@@ -1,0 +1,8 @@
+{
+  "projects": {
+    "default": "app-abanfoc-v1",
+    "app-abanfoc": "app-abanfoc-v1"
+  },
+  "targets": {},
+  "etags": {}
+}

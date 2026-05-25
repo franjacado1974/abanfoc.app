@@ -1,0 +1,736 @@
+import { useState, useEffect, useRef } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { ArrowLeft, Save, FileText, DownloadCloud, RefreshCw, Calendar, User as UserIcon, Building2, MapPin, Trash2, CheckCircle2, CalendarPlus, X, Search } from 'lucide-react';
+import { generarActaExtintoresPDF, generarAlbaranPDF, generarCertificadoPDF } from './pdfGenerator';
+
+const generateId = () => {
+  return crypto.randomUUID();
+};
+export default function Partes() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { centroId, clienteId } = location.state || {};
+
+  const [partes, setPartes] = useState<Parte[]>([]);
+  const [tecnicos, setTecnicos] = useState<{id: string, nombre: string, apellidos: string}[]>([]);
+  const [centros, setCentros] = useState<Centro[]>([]);
+  const [clientes, setClientes] = useState<Cliente[]>([]); // Add a state for clients to retrieve client names
+
+  const [view, setView] = useState<'list' | 'form'>('list'); // Default to list view
+  
+  const [form, setForm] = useState<Parte>({
+    id: '',
+    centroId: centroId || '',
+    clienteId: clienteId || '',
+    fechaCreacion: new Date().toISOString(),
+    tecnicoId: '',
+    periodicidad: '',
+    mesesRevision: '',
+    estado: 'Planificado'
+  });
+
+  const [isSignatureModalOpen, setIsSignatureModalOpen] = useState(false);
+  const [parteIdToClose, setParteIdToClose] = useState<string | null>(null);
+  const [nombreFirmante, setNombreFirmante] = useState('');
+  const [isDocumentsModalOpen, setIsDocumentsModalOpen] = useState(false);
+  const [parteDocumentos, setParteDocumentos] = useState<Parte | null>(null);
+  const [documentosSeleccionados, setDocumentosSeleccionados] = useState({
+    actas: true,
+    certificado: true,
+    albaran: true,
+  });
+  const [searchTerm, setSearchTerm] = useState('');
+  const canvasClienteRef = useRef<HTMLCanvasElement>(null);
+  const canvasTecnicoRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    try {
+      const storedPartes = localStorage.getItem('firecheck_db_partes'); // Ensure this is loaded
+      if (storedPartes) {
+        const parsed = JSON.parse(storedPartes);
+        if (Array.isArray(parsed)) setPartes(parsed);
+      }
+      
+      const storedTecnicos = localStorage.getItem('firecheck_db_tecnicos');
+      if (storedTecnicos) {
+        const parsed = JSON.parse(storedTecnicos);
+        if (Array.isArray(parsed)) setTecnicos(parsed);
+      }
+
+      const storedCentros = localStorage.getItem('firecheck_db_centros');
+      if (storedCentros) {
+        const parsed = JSON.parse(storedCentros);
+        if (Array.isArray(parsed)) setCentros(parsed);
+      }
+
+      const storedClientes = localStorage.getItem('firecheck_db_clientes');
+      if (storedClientes) {
+        const parsed = JSON.parse(storedClientes);
+        if (Array.isArray(parsed)) setClientes(parsed);
+      }
+    } catch (e) { console.error("Error loading from localStorage:", e); }
+  }, [centroId]);
+
+  // Manejar edición externa (desde el planificador)
+  useEffect(() => {
+    if (location.state?.editParteId && partes.length > 0) {
+      const target = partes.find(p => p.id === location.state.editParteId);
+      if (target) {
+        setForm(target);
+        setView('form');
+      }
+    }
+  }, [location.state, partes]);
+
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.centroId || !form.tecnicoId) return alert('Por favor, selecciona un centro y un técnico.');
+    const c = centros.find(ce => ce.id === form.centroId);
+    
+    const newParte: Parte = {
+      ...form,
+      id: form.id || `PARTE-${generateId().slice(0, 8).toUpperCase()}`,
+      clienteId: c ? c.clienteId : form.clienteId,
+    };
+
+    if (form.id) {
+      const updated = partes.map(p => p.id === form.id ? newParte : p);
+      setPartes(updated);
+      localStorage.setItem('firecheck_db_partes', JSON.stringify(updated));
+    } else {
+      const updated = [...partes, newParte];
+      setPartes(updated);
+      localStorage.setItem('firecheck_db_partes', JSON.stringify(updated));
+    }
+    setView('list'); // Go back to list view after saving
+  };
+  const handleDescargarOffline = (id: string) => {
+    // Simulamos la descarga offline cambiando el estado
+    const updated = partes.map(p => p.id === id ? { ...p, estado: 'Descargado (Offline)' as const } : p);
+    setPartes(updated);
+    localStorage.setItem('firecheck_db_partes', JSON.stringify(updated));
+    alert('Parte de trabajo descargado en el dispositivo. Ahora puedes trabajar sin conexión.');
+  };
+
+  const handleSincronizar = (id: string) => {
+    // Simulamos la sincronización de finalización
+    const numMant = `MANT-${new Date().getFullYear()}-${Math.floor(Math.random()*10000).toString().padStart(4, '0')}`;
+    const updated = partes.map(p => p.id === id ? { ...p, estado: 'Finalizado' as const, numeroMantenimiento: numMant } : p);
+    setPartes(updated);
+    localStorage.setItem('firecheck_db_partes', JSON.stringify(updated));
+    alert(`Trabajo sincronizado correctamente. Se ha asignado el Número de Mantenimiento: ${numMant}`);
+  };
+
+  const handleCerrarParte = (id: string) => {
+      const currentParte = partes.find(p => p.id === id);
+      if (!currentParte) return;
+      
+      setParteIdToClose(id);
+      setIsSignatureModalOpen(true);
+  };
+
+  const handleReabrirParte = (id: string) => {
+      if (!confirm('¿Re-abrir este parte? Volverá al estado "Finalizado" y podrás revisarlo de nuevo.')) return;
+      const updated = partes.map(p => p.id === id ? { ...p, estado: 'Finalizado' as const } : p);
+      setPartes(updated);
+      localStorage.setItem('firecheck_db_partes', JSON.stringify(updated));
+  };
+
+  const executeCerrarParte = (id: string) => {
+      const parteACerrar = partes.find(p => p.id === id);
+      if (!parteACerrar) return;
+
+      // 1. Actualizar el Parte a Cerrado
+      const updated = partes.map(p => p.id === id ? { ...p, estado: 'Cerrado' as const } : p);
+      setPartes(updated);
+      localStorage.setItem('firecheck_db_partes', JSON.stringify(updated));
+
+      // 2. Generar Certificado (Evaluar si es positivo o negativo)
+      try {
+        const storedEquipos = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
+        const eqDelCentro = storedEquipos.filter((e: any) => e.centroId === parteACerrar.centroId);
+        
+        // Comprobar si hay alguna anomalía (algún check = false)
+        const hasAnomalies = eqDelCentro.some((eq: any) => 
+          Object.keys(eq).some(k => k.startsWith('check') && eq[k] === false)
+        );
+
+        const nuevoCertificado = {
+          id: `CERT-${generateId().slice(0,8).toUpperCase()}`,
+          centroId: parteACerrar.centroId,
+          clienteId: parteACerrar.clienteId,
+          parteId: parteACerrar.id,
+          fechaCreacion: new Date().toISOString(),
+          estado: hasAnomalies ? 'NO favorable' : 'Favorable',
+          numeroMantenimiento: parteACerrar.numeroMantenimiento || 'Sin Número',
+          tecnicoId: parteACerrar.tecnicoId
+        };
+
+        const certificadosExistentes = JSON.parse(localStorage.getItem('firecheck_db_certificados') || '[]');
+        localStorage.setItem('firecheck_db_certificados', JSON.stringify([...certificadosExistentes, nuevoCertificado]));
+
+      } catch (e) { console.error("Error generando certificado automático", e); }
+  };
+
+  const confirmCerrarConFirma = () => {
+    if (!nombreFirmante.trim()) {
+      alert('Por favor, introduce el nombre del firmante.');
+      return;
+    }
+    if (parteIdToClose) {
+      // Extraer las firmas de los canvas como base64
+      const firmaCliente = canvasClienteRef.current?.toDataURL('image/png') || '';
+      const firmaTecnico = canvasTecnicoRef.current?.toDataURL('image/png') || '';
+
+      const parte = partes.find(p => p.id === parteIdToClose);
+
+      // Crear registro de albarán con firmas
+      const nuevoAlbaran = {
+        id: `ALB-${generateId().slice(0, 8).toUpperCase()}`,
+        centroId: parte?.centroId || '',
+        clienteId: parte?.clienteId || '',
+        parteId: parteIdToClose,
+        tecnicoId: parte?.tecnicoId || '',
+        numeroMantenimiento: parte?.numeroMantenimiento || '',
+        fechaCreacion: new Date().toISOString(),
+        facturado: false,
+        firmaCliente,
+        firmaTecnico,
+        nombreFirmante
+      };
+
+      const albaranesExistentes = JSON.parse(localStorage.getItem('firecheck_db_albaranes') || '[]');
+      localStorage.setItem('firecheck_db_albaranes', JSON.stringify([...albaranesExistentes, nuevoAlbaran]));
+
+      executeCerrarParte(parteIdToClose);
+      setIsSignatureModalOpen(false);
+      setParteIdToClose(null);
+      setNombreFirmante('');
+    }
+  };
+
+  const handleGenerarPDF = (parte: Parte) => {
+    try {
+      const storedSistemas = JSON.parse(localStorage.getItem('firecheck_db_centro_sistemas') || '[]');
+      const storedEquipos = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
+      
+      const centro = centros.find(c => c.id === parte.centroId);
+      const cliente = clientes.find(cl => cl.id === parte.clienteId);
+      const tecnico = tecnicos.find(t => t.id === parte.tecnicoId);
+      
+      if (!centro || !cliente) {
+        alert("No se encontró el centro o cliente asociado al parte.");
+        return;
+      }
+      
+      // Filtramos los sistemas y equipos específicos de este centro
+      const sistemasDelCentro = storedSistemas.filter((s: any) => s.centroId === centro.id);
+      const equiposDelCentro = storedEquipos.filter((e: any) => e.centroId === centro.id);
+      
+      if (sistemasDelCentro.length === 0 || equiposDelCentro.length === 0) {
+        alert("No hay sistemas o equipos revisados en este centro para generar el PDF.");
+        return;
+      }
+      
+      const nombreTecnico = tecnico ? `${tecnico.nombre} ${tecnico.apellidos}` : 'No asignado';
+
+      const albaranes = JSON.parse(localStorage.getItem('firecheck_db_albaranes') || '[]');
+      const albaranData = albaranes.find((a: any) => a.parteId === parte.id);
+
+      generarActaExtintoresPDF(
+        cliente, 
+        centro, 
+        sistemasDelCentro, 
+        equiposDelCentro, 
+        parte.numeroMantenimiento, 
+        nombreTecnico,
+        undefined, // anomalyTextColor: use default red
+        albaranData?.firmaCliente,
+        albaranData?.firmaTecnico,
+        albaranData?.nombreFirmante
+      );
+    } catch (e) {
+      console.error(e);
+      alert("Hubo un error al generar el PDF.");
+    }
+  };
+
+  const handleGenerarAlbaranPDF = (parte: Parte) => {
+    try {
+      const storedEquipos = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
+      
+      const centro = centros.find(c => c.id === parte.centroId);
+      const cliente = clientes.find(cl => cl.id === parte.clienteId);
+      const tecnico = tecnicos.find(t => t.id === parte.tecnicoId);
+      
+      if (!centro || !cliente) {
+        alert("No se encontró el centro o cliente asociado al parte.");
+        return;
+      }
+      
+      const equiposDelCentro = storedEquipos.filter((e: any) => e.centroId === centro.id);
+      if (equiposDelCentro.length === 0) {
+        alert("No hay equipos registrados en este centro.");
+        return;
+      }
+      
+      const albaranes = JSON.parse(localStorage.getItem('firecheck_db_albaranes') || '[]');
+      const albaranData = albaranes.find((a: any) => a.parteId === parte.id);
+
+      const nombreTecnico = tecnico ? `${tecnico.nombre} ${tecnico.apellidos}` : 'No asignado';
+      generarAlbaranPDF(
+        cliente, 
+        centro, 
+        equiposDelCentro, 
+        parte.numeroMantenimiento, 
+        nombreTecnico,
+        albaranData?.firmaCliente,
+        albaranData?.firmaTecnico,
+        albaranData?.nombreFirmante
+      );
+    } catch (e) {
+      console.error(e);
+      alert("Hubo un error al generar el Albarán.");
+    }
+  };
+
+  const handleGenerarCertificadoPDF = (parte: Parte) => {
+    try {
+      const centro = centros.find(c => c.id === parte.centroId);
+      const cliente = clientes.find(cl => cl.id === parte.clienteId);
+      const tecnico = tecnicos.find(t => t.id === parte.tecnicoId);
+
+      if (!centro || !cliente) {
+        alert("No se encontró el centro o cliente asociado al parte.");
+        return;
+      }
+
+      const storedSistemas = JSON.parse(localStorage.getItem('firecheck_db_centro_sistemas') || '[]');
+      const storedEquipos = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
+      const sistemasDelCentro = storedSistemas.filter((s: any) => s.centroId === parte.centroId);
+      const equiposDelCentro = storedEquipos.filter((e: any) => e.centroId === parte.centroId);
+
+      if (sistemasDelCentro.length === 0 || equiposDelCentro.length === 0) {
+        alert("No hay sistemas o equipos revisados en este centro para generar el Certificado.");
+        return;
+      }
+
+      const certificados = JSON.parse(localStorage.getItem('firecheck_db_certificados') || '[]');
+      const certificado = certificados
+        .filter((c: any) => c.parteId === parte.id)
+        .sort((a: any, b: any) => new Date(b.fechaCreacion).getTime() - new Date(a.fechaCreacion).getTime())[0];
+
+      const albaranes = JSON.parse(localStorage.getItem('firecheck_db_albaranes') || '[]');
+      const albaranData = albaranes.find((a: any) => a.parteId === parte.id);
+
+      const nombreTecnico = tecnico ? `${tecnico.nombre} ${tecnico.apellidos}` : 'No asignado';
+      generarCertificadoPDF(
+        cliente, centro, parte, nombreTecnico, certificado?.estado || 'Favorable', 
+        sistemasDelCentro, equiposDelCentro,
+        albaranData?.firmaCliente, albaranData?.firmaTecnico, albaranData?.nombreFirmante
+      );
+    } catch (e) {
+      console.error(e);
+      alert("Hubo un error al generar el Certificado.");
+    }
+  };
+
+  const handleAbrirDocumentos = (parte: Parte) => {
+    setParteDocumentos(parte);
+    setDocumentosSeleccionados({ actas: true, certificado: true, albaran: true });
+    setIsDocumentsModalOpen(true);
+  };
+
+  const handleDescargarDocumentosSeleccionados = () => {
+    if (!parteDocumentos) return;
+
+    const haySeleccion = Object.values(documentosSeleccionados).some(Boolean);
+    if (!haySeleccion) {
+      alert('Selecciona al menos un documento para descargar.');
+      return;
+    }
+
+    if (documentosSeleccionados.actas) {
+      handleGenerarPDF(parteDocumentos);
+    }
+    if (documentosSeleccionados.certificado) {
+      handleGenerarCertificadoPDF(parteDocumentos);
+    }
+    if (documentosSeleccionados.albaran) {
+      handleGenerarAlbaranPDF(parteDocumentos);
+    }
+
+    setIsDocumentsModalOpen(false);
+    setParteDocumentos(null);
+  };
+
+  const initDraw = (canvas: HTMLCanvasElement | null) => {
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#000';
+    let drawing = false;
+    const getPos = (e: any) => {
+      const rect = canvas.getBoundingClientRect();
+      const clientX = e.clientX || e.touches?.[0]?.clientX;
+      const clientY = e.clientY || e.touches?.[0]?.clientY;
+      return { x: clientX - rect.left, y: clientY - rect.top };
+    };
+    canvas.onmousedown = (e) => { drawing = true; const pos = getPos(e); ctx.beginPath(); ctx.moveTo(pos.x, pos.y); };
+    canvas.onmousemove = (e) => { if (!drawing) return; e.preventDefault(); const pos = getPos(e); ctx.lineTo(pos.x, pos.y); ctx.stroke(); };
+    window.addEventListener('mouseup', () => { drawing = false; });
+    canvas.ontouchstart = (e) => { drawing = true; const pos = getPos(e); ctx.beginPath(); ctx.moveTo(pos.x, pos.y); };
+    canvas.ontouchmove = (e) => { if (!drawing) return; e.preventDefault(); const pos = getPos(e); ctx.lineTo(pos.x, pos.y); ctx.stroke(); };
+    canvas.ontouchend = () => { drawing = false; };
+  };
+
+  const filteredPartes = partes.filter(parte => {
+    if (!searchTerm.trim()) return true;
+    const term = searchTerm.toLowerCase().trim();
+    const centro = centros.find(c => c.id === parte.centroId);
+    const tecnico = tecnicos.find(t => t.id === parte.tecnicoId);
+    const cliente = clientes.find(cl => cl.id === parte.clienteId);
+    return (
+      parte.id.toLowerCase().includes(term) ||
+      (centro?.nombre || '').toLowerCase().includes(term) ||
+      (centro?.poblacion || '').toLowerCase().includes(term) ||
+      (cliente?.nombre || '').toLowerCase().includes(term) ||
+      (tecnico ? `${tecnico.nombre} ${tecnico.apellidos}` : '').toLowerCase().includes(term) ||
+      parte.estado.toLowerCase().includes(term) ||
+      (parte.numeroMantenimiento || '').toLowerCase().includes(term) ||
+      (parte.periodicidad || '').toLowerCase().includes(term)
+    );
+  });
+
+  useEffect(() => {
+    if (isSignatureModalOpen) {
+      setTimeout(() => {
+        initDraw(canvasClienteRef.current);
+        initDraw(canvasTecnicoRef.current);
+      }, 100);
+    }
+  }, [isSignatureModalOpen]);
+
+  return (
+    <div className="min-h-screen bg-zinc-50 flex items-start justify-center p-4 md:p-8">
+      <div className="max-w-6xl w-full">
+        {/* HEADER */}
+        <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center gap-4">
+            <button onClick={() => navigate(-1)} className="p-2 bg-white rounded-full border border-sky-100 hover:bg-sky-50 text-sky-600 transition-colors shadow-sm">
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+            <h1 className="text-2xl md:text-3xl font-bold text-sky-950 flex items-center gap-3">
+              <Calendar className="w-8 h-8 text-sky-500" />
+              Gestión de Partes de Trabajo
+            </h1>
+          </div>
+          {view === 'list' && (
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Buscar por centro, cliente, técnico, estado..."
+                  className="pl-10 pr-4 py-2.5 bg-white border border-sky-100 rounded-xl text-sm text-slate-700 placeholder-slate-400 focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 outline-none transition-all w-72 shadow-sm"
+                />
+                {searchTerm && (
+                  <button
+                    onClick={() => setSearchTerm('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-600 rounded"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+              <button
+                onClick={() => { setForm({ id: '', centroId: '', clienteId: '', fechaCreacion: new Date().toISOString(), tecnicoId: '', periodicidad: '', mesesRevision: '', estado: 'Planificado' }); setView('form'); }}
+                className="flex items-center gap-2 bg-sky-600 text-white px-5 py-2.5 rounded-xl font-medium hover:bg-sky-700 transition-all shadow-md"
+              >
+                <CalendarPlus className="w-5 h-5" /> Nuevo
+              </button>
+            </div>
+          )}
+        </div>
+
+        {view === 'form' ? (
+          <div className="bg-white rounded-3xl p-6 md:p-10 shadow-xl shadow-sky-900/5 border border-sky-100/50">
+            <h2 className="text-xl font-bold text-sky-900 mb-6 flex items-center gap-2 pb-4 border-b border-sky-50">
+              <FileText className="w-5 h-5" />
+              {form.id ? 'Editar Parte' : 'Nuevo Parte'}
+            </h2>
+            
+            <form onSubmit={handleSave} className="space-y-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-sky-900 flex items-center gap-2"><Building2 className="w-4 h-4"/> Centro de Trabajo *</label>
+                  <select
+                    required
+                    value={form.centroId}
+                    onChange={e => setForm({...form, centroId: e.target.value})}
+                    className="w-full px-4 py-3 bg-sky-50/30 border border-sky-100 rounded-xl focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"
+                  >
+                    <option value="">Selecciona un centro...</option>
+                    {centros.map(c => {
+                      const cli = clientes.find(cl => cl.id === c.clienteId);
+                      return <option key={c.id} value={c.id}>{c.nombre} ({cli?.nombre || 'Sin cliente'})</option>;
+                    })}
+                  </select>
+                </div>
+                
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-sky-900 flex items-center gap-2"><UserIcon className="w-4 h-4"/> Técnico Asignado *</label>
+                  <select
+                    required
+                    value={form.tecnicoId}
+                    onChange={e => setForm({...form, tecnicoId: e.target.value})}
+                    className="w-full px-4 py-3 bg-sky-50/30 border border-sky-100 rounded-xl focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"
+                  >
+                    <option value="">Selecciona técnico...</option>
+                    {tecnicos.map(t => <option key={t.id} value={t.id}>{t.nombre} {t.apellidos}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-6 border-t border-amber-50 mt-8">
+                <button type="button" onClick={() => setView('list')} className="px-6 py-3 rounded-xl font-medium text-sky-700 bg-sky-50 hover:bg-sky-100 transition-colors">
+                  Cancelar
+                </button>
+                <button type="submit" className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-white bg-sky-600 hover:bg-sky-700 shadow-lg shadow-sky-200 transition-all">
+                  <Save className="w-5 h-5" /> Guardar Planificación
+                </button>
+              </div>
+            </form>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredPartes.length === 0 ? (
+              <div className="col-span-full text-center py-16 bg-white rounded-3xl border border-sky-100 border-dashed">
+                <Search className="w-16 h-16 text-sky-200 mx-auto mb-4" />
+                <h3 className="text-lg font-bold text-sky-900 mb-2">
+                  {searchTerm ? 'Sin resultados' : 'No hay partes planificados'}
+                </h3>
+                <p className="text-sky-700/60">
+                  {searchTerm ? 'No se encontraron partes que coincidan con tu búsqueda.' : 'Crea el primer parte de trabajo para asignarlo a un técnico.'}
+                </p>
+              </div>
+            ) : (
+              filteredPartes.map(parte => {
+                const centro = centros.find(c => c.id === parte.centroId);
+                const tecnico = tecnicos.find(t => t.id === parte.tecnicoId);
+                const isFinalizado = parte.estado === 'Finalizado';
+                const cliente = clientes.find(cl => cl.id === parte.clienteId); // Find the client for display
+                const isOffline = parte.estado === 'Descargado (Offline)';
+                const isCerrado = parte.estado === 'Cerrado';
+
+                return (
+                  <div key={parte.id} className={`bg-white rounded-3xl p-6 border shadow-sm transition-all flex flex-col ${isCerrado ? 'border-zinc-200 bg-zinc-50/50' : isFinalizado ? 'border-emerald-200 bg-emerald-50/30' : isOffline ? 'border-sky-200 bg-sky-50/30' : 'border-sky-100 hover:shadow-md'}`}>
+                    <div className="flex justify-between items-start mb-4">
+                      <span className="text-[10px] font-mono font-bold text-zinc-400 bg-zinc-100 px-2 py-1 rounded">{parte.id}</span>
+                      <span className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wider ${isCerrado ? 'bg-zinc-200 text-zinc-600' : isFinalizado ? 'bg-emerald-100 text-emerald-700' : isOffline ? 'bg-sky-100 text-sky-700' : 'bg-sky-100 text-sky-700'}`}>
+                        {parte.estado}
+                      </span>
+                    </div>
+
+                    <h3 className="text-lg font-bold text-zinc-900 mb-1 line-clamp-1">{centro?.nombre || 'Centro Desconocido'}</h3>
+                    <p className="text-xs text-zinc-500 mb-2 flex items-center gap-1"><MapPin className="w-3 h-3"/> {centro?.poblacion || 'Sin ubicación'}</p>
+                    {cliente && (
+                      <p className="text-xs text-zinc-500 mb-4 flex items-center gap-1.5">
+                        <Building2 className="w-3 h-3" /> {cliente.nombre}
+                      </p>
+                    )}
+
+                    <div className="space-y-3 mb-6 flex-1">
+                      <div className="flex justify-between items-center text-sm border-b border-zinc-50 pb-2">
+                        <span className="text-zinc-500 flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5"/> Fecha Programada</span>
+                        <span className="font-bold text-sky-600">
+                          {parte.fechaProgramada ? parte.fechaProgramada.split('-').reverse().join('/') : 'No programada'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center text-sm border-b border-zinc-50 pb-2">
+                        <span className="text-zinc-500 flex items-center gap-1.5"><UserIcon className="w-3.5 h-3.5"/> Técnico</span>
+                        <span className="font-medium text-zinc-800">{tecnico ? `${tecnico.nombre} ${tecnico.apellidos}` : 'No asignado'}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-sm border-b border-zinc-50 pb-2">
+                        <span className="text-zinc-500 flex items-center gap-1.5"><RefreshCw className="w-3.5 h-3.5"/> Mantenimiento</span>
+                          <span className="font-medium text-zinc-800">{parte.periodicidad || 'No especificado'}</span>
+                      </div>
+                      <div className="flex flex-col text-sm border-b border-zinc-50 pb-2 gap-1.5">
+                        <span className="text-zinc-500 flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5"/> Meses planificados</span>
+                        <span className="font-medium text-zinc-800 leading-tight">{parte.mesesRevision}</span>
+                      </div>
+                      {(isFinalizado || isCerrado) && parte.numeroMantenimiento && (
+                        <div className="flex justify-between items-center text-sm bg-emerald-100 p-2 rounded-lg mt-2">
+                          <span className="text-emerald-800 font-bold">Nº Mantenimiento:</span>
+                          <span className="font-mono font-bold text-emerald-900">{parte.numeroMantenimiento}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 mt-auto">
+                      {!isFinalizado && !isOffline && !isCerrado && (
+                        <button onClick={() => handleDescargarOffline(parte.id)} className="flex-1 min-w-[120px] flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-black text-white px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-sm">
+                          <DownloadCloud className="w-4 h-4" /> descargar off line
+                        </button>
+                      )}
+                      {!isCerrado && (
+                        <button onClick={() => {
+                          navigate('/revision-checklist', { state: { centroId: parte.centroId, parteId: parte.id } });
+                        }} className="flex-1 min-w-[120px] flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-sm">
+                          <Building2 className="w-4 h-4" /> Ir a la revisión
+                        </button>
+                      )}
+                      {!isFinalizado && isOffline && !isCerrado && (
+                        <button onClick={() => handleSincronizar(parte.id)} className="flex-1 min-w-[120px] flex items-center justify-center gap-1.5 bg-sky-600 hover:bg-sky-700 text-white px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-sm">
+                          <RefreshCw className="w-4 h-4" /> Sincronizar Fin
+                        </button>
+                      )}
+                      {isFinalizado && !isCerrado && (
+                        <button onClick={() => handleCerrarParte(parte.id)} className="flex-1 min-w-[120px] flex items-center justify-center gap-1.5 bg-amber-600 hover:bg-amber-700 text-white px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-sm">
+                          <CheckCircle2 className="w-4 h-4" /> Cerrar Parte
+                        </button>
+                      )}
+                      {isCerrado && (
+                        <div className="w-full flex flex-col gap-2">
+                          <button onClick={() => handleReabrirParte(parte.id)} className="w-full flex items-center justify-center gap-1.5 bg-amber-400 hover:bg-amber-500 text-amber-900 px-3 py-2 rounded-xl text-[10px] font-bold transition-all shadow-sm" title="Re-abrir el parte para revisarlo de nuevo">
+                            <RefreshCw className="w-4 h-4" /> Re-abrir parte
+                          </button>
+                          <button onClick={() => handleAbrirDocumentos(parte)} className="w-full flex items-center justify-center gap-1.5 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 px-3 py-2 rounded-xl text-[10px] font-bold transition-all shadow-sm" title="Seleccionar y descargar documentos">
+                            <FileText className="w-4 h-4" /> Documentos
+                          </button>
+                        </div>
+                      )}
+                      <button onClick={() => {
+                        if (confirm('¿Eliminar este parte?')) {
+                          const updated = partes.filter(p => p.id !== parte.id);
+                          setPartes(updated);
+                          localStorage.setItem('firecheck_db_partes', JSON.stringify(updated));
+                        }
+                      }} className="p-2 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors border border-zinc-200 hover:border-red-200" title="Eliminar Parte">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
+      </div>
+
+      {isDocumentsModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col">
+            <div className="px-6 py-4 border-b border-zinc-100 flex items-center justify-between bg-zinc-50/50">
+              <h2 className="text-lg font-bold text-zinc-900">Descargar documentos</h2>
+              <button
+                onClick={() => {
+                  setIsDocumentsModalOpen(false);
+                  setParteDocumentos(null);
+                }}
+                className="p-2 text-zinc-400 hover:text-black hover:bg-white rounded-xl transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-zinc-500">Selecciona los documentos que quieres descargar:</p>
+
+              <label className="flex items-center gap-3 p-4 rounded-2xl border border-zinc-200 hover:bg-zinc-50 cursor-pointer transition-colors">
+                <input
+                  type="checkbox"
+                  checked={documentosSeleccionados.actas}
+                  onChange={(e) => setDocumentosSeleccionados(prev => ({ ...prev, actas: e.target.checked }))}
+                  className="w-5 h-5 accent-indigo-600"
+                />
+                <span className="font-bold text-zinc-800">Actas</span>
+              </label>
+
+              <label className="flex items-center gap-3 p-4 rounded-2xl border border-zinc-200 hover:bg-zinc-50 cursor-pointer transition-colors">
+                <input
+                  type="checkbox"
+                  checked={documentosSeleccionados.certificado}
+                  onChange={(e) => setDocumentosSeleccionados(prev => ({ ...prev, certificado: e.target.checked }))}
+                  className="w-5 h-5 accent-indigo-600"
+                />
+                <span className="font-bold text-zinc-800">Certificado</span>
+              </label>
+
+              <label className="flex items-center gap-3 p-4 rounded-2xl border border-zinc-200 hover:bg-zinc-50 cursor-pointer transition-colors">
+                <input
+                  type="checkbox"
+                  checked={documentosSeleccionados.albaran}
+                  onChange={(e) => setDocumentosSeleccionados(prev => ({ ...prev, albaran: e.target.checked }))}
+                  className="w-5 h-5 accent-indigo-600"
+                />
+                <span className="font-bold text-zinc-800">Albarán</span>
+              </label>
+            </div>
+
+            <div className="px-6 py-4 bg-zinc-50/50 border-t border-zinc-100 flex gap-3">
+              <button
+                onClick={() => {
+                  setIsDocumentsModalOpen(false);
+                  setParteDocumentos(null);
+                }}
+                className="flex-1 px-4 py-3 rounded-xl font-bold text-zinc-500 hover:bg-zinc-100 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button onClick={handleDescargarDocumentosSeleccionados} className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-3 rounded-xl font-bold shadow-lg shadow-indigo-200 transition-all">
+                Descargar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isSignatureModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col">
+            <div className="px-6 py-4 border-b border-zinc-100 flex items-center justify-between bg-zinc-50/50">
+              <h2 className="text-lg font-bold text-zinc-900">Cierre de Parte y Firmas</h2>
+              <button onClick={() => setIsSignatureModalOpen(false)} className="p-2 text-zinc-400 hover:text-black hover:bg-white rounded-xl transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-6 overflow-y-auto max-h-[70vh]">
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-zinc-700">Nombre del Cliente / Receptor *</label>
+                    <input 
+                      type="text" 
+                      value={nombreFirmante} 
+                      onChange={(e) => setNombreFirmante(e.target.value)}
+                      placeholder="Nombre y Apellidos"
+                      className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 outline-none transition-all"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-zinc-400 uppercase">Firma del Cliente</label>
+                <canvas ref={canvasClienteRef} width={450} height={150} className="w-full h-32 border border-zinc-200 rounded-2xl bg-zinc-50 touch-none" />
+                <button onClick={() => canvasClienteRef.current?.getContext('2d')?.clearRect(0,0,1000,1000)} className="text-[10px] text-zinc-400 underline">Limpiar firma cliente</button>
+              </div>
+              <div className="space-y-2 pt-4 border-t border-zinc-100">
+                <label className="text-xs font-bold text-zinc-400 uppercase">Firma del Técnico</label>
+                <canvas ref={canvasTecnicoRef} width={450} height={150} className="w-full h-32 border border-zinc-200 rounded-2xl bg-zinc-50 touch-none" />
+                <button onClick={() => canvasTecnicoRef.current?.getContext('2d')?.clearRect(0,0,1000,1000)} className="text-[10px] text-zinc-400 underline">Limpiar firma técnico</button>
+              </div>
+            </div>
+            <div className="px-6 py-4 bg-zinc-50/50 border-t border-zinc-100 flex gap-3">
+              <button onClick={() => setIsSignatureModalOpen(false)} className="flex-1 px-4 py-3 rounded-xl font-bold text-zinc-500 hover:bg-zinc-100 transition-colors">
+                Cancelar
+              </button>
+              <button onClick={confirmCerrarConFirma} className="flex-1 bg-sky-600 hover:bg-sky-700 text-white px-4 py-3 rounded-xl font-bold shadow-lg shadow-sky-200 transition-all">
+                Finalizar y Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
