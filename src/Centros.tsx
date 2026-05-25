@@ -20,6 +20,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 
 import { CATEGORIAS_POR_DEFECTO, getIconForSistema } from './Sistemas';
+import { getCentros, addCentro, updateCentro, deleteCentro, subscribeCentros } from './firebase';
 
 const MESES = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -369,6 +370,22 @@ export default function Centros() {
     setCentros(data);
   };
 
+  // Sincronización en tiempo real desde Firestore
+  useEffect(() => {
+    let unsub: (() => void) | null = null;
+    try {
+      unsub = subscribeCentros((items: any[]) => {
+        // Mapeamos documentos tal cual vienen (contienen id: docId + fields)
+        const mapped = items.map((d: any) => ({ ...d }));
+        setCentros(mapped);
+        localStorage.setItem('firecheck_db_centros', JSON.stringify(mapped));
+      });
+    } catch (e) {
+      console.error('subscribeCentros failed', e);
+    }
+    return () => { if (unsub) unsub(); };
+  }, []);
+
   // ----- LOGICA DE IDs ----- //
   const calculateNextCentroId = (cliId: string, customPart: string) => {
     if (!cliId) return '';
@@ -386,9 +403,10 @@ export default function Centros() {
   };
 
   // ----- ACCIONES ----- //
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.clienteId) return alert('Debes seleccionar un cliente primero.');
+    if (!form.customIdPart || !form.customIdPart.trim()) return alert('El código periodicidad es obligatorio.');
     if (!form.nombre.trim()) return alert('El nombre del centro es obligatorio.');
     let finalId = form.id;
     if (!finalId) {
@@ -401,12 +419,30 @@ export default function Centros() {
       }
     }
 
-    const newCentro = { ...form, id: finalId };
-    const newData = form.id 
-      ? centros.map(c => c.id === form.id ? newCentro : c)
-      : [...centros, newCentro];
-      
-    saveToDB(newData);
+    const newCentro: any = { ...form, id: finalId };
+    
+    try {
+      if ((form as any)._docId) {
+        console.info('handleSave: updating existing centro, _docId=', (form as any)._docId, 'data=', newCentro);
+        // Actualizar en Firestore si ya tiene _docId
+        await updateCentro((form as any)._docId, newCentro);
+        const updated = centros.map(c => c.id === form.id ? { ...newCentro, _docId: (form as any)._docId } : c);
+        saveToDB(updated);
+      } else {
+        console.info('handleSave: adding new centro to Firestore, data=', newCentro);
+        // Añadir nuevo en Firestore
+        const created = await addCentro(newCentro);
+        console.info('handleSave: addCentro returned', created);
+        const withDoc = { ...newCentro, _docId: created.id };
+        const updated = form.id ? centros.map(c => c.id === form.id ? withDoc : c) : [...centros, withDoc];
+        saveToDB(updated);
+      }
+    } catch (err) {
+      console.error('Error guardando centro en Firestore:', err);
+      alert('Error al guardar en Firestore');
+      return;
+    }
+
     setView('list');
     setForm(emptyCentro);
   };
@@ -439,9 +475,20 @@ export default function Centros() {
     setCentroForNewPeriodicidad(null);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (window.confirm('¿Estás seguro de que quieres eliminar este centro?')) {
-      saveToDB(centros.filter(c => c.id !== id));
+      const target = centros.find(c => c.id === id) as any;
+      try {
+        if (target && target._docId) {
+          await deleteCentro(target._docId);
+        }
+      } catch (err) {
+        console.error('Error borrando centro en Firestore:', err);
+        alert('Error al borrar en Firestore');
+        // Continuamos y borramos localmente de todos modos
+      }
+      const remaining = centros.filter(c => c.id !== id);
+      saveToDB(remaining);
       // Limpiar sistemas del centro
       const dbSist = centroSistemas.filter(s => s.centroId !== id);
       setCentroSistemas(dbSist);
@@ -621,17 +668,22 @@ export default function Centros() {
     }
   };
 
-  // Filtrado
+  // Filtrado (seguro contra campos undefined)
   const filteredCentros = centros.filter(c => {
-    const client = clientes.find(cl => cl.id === c.clienteId);
+    const client = clientes.find(cl => cl.id === c?.clienteId);
     // Limpiamos los espacios extras en el termino de busqueda antes de comparar
     const term = (searchTerm || '').toLowerCase().trim();
-    return c.nombre.toLowerCase().includes(term) || 
-           c.id.toLowerCase().includes(term) ||
+    const nombre = c && c.nombre ? String(c.nombre).toLowerCase() : '';
+    const cid = c && c.id ? String(c.id).toLowerCase() : '';
+    const clienteId = c && c.clienteId ? String(c.clienteId).toLowerCase() : '';
+    const poblacion = c && c.poblacion ? String(c.poblacion).toLowerCase() : '';
+    const clientNombre = client && client.nombre ? String(client.nombre).toLowerCase() : '';
+    return nombre.includes(term) ||
+           cid.includes(term) ||
            // Buscamos también por el ID del cliente para que funcione el link
-           c.clienteId.toLowerCase().includes(term) ||
-           (c.poblacion || '').toLowerCase().includes(term) ||
-           (client && client.nombre.toLowerCase().includes(term));
+           clienteId.includes(term) ||
+           poblacion.includes(term) ||
+           (clientNombre && clientNombre.includes(term));
   });
 
   // ----- RENDERIZADO DE LA LISTA ----- //
@@ -1351,9 +1403,10 @@ export default function Centros() {
                     <p className="text-[10px] text-zinc-400 font-bold mb-0.5">CÓDIGO DE CENTRO</p>
                     <p className="text-lg font-mono font-bold tracking-wider">{idPreview || 'CEN XXXX-XX-(XXXX)'}</p>
                   </div>
-                  <div className="text-right w-1/3">
-                    <label className="block text-[10px] text-zinc-400 font-bold mb-0.5">SUBCÓDIGO EDITABLE</label>
+                    <div className="text-right w-1/3">
+                    <label className="block text-[10px] text-zinc-400 font-bold mb-0.5">codigo periodicidad</label>
                     <input 
+                      required
                       type="text" 
                       value={form.customIdPart} 
                       onChange={e => setForm({...form, customIdPart: e.target.value.toUpperCase()})}

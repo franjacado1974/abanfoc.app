@@ -1,4 +1,3 @@
-src/App.tsx(759,14): error TS2304: Cannot find name 'Revisiones'.
 src/Centros.tsx(150,20): error TS6133: 'setClientes' is declared but its value is never read.
 src/Centros.tsx(162,29): error TS6133: 'setCategoriasSistema' is declared but its value is never read.
 src/Centros.tsx(188,27): error TS6133: 'setEquiposCatalogo' is declared but its value is never read.

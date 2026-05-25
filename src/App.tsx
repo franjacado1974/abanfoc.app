@@ -18,6 +18,8 @@ import Certificados from './Certificados';
 import GestionEmpresa from './GestionEmpresa';
 import Planificacion from './Planificacion';
 import RevisionChecklist from './RevisionChecklist';
+import Revisiones from './Revisiones';
+import { verifyUser } from './firebase';
 
 const generateId = () => {
   try {
@@ -56,35 +58,52 @@ function Login({ usuarios, onLogin }: { usuarios: Usuario[], onLogin: (user: Usu
     }
   });
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Primero intentamos verificar contra Firestore
+    try {
+      const remoteUser = await verifyUser(username, password);
+      if (remoteUser) {
+        sessionStorage.setItem('firecheck_logged_user', JSON.stringify(remoteUser));
+        onLogin(remoteUser);
+        return;
+      }
+    } catch (err) {
+      console.error('Error verificando en Firestore:', err);
+      // Continuamos con fallback local
+    }
+
+    // Fallback: comprobar usuarios locales (localStorage)
     const user = usuarios.find(u => u.nombre.toLowerCase() === username.toLowerCase());
     if (user) {
       const storedPassword = user.password || '';
       if (storedPassword === password) {
         sessionStorage.setItem('firecheck_logged_user', JSON.stringify(user));
         onLogin(user);
+        return;
       } else {
         alert('Contraseña incorrecta');
+        return;
       }
-    } else {
-      alert('Usuario no encontrado');
     }
+
+    alert('Usuario no encontrado');
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-zinc-50 via-zinc-100 to-zinc-200 flex items-center justify-center p-4">
-      <div className="bg-white p-8 rounded-[2.5rem] shadow-2xl w-full max-w-sm border border-zinc-200">
+      <div className="bg-white p-6 sm:p-8 rounded-2xl shadow-2xl w-full max-w-md sm:max-w-sm md:max-w-md lg:max-w-lg border border-zinc-200">
         <div className="flex flex-col items-center mb-6">
-          <img src={appLogo} alt="Logo" className="h-12 mb-6 object-contain" />
-          <h2 className="text-2xl font-black text-zinc-900">Acceso al Sistema</h2>
-          <p className="text-zinc-500 text-sm">Introduce tus credenciales para continuar</p>
+          <img src={appLogo} alt="Logo" className="h-12 sm:h-14 md:h-16 mb-4 sm:mb-6 object-contain" />
+          <h2 className="text-2xl sm:text-3xl font-black text-zinc-900 text-center">Acceso al Sistema</h2>
+          <p className="text-zinc-500 text-sm text-center">Introduce tus credenciales para continuar</p>
         </div>
         <form onSubmit={handleLogin} className="space-y-4">
           <input 
             type="text" 
             placeholder="Nombre"
-            className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-2xl outline-none focus:border-black font-medium" 
+            className="w-full px-4 py-3 sm:py-3.5 bg-zinc-50 border border-zinc-200 rounded-xl sm:rounded-2xl outline-none focus:border-black font-medium text-sm" 
             value={username} 
             onChange={e => setUsername(e.target.value)} 
             required
@@ -92,12 +111,12 @@ function Login({ usuarios, onLogin }: { usuarios: Usuario[], onLogin: (user: Usu
           <input 
             type="password" 
             placeholder="Contraseña"
-            className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-2xl outline-none focus:border-black font-medium" 
+            className="w-full px-4 py-3 sm:py-3.5 bg-zinc-50 border border-zinc-200 rounded-xl sm:rounded-2xl outline-none focus:border-black font-medium text-sm" 
             value={password} 
             onChange={e => setPassword(e.target.value)} 
             required
           />
-          <button type="submit" className="w-full bg-black hover:bg-zinc-800 text-white py-4 rounded-2xl font-bold shadow-lg transition-all active:scale-95">Entrar</button>
+          <button type="submit" className="w-full bg-black hover:bg-zinc-800 text-white py-3.5 sm:py-4 rounded-xl sm:rounded-2xl font-bold shadow-lg transition-all active:scale-95">Entrar</button>
         </form>
       </div>
     </div>
