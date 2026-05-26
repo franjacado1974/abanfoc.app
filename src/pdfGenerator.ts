@@ -723,7 +723,7 @@ export const generarCertificadoPDF = (
   sistemas?: Record<string, any>[],
   equiposTodos?: Record<string, any>[],
   _firmaCliente?: string,
-  firmaTecnico?: string,
+  _firmaTecnico?: string,
   _nombreFirmante?: string
 ) => {
   const doc = new jsPDF('p', 'mm', 'a4');

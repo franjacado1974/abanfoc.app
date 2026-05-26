@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Package, Plus, Search, Edit, Trash2, X, Download, Upload } from 'lucide-react';
+import ConfirmationModal from './ConfirmationModal'; // Import the new modal component
 import * as XLSX from 'xlsx';
 
 export interface Articulo {
@@ -29,6 +30,9 @@ export default function Articulos() {
     precioCompra: '',
     precioVenta: ''
   });
+  // State for confirmation modal
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [articuloIdToDelete, setArticuloIdToDelete] = useState<string | null>(null);
 
   useEffect(() => {
     const saved = localStorage.getItem('firecheck_db_articulos');
@@ -84,8 +88,15 @@ export default function Articulos() {
   };
 
   const handleDelete = (id: string) => {
-    if (confirm('¿Estás seguro de que quieres eliminar este artículo?')) {
-      saveToDb(articulos.filter(a => a.id !== id));
+    setArticuloIdToDelete(id);
+    setIsConfirmModalOpen(true);
+  };
+
+  const confirmDeleteArticulo = () => {
+    if (articuloIdToDelete) {
+      setIsConfirmModalOpen(false);
+      saveToDb(articulos.filter(a => a.id !== articuloIdToDelete));
+      setArticuloIdToDelete(null);
     }
   };
 
@@ -271,7 +282,7 @@ export default function Articulos() {
                       <button onClick={() => handleOpenModal(a)} className="p-1.5 text-fuchsia-400 hover:text-fuchsia-700 hover:bg-fuchsia-50 rounded-lg transition-colors">
                         <Edit className="w-4 h-4" />
                       </button>
-                      <button onClick={() => handleDelete(a.id)} className="p-1.5 text-fuchsia-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                      <button onClick={() => handleDelete(a.id)} className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors">
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
@@ -404,6 +415,19 @@ export default function Articulos() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Confirmation Modal */}
+      {isConfirmModalOpen && articuloIdToDelete && (
+        <ConfirmationModal
+          isOpen={isConfirmModalOpen}
+          onClose={() => setIsConfirmModalOpen(false)}
+          onConfirm={confirmDeleteArticulo}
+          title="Confirmar Eliminación"
+          message="ATENCIÓN SE PROCEDE A BORRAR EL ELEMENTO Y SUS REGISTROS ¿ CONFIRMA SU PETICIÓN ?"
+          confirmText="Sí, eliminar"
+          cancelText="No, cancelar"
+        />
       )}
     </div>
   );

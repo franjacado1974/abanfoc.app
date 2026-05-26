@@ -74,7 +74,7 @@ export default function Catalogo() {
             
             <div className="mt-auto relative z-10">
               <h2 className="text-2xl font-bold text-fuchsia-950 mb-2 flex items-center gap-2">
-                Equipamientos
+                Sistemas
               </h2>
               <p className="text-fuchsia-900/70 text-sm line-clamp-2">Añadir sistemas y equipos a los centros.</p>
             </div>

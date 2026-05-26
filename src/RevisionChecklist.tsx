@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Save, Building2, Layers, MapPin, FileText, ChevronDown, ChevronRight, Plus, X, CheckCircle2, XCircle, Trash2, AlertTriangle } from 'lucide-react';
 import type { Centro, Parte, Cliente, CentroSistema, EquipoInstalado } from './Centros';
+import ConfirmationModal from './ConfirmationModal';
 
 const CHECKLIST_ITEMS = [
     { key: 'checkAcceso', label: 'Acceso' },
@@ -25,19 +26,67 @@ export default function RevisionChecklist() {
     const location = useLocation();
     const { centroId, parteId } = location.state || {};
 
-    const [centro, setCentro] = useState<Centro | null>(null);
-    const [parte, setParte] = useState<Parte | null>(null);
-    const [sistemasDelCentro, setSistemasDelCentro] = useState<CentroSistema[]>([]);
-    const [equiposInstalados, setEquiposInstalados] = useState<EquipoInstalado[]>([]);
-    const [equiposCatalogo, setEquiposCatalogo] = useState<any[]>([]);
-    const [categoriasSistema, setCategoriasSistema] = useState<any[]>([]);
+    const [centro, setCentro] = useState<Centro | null>(() => {
+        const stored = JSON.parse(localStorage.getItem('firecheck_db_centros') || '[]');
+        return stored.find((c: any) => c.id === (location.state?.centroId)) || null;
+    });
+    const [parte, setParte] = useState<Parte | null>(() => {
+        const stored = JSON.parse(localStorage.getItem('firecheck_db_partes') || '[]');
+        return stored.find((p: any) => p.id === (location.state?.parteId)) || null;
+    });
+    const [sistemasDelCentro, setSistemasDelCentro] = useState<CentroSistema[]>(() => {
+        const stored = JSON.parse(localStorage.getItem('firecheck_db_centro_sistemas') || '[]');
+        return stored.filter((s: any) => s.centroId === (location.state?.centroId));
+    });
+    const [equiposInstalados, setEquiposInstalados] = useState<EquipoInstalado[]>(() => {
+        const stored = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
+        return stored.filter((e: any) => e.centroId === (location.state?.centroId));
+    });
+    const [equiposCatalogo, setEquiposCatalogo] = useState<any[]>(() => JSON.parse(localStorage.getItem('firecheck_db_sistemas_equipos') || '[]'));
+    const [categoriasSistema, setCategoriasSistema] = useState<any[]>(() => JSON.parse(localStorage.getItem('firecheck_db_sistemas_categorias') || '[]'));
     const [loading, setLoading] = useState(true);
-    const [clientes, setClientes] = useState<Cliente[]>([]);
+    const [clientes, setClientes] = useState<Cliente[]>(() => JSON.parse(localStorage.getItem('firecheck_db_clientes') || '[]'));
     const [openSistemas, setOpenSistemas] = useState<Record<string, boolean>>({});
     const [selectedCatalogItem, setSelectedCatalogItem] = useState<string>('');
     const [addQuantity, setAddQuantity] = useState(1);
     const [newEquipo, setNewEquipo] = useState<{ codigo: string; nombre: string; ubicacion: string; placa: string }>({ codigo: '', nombre: '', ubicacion: '', placa: '' });
     const [addSistemaId, setAddSistemaId] = useState<string | null>(null);
+
+    const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+    const [equipoIdToDelete, setEquipoIdToDelete] = useState<string | null>(null);
+
+    const handleAddFromCatalog = (sistemaId: string, sistType: string) => {
+        if (!selectedCatalogItem) {
+            alert('Por favor, selecciona un equipo del catálogo.');
+            return;
+        }
+
+        const itemBase = equiposCatalogo.find(e => e.id === selectedCatalogItem);
+        if (!itemBase) return;
+
+        const newItems: EquipoInstalado[] = [];
+        for (let i = 0; i < addQuantity; i++) {
+            newItems.push({
+                id: `EQ-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
+                centroId: centroId,
+                sistemaId: sistemaId,
+                codigo: '', // User will assign later
+                nombre: itemBase.nombre,
+                ubicacion: '',
+                placa: '',
+                revisado: false,
+                // Initialize all checks to true by default
+                checkAcceso: true, checkAltura: true, checkSoporte: true, checkSenalizacion: true, checkManguera: true,
+                checkPeso: true, checkManometro: true, checkMarcado: true, checkEtiquetas: true, checkRetimbre: true,
+                checkRiesgo: true, checkDistancia: true, checkPasador: true, checkMovilidad: true
+            });
+        }
+
+        const updatedEquipos = [...equiposInstalados, ...newItems];
+        setEquiposInstalados(updatedEquipos);
+        localStorage.setItem('firecheck_db_equipos_instalados', JSON.stringify(updatedEquipos)); // Update all equipos
+        closeAddModal();
+    };
 
     useEffect(() => {
         if (!centroId || !parteId) {
@@ -129,13 +178,18 @@ export default function RevisionChecklist() {
     };
 
     const handleDeleteEquipo = (id: string) => {
-        if (!window.confirm('¿Estás seguro de que quieres eliminar este equipo de la revisión?')) return;
-        
-        const updatedEquipos = equiposInstalados.filter(eq => eq.id !== id);
+        setEquipoIdToDelete(id);
+        setIsConfirmModalOpen(true);
+    };
+
+    const confirmDeleteEquipo = () => {
+        if (!equipoIdToDelete) return;
+        setIsConfirmModalOpen(false);
+        const updatedEquipos = equiposInstalados.filter(eq => eq.id !== equipoIdToDelete);
         setEquiposInstalados(updatedEquipos);
 
         const allEquipos = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
-        const updatedAll = allEquipos.filter((eq: any) => eq.id !== id);
+        const updatedAll = allEquipos.filter((eq: any) => eq.id !== equipoIdToDelete);
         localStorage.setItem('firecheck_db_equipos_instalados', JSON.stringify(updatedAll));
     };
 
@@ -198,54 +252,6 @@ export default function RevisionChecklist() {
         localStorage.setItem('firecheck_db_equipos_instalados', JSON.stringify([...allEquipos, nuevoEquipo]));
 
         setNewEquipo({ codigo: '', nombre: '', ubicacion: '', placa: '' });
-        setSelectedCatalogItem('');
-        setAddQuantity(1);
-        closeAddModal();
-    };
-
-    const handleAddFromCatalog = (sistemaId: string, sistType: string) => {
-        if (!selectedCatalogItem) {
-            alert('Por favor, selecciona un equipo del catálogo.');
-            return;
-        }
-
-        const itemBase = equiposCatalogo.find(e => e.id === selectedCatalogItem);
-        if (!itemBase) return;
-
-        const newItems: EquipoInstalado[] = [];
-        for (let i = 0; i < addQuantity; i++) {
-            newItems.push({
-                id: `EQ-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
-                centroId: centroId,
-                sistemaId: sistemaId,
-                codigo: '', 
-                nombre: itemBase.nombre,
-                ubicacion: '',
-                placa: '',
-                revisado: false,
-                checkAcceso: true,
-                checkAltura: true,
-                checkSoporte: true,
-                checkSenalizacion: true,
-                checkManguera: true,
-                checkPeso: true,
-                checkManometro: true,
-                checkMarcado: true,
-                checkEtiquetas: true,
-                checkRetimbre: true,
-                checkRiesgo: true,
-                checkDistancia: true,
-                checkPasador: true,
-                checkMovilidad: true
-            });
-        }
-
-        const updatedEquipos = [...equiposInstalados, ...newItems];
-        setEquiposInstalados(updatedEquipos);
-
-        const allEquipos = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
-        localStorage.setItem('firecheck_db_equipos_instalados', JSON.stringify([...allEquipos, ...newItems]));
-
         setSelectedCatalogItem('');
         setAddQuantity(1);
         closeAddModal();
@@ -679,7 +685,7 @@ export default function RevisionChecklist() {
                                     if (!addSistemaId) return;
                                     if (selectedCatalogItem) {
                                         const sist = sistemasDelCentro.find(s => s.id === addSistemaId);
-                                        handleAddFromCatalog(addSistemaId, sist?.tipo || sist?.familia || '');
+                                        handleAddFromCatalog(addSistemaId, sist?.tipo || sist?.familia || ''); // Corrected call
                                     } else if (newEquipo.codigo.trim() && newEquipo.nombre.trim()) {
                                         handleAddEquipo(addSistemaId);
                                     } else {
@@ -693,6 +699,18 @@ export default function RevisionChecklist() {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {isConfirmModalOpen && equipoIdToDelete && (
+                <ConfirmationModal
+                    isOpen={isConfirmModalOpen}
+                    onClose={() => { setIsConfirmModalOpen(false); setEquipoIdToDelete(null); }}
+                    onConfirm={confirmDeleteEquipo}
+                    title="Confirmar Eliminación"
+                    message="ATENCIÓN SE PROCEDE A BORRAR EL ELEMENTO Y SUS REGISTROS ¿ CONFIRMA SU PETICIÓN ?"
+                    confirmText="Sí, eliminar"
+                    cancelText="No, cancelar"
+                />
             )}
         </div>
     );

@@ -1,7 +1,7 @@
 // Import the functions you need from the SDKs you need
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
-import { getFirestore, collection, getDocs, query, where, addDoc, doc, setDoc, deleteDoc, onSnapshot } from "firebase/firestore";
+import { getFirestore, collection, getDocs, query, where, addDoc, doc, setDoc, deleteDoc, onSnapshot, enableIndexedDbPersistence } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 // TODO: Add SDKs for Firebase products that you want to use
 // https://firebase.google.com/docs/web/setup#available-libraries
@@ -19,10 +19,33 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase
+// Interfaces para Sistemas y Equipos
+export interface SistemaCategoria {
+  id: string;
+  nombre: string;
+}
+
+export interface SistemaEquipo {
+  id: string;
+  idCategoria: string;
+  codigo: string;
+  nombre: string;
+  familia: string;
+}
+
 const app = initializeApp(firebaseConfig);
 const analytics = getAnalytics(app);
 const storage= getStorage(app);
 const db = getFirestore(app);
+
+// Habilitar persistencia offline para evitar bloqueos por falta de conexión
+enableIndexedDbPersistence(db).catch((err) => {
+  if (err.code === 'failed-precondition') {
+    console.warn('La persistencia falló: Múltiples pestañas abiertas.');
+  } else if (err.code === 'unimplemented') {
+    console.warn('El navegador no soporta persistencia offline.');
+  }
+});
 
 /**
  * Guarda un nuevo usuario en Firestore (colección "usuarios").
@@ -194,6 +217,175 @@ export function subscribeCentros(callback: (centros: any[]) => void) {
   } catch (e) {
     console.error('subscribeCentros error:', e);
     return () => {};
+  }
+}
+
+/**
+ * Helper para normalizar el nombre del sistema y usarlo como ID de documento (2ª columna).
+ * "SISTEMA EXTINTORES" -> "extintores"
+ */
+function getCollectionName(catNombre: string) {
+  return catNombre
+    .replace(/^sistema\s+/i, '')
+    .toLowerCase()
+    .trim()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, '_');
+}
+
+/**
+ * SISTEMAS (CATEGORÍAS) - operaciones con Firestore
+ */
+export async function addSistemaCategoria(categoria: SistemaCategoria) {
+  try {
+    const systemId = getCollectionName(categoria.nombre);
+    const ref = doc(db, 'sistemas', systemId);
+    await setDoc(ref, { 
+      id: systemId, 
+      nombre: categoria.nombre.toUpperCase(), 
+      updatedAt: new Date().toISOString() 
+    });
+    return { id: systemId, nombre: categoria.nombre };
+  } catch (e) {
+    console.error('addSistemaCategoria error:', e);
+    throw e;
+  }
+}
+
+export async function updateSistemaCategoria(id: string, categoria: Partial<SistemaCategoria>) {
+  try {
+    const ref = doc(db, 'sistemas', id);
+    await setDoc(ref, { ...categoria, updatedAt: new Date().toISOString() }, { merge: true });
+    return { _docId: id, ...categoria };
+  } catch (e) {
+    console.error('updateSistemaCategoria error:', e);
+    throw e;
+  }
+}
+
+export async function deleteSistemaCategoria(id: string) {
+  try {
+    const ref = doc(db, 'sistemas', id);
+    await deleteDoc(ref);
+    return true;
+  } catch (e) {
+    console.error('deleteSistemaCategoria error:', e);
+    throw e;
+  }
+}
+
+export async function getSistemasCategorias() {
+  try {
+    const col = collection(db, 'sistemas');
+    const snap = await getDocs(col);
+    return snap.docs.map(d => ({ id: d.id, ...d.data() })) as SistemaCategoria[];
+  } catch (e) {
+    console.error('getSistemasCategorias error:', e);
+    throw e;
+  }
+}
+
+export function subscribeSistemasCategorias(callback: (categorias: SistemaCategoria[]) => void) {
+  try {
+    const col = collection(db, 'sistemas');
+    const unsub = onSnapshot(col, (snap) => {
+      const items = snap.docs.map(d => ({ id: d.id, ...d.data() })) as SistemaCategoria[];
+      callback(items);
+    }, (err) => {
+      console.error('subscribeSistemasCategorias error:', err);
+      callback([]);
+    });
+    return unsub;
+  } catch (e) {
+    console.error('subscribeSistemasCategorias error:', e);
+    return () => {};
+  }
+}
+
+/**
+ * Suscribe a los equipos de un sistema específico (colección dinámica).
+ * Por ejemplo, si catNombre es "SISTEMA EXTINTORES", escuchará la colección "extintores".
+ */
+export function subscribeEquiposBySystem(catNombre: string, callback: (equipos: SistemaEquipo[]) => void) {
+  try {
+    const systemId = getCollectionName(catNombre);
+    // Nueva ruta anidada: sistemas -> [ID Sistema] -> equipos
+    const col = collection(db, 'sistemas', systemId, 'equipos');
+    const unsub = onSnapshot(col, (snap) => {
+      const items = snap.docs.map(d => {
+        const data = d.data() as any;
+        return { ...data, id: d.id };
+      }) as SistemaEquipo[];
+      callback(items);
+    }, (err) => {
+      console.error(`Error en suscripción a equipos de ${systemId}:`, err);
+    });
+    return unsub;
+  } catch (e) {
+    return () => {};
+  }
+}
+
+/**
+ * Guarda o actualiza un equipo individual en su colección de sistema correspondiente.
+ */
+export async function saveEquipoToSystemCollection(catNombre: string, equipo: SistemaEquipo) {
+  try {
+    const systemId = getCollectionName(catNombre);
+    const ref = doc(db, 'sistemas', systemId, 'equipos', equipo.id);
+    await setDoc(ref, { 
+      ...equipo, 
+      idCategoria: systemId,
+      updatedAt: new Date().toISOString() 
+    });
+    return true;
+  } catch (e) {
+    console.error('Error al guardar equipo en Firestore:', e);
+    throw e;
+  }
+}
+
+/**
+ * Elimina un equipo de su colección de sistema.
+ */
+export async function deleteEquipoFromSystemCollection(catNombre: string, equipoId: string) {
+  try {
+    const systemId = getCollectionName(catNombre);
+    const ref = doc(db, 'sistemas', systemId, 'equipos', equipoId);
+    await deleteDoc(ref);
+    return true;
+  } catch (e) {
+    console.error('Error al eliminar equipo de Firestore:', e);
+    throw e;
+  }
+}
+
+/**
+ * Sincroniza cada sistema en su propia colección de Firestore.
+ * Por ejemplo: "SISTEMA EXTINTORES" -> Colección "extintores"
+ */
+export async function syncSistemas(categorias: SistemaCategoria[], equipos: SistemaEquipo[]) {
+  try {
+    for (const cat of categorias) {
+      const systemId = getCollectionName(cat.nombre);
+      const catRef = doc(db, 'sistemas', systemId);
+      
+      await setDoc(catRef, { id: systemId, nombre: cat.nombre, updatedAt: new Date().toISOString() });
+
+      const equiposDelSistema = equipos.filter(e => e.idCategoria === cat.id);
+      for (const eq of equiposDelSistema) {
+        const ref = doc(db, 'sistemas', systemId, 'equipos', eq.id);
+        await setDoc(ref, { 
+          ...eq, 
+          idCategoria: systemId,
+          updatedAt: new Date().toISOString() 
+        });
+      }
+    }
+    return true;
+  } catch (e: any) {
+    console.error('Error en syncSistemas:', e);
+    throw e;
   }
 }
 

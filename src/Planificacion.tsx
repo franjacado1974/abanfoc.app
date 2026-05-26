@@ -191,7 +191,7 @@ export default function Planificacion() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-50 p-4 md:p-8">
+    <div className="min-h-screen bg-amber-50/40 p-4 md:p-8">
       <div className="max-w-[1600px] mx-auto">
         <div className="flex items-center gap-4 mb-8">
           <button onClick={() => navigate('/')} className="p-2 bg-white rounded-full border border-sky-100 hover:bg-sky-50 text-sky-600 transition-colors shadow-sm">
@@ -271,30 +271,34 @@ export default function Planificacion() {
             )}
           </div>
 
-          {/* CALENDARIO */}
+            {/* CALENDARIO */}
           <div className="flex-1 bg-white rounded-3xl shadow-xl border border-sky-100 flex flex-col overflow-hidden h-[600px] lg:h-full">
-            <div className="p-6 border-b border-sky-50 flex items-center justify-between bg-sky-50/20">
-              <div className="flex items-center gap-4">
-                <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))} className="p-1 hover:bg-white rounded-full transition-all border border-transparent hover:border-sky-100"><ChevronLeft/></button>
-                <h2 className="text-lg md:text-xl font-bold text-sky-950 min-w-[120px] md:min-w-[150px] text-center capitalize">
-                  {new Intl.DateTimeFormat('es-ES', { month: 'long', year: 'numeric' }).format(currentDate)}
-                </h2>
-                <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))} className="p-1 hover:bg-white rounded-full transition-all border border-transparent hover:border-sky-100"><ChevronRight/></button>
-              </div>
-              <div className={`grid ${showWeekends ? 'grid-cols-7' : 'grid-cols-5'} w-full max-w-xl text-center text-[10px] md:text-xs font-bold text-sky-400 ml-4`}>
-                {showWeekends
-                  ? ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'].map(d => <div key={d}>{d}</div>)
-                  : ['Lun', 'Mar', 'Mié', 'Jue', 'Vie'].map(d => <div key={d}>{d}</div>)
-                }
-              </div>
+            {/* Navegación del mes */}
+            <div className="px-6 py-4 border-b border-sky-50 flex items-center justify-center gap-4 bg-sky-50/20">
+              <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))} className="p-1 hover:bg-white rounded-full transition-all border border-transparent hover:border-sky-100"><ChevronLeft/></button>
+              <h2 className="text-lg md:text-xl font-bold text-sky-950 min-w-[120px] md:min-w-[150px] text-center capitalize">
+                {new Intl.DateTimeFormat('es-ES', { month: 'long', year: 'numeric' }).format(currentDate)}
+              </h2>
+              <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))} className="p-1 hover:bg-white rounded-full transition-all border border-transparent hover:border-sky-100"><ChevronRight/></button>
             </div>
-            <div className={`flex-1 overflow-y-auto ${showWeekends ? 'grid grid-cols-7' : 'grid grid-cols-5'}`}>
+            {/* Encabezados de días de la semana - alineados con las columnas del calendario */}
+            <div className={`px-2 border-b border-sky-50 ${showWeekends ? 'grid grid-cols-7' : 'grid grid-cols-5'}`}>
+              {(showWeekends
+                ? ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
+                : ['Lun', 'Mar', 'Mié', 'Jue', 'Vie']
+              ).map(d => (
+                <div key={d} className="py-2 text-center text-[10px] md:text-xs font-bold text-sky-400">
+                  {d}
+                </div>
+              ))}
+            </div>
+            <div className={`flex-1 overflow-y-auto px-2 ${showWeekends ? 'grid grid-cols-7' : 'grid grid-cols-5'}`}>
               {getCalendarDays()
                 .filter(({ date }) => showWeekends || (date.getDay() !== 0 && date.getDay() !== 6))
                 .map(({ date, currentMonth }, idx) => {
                 const dateStr = formatDate(date);
                 return (
-                  <div key={dateStr + idx} onDragOver={onDragOver} onDrop={(e) => onDrop(e, dateStr)} className={`min-h-[80px] md:min-h-[100px] p-1 md:p-2 border border-sky-50 flex flex-col ${currentMonth ? 'bg-white' : 'bg-zinc-50/50 opacity-40'}`}>
+                  <div key={dateStr + idx} onDragOver={onDragOver} onDrop={(e) => onDrop(e, dateStr)} className={`min-h-[80px] md:min-h-[100px] p-1 md:p-2 border border-sky-50 flex flex-col ${currentMonth ? 'bg-amber-50/20' : 'bg-zinc-50/50 opacity-40'}`}>
                     <span className="text-xs font-bold text-zinc-400 mb-1">{date.getDate()}</span>
                     <div className="flex-1 space-y-1">
                       {partes.filter(p => p.fechaProgramada === dateStr).map(p => {

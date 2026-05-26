@@ -1,0 +1,15 @@
+
+> app@0.0.0 build
+> tsc -b && vite build
+
+src/App.tsx(51,18): error TS6133: 'usuarios' is declared but its value is never read.
+src/Centros.tsx(508,9): error TS2451: Cannot redeclare block-scoped variable 'confirmDeleteSistema'.
+src/Centros.tsx(520,9): error TS2451: Cannot redeclare block-scoped variable 'confirmDeleteEquipo'.
+src/Centros.tsx(587,9): error TS2451: Cannot redeclare block-scoped variable 'confirmDeleteSistema'.
+src/Centros.tsx(673,9): error TS2451: Cannot redeclare block-scoped variable 'confirmDeleteEquipo'.
+src/Partes.tsx(4,1): error TS6133: 'ConfirmationModal' is declared but its value is never read.
+src/Partes.tsx(49,10): error TS6133: 'isConfirmModalOpen' is declared but its value is never read.
+src/Partes.tsx(49,30): error TS6133: 'setIsConfirmModalOpen' is declared but its value is never read.
+src/Partes.tsx(50,10): error TS6133: 'parteIdToDelete' is declared but its value is never read.
+src/Partes.tsx(50,27): error TS6133: 'setParteIdToDelete' is declared but its value is never read.
+src/RevisionChecklist.tsx(58,54): error TS6133: 'sistType' is declared but its value is never read.

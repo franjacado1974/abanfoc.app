@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, FileCheck, Download, Search, CheckCircle2, CircleX, Clock, Trash2 } from 'lucide-react';
+import ConfirmationModal from './ConfirmationModal';
 import { generarCertificadoPDF } from './pdfGenerator';
 
 export default function Certificados() {
@@ -12,6 +13,9 @@ export default function Certificados() {
   const [equipos, setEquipos] = useState<any[]>([]);
   const [tecnicos, setTecnicos] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  // State for confirmation modal
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [certificadoIdToDelete, setCertificadoIdToDelete] = useState<string | null>(null);
 
   useEffect(() => {
     const storedCertificados = JSON.parse(localStorage.getItem('firecheck_db_certificados') || '[]');
@@ -30,11 +34,17 @@ export default function Certificados() {
   }, []);
 
   const handleDeleteCertificado = (id: string) => {
-    if (window.confirm('¿Estás seguro de que quieres eliminar este certificado?')) {
-      const updatedCertificados = certificados.filter(cert => cert.id !== id);
-      setCertificados(updatedCertificados);
-      localStorage.setItem('firecheck_db_certificados', JSON.stringify(updatedCertificados));
-    }
+    setCertificadoIdToDelete(id);
+    setIsConfirmModalOpen(true);
+  };
+
+  const confirmDeleteCertificado = () => {
+    if (!certificadoIdToDelete) return;
+    setIsConfirmModalOpen(false);
+    const updatedCertificados = certificados.filter(cert => cert.id !== certificadoIdToDelete);
+    setCertificados(updatedCertificados);
+    localStorage.setItem('firecheck_db_certificados', JSON.stringify(updatedCertificados));
+    setCertificadoIdToDelete(null);
   };
 
   const sortedAndFilteredCertificados = useMemo(() => {
@@ -172,7 +182,7 @@ export default function Certificados() {
                       </button>
                       <button 
                         onClick={() => handleDeleteCertificado(cert.id)}
-                        className="p-2.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors"
+                        className="p-2.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-xl transition-colors"
                         title="Eliminar certificado"
                       >
                         <Trash2 className="w-5 h-5" />
@@ -187,4 +197,19 @@ export default function Certificados() {
       </div>
     </div>
   );
+
+  // Confirmation Modal
+  if (isConfirmModalOpen && certificadoIdToDelete) {
+    return (
+      <ConfirmationModal
+        isOpen={isConfirmModalOpen}
+        onClose={() => setIsConfirmModalOpen(false)}
+        onConfirm={confirmDeleteCertificado}
+        title="Confirmar Eliminación"
+        message="ATENCIÓN SE PROCEDE A BORRAR EL ELEMENTO Y SUS REGISTROS ¿ CONFIRMA SU PETICIÓN ?"
+        confirmText="Sí, eliminar"
+        cancelText="No, cancelar"
+      />
+    );
+  }
 }

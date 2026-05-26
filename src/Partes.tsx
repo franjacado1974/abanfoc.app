@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Save, FileText, DownloadCloud, RefreshCw, Calendar, User as UserIcon, Building2, MapPin, Trash2, CheckCircle2, CalendarPlus, X, Search } from 'lucide-react';
+import ConfirmationModal from './ConfirmationModal'; // Import the new modal component
+import type { Parte, Centro, Cliente } from './Centros';
 import { generarActaExtintoresPDF, generarAlbaranPDF, generarCertificadoPDF } from './pdfGenerator';
 
 const generateId = () => {
@@ -11,10 +13,10 @@ export default function Partes() {
   const location = useLocation();
   const { centroId, clienteId } = location.state || {};
 
-  const [partes, setPartes] = useState<Parte[]>([]);
-  const [tecnicos, setTecnicos] = useState<{id: string, nombre: string, apellidos: string}[]>([]);
-  const [centros, setCentros] = useState<Centro[]>([]);
-  const [clientes, setClientes] = useState<Cliente[]>([]); // Add a state for clients to retrieve client names
+  const [partes, setPartes] = useState<Parte[]>(() => JSON.parse(localStorage.getItem('firecheck_db_partes') || '[]'));
+  const [tecnicos, _setTecnicos] = useState<{id: string, nombre: string, apellidos: string}[]>(() => JSON.parse(localStorage.getItem('firecheck_db_tecnicos') || '[]'));
+  const [centros, _setCentros] = useState<Centro[]>(() => JSON.parse(localStorage.getItem('firecheck_db_centros') || '[]'));
+  const [clientes, _setClientes] = useState<Cliente[]>(() => JSON.parse(localStorage.getItem('firecheck_db_clientes') || '[]')); 
 
   const [view, setView] = useState<'list' | 'form'>('list'); // Default to list view
   
@@ -42,33 +44,10 @@ export default function Partes() {
   const [searchTerm, setSearchTerm] = useState('');
   const canvasClienteRef = useRef<HTMLCanvasElement>(null);
   const canvasTecnicoRef = useRef<HTMLCanvasElement>(null);
-  useEffect(() => {
-    try {
-      const storedPartes = localStorage.getItem('firecheck_db_partes'); // Ensure this is loaded
-      if (storedPartes) {
-        const parsed = JSON.parse(storedPartes);
-        if (Array.isArray(parsed)) setPartes(parsed);
-      }
-      
-      const storedTecnicos = localStorage.getItem('firecheck_db_tecnicos');
-      if (storedTecnicos) {
-        const parsed = JSON.parse(storedTecnicos);
-        if (Array.isArray(parsed)) setTecnicos(parsed);
-      }
 
-      const storedCentros = localStorage.getItem('firecheck_db_centros');
-      if (storedCentros) {
-        const parsed = JSON.parse(storedCentros);
-        if (Array.isArray(parsed)) setCentros(parsed);
-      }
-
-      const storedClientes = localStorage.getItem('firecheck_db_clientes');
-      if (storedClientes) {
-        const parsed = JSON.parse(storedClientes);
-        if (Array.isArray(parsed)) setClientes(parsed);
-      }
-    } catch (e) { console.error("Error loading from localStorage:", e); }
-  }, [centroId]);
+  // State for confirmation modal
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [parteIdToDelete, setParteIdToDelete] = useState<string | null>(null);
 
   // Manejar edición externa (desde el planificador)
   useEffect(() => {
@@ -604,12 +583,15 @@ export default function Partes() {
                         </div>
                       )}
                       <button onClick={() => {
-                        if (confirm('¿Eliminar este parte?')) {
+                        if (
+                          window.confirm('¿Estás seguro de que quieres eliminar este parte?') &&
+                          window.confirm('ATENCIÓN SE PROCEDE A BORRAR EL ELEMENTO Y SUS REGISTROS ¿ CONFIRMA SU PETICIÓN ?')
+                        ) {
                           const updated = partes.filter(p => p.id !== parte.id);
                           setPartes(updated);
                           localStorage.setItem('firecheck_db_partes', JSON.stringify(updated));
                         }
-                      }} className="p-2 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors border border-zinc-200 hover:border-red-200" title="Eliminar Parte">
+                      }} className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-xl transition-colors border border-zinc-200 hover:border-red-200" title="Eliminar Parte">
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>

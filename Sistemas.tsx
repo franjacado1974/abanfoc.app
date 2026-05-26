@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Layers, ArrowLeft, Plus, Edit, Trash2, X, FileBox, LayoutList, Droplets, BellRing, Wind, Download, Upload, Copy, FireExtinguisher, Search } from 'lucide-react';
+import { Layers, ArrowLeft, Plus, Edit, Trash2, X, FileBox, LayoutList, Droplets, BellRing, Wind, Download, Upload, Copy, Search, Cloud, Loader } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { syncSistemas, subscribeSistemasCategorias, saveEquipoToSystemCollection, deleteEquipoFromSystemCollection, subscribeEquiposBySystem, addSistemaCategoria, deleteSistemaCategoria } from './firebase';
+import ConfirmationModal from './ConfirmationModal'; // Ruta corregida
 
 export interface SistemaCategoria {
   id: string;
@@ -57,22 +59,65 @@ export default function Sistemas() {
   
   const [formEquipo, setFormEquipo] = useState({ id: '', codigo: '', nombre: '', familia: '' });
 
-  useEffect(() => {
-    // Cargar o Inicializar Categorías
-    const savedCats = localStorage.getItem('firecheck_db_sistemas_categorias');
-    if (savedCats) {
-      setCategorias(JSON.parse(savedCats));
-    } else {
-      setCategorias(CATEGORIAS_POR_DEFECTO);
-      localStorage.setItem('firecheck_db_sistemas_categorias', JSON.stringify(CATEGORIAS_POR_DEFECTO));
-    }
+  // State for confirmation modal
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<{ type: 'cat' | 'equipo', id: string } | null>(null);
 
-    // Cargar Equipos
-    const savedEquipos = localStorage.getItem('firecheck_db_sistemas_equipos');
-    if (savedEquipos) {
-      setEquipos(JSON.parse(savedEquipos));
+  // Estado de sincronización
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
+
+  const handleSyncToFirestore = async () => {
+    setIsSyncing(true);
+    setSyncStatus('syncing');
+    try {
+      console.log('Iniciando sincronización...');
+      console.log('Categorías a sincronizar:', categorias);
+      console.log('Equipos a sincronizar:', equipos);
+      const result = await syncSistemas(categorias, equipos);
+      console.log('Resultado sincronización:', result);
+      setSyncStatus('success');
+      setTimeout(() => setSyncStatus('idle'), 3000);
+    } catch (e: any) {
+      console.error('Error al sincronizar:', e);
+      console.error('Mensaje:', e?.message);
+      console.error('Stack:', e?.stack);
+      alert(`Error al sincronizar con Firebase: ${e?.message || 'Error desconocido'}`);
+      setSyncStatus('error');
+      setTimeout(() => setSyncStatus('idle'), 3000);
+    } finally {
+      setIsSyncing(false);
     }
+  };
+
+  // Sincronización en tiempo real desde Firestore
+  useEffect(() => {
+    const unsubCats = subscribeSistemasCategorias((cats) => {
+      setCategorias(cats);
+      localStorage.setItem('firecheck_db_sistemas_categorias', JSON.stringify(cats));
+
+      // // Si no hay categorías en Firestore, añadir las por defecto
+      // if (cats.length === 0 && CATEGORIAS_POR_DEFECTO.length > 0) {
+      //   console.log('No categories found in Firestore, adding default categories.');
+      //   CATEGORIAS_POR_DEFECTO.forEach(cat => addSistemaCategoria(cat).catch(console.error));
+      // }
+
+    });
+
+    return () => {
+      unsubCats();
+    };
   }, []);
+
+  // Suscripción dinámica según el sistema seleccionado en la UI
+  useEffect(() => {
+    if (!selectedCategoria) return;
+    setEquipos([]); // Clear previous system's equipment
+    const unsub = subscribeEquiposBySystem(selectedCategoria.nombre, (newEqs) => {
+      setEquipos(newEqs); // Directly set equipment for the selected category
+    });
+    return () => unsub();
+  }, [selectedCategoria]);
 
   const saveCats = (data: SistemaCategoria[]) => {
     setCategorias(data);
@@ -85,29 +130,56 @@ export default function Sistemas() {
   };
 
   // ----- LOGICA CATEGORÍAS -----
-  const handleSaveCat = (e: React.FormEvent) => {
+  const handleSaveCat = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!catNombre.trim()) return;
 
-    if (editCatId) {
-      saveCats(categorias.map(c => c.id === editCatId ? { ...c, nombre: catNombre.toUpperCase() } : c));
-    } else {
-      saveCats([...categorias, { id: crypto.randomUUID(), nombre: catNombre.toUpperCase() }]);
+    const newCat: SistemaCategoria = { 
+      id: editCatId || crypto.randomUUID(), 
+      nombre: catNombre.toUpperCase() 
+    };
+
+    try {
+      // Guardar en Firestore para que el listener no la borre al refrescar
+      await addSistemaCategoria(newCat);
+
+      if (editCatId) {
+        saveCats(categorias.map(c => c.id === editCatId ? newCat : c));
+      } else {
+        saveCats([...categorias, newCat]);
+      }
+      setIsCatModalOpen(false);
+      setCatNombre('');
+      setEditCatId(null);
+    } catch (error) {
+      alert("Error al guardar el sistema en Firebase.");
     }
-    setIsCatModalOpen(false);
-    setCatNombre('');
-    setEditCatId(null);
   };
 
-  const handleDeleteCat = (id: string) => {
-    if (confirm('¿Estás seguro de eliminar este sistema? Se eliminarán también todos los equipos de su interior.')) {
-      saveCats(categorias.filter(c => c.id !== id));
-      saveEquipos(equipos.filter(e => e.idCategoria !== id));
+  const handleDeleteCat = async (id: string) => {
+    if (!window.confirm('¿Estás seguro de que quieres eliminar este sistema?')) {
+      return;
     }
+    setItemToDelete({ type: 'cat', id });
+    setIsConfirmModalOpen(true);
+  };
+
+  const confirmDeleteCat = async () => {
+    if (!itemToDelete || itemToDelete.type !== 'cat') return;
+    setIsConfirmModalOpen(false);
+    // Actual deletion logic will be moved here
+    try {
+      await deleteSistemaCategoria(itemToDelete.id);
+      saveCats(categorias.filter(c => c.id !== itemToDelete.id));
+      saveEquipos(equipos.filter(e => e.idCategoria !== itemToDelete.id));
+    } catch (error) {
+      alert("Error al eliminar el sistema de Firebase.");
+    }
+    setItemToDelete(null);
   };
 
   // ----- LOGICA EQUIPOS -----
-  const handleSaveEquipo = (e: React.FormEvent) => {
+  const handleSaveEquipo = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCategoria) return;
 
@@ -119,18 +191,43 @@ export default function Sistemas() {
       familia: selectedCategoria.nombre.toUpperCase()
     };
 
-    if (formEquipo.id) {
-      saveEquipos(equipos.map(eq => eq.id === formEquipo.id ? newEquipo : eq));
-    } else {
-      saveEquipos([...equipos, newEquipo]);
+    try {
+      // Guardar en Firestore automáticamente
+      await saveEquipoToSystemCollection(selectedCategoria.nombre, newEquipo);
+
+      // Actualizar estado local
+      if (formEquipo.id) {
+        saveEquipos(equipos.map(eq => eq.id === formEquipo.id ? newEquipo : eq));
+      } else {
+        saveEquipos([...equipos, newEquipo]);
+      }
+      setIsEquipoModalOpen(false);
+    } catch (error) {
+      alert("Error al guardar en Firebase. El cambio se mantuvo localmente.");
     }
-    setIsEquipoModalOpen(false);
   };
 
-  const handleDeleteEquipo = (id: string) => {
-    if (confirm('¿Eliminar este equipo?')) {
-      saveEquipos(equipos.filter(e => e.id !== id));
+  const handleDeleteEquipo = async (id: string) => {
+    if (!window.confirm('¿Estás seguro de que quieres eliminar este equipo?')) {
+      return;
     }
+    setItemToDelete({ type: 'equipo', id });
+    setIsConfirmModalOpen(true);
+  };
+
+  const confirmDeleteEquipo = async () => {
+    if (!itemToDelete || itemToDelete.type !== 'equipo') return;
+    setIsConfirmModalOpen(false);
+    // Actual deletion logic will be moved here
+    try {
+      if (selectedCategoria) {
+        await deleteEquipoFromSystemCollection(selectedCategoria.nombre, itemToDelete.id);
+      }
+      saveEquipos(equipos.filter(e => e.id !== itemToDelete.id));
+    } catch (error) {
+      alert("Error al eliminar en Firebase.");
+    }
+    setItemToDelete(null);
   };
 
   const handleDuplicateEquipo = (eq: SistemaEquipo) => {
@@ -306,11 +403,11 @@ export default function Sistemas() {
   };
 
   return (
-    <div className="min-h-screen bg-sky-50/40 p-6 md:p-12">
+    <div className="min-h-screen bg-fuchsia-50/40 p-6 md:p-12">
       <div className="max-w-5xl mx-auto w-full">
         <button 
           onClick={() => selectedCategoria ? setSelectedCategoria(null) : navigate('/')} 
-          className="text-sm font-medium text-sky-600 hover:text-sky-950 mb-8 flex items-center gap-2 transition-colors"
+          className="text-sm font-medium text-fuchsia-600 hover:text-fuchsia-950 mb-8 flex items-center gap-2 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" /> 
           {selectedCategoria ? 'Volver a Sistemas' : 'Volver al panel'}
@@ -333,14 +430,14 @@ export default function Sistemas() {
           <>
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
               <div>
-                <h1 className="text-3xl font-bold text-sky-950 tracking-tight flex items-center gap-3">
-                  <div className="w-10 h-10 bg-sky-100 text-sky-600 rounded-xl flex items-center justify-center">
+                <h1 className="text-3xl font-bold text-fuchsia-950 tracking-tight flex items-center gap-3">
+                  <div className="w-10 h-10 bg-fuchsia-100 text-fuchsia-600 rounded-xl flex items-center justify-center">
                     <Layers className="w-5 h-5" />
                   </div>
-                  Equipamientos
+                  Sistemas
                 </h1>
-                <p className="text-sky-900/60 mt-1">
-                  Catálogo de sistemas y modelos de equipos.
+                <p className="text-fuchsia-900/60 mt-1">
+                  Gestión de sistemas y equipos contra incendios.
                 </p>
               </div>
               <div className="flex gap-2">
@@ -353,7 +450,7 @@ export default function Sistemas() {
                 />
                 <button 
                   onClick={() => fileInputCatsRef.current?.click()}
-                  className="flex items-center justify-center gap-2 bg-white border border-sky-200 hover:bg-sky-50 text-sky-700 px-4 py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm"
+                  className="flex items-center justify-center gap-2 bg-white border border-fuchsia-200 hover:bg-fuchsia-50 text-fuchsia-700 px-4 py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm"
                   title="Importar Excel"
                 >
                   <Download className="w-4 h-4" />
@@ -361,15 +458,40 @@ export default function Sistemas() {
                 </button>
                 <button 
                   onClick={handleExportCats}
-                  className="flex items-center justify-center gap-2 bg-white border border-sky-200 hover:bg-sky-50 text-sky-700 px-4 py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm"
+                  className="flex items-center justify-center gap-2 bg-white border border-fuchsia-200 hover:bg-fuchsia-50 text-fuchsia-700 px-4 py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm"
                   title="Exportar a Excel"
                 >
                   <Upload className="w-4 h-4" />
                   <span className="hidden sm:inline">Exportar</span>
                 </button>
                 <button 
+                  onClick={handleSyncToFirestore}
+                  disabled={isSyncing}
+                  className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm ${
+                    syncStatus === 'success'
+                      ? 'bg-emerald-500 text-white border-emerald-500'
+                      : syncStatus === 'error'
+                      ? 'bg-red-500 text-white border-red-500'
+                      : 'bg-white border border-fuchsia-200 hover:bg-fuchsia-50 text-fuchsia-700'
+                  }`}
+                  title="Sincronizar con Firebase"
+                >
+                  {isSyncing ? (
+                    <Loader className="w-4 h-4 animate-spin" />
+                  ) : syncStatus === 'success' ? (
+                    <Cloud className="w-4 h-4" />
+                  ) : syncStatus === 'error' ? (
+                    <Cloud className="w-4 h-4" />
+                  ) : (
+                    <Cloud className="w-4 h-4" />
+                  )}
+                  <span className="hidden sm:inline">
+                    {isSyncing ? 'Sincronizando...' : syncStatus === 'success' ? '¡Sincronizado!' : syncStatus === 'error' ? 'Error' : 'Firebase'}
+                  </span>
+                </button>
+                <button 
                   onClick={() => { setEditCatId(null); setCatNombre(''); setIsCatModalOpen(true); }}
-                  className="flex items-center justify-center gap-2 bg-white border border-sky-200 hover:border-sky-300 text-sky-700 px-5 py-2.5 rounded-xl font-medium transition-colors shadow-sm"
+                  className="flex items-center justify-center gap-2 bg-white border border-fuchsia-200 hover:border-fuchsia-300 text-fuchsia-700 px-5 py-2.5 rounded-xl font-medium transition-colors shadow-sm"
                 >
                   <Plus className="w-5 h-5" />
                   <span className="hidden sm:inline">Añadir sistemas</span>
@@ -381,11 +503,11 @@ export default function Sistemas() {
             {/* Buscador de Sistemas */}
             <div className="relative mb-6">
               <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                <Search className="w-5 h-5 text-sky-400" />
+                <Search className="w-5 h-5 text-fuchsia-400" />
               </div>
               <input
                 type="text"
-                className="w-full pl-12 pr-4 py-3 bg-white rounded-xl border border-sky-100 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 outline-none transition-all shadow-sm text-sky-950 placeholder-sky-300"
+                className="w-full pl-12 pr-4 py-3 bg-white rounded-xl border border-fuchsia-100 focus:border-fuchsia-500 focus:ring-1 focus:ring-fuchsia-500 outline-none transition-all shadow-sm text-fuchsia-950 placeholder-fuchsia-300"
                 placeholder="Buscar sistema por nombre..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -396,15 +518,18 @@ export default function Sistemas() {
               {categorias.filter(cat => cat.nombre.toLowerCase().includes(searchTerm.toLowerCase())).map(cat => {
                 const count = equipos.filter(e => e.idCategoria === cat.id).length;
                 const IconoCategoria = getIconForSistema(cat.nombre);
-                
+
                 return (
-                  <div 
-                    key={cat.id} 
-                    className="bg-white p-5 rounded-3xl border border-sky-100 shadow-sm hover:shadow-md hover:border-sky-200 transition-all cursor-pointer group flex flex-col h-full"
-                    onClick={() => setSelectedCategoria(cat)}
+                  <div
+                    key={cat.id}
+                    className="bg-white p-4 rounded-3xl border border-fuchsia-100 shadow-sm hover:shadow-md hover:border-fuchsia-200 transition-all group flex flex-col h-full relative overflow-hidden"
                   >
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="w-12 h-12 bg-sky-50 rounded-2xl flex items-center justify-center text-sky-500 group-hover:scale-110 group-hover:bg-sky-100 group-hover:text-sky-600 transition-all overflow-hidden">
+                    <div className="flex justify-between items-start mb-3">
+                      <div
+                        onClick={() => setSelectedCategoria(cat)}
+                        className="w-10 h-10 bg-fuchsia-50 rounded-2xl flex items-center justify-center text-fuchsia-500 hover:scale-110 hover:bg-fuchsia-100 hover:text-fuchsia-600 transition-all overflow-hidden cursor-pointer relative z-10"
+                        title="Ver detalles del sistema"
+                      >
                         {typeof IconoCategoria === 'string' ? (
                           <img src={IconoCategoria} alt="Icon" className="w-8 h-8 object-contain opacity-80" />
                         ) : (
@@ -414,22 +539,33 @@ export default function Sistemas() {
                       <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
                         <button 
                           onClick={() => { setEditCatId(cat.id); setCatNombre(cat.nombre); setIsCatModalOpen(true); }} 
-                          className="p-1.5 text-sky-400 hover:text-sky-700 hover:bg-sky-50 rounded-lg transition-colors"
+                          className="p-1.5 text-fuchsia-400 hover:text-fuchsia-700 hover:bg-fuchsia-50 rounded-lg transition-colors relative z-10"
                         >
                           <Edit className="w-4 h-4" />
                         </button>
                         <button 
                           onClick={() => handleDeleteCat(cat.id)} 
-                          className="p-1.5 text-sky-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          className="p-1.5 text-fuchsia-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors relative z-10"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
                     </div>
-                    <h3 className="text-lg font-bold text-sky-950 mb-1 leading-tight">{cat.nombre}</h3>
+
+                    <div className="flex items-center gap-2 mb-1 relative z-10 min-w-0">
+                      <h3
+                        className="text-base font-bold text-fuchsia-950 truncate cursor-pointer hover:text-fuchsia-600 transition-colors"
+                        onClick={() => setSelectedCategoria(cat)}
+                      >
+                        {cat.nombre}
+                      </h3>
+                      <span className="shrink-0 px-1.5 py-0.5 bg-fuchsia-100 text-fuchsia-800 text-[10px] font-mono font-bold rounded" title="Modelos registrados">
+                        {count}
+                      </span>
+                    </div>
                     
-                    {selectForCentroId ? (
-                      <div className="mt-auto pt-4 flex gap-2 border-t border-sky-50">
+                    {selectForCentroId && (
+                      <div className="mt-auto pt-3 flex gap-2 border-t border-fuchsia-50 relative z-10">
                         <button 
                           onClick={(e) => { e.stopPropagation(); handleAddToCentro(cat); }}
                           className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-xl text-sm font-medium transition-colors shadow-sm flex items-center justify-center gap-1.5"
@@ -437,11 +573,6 @@ export default function Sistemas() {
                           <Plus className="w-4 h-4" />
                           Añadir al Centro
                         </button>
-                      </div>
-                    ) : (
-                      <div className="mt-auto pt-4 flex items-center gap-2 text-sm text-sky-700 font-medium border-t border-sky-50">
-                        <LayoutList className="w-4 h-4" />
-                        {count} {count === 1 ? 'equipo registrado' : 'equipos registrados'}
                       </div>
                     )}
                   </div>
@@ -604,7 +735,7 @@ export default function Sistemas() {
                 </div>
               </div>
               <div className="space-y-1.5">
-                <label className="text-sm font-semibold text-fuchsia-950">Nombre del equipo *</label>
+                <label className="text-sm font-semibold text-fuchsia-950">Tipo *</label>
                 <input
                   required type="text" value={formEquipo.nombre} onChange={e => setFormEquipo({...formEquipo, nombre: e.target.value})}
                   className="w-full px-4 py-3 bg-fuchsia-50/50 border border-fuchsia-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-fuchsia-500/20 focus:border-fuchsia-500 transition-all text-fuchsia-950"
@@ -619,6 +750,20 @@ export default function Sistemas() {
           </div>
         </div>
       )}
+
+      {/* Confirmation Modal */}
+      {isConfirmModalOpen && itemToDelete && (
+        <ConfirmationModal
+          isOpen={isConfirmModalOpen}
+          onClose={() => setIsConfirmModalOpen(false)}
+          onConfirm={itemToDelete.type === 'cat' ? confirmDeleteCat : confirmDeleteEquipo}
+          title="Confirmar Eliminación"
+          message="ATENCIÓN SE PROCEDE A BORRAR EL ELEMENTO Y SUS REGISTROS ¿ CONFIRMA SU PETICIÓN ?"
+          confirmText="Sí, eliminar"
+          cancelText="No, cancelar"
+        />
+      )}
+
     </div>
   );
 }

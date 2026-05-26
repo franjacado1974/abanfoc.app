@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Wrench, Plus, Search, Edit, Trash2, X, Download, Upload } from 'lucide-react';
+import ConfirmationModal from './ConfirmationModal';
 import * as XLSX from 'xlsx';
 
 export interface Servicio {
@@ -29,6 +30,9 @@ export default function Servicios() {
     precioCompra: '',
     precioVenta: ''
   });
+  // State for confirmation modal
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [servicioIdToDelete, setServicioIdToDelete] = useState<string | null>(null);
 
   useEffect(() => {
     const saved = localStorage.getItem('firecheck_db_servicios');
@@ -84,8 +88,15 @@ export default function Servicios() {
   };
 
   const handleDelete = (id: string) => {
-    if (confirm('¿Estás seguro de que quieres eliminar este servicio?')) {
-      saveToDb(servicios.filter(s => s.id !== id));
+    setServicioIdToDelete(id);
+    setIsConfirmModalOpen(true);
+  };
+
+  const confirmDeleteServicio = () => {
+    if (servicioIdToDelete) {
+      setIsConfirmModalOpen(false);
+      saveToDb(servicios.filter(s => s.id !== servicioIdToDelete));
+      setServicioIdToDelete(null);
     }
   };
 
@@ -270,7 +281,7 @@ export default function Servicios() {
                       <button onClick={() => handleOpenModal(s)} className="p-1.5 text-fuchsia-400 hover:text-fuchsia-700 hover:bg-fuchsia-50 rounded-lg transition-colors">
                         <Edit className="w-4 h-4" />
                       </button>
-                      <button onClick={() => handleDelete(s.id)} className="p-1.5 text-fuchsia-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                      <button onClick={() => handleDelete(s.id)} className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors">
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
@@ -403,6 +414,19 @@ export default function Servicios() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Confirmation Modal */}
+      {isConfirmModalOpen && servicioIdToDelete && (
+        <ConfirmationModal
+          isOpen={isConfirmModalOpen}
+          onClose={() => setIsConfirmModalOpen(false)}
+          onConfirm={confirmDeleteServicio}
+          title="Confirmar Eliminación"
+          message="ATENCIÓN SE PROCEDE A BORRAR EL ELEMENTO Y SUS REGISTROS ¿ CONFIRMA SU PETICIÓN ?"
+          confirmText="Sí, eliminar"
+          cancelText="No, cancelar"
+        />
       )}
     </div>
   );

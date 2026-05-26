@@ -234,6 +234,7 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
   const [stats] = useState(() => {
     let clientes = 0;
     let centros = 0;
+    let catalogo = 0;
     try {
       const savedClientes = localStorage.getItem('firecheck_db_clientes');
       if (savedClientes) {
@@ -245,8 +246,20 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
         const parsed = JSON.parse(savedCentros);
         centros = Array.isArray(parsed) ? parsed.length : 0;
       }
+
+      const savedArticulos = localStorage.getItem('firecheck_db_articulos');
+      const articulosCount = savedArticulos
+        ? (Array.isArray(JSON.parse(savedArticulos)) ? JSON.parse(savedArticulos).length : 0)
+        : 0;
+
+      const savedServicios = localStorage.getItem('firecheck_db_servicios');
+      const serviciosCount = savedServicios
+        ? (Array.isArray(JSON.parse(savedServicios)) ? JSON.parse(savedServicios).length : 0)
+        : 0;
+
+      catalogo = articulosCount + serviciosCount;
     } catch { /* ignore error in initial state */ }
-    return { clientes, centros };
+    return { clientes, centros, catalogo };
   });
 
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -457,6 +470,7 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
   const cardsWithStats = filteredCardsByRole.map(c => {
     if (c.id === 'clientes') return { ...c, stat: stats.clientes };
     if (c.id === 'centros') return { ...c, stat: stats.centros };
+    if (c.id === 'catalogo') return { ...c, stat: stats.catalogo };
     return c;
   });
 

@@ -2,27 +2,20 @@
 > app@0.0.0 build
 > tsc -b && vite build
 
-src/Centros.tsx(3,91): error TS6133: 'FileText' is declared but its value is never read.
-src/Centros.tsx(3,116): error TS6133: 'CheckCheck' is declared but its value is never read.
-src/Centros.tsx(3,162): error TS6133: 'Calendar' is declared but its value is never read.
-src/Centros.tsx(3,172): error TS6133: 'FileCheck' is declared but its value is never read.
-src/Centros.tsx(3,183): error TS6133: 'FileX' is declared but its value is never read.
-src/Centros.tsx(5,1): error TS6192: All imports in import declaration are unused.
-src/Centros.tsx(25,7): error TS6133: 'checkIsSistemaType' is declared but its value is never read.
-src/Centros.tsx(567,9): error TS6133: 'handleRevisarTodo' is declared but its value is never read.
-src/Centros.tsx(623,9): error TS6133: 'handleDeleteCertificado' is declared but its value is never read.
-src/Partes.tsx(3,110): error TS6133: 'Edit' is declared but its value is never read.
-src/Partes.tsx(19,7): error TS6133: 'MESES' is declared but its value is never read.
-src/Planificación.tsx(3,58): error TS6133: 'LayoutList' is declared but its value is never read.
-src/Planificación.tsx(3,78): error TS6133: 'UserIcon' is declared but its value is never read.
-src/Planificación.tsx(3,99): error TS6133: 'Search' is declared but its value is never read.
-src/Planificación.tsx(23,11): error TS6196: 'CentroConRevision' is declared but never used.
-src/RevisionChecklist.tsx(3,21): error TS6133: 'CheckSquare' is declared but its value is never read.
-src/RevisionChecklist.tsx(3,34): error TS6133: 'X' is declared but its value is never read.
-src/RevisionChecklist.tsx(3,37): error TS6133: 'AlertTriangle' is declared but its value is never read.
-src/RevisionChecklist.tsx(3,52): error TS6133: 'CheckCheck' is declared but its value is never read.
-src/RevisionChecklist.tsx(3,107): error TS6133: 'Square' is declared but its value is never read.
-src/RevisionChecklist.tsx(3,115): error TS6133: 'MinusSquare' is declared but its value is never read.
-src/RevisionChecklist.tsx(4,10): error TS1484: 'CentroSistema' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
-src/RevisionChecklist.tsx(4,25): error TS1484: 'EquipoInstalado' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled.
-src/Sistemas.tsx(3,123): error TS6133: 'FileText' is declared but its value is never read.
+[36mvite v8.0.13 [32mbuilding client environment for production...[36m[39m
+[2Ktransforming...✓ 1987 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                          0.47 kB │ gzip:   0.30 kB
+dist/assets/index-CN6Y0_Az.css          69.80 kB │ gzip:  12.02 kB
+dist/assets/purify.es-BhRg3p_C.js       23.45 kB │ gzip:   9.28 kB
+dist/assets/index.es-B9j2L2OH.js       151.38 kB │ gzip:  48.87 kB
+dist/assets/html2canvas-vCFxuBk9.js    199.56 kB │ gzip:  46.78 kB
+dist/assets/index-CkRqaUyS.js        2,157.04 kB │ gzip: 882.16 kB
+
+[32m✓ built in 1.55s[39m
+[33m[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.[39m

@@ -105,7 +105,7 @@ export default function Clientes() {
       newId = `CLI ${String(maxNum + 1).padStart(4, '0')}`;
     }
 
-    const newCliente = { ...form, id: newId };
+    const newCliente = { ...form, id: newId, nombre: (form.nombre || '').toUpperCase() };
 
     try {
       // Guardamos en Firestore usando el ID personalizado (CLI XXXX) como nombre del documento
@@ -305,16 +305,16 @@ export default function Clientes() {
               <p className="text-zinc-500">No se ha encontrado ningún cliente que coincida con "{searchTerm}".</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {(filteredClientes || []).map((c) => {
                 const clientCentrosCount = centros.filter(centro => centro.clienteId === c.id).length;
                 
                 return (
-                  <div key={c.id} className="bg-blue-50/50 p-4 rounded-3xl border border-blue-100 shadow-sm hover:shadow-md hover:border-blue-200 transition-all">
+                  <div key={c.id} className="bg-blue-50/50 p-3.5 rounded-3xl border border-blue-100 shadow-sm hover:shadow-md hover:border-blue-200 transition-all">
                     <div className="flex justify-between items-start mb-3">
                       <div className="flex flex-col gap-0.5 flex-1 min-w-0 mr-4">
                         <div className="flex items-center gap-2 min-w-0">
-                          <h3 className="text-lg font-bold text-blue-950 truncate" title={c.nombre}>{c.nombre}</h3>
+                          <h3 className="text-base font-bold text-blue-950 truncate" title={c.nombre}>{c.nombre}</h3>
                           <span className="shrink-0 px-1.5 py-0.5 bg-blue-100 text-blue-800 text-[10px] font-mono font-bold rounded block w-max">
                             {c.id || 'CLI----'}
                           </span>
@@ -323,7 +323,7 @@ export default function Clientes() {
                       </div>
                       {/* Botones de acción (Editar / Borrar) */}
                       <div className="flex items-center gap-0.5 shrink-0">
-                      <button onClick={() => handleEdit(c)} className="p-1.5 text-blue-400 hover:text-blue-700 hover:bg-blue-100 rounded-lg transition-colors" title="Editar cliente">
+                      <button onClick={() => handleEdit(c)} className="p-1.5 text-black hover:text-zinc-600 hover:bg-zinc-100 rounded-lg transition-colors" title="Editar cliente">
                           <Edit className="w-4 h-4" />
                         </button>
                         <button onClick={() => handleDelete(c.id)} className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors" title="Eliminar cliente">
@@ -410,7 +410,7 @@ export default function Clientes() {
               <label className="block text-sm font-semibold text-zinc-900 mb-2">CLIENTE *</label>
               <input 
                 required type="text" 
-                value={form.nombre} onChange={e => setForm({...form, nombre: e.target.value})}
+                value={form.nombre} onChange={e => setForm({...form, nombre: e.target.value.toUpperCase()})}
                 className="w-full px-4 py-3.5 bg-zinc-50/50 rounded-xl border border-zinc-200 focus:bg-white focus:border-black focus:ring-1 focus:ring-black outline-none transition-all text-zinc-900 placeholder-zinc-400" 
                 placeholder="Nombre completo o Razón social" 
               />
