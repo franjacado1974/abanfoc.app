@@ -1,6 +1,7 @@
 import { collection, doc, deleteDoc, getDocs, setDoc } from "firebase/firestore";
 import { db } from "./firebase";
 import { useState, useEffect, useRef, useMemo } from 'react';
+import ConfirmationModal from './ConfirmationModal'; // Import the new modal component
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Save, Building2, Plus, Download, Upload, Users, Search, Edit, Trash2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -49,6 +50,9 @@ export default function Clientes() {
   const [form, setForm] = useState<Cliente>(emptyCliente);
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(false); // Nuevo estado para el indicador de carga
+  // State for confirmation modal
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [clientIdToDelete, setClientIdToDelete] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Función para obtener clientes de Firestore
@@ -123,16 +127,22 @@ export default function Clientes() {
   };
 
   const handleDelete = async (id: string) => {
-    if (window.confirm('¿Estás seguro de que quieres eliminar este cliente?')) {
-      try {
-        await deleteDoc(doc(db, "clientes", id));
-        const newData = clientes.filter(c => c.id !== id);
-        saveToDB(newData);
-        setClientes(newData);
-      } catch (error) {
-        console.error("Error al eliminar:", error);
-      }
+    setClientIdToDelete(id);
+    setIsConfirmModalOpen(true);
+  };
+
+  const confirmDeleteClient = async () => {
+    if (!clientIdToDelete) return;
+    setIsConfirmModalOpen(false);
+    try {
+      await deleteDoc(doc(db, "clientes", clientIdToDelete));
+      const newData = clientes.filter(c => c.id !== clientIdToDelete);
+      saveToDB(newData);
+      setClientes(newData);
+    } catch (error) {
+      console.error("Error al eliminar:", error);
     }
+    setClientIdToDelete(null);
   };
 
   const handleExportExcel = () => {
@@ -313,10 +323,10 @@ export default function Clientes() {
                       </div>
                       {/* Botones de acción (Editar / Borrar) */}
                       <div className="flex items-center gap-0.5 shrink-0">
-                        <button onClick={() => handleEdit(c)} className="p-1.5 text-blue-400 hover:text-blue-700 hover:bg-blue-100 rounded-lg transition-colors" title="Editar cliente">
+                      <button onClick={() => handleEdit(c)} className="p-1.5 text-blue-400 hover:text-blue-700 hover:bg-blue-100 rounded-lg transition-colors" title="Editar cliente">
                           <Edit className="w-4 h-4" />
                         </button>
-                        <button onClick={() => handleDelete(c.id)} className="p-1.5 text-blue-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Eliminar cliente">
+                        <button onClick={() => handleDelete(c.id)} className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors" title="Eliminar cliente">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
@@ -346,6 +356,17 @@ export default function Clientes() {
                 );
               })}
             </div>
+          )}
+          {isConfirmModalOpen && clientIdToDelete && (
+            <ConfirmationModal
+              isOpen={isConfirmModalOpen}
+              onClose={() => { setIsConfirmModalOpen(false); setClientIdToDelete(null); }}
+              onConfirm={confirmDeleteClient}
+              title="Confirmar Eliminación"
+              message="ATENCIÓN SE PROCEDE A BORRAR EL ELEMENTO Y SUS REGISTROS ¿ CONFIRMA SU PETICIÓN ?"
+              confirmText="Sí, eliminar"
+              cancelText="No, cancelar"
+            />
           )}
         </div>
       </div>
@@ -495,4 +516,5 @@ export default function Clientes() {
       </div>
     </div>
   );
+
 }

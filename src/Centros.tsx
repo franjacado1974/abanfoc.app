@@ -20,7 +20,8 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 
 import { CATEGORIAS_POR_DEFECTO, getIconForSistema } from './Sistemas';
-import { getCentros, addCentro, updateCentro, deleteCentro, subscribeCentros } from './firebase';
+import { addCentro, updateCentro, deleteCentro, subscribeCentros } from './firebase';
+import ConfirmationModal from './ConfirmationModal'; // Import the new modal component
 
 const MESES = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -148,7 +149,7 @@ export default function Centros() {
       return saved ? JSON.parse(saved) : [];
     } catch { return []; }
   });
-  const [clientes, setClientes] = useState<Cliente[]>(() => {
+  const [clientes, _setClientes] = useState<Cliente[]>(() => {
     try {
       const saved = localStorage.getItem('firecheck_db_clientes');
       return saved ? JSON.parse(saved) : [];
@@ -160,7 +161,7 @@ export default function Centros() {
       return saved ? JSON.parse(saved) : [];
     } catch { return []; }
   });
-  const [categoriasSistema, setCategoriasSistema] = useState<{id: string, nombre: string}[]>(() => {
+  const [categoriasSistema, _setCategoriasSistema] = useState<{id: string, nombre: string}[]>(() => {
     try {
       const saved = localStorage.getItem('firecheck_db_sistemas_categorias');
       return saved ? JSON.parse(saved) : CATEGORIAS_POR_DEFECTO;
@@ -186,7 +187,7 @@ export default function Centros() {
     } catch { return []; }
   });
 
-  const [equiposCatalogo, setEquiposCatalogo] = useState<any[]>(() => {
+  const [equiposCatalogo, _setEquiposCatalogo] = useState<any[]>(() => {
     try {
       const saved = localStorage.getItem('firecheck_db_sistemas_equipos');
       return saved ? JSON.parse(saved) : [];
@@ -204,6 +205,10 @@ export default function Centros() {
   const [selectedEquipoCatalogo, setSelectedEquipoCatalogo] = useState('');
   const [cantidadAñadir, setCantidadAñadir] = useState(1);
   
+  // State for confirmation modal
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<{ type: 'centro' | 'sistema' | 'equipo', id: string } | null>(null);
+
   const [searchTerm, setSearchTerm] = useState(location.state?.search || '');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -261,7 +266,7 @@ export default function Centros() {
                 ...newCentros[idx],
                 clienteId: cliMatch ? cliMatch.id : newCentros[idx].clienteId,
                 customIdPart: row['Código Centro'] || newCentros[idx].customIdPart || '',
-                nombre: row['Nombre Centro'],
+                nombre: String(row['Nombre Centro']).toUpperCase(),
                 direccion: row['Dirección'] || '',
                 poblacion: row['Población'] || '',
                 cp: row['C.P.'] || '',
@@ -282,7 +287,7 @@ export default function Centros() {
                 id: newId,
                 clienteId: cliMatch ? cliMatch.id : '',
                 customIdPart: row['Código Centro'] || '',
-                nombre: row['Nombre Centro'],
+                nombre: String(row['Nombre Centro']).toUpperCase(),
                 direccion: row['Dirección'] || '',
                 poblacion: row['Población'] || '',
                 cp: row['C.P.'] || '',
@@ -363,7 +368,7 @@ export default function Centros() {
         navigate(location.pathname, { replace: true });
       }
     }
-  }, [centros, location.state, navigate]);
+  }, [centros, location.state, navigate, location.pathname]);
 
   const saveToDB = (data: Centro[]) => {
     localStorage.setItem('firecheck_db_centros', JSON.stringify(data));
@@ -419,7 +424,7 @@ export default function Centros() {
       }
     }
 
-    const newCentro: any = { ...form, id: finalId };
+    const newCentro: any = { ...form, id: finalId, nombre: form.nombre.toUpperCase() };
     
     try {
       if ((form as any)._docId) {
@@ -476,24 +481,28 @@ export default function Centros() {
   };
 
   const handleDelete = async (id: string) => {
-    if (window.confirm('¿Estás seguro de que quieres eliminar este centro?')) {
-      const target = centros.find(c => c.id === id) as any;
-      try {
-        if (target && target._docId) {
-          await deleteCentro(target._docId);
-        }
-      } catch (err) {
-        console.error('Error borrando centro en Firestore:', err);
-        alert('Error al borrar en Firestore');
-        // Continuamos y borramos localmente de todos modos
+    setItemToDelete({ type: 'centro', id });
+    setIsConfirmModalOpen(true);
+  };
+
+  const confirmDeleteCentro = async () => {
+    if (!itemToDelete || itemToDelete.type !== 'centro') return;
+    setIsConfirmModalOpen(false);
+    const target = centros.find(c => c.id === itemToDelete.id) as any;
+    try {
+      if (target && target._docId) {
+        await deleteCentro(target._docId);
       }
-      const remaining = centros.filter(c => c.id !== id);
-      saveToDB(remaining);
-      // Limpiar sistemas del centro
-      const dbSist = centroSistemas.filter(s => s.centroId !== id);
-      setCentroSistemas(dbSist);
-      localStorage.setItem('firecheck_db_centro_sistemas', JSON.stringify(dbSist));
+    } catch (err) {
+      console.error('Error borrando centro en Firestore:', err);
+      alert('Error al borrar en Firestore');
     }
+    const remaining = centros.filter(c => c.id !== itemToDelete.id);
+    saveToDB(remaining);
+    const dbSist = centroSistemas.filter(s => s.centroId !== itemToDelete.id);
+    setCentroSistemas(dbSist);
+    localStorage.setItem('firecheck_db_centro_sistemas', JSON.stringify(dbSist));
+    setItemToDelete(null);
   };
 
   const openSistemas = (c: Centro) => {
@@ -550,16 +559,20 @@ export default function Centros() {
   };
 
   const handleDeleteSistema = (id: string) => {
-    if (window.confirm('¿Eliminar este sistema y todos los equipos de su interior?')) {
-      const db = centroSistemas.filter(s => s.id !== id);
-      setCentroSistemas(db);
-      localStorage.setItem('firecheck_db_centro_sistemas', JSON.stringify(db));
+    setItemToDelete({ type: 'sistema', id });
+    setIsConfirmModalOpen(true);
+  };
 
-      // Limpiar equipos
-      const dbEq = equiposInstalados.filter(e => e.sistemaId !== id);
-      setEquiposInstalados(dbEq);
-      localStorage.setItem('firecheck_db_equipos_instalados', JSON.stringify(dbEq));
-    }
+  const confirmDeleteSistema = () => {
+    if (!itemToDelete || itemToDelete.type !== 'sistema') return;
+    setIsConfirmModalOpen(false);
+    const db = centroSistemas.filter(s => s.id !== itemToDelete.id);
+    setCentroSistemas(db);
+    localStorage.setItem('firecheck_db_centro_sistemas', JSON.stringify(db));
+    const dbEq = equiposInstalados.filter(e => e.sistemaId !== itemToDelete.id);
+    setEquiposInstalados(dbEq);
+    localStorage.setItem('firecheck_db_equipos_instalados', JSON.stringify(dbEq));
+    setItemToDelete(null);
   };
 
   // ----- FUNCIONES EQUIPOS DEL SISTEMA (EN CENTRO) -----
@@ -632,11 +645,17 @@ export default function Centros() {
   };
 
   const handleDeleteEquipo = (id: string) => {
-    if (window.confirm('¿Eliminar este equipo?')) {
-      const db = equiposInstalados.filter(eq => eq.id !== id);
-      setEquiposInstalados(db);
-      localStorage.setItem('firecheck_db_equipos_instalados', JSON.stringify(db));
-    }
+    setItemToDelete({ type: 'equipo', id });
+    setIsConfirmModalOpen(true);
+  };
+
+  const confirmDeleteEquipo = () => {
+    if (!itemToDelete || itemToDelete.type !== 'equipo') return;
+    setIsConfirmModalOpen(false);
+    const db = equiposInstalados.filter(eq => eq.id !== itemToDelete.id);
+    setEquiposInstalados(db);
+    localStorage.setItem('firecheck_db_equipos_instalados', JSON.stringify(db));
+    setItemToDelete(null);
   };
 
   // Cliente seleccionado actual en el formulario
@@ -687,8 +706,9 @@ export default function Centros() {
   });
 
   // ----- RENDERIZADO DE LA LISTA ----- //
-  if (view === 'list') {
-    return (
+  const renderContent = () => {
+    if (view === 'list') {
+      return (
       <div className="min-h-screen bg-emerald-50/40 p-6 md:p-12">
         <div className="max-w-5xl mx-auto">
           {/* Header */}
@@ -784,10 +804,10 @@ export default function Centros() {
                         </span>
                       </div>
                       <div className="flex items-center gap-0.5 shrink-0">
-                        <button onClick={() => handleEdit(c)} className="p-1.5 text-emerald-400 hover:text-emerald-700 hover:bg-emerald-100 rounded-lg transition-colors">
+                        <button onClick={() => handleEdit(c)} className="p-1.5 text-black hover:text-zinc-600 hover:bg-zinc-100 rounded-lg transition-colors">
                           <Edit className="w-4 h-4" />
                         </button>
-                        <button onClick={() => handleDelete(c.id)} className="p-1.5 text-emerald-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                        <button onClick={() => handleDelete(c.id)} className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
@@ -938,17 +958,27 @@ export default function Centros() {
               </div>
             </div>
           )}
+
+          {isConfirmModalOpen && itemToDelete && (
+            <ConfirmationModal
+              isOpen={isConfirmModalOpen}
+              onClose={() => { setIsConfirmModalOpen(false); setItemToDelete(null); }}
+              onConfirm={itemToDelete.type === 'centro' ? confirmDeleteCentro : itemToDelete.type === 'sistema' ? confirmDeleteSistema : confirmDeleteEquipo}
+              title="Confirmar Eliminación"
+              message="ATENCIÓN: Vas a proceder al borrado del elemento y sus registros ¿CONFIRMAS LA PETICIÓN?"
+              confirmText="Sí, eliminar"
+              cancelText="No, cancelar"
+            />
+          )}
         </div>
       </div>
     );
   }
 
-  // ----- RENDERIZADO DE SISTEMAS DEL CENTRO ----- //
-  if (view === 'sistemas' && centroSeleccionado) {
-    const sistDelCentro = centroSistemas.filter(s => s.centroId === centroSeleccionado.id);
-    const clientInfo = clientes.find(cl => cl.id === centroSeleccionado.clienteId);
-
-    return (
+    if (view === 'sistemas' && centroSeleccionado) {
+      const sistDelCentro = centroSistemas.filter(s => s.centroId === centroSeleccionado.id);
+      const clientInfo = clientes.find(cl => cl.id === centroSeleccionado.clienteId);
+      return (
       <div className="min-h-screen bg-emerald-50/40 p-6 md:p-12">
         <div className="max-w-4xl mx-auto w-full">
           <button 
@@ -1004,47 +1034,51 @@ export default function Centros() {
                     return (
                     <SortableSistemaWrapper key={sist.id} sist={sist}>
                       {(attrs, listeners) => (
-                      <div className="bg-white p-5 rounded-3xl border-2 border-emerald-100 shadow-sm hover:shadow-xl hover:border-emerald-400 transition-all flex flex-col group h-full relative">
+                      <div className="bg-white p-4 rounded-3xl border-2 border-emerald-100 shadow-sm hover:shadow-xl hover:border-emerald-400 transition-all flex flex-col group h-full relative overflow-hidden">
                         {/* Botón de arrastrar escondido, aparece en hover */}
                         <div 
                           {...attrs} 
                           {...listeners} 
                           onClick={(e) => e.stopPropagation()}
-                          className="absolute top-2 right-14 p-1.5 text-slate-300 hover:text-slate-500 cursor-grab active:cursor-grabbing md:opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                          className="absolute top-2 right-14 p-1.5 text-slate-300 hover:text-slate-500 cursor-grab active:cursor-grabbing md:opacity-0 group-hover:opacity-100 transition-opacity z-20"
                         >
                           <GripHorizontal className="w-5 h-5" />
                         </div>
                         
-                        <div className="flex justify-between items-start mb-3">
-                          <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600 overflow-hidden">
+                        <div className="flex justify-between items-start mb-3 relative z-10">
+                          <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-9 h-9 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600 overflow-hidden relative z-10 shrink-0">
                         {IconoCat && (typeof IconoCat === 'string' ? (
-                          <img src={IconoCat} alt="Icon" className="w-7 h-7 object-contain opacity-80" />
+                          <img src={IconoCat} alt="Icon" className="w-6 h-6 object-contain opacity-80" />
                         ) : (
                           <IconoCat className="w-5 h-5" />
                         ))}
                       </div>
-                      <div>
+                      <div className="min-w-0">
                         <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider block mb-0.5">{sist.tipo}</span>
-                        <h3 className="font-bold text-emerald-950 text-base leading-tight">{sist.familia || sist.tipo}</h3>
-                        <span className="text-[11px] font-semibold text-emerald-500/80 mt-0.5 block">{equiposCount} {equiposCount === 1 ? 'equipo' : 'equipos'}</span>
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-bold text-emerald-950 text-base leading-tight truncate">{sist.familia || sist.tipo}</h3>
+                          <span className="shrink-0 px-1.5 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-mono font-bold rounded" title="Equipos registrados">
+                            {equiposCount}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-1">
-                      <button onClick={(e) => { e.stopPropagation(); setFormSistema(sist); setIsSistemaModalOpen(true); }} className="p-1.5 text-emerald-400 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors">
+                    <div className="flex items-center gap-1 relative z-10">
+                      <button onClick={(e) => { e.stopPropagation(); setFormSistema(sist); setIsSistemaModalOpen(true); }} className="p-1.5 text-black hover:text-zinc-600 hover:bg-zinc-100 rounded-lg transition-colors">
                         <Edit className="w-4 h-4" />
                       </button>
-                      <button onClick={(e) => { e.stopPropagation(); handleDeleteSistema(sist.id); }} className="p-1.5 text-emerald-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                      <button onClick={(e) => { e.stopPropagation(); handleDeleteSistema(sist.id); }} className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors">
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
                   </div>
                   {sist.descripcion && (
-                    <div className="bg-emerald-50/50 p-3 rounded-xl border border-emerald-50 mt-2">
+                    <div className="bg-emerald-50/50 p-3 rounded-xl border border-emerald-50 mt-2 relative z-10">
                       <p className="text-sm text-emerald-900/70">{sist.descripcion}</p>
                     </div>
                   )}
-                  <div className="mt-4 pt-4 border-t border-emerald-50">
+                  <div className="mt-4 pt-4 border-t border-emerald-50 relative z-10">
                     <div className="flex items-center justify-between mb-3">
                       <h4 className="text-xs font-bold text-emerald-950 uppercase tracking-wider">Equipos en el sistema</h4>
                       <div className="flex gap-2">
@@ -1108,7 +1142,7 @@ export default function Centros() {
                                 <button onClick={(e) => { e.stopPropagation(); handleEditEquipo(eq, sist); }} className="p-1 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded transition-colors" title="Editar equipo">
                                   <Edit className="w-3.5 h-3.5" />
                                 </button>
-                                <button onClick={(e) => { e.stopPropagation(); handleDeleteEquipo(eq.id); }} className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors" title="Eliminar equipo">
+                      <button onClick={(e) => { e.stopPropagation(); handleDeleteEquipo(eq.id); }} className="p-1 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors" title="Eliminar equipo">
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </button>
                               </div>
@@ -1336,9 +1370,26 @@ export default function Centros() {
             </div>
           )}
 
+          {isConfirmModalOpen && itemToDelete && (
+            <ConfirmationModal
+              isOpen={isConfirmModalOpen}
+              onClose={() => { setIsConfirmModalOpen(false); setItemToDelete(null); }}
+              onConfirm={itemToDelete.type === 'centro' ? confirmDeleteCentro : itemToDelete.type === 'sistema' ? confirmDeleteSistema : confirmDeleteEquipo}
+              title="Confirmar Eliminación"
+              message="ATENCIÓN SE PROCEDE A BORRAR EL ELEMENTO Y SUS REGISTROS ¿ CONFIRMA SU PETICIÓN ?"
+              confirmText="Sí, eliminar"
+              cancelText="No, cancelar"
+            />
+          )}
         </div>
       </div>
     );
+  }
+
+  };
+
+  if (view !== 'form') {
+    return renderContent();
   }
 
   // ----- RENDERIZADO DEL FORMULARIO ----- //
@@ -1404,7 +1455,7 @@ export default function Centros() {
                     <p className="text-lg font-mono font-bold tracking-wider">{idPreview || 'CEN XXXX-XX-(XXXX)'}</p>
                   </div>
                     <div className="text-right w-1/3">
-                    <label className="block text-[10px] text-zinc-400 font-bold mb-0.5">codigo periodicidad</label>
+                    <label className="block text-[10px] text-red-400 font-bold mb-0.5">codigo periodicidad <span className="text-red-500">*</span></label>
                     <input 
                       required
                       type="text" 
@@ -1429,7 +1480,7 @@ export default function Centros() {
                   <label className="block text-xs font-semibold text-zinc-900 mb-1.5">NOMBRE DEL CENTRO *</label>
                   <input 
                     required type="text" 
-                    value={form.nombre} onChange={e => setForm({...form, nombre: e.target.value})}
+                    value={form.nombre} onChange={e => setForm({...form, nombre: e.target.value.toUpperCase()})}
                     className="w-full px-3 py-2.5 text-sm bg-zinc-50/50 rounded-lg border border-zinc-200 focus:bg-white focus:border-black focus:ring-1 focus:ring-black outline-none transition-all text-zinc-900 placeholder-zinc-400" 
                     placeholder="Ej. Nave Principal, Sede Norte..." 
                   />

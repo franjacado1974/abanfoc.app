@@ -19,6 +19,7 @@ import GestionEmpresa from './GestionEmpresa';
 import Planificacion from './Planificacion';
 import RevisionChecklist from './RevisionChecklist';
 import Revisiones from './Revisiones';
+import ConfirmationModal from './ConfirmationModal'; // Import the new modal component
 import { verifyUser, addUserToFirestore } from './firebase';
 
 const generateId = () => {
@@ -76,8 +77,11 @@ function Login({ usuarios, onLogin }: { usuarios: Usuario[], onLogin: (user: Usu
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-zinc-50 via-zinc-100 to-zinc-200 flex items-center justify-center p-4">
-      <div className="bg-white p-6 sm:p-8 rounded-2xl shadow-2xl w-full max-w-md sm:max-w-sm md:max-w-md lg:max-w-lg border border-zinc-200">
+    <div 
+      className="min-h-screen bg-cover bg-center bg-no-repeat flex items-center justify-center p-4 bg-zinc-200"
+      style={{ backgroundImage: "url('/bg-login.jpg')" }}
+    >
+      <div className="bg-white/85 backdrop-blur-md p-5 sm:p-6 rounded-2xl shadow-2xl w-full max-w-xs sm:max-w-sm border border-white/20">
         <div className="flex flex-col items-center mb-6">
           <img src={appLogo} alt="Logo" className="h-12 sm:h-14 md:h-16 mb-4 sm:mb-6 object-contain" />
           <h2 className="text-xl sm:text-2xl font-bold text-zinc-900 text-center">acceso al sistema</h2>
@@ -289,6 +293,10 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
 
   const [nuevoUsuario, setNuevoUsuario] = useState({nombre: '', apellidos: '', rol: 'visualizador', password: ''});
 
+  // State for confirmation modal
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<{ type: 'tecnico' | 'usuario', id: string } | null>(null);
+
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
@@ -311,9 +319,17 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
   };
 
   const handleDeleteTecnico = (id: string) => {
-    const updated = tecnicos.filter(t => t.id !== id);
+    setItemToDelete({ type: 'tecnico', id });
+    setIsConfirmModalOpen(true);
+  };
+
+  const confirmDeleteTecnico = () => {
+    if (!itemToDelete || itemToDelete.type !== 'tecnico') return;
+    setIsConfirmModalOpen(false);
+    const updated = tecnicos.filter(t => t.id !== itemToDelete.id);
     setTecnicos(updated);
     localStorage.setItem('firecheck_db_tecnicos', JSON.stringify(updated));
+    setItemToDelete(null);
   };
 
   const handleResetUsuarios = () => {
@@ -372,9 +388,17 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
   };
 
   const handleDeleteUsuario = (id: string) => {
-    const updated = usuarios.filter(u => u.id !== id);
+    setItemToDelete({ type: 'usuario', id });
+    setIsConfirmModalOpen(true);
+  };
+
+  const confirmDeleteUsuario = () => {
+    if (!itemToDelete || itemToDelete.type !== 'usuario') return;
+    setIsConfirmModalOpen(false);
+    const updated = usuarios.filter(u => u.id !== itemToDelete.id);
     setUsuarios(updated);
     localStorage.setItem('firecheck_db_usuarios', JSON.stringify(updated));
+    setItemToDelete(null);
   };
 
   const handleUpdateRol = (id: string, newRol: string) => {
@@ -579,7 +603,7 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
                         {tecnicos.map(t => (
                           <li key={t.id} className="p-4 flex items-center justify-between bg-white hover:bg-zinc-50 transition-colors">
                             <span className="font-medium text-zinc-900 text-sm">{t.nombre} {t.apellidos}</span>
-                            <button onClick={() => handleDeleteTecnico(t.id)} className="p-1.5 text-zinc-400 hover:text-red-500 hover:bg-red-50 rounded-lg">
+                            <button onClick={() => handleDeleteTecnico(t.id)} className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg">
                               <Trash2 className="w-4 h-4" />
                             </button>
                           </li>
@@ -642,7 +666,7 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
                           <li key={u.id} className="p-4 flex flex-col gap-2 bg-white hover:bg-zinc-50 transition-colors">
                             <div className="flex items-center justify-between">
                               <span className="font-bold text-zinc-900 text-sm">{u.nombre} {u.apellidos}</span>
-                              <button onClick={() => handleDeleteUsuario(u.id)} className="p-1.5 text-zinc-400 hover:text-red-500 hover:bg-red-50 rounded-lg">
+                              <button onClick={() => handleDeleteUsuario(u.id)} className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg">
                                 <Trash2 className="w-4 h-4" />
                               </button>
                             </div>
@@ -670,6 +694,20 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
           </div>
         </div>
       )}
+
+      {/* Confirmation Modal */}
+      {isConfirmModalOpen && itemToDelete && (
+        <ConfirmationModal
+          isOpen={isConfirmModalOpen}
+          onClose={() => setIsConfirmModalOpen(false)}
+          onConfirm={itemToDelete.type === 'tecnico' ? confirmDeleteTecnico : confirmDeleteUsuario}
+          title="Confirmar Eliminación"
+          message="ATENCIÓN SE PROCEDE A BORRAR EL ELEMENTO Y SUS REGISTROS ¿ CONFIRMA SU PETICIÓN ?"
+          confirmText="Sí, eliminar"
+          cancelText="No, cancelar"
+        />
+      )}
+
     </div>
   );
 }
