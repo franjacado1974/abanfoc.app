@@ -19,7 +19,7 @@ import GestionEmpresa from './GestionEmpresa';
 import Planificacion from './Planificacion';
 import RevisionChecklist from './RevisionChecklist';
 import Revisiones from './Revisiones';
-import { verifyUser } from './firebase';
+import { verifyUser, addUserToFirestore } from './firebase';
 
 const generateId = () => {
   try {
@@ -61,7 +61,6 @@ function Login({ usuarios, onLogin }: { usuarios: Usuario[], onLogin: (user: Usu
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Primero intentamos verificar contra Firestore
     try {
       const remoteUser = await verifyUser(username, password);
       if (remoteUser) {
@@ -71,24 +70,9 @@ function Login({ usuarios, onLogin }: { usuarios: Usuario[], onLogin: (user: Usu
       }
     } catch (err) {
       console.error('Error verificando en Firestore:', err);
-      // Continuamos con fallback local
     }
 
-    // Fallback: comprobar usuarios locales (localStorage)
-    const user = usuarios.find(u => u.nombre.toLowerCase() === username.toLowerCase());
-    if (user) {
-      const storedPassword = user.password || '';
-      if (storedPassword === password) {
-        sessionStorage.setItem('firecheck_logged_user', JSON.stringify(user));
-        onLogin(user);
-        return;
-      } else {
-        alert('Contraseña incorrecta');
-        return;
-      }
-    }
-
-    alert('Usuario no encontrado');
+    alert('Usuario o contraseña incorrectos');
   };
 
   return (
@@ -96,8 +80,8 @@ function Login({ usuarios, onLogin }: { usuarios: Usuario[], onLogin: (user: Usu
       <div className="bg-white p-6 sm:p-8 rounded-2xl shadow-2xl w-full max-w-md sm:max-w-sm md:max-w-md lg:max-w-lg border border-zinc-200">
         <div className="flex flex-col items-center mb-6">
           <img src={appLogo} alt="Logo" className="h-12 sm:h-14 md:h-16 mb-4 sm:mb-6 object-contain" />
-          <h2 className="text-2xl sm:text-3xl font-black text-zinc-900 text-center">Acceso al Sistema</h2>
-          <p className="text-zinc-500 text-sm text-center">Introduce tus credenciales para continuar</p>
+          <h2 className="text-xl sm:text-2xl font-bold text-zinc-900 text-center">acceso al sistema</h2>
+          <p className="text-zinc-500 text-sm text-center">introduce tus credenciales para continuar</p>
         </div>
         <form onSubmit={handleLogin} className="space-y-4">
           <input 
@@ -353,21 +337,37 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
     }
   };
 
-  const handleAddUsuario = (e: React.FormEvent) => {
+  const handleAddUsuario = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nuevoUsuario.nombre.trim() || !nuevoUsuario.apellidos.trim()) return;
     
-    const newUsr = {
-      id: generateId(),
+    const userData = {
       nombre: nuevoUsuario.nombre.trim(),
       apellidos: nuevoUsuario.apellidos.trim(),
       rol: nuevoUsuario.rol,
       password: nuevoUsuario.password.trim()
     };
     
-    const updated = [...usuarios, newUsr];
-    setUsuarios(updated);
-    localStorage.setItem('firecheck_db_usuarios', JSON.stringify(updated));
+    // Guardar en Firestore
+    try {
+      const savedUser = await addUserToFirestore(userData);
+      const localUser: Usuario = {
+        id: savedUser.id,
+        nombre: savedUser.nombre,
+        apellidos: savedUser.apellidos,
+        rol: savedUser.rol,
+        password: userData.password
+      };
+      const updated = [...usuarios, localUser];
+      setUsuarios(updated);
+      localStorage.setItem('firecheck_db_usuarios', JSON.stringify(updated));
+      alert(`Usuario "${userData.nombre}" creado correctamente en Firestore`);
+    } catch (err) {
+      console.error('Error guardando usuario en Firestore:', err);
+      alert('Error al crear el usuario en Firestore. Comprueba tu conexión.');
+      return;
+    }
+    
     setNuevoUsuario({nombre: '', apellidos: '', rol: 'visualizador', password: ''});
   };
 
@@ -467,7 +467,7 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
             </div>
             <p className="text-xs md:text-sm font-medium text-zinc-500 capitalize">{formatDate(currentTime)}</p>
             <p className="text-2xl md:text-3xl font-bold text-zinc-900 tracking-tight leading-none mt-1">{formatTime(currentTime)}</p>
-            <span className="text-[10px] text-zinc-400 mt-1 font-medium">v.1.1</span>
+            <span className="text-[10px] text-zinc-400 mt-1 font-medium">v.1.2</span>
           </div>
         </div>
 
@@ -719,7 +719,7 @@ export default function App() {
     } catch { return []; }
   });
 
-  if (!loggedUser && availableUsers.length > 0) {
+  if (!loggedUser) {
     return <Login usuarios={availableUsers} onLogin={setLoggedUser} />;
   }
 

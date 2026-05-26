@@ -25,28 +25,80 @@ const storage= getStorage(app);
 const db = getFirestore(app);
 
 /**
+ * Guarda un nuevo usuario en Firestore (colección "usuarios").
+ * Campos que guarda: nombre, apellidos, rol, contraseña
+ */
+export async function addUserToFirestore(user: { nombre: string; apellidos: string; rol: string; password: string }) {
+  try {
+    const col = collection(db, 'usuarios');
+    const docRef = await addDoc(col, {
+      nombre: user.nombre,
+      apellidos: user.apellidos,
+      rol: user.rol,
+      contraseña: user.password
+    });
+    console.info('addUserToFirestore: created', docRef.id, user.nombre);
+    return { id: docRef.id, ...user };
+  } catch (e) {
+    console.error('addUserToFirestore error:', e);
+    throw e;
+  }
+}
+
+/**
  * Verifica credenciales en Firestore.
- * Busca en la colección "usuarios" un documento con campo `nombre` igual a username
- * y compara el campo `password`. Devuelve el documento de usuario (sin password) o null.
+ * Busca en la colección "usuarios" un documento con campo `nombre` o `usuario` igual a username
+ * y compara la contraseña. Devuelve el objeto usuario (sin contraseña) o null.
  */
 export async function verifyUser(username: string, password: string) {
   try {
     const col = collection(db, 'usuarios');
-    // La colección usa campos en español: 'usuario' y 'contraseña'
-    const q = query(col, where('usuario', '==', username));
-    const snap = await getDocs(q);
-    if (snap.empty) return null;
+    console.info('verifyUser: buscando usuario', username);
+
+    // Buscar por 'usuario' primero (usuarios legacy: superusuario, administrador, tecnico)
+    let q = query(col, where('usuario', '==', username));
+    let snap = await getDocs(q);
+    console.info('verifyUser: resultado busqueda por usuario, docs=', snap.size);
+
+    // Si no encuentra, buscar por 'nombre' (usuarios creados desde Gestión de Usuarios)
+    if (snap.empty) {
+      q = query(col, where('nombre', '==', username));
+      snap = await getDocs(q);
+      console.info('verifyUser: resultado busqueda por nombre, docs=', snap.size);
+    }
+
+    if (snap.empty) {
+      console.warn('verifyUser: usuario no encontrado en Firestore');
+      return null;
+    }
+
     const doc = snap.docs[0];
     const data: any = doc.data();
-    if (!data) return null;
-
-    // Soportar varios nombres de campo para compatibilidad
-    const storedPassword = data['contraseña'] ?? data['password'] ?? data['clave'] ?? '';
-    if (storedPassword === password) {
-      // Eliminar el campo de contraseña antes de devolver
-      const { contraseña: _c, password: _p, clave: _k, ...sanitized } = data;
-      return { id: doc.id, ...sanitized };
+    if (!data) {
+      console.warn('verifyUser: documento sin datos');
+      return null;
     }
+
+    console.info('verifyUser: datos del documento:', JSON.stringify(data));
+
+    // Soportar varios nombres de campo para contraseña
+    const storedPassword = data['contraseña'] ?? data['password'] ?? data['clave'] ?? '';
+    console.info('verifyUser: contraseña almacenada:', storedPassword, '| introducida:', password);
+
+    if (storedPassword === password) {
+      const nombre = data['nombre'] ?? data['usuario'] ?? username;
+      const apellidos = data['apellidos'] ?? '';
+      const rol = data['rol'] ?? (username === 'superusuario' ? 'super-administrador' : 'administrador');
+      console.info('verifyUser: login exitoso para', nombre, 'rol:', rol);
+      return {
+        id: doc.id,
+        nombre,
+        apellidos,
+        rol
+      };
+    }
+
+    console.warn('verifyUser: contraseña incorrecta');
     return null;
   } catch (e) {
     console.error('verifyUser error:', e);
