@@ -3,20 +3,34 @@ import { useNavigate } from 'react-router-dom';
 import { Package, Plus, Search, Edit, Trash2, X, Download, Upload } from 'lucide-react';
 import ConfirmationModal from './ConfirmationModal'; // Import the new modal component
 import * as XLSX from 'xlsx';
+import { 
+  subscribeArticulos, 
+  saveArticulo, 
+  deleteArticulo, 
+  getArticulos,
+  getFamilias,
+  subscribeFamilias,
+} from './firebase';
+import type { Familia } from './firebase';
 
 export interface Articulo {
   id: string;
   codigo: string;
   nombre: string;
+  familiaId?: string;
   familia: string;
   precioCompra: number;
   precioVenta: number;
+  revisable: boolean;
 }
 
 export default function Articulos() {
   const navigate = useNavigate();
   const [articulos, setArticulos] = useState<Articulo[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+
+  const [familias, setFamilias] = useState<Familia[]>([]);
+  const [isFamiliasLoading, setIsFamiliasLoading] = useState(true);
   
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -26,24 +40,113 @@ export default function Articulos() {
   const [formData, setFormData] = useState({
     codigo: '',
     nombre: '',
+    familiaId: '',
     familia: '',
     precioCompra: '',
-    precioVenta: ''
+    precioVenta: '',
+    revisable: true
   });
+  
   // State for confirmation modal
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [articuloIdToDelete, setArticuloIdToDelete] = useState<string | null>(null);
 
+  // Firebase subscription
   useEffect(() => {
-    const saved = localStorage.getItem('firecheck_db_articulos');
-    if (saved) {
-      setArticulos(JSON.parse(saved));
-    }
+    // Load initial data from Firebase
+    const loadInitialData = async () => {
+      try {
+        const firebaseArticulos = await getArticulos();
+        setArticulos(firebaseArticulos);
+        // Also save to localStorage as backup
+        localStorage.setItem('firecheck_db_articulos', JSON.stringify(firebaseArticulos));
+      } catch (error) {
+        console.error('Error loading articulos from Firebase:', error);
+        // Fallback to localStorage
+        const saved = localStorage.getItem('firecheck_db_articulos');
+        if (saved) {
+          try {
+            setArticulos(JSON.parse(saved));
+          } catch (parseError) {
+            console.error('Error parsing articulos from localStorage:', parseError);
+            setArticulos([]);
+          }
+        } else {
+          setArticulos([]);
+        }
+      }
+    };
+
+    loadInitialData();
+
+    // Subscribe to real-time updates from Firebase
+    const unsubscribe = subscribeArticulos((firebaseArticulos) => {
+      setArticulos(firebaseArticulos);
+      // Update localStorage as backup
+      localStorage.setItem('firecheck_db_articulos', JSON.stringify(firebaseArticulos));
+    });
+
+    // Cleanup subscription on unmount
+    return () => unsubscribe();
   }, []);
 
-  const saveToDb = (data: Articulo[]) => {
+  // Cargar familias desde Firestore para el desplegable de artículos.
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadFamilias = async () => {
+      try {
+        const familias = await getFamilias();
+        if (isMounted) {
+          setFamilias(familias);
+          setIsFamiliasLoading(false);
+        }
+      } catch (error) {
+        console.error('Error loading familias from Firebase:', error);
+        if (isMounted) {
+          setFamilias([]);
+          setIsFamiliasLoading(false);
+        }
+      }
+    };
+
+    loadFamilias();
+
+    const unsubscribe = subscribeFamilias((familias) => {
+      setFamilias(familias);
+      setIsFamiliasLoading(false);
+    });
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    setFormData(prev => {
+      if (!prev.familiaId || prev.familiaId === '__current__') return prev;
+      const familia = familias.find(item => item.id === prev.familiaId);
+      if (!familia || familia.nombre === prev.familia) return prev;
+      return { ...prev, familia: familia.nombre };
+    });
+  }, [familias]);
+
+  const saveToDb = async (data: Articulo[]) => {
     setArticulos(data);
-    localStorage.setItem('firecheck_db_articulos', JSON.stringify(data));
+    // Save to Firebase
+    try {
+      // Save each articulo individually
+      for (const articulo of data) {
+        await saveArticulo(articulo);
+      }
+      // Also save to localStorage as backup
+      localStorage.setItem('firecheck_db_articulos', JSON.stringify(data));
+    } catch (error) {
+      console.error('Error saving articulos to Firebase:', error);
+      // Still update localStorage even if Firebase fails
+      localStorage.setItem('firecheck_db_articulos', JSON.stringify(data));
+    }
   };
 
   const handleOpenModal = (articulo?: Articulo) => {
@@ -52,13 +155,15 @@ export default function Articulos() {
       setFormData({
         codigo: articulo.codigo,
         nombre: articulo.nombre,
+        familiaId: articulo.familiaId || familias.find(familia => familia.nombre === articulo.familia)?.id || '',
         familia: articulo.familia,
         precioCompra: articulo.precioCompra.toString(),
-        precioVenta: articulo.precioVenta.toString()
+        precioVenta: articulo.precioVenta.toString(),
+        revisable: articulo.revisable
       });
     } else {
       setEditingArticulo(null);
-      setFormData({ codigo: '', nombre: '', familia: '', precioCompra: '', precioVenta: '' });
+      setFormData({ codigo: '', nombre: '', familiaId: '', familia: '', precioCompra: '', precioVenta: '', revisable: true });
     }
     setIsModalOpen(true);
   };
@@ -68,21 +173,32 @@ export default function Articulos() {
     setEditingArticulo(null);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formData.familia.trim()) {
+      alert('Debes seleccionar una familia de Firestore antes de guardar el artículo.');
+      return;
+    }
+
     const newArticulo: Articulo = {
       id: editingArticulo ? editingArticulo.id : crypto.randomUUID(),
       codigo: formData.codigo.trim(),
       nombre: formData.nombre.trim(),
+      familiaId: formData.familiaId && formData.familiaId !== '__current__' ? formData.familiaId : undefined,
       familia: formData.familia.trim(),
       precioCompra: parseFloat(formData.precioCompra) || 0,
       precioVenta: parseFloat(formData.precioVenta) || 0,
+      revisable: formData.revisable
     };
 
     if (editingArticulo) {
-      saveToDb(articulos.map(a => a.id === editingArticulo.id ? newArticulo : a));
+      // Update existing articulo
+      const updatedArticulos = articulos.map(a => a.id === editingArticulo.id ? newArticulo : a);
+      await saveToDb(updatedArticulos);
     } else {
-      saveToDb([...articulos, newArticulo]);
+      // Add new articulo
+      const updatedArticulos = [...articulos, newArticulo];
+      await saveToDb(updatedArticulos);
     }
     handleCloseModal();
   };
@@ -92,10 +208,22 @@ export default function Articulos() {
     setIsConfirmModalOpen(true);
   };
 
-  const confirmDeleteArticulo = () => {
+  const confirmDeleteArticulo = async () => {
     if (articuloIdToDelete) {
       setIsConfirmModalOpen(false);
-      saveToDb(articulos.filter(a => a.id !== articuloIdToDelete));
+      try {
+        // Delete from Firebase
+        await deleteArticulo(articuloIdToDelete);
+        // Update local state
+        setArticulos(articulos.filter(a => a.id !== articuloIdToDelete));
+        // Update localStorage
+        localStorage.setItem('firecheck_db_articulos', JSON.stringify(articulos.filter(a => a.id !== articuloIdToDelete)));
+      } catch (error) {
+        console.error('Error deleting articulo from Firebase:', error);
+        // Fallback to localStorage only
+        setArticulos(articulos.filter(a => a.id !== articuloIdToDelete));
+        localStorage.setItem('firecheck_db_articulos', JSON.stringify(articulos.filter(a => a.id !== articuloIdToDelete)));
+      }
       setArticuloIdToDelete(null);
     }
   };
@@ -107,6 +235,22 @@ export default function Articulos() {
   );
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const currentFamiliaIsAvailable = familias.some(familia =>
+    familia.id === formData.familiaId || familia.nombre === formData.familia
+  );
+  const selectFamiliaOptions = formData.familia && !currentFamiliaIsAvailable
+    ? [{ id: '__current__', nombre: formData.familia }, ...familias]
+    : familias;
+
+  const handleFamiliaChange = (familiaId: string) => {
+    if (familiaId === '__current__') return;
+    const selectedFamilia = familias.find(familia => familia.id === familiaId);
+    setFormData({
+      ...formData,
+      familiaId,
+      familia: selectedFamilia?.nombre || '',
+    });
+  };
 
   const handleExport = () => {
     if (articulos.length === 0) {
@@ -118,78 +262,97 @@ export default function Articulos() {
       Familia: item.familia,
       Nombre: item.nombre,
       PrecioCompra: item.precioCompra,
-      PrecioVenta: item.precioVenta
+      PrecioVenta: item.precioVenta,
+      Revisable: item.revisable ? 'Sí' : 'No'
     })));
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Articulos");
     XLSX.writeFile(workbook, "Articulos.xlsx");
   };
 
-  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
 
-    const targetInput = e.target;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const arrayBuffer = event.target?.result;
-        const wb = XLSX.read(arrayBuffer, { type: 'array' });
-        const wsname = wb.SheetNames[0];
-        const ws = wb.Sheets[wsname];
-        const data = XLSX.utils.sheet_to_json(ws);
-        
-        if (!data || data.length === 0) {
-          alert('El archivo Excel está vacío o no se pudo leer correctamente.');
-          targetInput.value = '';
-          return;
-        }
-
-        let importados = 0;
-        let actualizados = 0;
-        const datosFinales = [...articulos]; // Copia del estado actual
-
-        data.forEach((item: any) => {
-          const codigo = String(item.Codigo || item.codigo || item.CODIGO || '').trim();
-          if (!codigo) return;
-
-          const parsePrice = (val: any) => {
-            if (val === undefined || val === null) return 0;
-            if (typeof val === 'number') return val;
-            return parseFloat(String(val).replace(',', '.')) || 0;
-          };
-
-          const nuevoItem = {
-            id: crypto.randomUUID(),
-            codigo: codigo,
-            nombre: String(item.Nombre || item.nombre || item.NOMBRE || ''),
-            familia: String(item.Familia || item.familia || item.FAMILIA || ''),
-            precioCompra: parsePrice(item.PrecioCompra || item.precioCompra || item.PRECIOCOMPRA),
-            precioVenta: parsePrice(item.PrecioVenta || item.precioVenta || item.PRECIOVENTA),
-          };
-
-          const indexExistente = datosFinales.findIndex((x) => x.codigo === codigo);
+      const targetInput = e.target;
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const arrayBuffer = event.target?.result;
+          const wb = XLSX.read(arrayBuffer, { type: 'array' });
+          const wsname = wb.SheetNames[0];
+          const ws = wb.Sheets[wsname];
+          const data = XLSX.utils.sheet_to_json(ws);
           
-          if (indexExistente >= 0) {
-            datosFinales[indexExistente] = { ...datosFinales[indexExistente], ...nuevoItem, id: datosFinales[indexExistente].id };
-            actualizados++;
-          } else {
-            datosFinales.push(nuevoItem);
-            importados++;
+          if (!data || data.length === 0) {
+            alert('El archivo Excel está vacío o no se pudo leer correctamente.');
+            targetInput.value = '';
+            return;
           }
-        });
 
-        // Guardar actualizando estado y localStorage simultáneamente
-        saveToDb(datosFinales);
-        alert(`¡Importación completada!\nNuevos añadidos: ${importados}\nActualizados: ${actualizados}`);
-      } catch (error) {
-        console.error(error);
-        alert('Error al importar el archivo. Asegúrate de que es un archivo Excel válido.');
-      }
-      targetInput.value = '';
+          let importados = 0;
+          let actualizados = 0;
+          const datosFinales = [...articulos]; // Copia del estado actual
+
+          data.forEach((item: any) => {
+            const codigo = String(item.Codigo || item.codigo || item.CODIGO || '').trim();
+            if (!codigo) return;
+
+            const parsePrice = (val: any) => {
+              if (val === undefined || val === null) return 0;
+              if (typeof val === 'number') return val;
+              return parseFloat(String(val).replace(',', '.')) || 0;
+            };
+
+            // Handle Revisable field (could be boolean, string, or Excel value)
+            let revisable = true; // Default value
+            if (item.Revisable !== undefined && item.Revisable !== null) {
+              if (typeof item.Revisable === 'boolean') {
+                revisable = item.Revisable;
+              } else if (typeof item.Revisable === 'string') {
+                revisable = item.Revisable.toLowerCase() === 'sí' || 
+                         item.Revisable.toLowerCase() === 'si' || 
+                         item.Revisable.toLowerCase() === 'yes' || 
+                         item.Revisable.toLowerCase() === 'true' || 
+                         item.Revisable === '1';
+              } else {
+                // Assume numeric: 0 = false, anything else = true
+                revisable = parseFloat(item.Revisable) !== 0;
+              }
+            }
+
+            const nuevoItem = {
+              id: crypto.randomUUID(),
+              codigo: codigo,
+              nombre: String(item.Nombre || item.nombre || item.NOMBRE || ''),
+              familia: String(item.Familia || item.familia || item.FAMILIA || ''),
+              precioCompra: parsePrice(item.PrecioCompra || item.precioCompra || item.PRECIOCOMPRA),
+              precioVenta: parsePrice(item.PrecioVenta || item.precioVenta || item.PRECIOVENTA),
+              revisable: revisable
+            };
+
+            const indexExistente = datosFinales.findIndex((x) => x.codigo === codigo);
+            
+            if (indexExistente >= 0) {
+              datosFinales[indexExistente] = { ...datosFinales[indexExistente], ...nuevoItem, id: datosFinales[indexExistente].id };
+              actualizados++;
+            } else {
+              datosFinales.push(nuevoItem);
+              importados++;
+            }
+          });
+
+          // Guardar actualizando estado y localStorage simultáneamente
+          saveToDb(datosFinales);
+          alert(`¡Importación completada!\nNuevos añadidos: ${importados}\nActualizados: ${actualizados}`);
+        } catch (error) {
+          console.error(error);
+          alert('Error al importar el archivo. Asegúrate de que es un archivo Excel válido.');
+        }
+        targetInput.value = '';
+      };
+      reader.readAsArrayBuffer(file);
     };
-    reader.readAsArrayBuffer(file);
-  };
 
   return (
     <div className="min-h-screen bg-fuchsia-50/40 p-6 md:p-12">
@@ -279,9 +442,9 @@ export default function Articulos() {
                       <h3 className="text-lg font-bold text-fuchsia-950 truncate" title={a.nombre}>{a.nombre}</h3>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
-                      <button onClick={() => handleOpenModal(a)} className="p-1.5 text-fuchsia-400 hover:text-fuchsia-700 hover:bg-fuchsia-50 rounded-lg transition-colors">
-                        <Edit className="w-4 h-4" />
-                      </button>
+<button onClick={() => handleOpenModal(a)} className="p-1.5 text-black hover:text-fuchsia-700 hover:bg-fuchsia-50 rounded-lg transition-colors">
+  <Edit className="w-4 h-4" />
+</button>
                       <button onClick={() => handleDelete(a.id)} className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors">
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -335,17 +498,28 @@ export default function Articulos() {
                     placeholder="Ej: EXT-001"
                   />
                 </div>
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-fuchsia-950">Familia</label>
-                  <input
-                    required
-                    type="text"
-                    value={formData.familia}
-                    onChange={e => setFormData({...formData, familia: e.target.value})}
-                    className="w-full px-4 py-2.5 bg-fuchsia-50/50 border border-fuchsia-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-fuchsia-500/20 focus:border-fuchsia-500 transition-all text-fuchsia-950"
-                    placeholder="Ej: Extintores"
-                  />
-                </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-fuchsia-950">Familia</label>
+                    <select
+                      required
+                      value={formData.familiaId || (formData.familia ? '__current__' : '')}
+                      disabled={isFamiliasLoading || selectFamiliaOptions.length === 0}
+                      onChange={e => handleFamiliaChange(e.target.value)}
+                      className="w-full px-4 py-2.5 bg-fuchsia-50/50 border border-fuchsia-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-fuchsia-500/20 focus:border-fuchsia-500 transition-all text-fuchsia-950 disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      <option value="">
+                        {isFamiliasLoading ? 'Cargando familias...' : '-- Selecciona familia --'}
+                      </option>
+                      {selectFamiliaOptions.map(option => (
+                        <option key={option.id} value={option.id}>{option.nombre}</option>
+                      ))}
+                    </select>
+                    {!isFamiliasLoading && selectFamiliaOptions.length === 0 && (
+                      <p className="text-xs text-amber-600 font-medium">
+                        No hay familias disponibles en Firestore. Añade documentos en la colección "familias".
+                      </p>
+                    )}
+                  </div>
               </div>
 
               <div className="space-y-1.5">
@@ -387,9 +561,19 @@ export default function Articulos() {
                     placeholder="0.00"
                   />
                 </div>
-              </div>
+               </div>
 
-              {/* Previsualización del IVA */}
+               <div className="flex items-center gap-4">
+                 <label className="text-sm font-medium text-fuchsia-950">Equipo revisable en los mantenimientos</label>
+                 <input
+                   type="checkbox"
+                   checked={formData.revisable}
+                   onChange={e => setFormData({...formData, revisable: e.target.checked})}
+                   className="w-4 h-4 text-fuchsia-600"
+                 />
+               </div>
+
+               {/* Previsualización del IVA */}
               <div className="mt-2 p-3 bg-fuchsia-50 rounded-xl border border-fuchsia-200/50 flex justify-between items-center">
                 <span className="text-xs font-medium text-fuchsia-700">Precio Final (IVA 21%)</span>
                 <span className="text-lg font-bold text-fuchsia-900">

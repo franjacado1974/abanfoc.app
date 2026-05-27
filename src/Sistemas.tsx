@@ -16,6 +16,7 @@ export interface SistemaEquipo {
   codigo: string;
   nombre: string;
   familia: string;
+  revisable: boolean;
 }
 
 export const CATEGORIAS_POR_DEFECTO: SistemaCategoria[] = [
@@ -57,7 +58,7 @@ export default function Sistemas() {
   const [catNombre, setCatNombre] = useState('');
   const [editCatId, setEditCatId] = useState<string | null>(null);
   
-  const [formEquipo, setFormEquipo] = useState({ id: '', codigo: '', nombre: '', familia: '' });
+  const [formEquipo, setFormEquipo] = useState({ id: '', codigo: '', nombre: '', familia: '', revisable: true });
 
   // State for confirmation modal
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
@@ -240,7 +241,7 @@ const unsub = subscribeEquiposBySystem(selectedCategoria.nombre, (newEqs) => {
   };
 
   // ----- LOGICA EQUIPOS -----
-  const handleSaveEquipo = async (e: React.FormEvent) => {
+const handleSaveEquipo = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCategoria) return;
 
@@ -249,23 +250,24 @@ const unsub = subscribeEquiposBySystem(selectedCategoria.nombre, (newEqs) => {
       idCategoria: selectedCategoria.id,
       codigo: formEquipo.codigo.toUpperCase(),
       nombre: formEquipo.nombre,
-      familia: selectedCategoria.nombre.toUpperCase()
+      familia: selectedCategoria.nombre.toUpperCase(),
+      revisable: formEquipo.revisable
     };
 
     try {
       // Guardar en Firestore automáticamente
       await saveEquipoToSystemCollection(selectedCategoria.nombre, newEquipo);
 
-// Actualizar estado local
-       if (formEquipo.id) {
-          const updated = equipos.map(eq => eq.id === formEquipo.id ? newEquipo : eq);
-          if (selectedCategoria) saveEquiposToSystem(updated, selectedCategoria.nombre);
-          saveEquipos(updated);
-        } else {
-          const updated = [...equipos, newEquipo];
-          if (selectedCategoria) saveEquiposToSystem(updated, selectedCategoria.nombre);
-          saveEquipos(updated);
-        }
+      // Actualizar estado local
+      if (formEquipo.id) {
+        const updated = equipos.map(eq => eq.id === formEquipo.id ? newEquipo : eq);
+        if (selectedCategoria) saveEquiposToSystem(updated, selectedCategoria.nombre);
+        saveEquipos(updated);
+      } else {
+        const updated = [...equipos, newEquipo];
+        if (selectedCategoria) saveEquiposToSystem(updated, selectedCategoria.nombre);
+        saveEquipos(updated);
+      }
       setIsEquipoModalOpen(false);
     } catch (error) {
       alert("Error al guardar en Firebase. El cambio se mantuvo localmente.");
@@ -435,13 +437,14 @@ const unsub = subscribeEquiposBySystem(selectedCategoria.nombre, (newEqs) => {
           const codigo = String(item.Codigo || item.codigo || item.CODIGO || '').trim();
           if (!codigo) return;
 
-          const nuevoItem: SistemaEquipo = {
-            id: crypto.randomUUID(),
-            idCategoria: selectedCategoria.id,
-            codigo: codigo.toUpperCase(),
-            familia: selectedCategoria.nombre.toUpperCase(),
-            nombre: String(item.Nombre || item.nombre || item.NOMBRE || '')
-          };
+            const nuevoItem: SistemaEquipo = {
+              id: crypto.randomUUID(),
+              idCategoria: selectedCategoria.id,
+              codigo: codigo.toUpperCase(),
+              familia: selectedCategoria.nombre.toUpperCase(),
+              nombre: String(item.Nombre || item.nombre || item.NOMBRE || ''),
+              revisable: true
+            };
 
           const indexExistente = datosFinales.findIndex(x => x.codigo === codigo && x.idCategoria === selectedCategoria.id);
           
@@ -693,7 +696,7 @@ const unsub = subscribeEquiposBySystem(selectedCategoria.nombre, (newEqs) => {
                   <span className="hidden sm:inline">Exportar</span>
                 </button>
                 <button 
-                  onClick={() => { setFormEquipo({ id: '', codigo: '', nombre: '', familia: '' }); setIsEquipoModalOpen(true); }}
+                  onClick={() => { setFormEquipo({ id: '', codigo: '', nombre: '', familia: '', revisable: true }); setIsEquipoModalOpen(true); }}
                   className="flex items-center justify-center gap-2 bg-white border border-fuchsia-200 hover:border-fuchsia-300 text-fuchsia-700 px-5 py-2.5 rounded-xl font-medium transition-colors shadow-sm"
                 >
                   <Plus className="w-5 h-5" />
@@ -816,10 +819,19 @@ const unsub = subscribeEquiposBySystem(selectedCategoria.nombre, (newEqs) => {
                   placeholder="Ej: Extintor Polvo ABC 6Kg"
                 />
               </div>
-              <div className="pt-2 flex gap-3">
-                <button type="button" onClick={() => setIsEquipoModalOpen(false)} className="flex-1 px-4 py-2.5 text-fuchsia-700 bg-fuchsia-50 hover:bg-fuchsia-100 rounded-xl font-medium transition-colors">Cancelar</button>
-                <button type="submit" className="flex-1 px-4 py-2.5 text-white bg-fuchsia-600 hover:bg-fuchsia-700 rounded-xl font-medium transition-colors shadow-sm">Guardar</button>
-              </div>
+               <div className="space-y-1.5">
+                 <label className="text-sm font-semibold text-fuchsia-950">Revisable</label>
+                 <input
+                   type="checkbox"
+                   checked={formEquipo.revisable}
+                   onChange={e => setFormEquipo({...formEquipo, revisable: e.target.checked})}
+                   className="w-4 h-4 text-fuchsia-600"
+                 />
+               </div>
+               <div className="pt-2 flex gap-3">
+                 <button type="button" onClick={() => setIsEquipoModalOpen(false)} className="flex-1 px-4 py-2.5 text-fuchsia-700 bg-fuchsia-50 hover:bg-fuchsia-100 rounded-xl font-medium transition-colors">Cancelar</button>
+                 <button type="submit" className="flex-1 px-4 py-2.5 text-white bg-fuchsia-600 hover:bg-fuchsia-700 rounded-xl font-medium transition-colors shadow-sm">Guardar</button>
+               </div>
             </form>
           </div>
         </div>

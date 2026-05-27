@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Save, FileText, DownloadCloud, RefreshCw, Calendar, User as UserIcon, Building2, MapPin, Trash2, CheckCircle2, CalendarPlus, X, Search } from 'lucide-react';
-import ConfirmationModal from './ConfirmationModal'; // Import the new modal component
 import type { Parte, Centro, Cliente } from './Centros';
 import { generarActaExtintoresPDF, generarAlbaranPDF, generarCertificadoPDF } from './pdfGenerator';
 
@@ -44,10 +43,6 @@ export default function Partes() {
   const [searchTerm, setSearchTerm] = useState('');
   const canvasClienteRef = useRef<HTMLCanvasElement>(null);
   const canvasTecnicoRef = useRef<HTMLCanvasElement>(null);
-
-  // State for confirmation modal
-  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
-  const [parteIdToDelete, setParteIdToDelete] = useState<string | null>(null);
 
   // Manejar edición externa (desde el planificador)
   useEffect(() => {
@@ -504,12 +499,13 @@ export default function Partes() {
                 const cliente = clientes.find(cl => cl.id === parte.clienteId); // Find the client for display
                 const isOffline = parte.estado === 'Descargado (Offline)';
                 const isCerrado = parte.estado === 'Cerrado';
+                const isPlanificado = parte.estado === 'Planificado';
 
                 return (
-                  <div key={parte.id} className={`bg-white rounded-3xl p-6 border shadow-sm transition-all flex flex-col ${isCerrado ? 'border-zinc-200 bg-zinc-50/50' : isFinalizado ? 'border-emerald-200 bg-emerald-50/30' : isOffline ? 'border-sky-200 bg-sky-50/30' : 'border-sky-100 hover:shadow-md'}`}>
+                  <div key={parte.id} className={`bg-white rounded-3xl p-6 border-2 shadow-sm transition-all flex flex-col ${isCerrado ? 'border-black bg-zinc-50/50' : isFinalizado ? 'border-emerald-500 bg-emerald-50/30' : isPlanificado ? 'border-blue-500 hover:shadow-md' : isOffline ? 'border-sky-300 bg-sky-50/30' : 'border-sky-100 hover:shadow-md'}`}>
                     <div className="flex justify-between items-start mb-4">
                       <span className="text-[10px] font-mono font-bold text-zinc-400 bg-zinc-100 px-2 py-1 rounded">{parte.id}</span>
-                      <span className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wider ${isCerrado ? 'bg-zinc-200 text-zinc-600' : isFinalizado ? 'bg-emerald-100 text-emerald-700' : isOffline ? 'bg-sky-100 text-sky-700' : 'bg-sky-100 text-sky-700'}`}>
+                      <span className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wider ${isCerrado ? 'bg-black text-white' : isFinalizado ? 'bg-emerald-100 text-emerald-700' : isOffline ? 'bg-sky-100 text-sky-700' : 'bg-sky-100 text-sky-700'}`}>
                         {parte.estado}
                       </span>
                     </div>
@@ -568,7 +564,7 @@ export default function Partes() {
                         </button>
                       )}
                       {isFinalizado && !isCerrado && (
-                        <button onClick={() => handleCerrarParte(parte.id)} className="flex-1 min-w-[120px] flex items-center justify-center gap-1.5 bg-amber-600 hover:bg-amber-700 text-white px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-sm">
+                        <button onClick={() => handleCerrarParte(parte.id)} className="flex-1 min-w-[120px] flex items-center justify-center gap-1.5 bg-black hover:bg-zinc-800 text-white px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-sm">
                           <CheckCircle2 className="w-4 h-4" /> Cerrar Parte
                         </button>
                       )}

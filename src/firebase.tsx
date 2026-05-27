@@ -31,11 +31,34 @@ export interface SistemaEquipo {
   codigo: string;
   nombre: string;
   familia: string;
+  revisable: boolean;
+}
+
+// Interface for Articulos
+export interface Articulo {
+  id: string;
+  codigo: string;
+  nombre: string;
+  familiaId?: string;
+  familia: string;
+  precioCompra: number;
+  precioVenta: number;
+  revisable: boolean;
+}
+
+export interface Familia {
+  id: string;
+  nombre: string;
 }
 
 const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
-const storage= getStorage(app);
+let analytics;
+try {
+  analytics = getAnalytics(app);
+} catch (e) {
+  console.warn('Firebase Analytics not available in this environment:', e);
+}
+const storage = getStorage(app);
 const db = getFirestore(app);
 
 // Habilitar persistencia offline para evitar bloqueos por falta de conexión
@@ -386,6 +409,129 @@ export async function syncSistemas(categorias: SistemaCategoria[], equipos: Sist
   } catch (e: any) {
     console.error('Error en syncSistemas:', e);
     throw e;
+  }
+}
+
+/**
+ * ARTICULOS - operaciones con Firestore
+ * getArticulos: obtiene todos los articulos una sola vez
+ * subscribeArticulos: escucha cambios en tiempo real y llama al callback con la lista actualizada
+ * saveArticulo: guarda o actualiza un articulo
+ * deleteArticulo: elimina un articulo
+ */
+
+export async function getArticulos() {
+  try {
+    const col = collection(db, 'articulos');
+    const snap = await getDocs(col);
+    return snap.docs.map(d => {
+      const data = d.data() as any;
+      return { id: d.id, ...data };
+    }) as Articulo[];
+  } catch (e) {
+    console.error('getArticulos error:', e);
+    throw e;
+  }
+}
+
+export function subscribeArticulos(callback: (articulos: Articulo[]) => void) {
+  try {
+    const col = collection(db, 'articulos');
+    const unsub = onSnapshot(col, (snap) => {
+      const items = snap.docs.map(d => {
+        const data = d.data() as any;
+        return { id: d.id, ...data };
+      }) as Articulo[];
+      callback(items);
+    }, (err) => {
+      console.error('subscribeArticulos error:', err);
+      callback([]);
+    });
+    return unsub;
+  } catch (e) {
+    console.error('subscribeArticulos error:', e);
+    return () => {};
+  }
+}
+
+export async function saveArticulo(articulo: Articulo) {
+  try {
+    const col = collection(db, 'articulos');
+    const cleanArticulo = Object.fromEntries(
+      Object.entries(articulo).filter(([, value]) => value !== undefined)
+    ) as Articulo;
+    // Si el objeto articulo incluye un campo `id` lo usamos como documentId en Firestore
+    if (cleanArticulo && cleanArticulo.id) {
+      const ref = doc(db, 'articulos', cleanArticulo.id);
+      await setDoc(ref, { 
+        ...cleanArticulo, 
+        updatedAt: new Date().toISOString() 
+      });
+      return { ...cleanArticulo, id: ref.id };
+    } else {
+      const ref = await addDoc(col, { 
+        ...cleanArticulo, 
+        updatedAt: new Date().toISOString() 
+      });
+      return { ...cleanArticulo, id: ref.id };
+    }
+  } catch (e) {
+    console.error('saveArticulo error:', e);
+    throw e;
+  }
+}
+
+export async function deleteArticulo(id: string) {
+  try {
+    const ref = doc(db, 'articulos', id);
+    await deleteDoc(ref);
+    return true;
+  } catch (e) {
+    console.error('deleteArticulo error:', e);
+    throw e;
+  }
+}
+
+/**
+ * FAMILIAS - opciones para el desplegable de familia en artículos.
+ */
+const mapFamiliaDoc = (docId: string, data: any): Familia | null => {
+  const nombre = String(data?.nombre ?? data?.familia ?? data?.name ?? docId).trim();
+  if (!nombre) return null;
+  return { id: docId, nombre };
+};
+
+export async function getFamilias() {
+  try {
+    const col = collection(db, 'familias');
+    const snap = await getDocs(col);
+    return snap.docs
+      .map(d => mapFamiliaDoc(d.id, d.data()))
+      .filter((familia): familia is Familia => familia !== null)
+      .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' }));
+  } catch (e) {
+    console.error('getFamilias error:', e);
+    throw e;
+  }
+}
+
+export function subscribeFamilias(callback: (familias: Familia[]) => void) {
+  try {
+    const col = collection(db, 'familias');
+    const unsub = onSnapshot(col, (snap) => {
+      const items = snap.docs
+        .map(d => mapFamiliaDoc(d.id, d.data()))
+        .filter((familia): familia is Familia => familia !== null)
+        .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' }));
+      callback(items);
+    }, (err) => {
+      console.error('subscribeFamilias error:', err);
+      callback([]);
+    });
+    return unsub;
+  } catch (e) {
+    console.error('subscribeFamilias error:', e);
+    return () => {};
   }
 }
 

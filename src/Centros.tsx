@@ -20,7 +20,8 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 
 import { CATEGORIAS_POR_DEFECTO, getIconForSistema } from './Sistemas';
-import { addCentro, updateCentro, deleteCentro, subscribeCentros, subscribeEquiposBySystem, getCollectionName } from './firebase';
+import { addCentro, updateCentro, deleteCentro, subscribeCentros, subscribeFamilias, subscribeArticulos } from './firebase';
+import type { Articulo, Familia } from './firebase';
 import ConfirmationModal from './ConfirmationModal'; // Import the new modal component
 
 const MESES = [
@@ -95,6 +96,7 @@ export interface EquipoInstalado {
   codigo: string;
   nombre: string;
   ubicacion: string;
+  revisable?: boolean;
   revisado?: boolean; // Indica si el equipo ya ha sido revisado
   
   // Datos específicos y Checklist Extintores (Opcional)
@@ -130,6 +132,14 @@ const emptyCentro: Centro = {
   periodicidad: [],
   mesesRevision: []
 };
+
+const normalizeFamilyName = (value: string) =>
+  value
+    .replace(/^sistema\s+/i, '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
 
 function SortableSistemaWrapper({ sist, children }: { sist: any, children: (attrs: any, listeners: any) => React.ReactNode }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: sist.id });
@@ -194,12 +204,8 @@ export default function Centros() {
     } catch { return []; }
   });
 
-  const [equiposCatalogo, _setEquiposCatalogo] = useState<any[]>(() => {
-    try {
-      const saved = localStorage.getItem('firecheck_db_sistemas_equipos');
-      return saved ? JSON.parse(saved) : [];
-    } catch { return []; }
-  });
+  const [articulosCatalogo, setArticulosCatalogo] = useState<Articulo[]>([]);
+  const [isArticulosLoading, setIsArticulosLoading] = useState(true);
   const [formEquipo, setFormEquipo] = useState<EquipoInstalado>({ id: '', centroId: '', sistemaId: '', codigo: '', nombre: '', ubicacion: '' });
   const [isEquipoModalOpen, setIsEquipoModalOpen] = useState(false);
   
@@ -207,10 +213,13 @@ export default function Centros() {
   const [isAddCatModalOpen, setIsAddCatModalOpen] = useState(false);
   const [selectedCatIdForCentro, setSelectedCatIdForCentro] = useState('');
   const [centroForNewSistema, setCentroForNewSistema] = useState<Centro | null>(null);
+  const [familiasFirestore, setFamiliasFirestore] = useState<Familia[]>([]);
+  const [isFamiliasLoading, setIsFamiliasLoading] = useState(true);
 
   // Variables para la selección de equipo desde el catálogo
   const [selectedEquipoCatalogo, setSelectedEquipoCatalogo] = useState('');
   const [cantidadAñadir, setCantidadAñadir] = useState(1);
+  const [selectedFamilyForCatalog, setSelectedFamilyForCatalog] = useState('');
   
   // State for confirmation modal
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
@@ -377,6 +386,17 @@ export default function Centros() {
     }
   }, [centros, location.state, navigate, location.pathname]);
 
+  // Cargar sistemas disponibles desde la colección Firestore "familias".
+  useEffect(() => {
+    setIsFamiliasLoading(true);
+    const unsubscribe = subscribeFamilias((familias) => {
+      setFamiliasFirestore(familias);
+      setIsFamiliasLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
   const saveToDB = (data: Centro[]) => {
     localStorage.setItem('firecheck_db_centros', JSON.stringify(data));
     setCentros(data);
@@ -398,62 +418,16 @@ export default function Centros() {
     return () => { if (unsub) unsub(); };
   }, []);
 
-  // Escuchar cambios en equipos del catálogo (localStorage + storage events entre pestañas)
+  // Escuchar artículos revisables para añadirlos como equipos del centro.
   useEffect(() => {
-    const loadEquiposCatalogo = () => {
-      try {
-        const saved = localStorage.getItem('firecheck_db_sistemas_equipos');
-        let parsed = saved ? JSON.parse(saved) : [];
-        if (parsed.length === 0 && categoriasSistema.length > 0) {
-          const allEquipos = [];
-          categoriasSistema.forEach(cat => {
-            const catNombre = (cat.nombre || '').replace(/^sistema\s+/i, '').toLowerCase().replace(/\s+/g, '_');
-            const key = 'firecheck_db_sistemas_equipos_' + (catNombre || 'unknown');
-            const catEquipos = localStorage.getItem(key);
-            if (catEquipos) { try { allEquipos.push(...JSON.parse(catEquipos)); } catch {} }
-          });
-          parsed = allEquipos;
-        }
-        _setEquiposCatalogo(parsed);
-      } catch { }
-    };
-    loadEquiposCatalogo();
-    const handleStorage = () => loadEquiposCatalogo();
-    const handleCustom = () => loadEquiposCatalogo();
-    window.addEventListener('storage', handleStorage);
-    window.addEventListener('equiposCatalogoChanged', handleCustom);
-    return () => {
-      window.removeEventListener('storage', handleStorage);
-      window.removeEventListener('equiposCatalogoChanged', handleCustom);
-    };
-  }, [categoriasSistema]);
-
-  // Escuchar equipos desde Firestore para todas las categorías (cuando cambian)
-  useEffect(() => {
-    if (categoriasSistema.length === 0) return;
-    
-    const unsubs: (() => void)[] = [];
-    categoriasSistema.forEach(cat => {
-      const unsub = subscribeEquiposBySystem(cat.nombre, (newEqs) => {
-        // Guardar en clave individual del sistema
-        const catNombre = (cat.nombre || '').replace(/^sistema\s+/i, '').toLowerCase().replace(/\s+/g, '_');
-        localStorage.setItem('firecheck_db_sistemas_equipos_' + catNombre, JSON.stringify(newEqs));
-        
-        // Reconstruir y guardar el índice maestro
-        const allEquipos: any[] = [];
-        categoriasSistema.forEach(c => {
-          const key = 'firecheck_db_sistemas_equipos_' + (c.nombre || '').replace(/^sistema\s+/i, '').toLowerCase().replace(/\s+/g, '_');
-          const saved = localStorage.getItem(key);
-          if (saved) { try { allEquipos.push(...JSON.parse(saved)); } catch {} }
-        });
-        localStorage.setItem('firecheck_db_sistemas_equipos', JSON.stringify(allEquipos));
-        _setEquiposCatalogo(allEquipos);
-      });
-      unsubs.push(unsub);
+    setIsArticulosLoading(true);
+    const unsubscribe = subscribeArticulos((articulos) => {
+      setArticulosCatalogo(articulos.filter(articulo => articulo.revisable === true));
+      setIsArticulosLoading(false);
     });
-    
-    return () => unsubs.forEach(u => u());
-  }, [categoriasSistema]);
+
+    return () => unsubscribe();
+  }, []);
 
   // ----- LOGICA DE IDs ----- //
   const calculateNextCentroId = (cliId: string, customPart: string) => {
@@ -602,14 +576,14 @@ export default function Centros() {
     e.preventDefault();
     if (!centroForNewSistema || !selectedCatIdForCentro) return;
     
-    const cat = categoriasSistema.find(c => c.id === selectedCatIdForCentro);
-    if (!cat) return;
+    const sistemaFirestore = familiasFirestore.find(familia => familia.id === selectedCatIdForCentro);
+    if (!sistemaFirestore) return;
 
     const newSistema: CentroSistema = {
       id: generateId(),
       centroId: centroForNewSistema.id,
-      tipo: cat.nombre,
-      familia: cat.nombre,
+      tipo: sistemaFirestore.nombre,
+      familia: sistemaFirestore.nombre,
       descripcion: ''
     };
 
@@ -644,7 +618,7 @@ export default function Centros() {
     e.preventDefault();
     if (!centroSeleccionado || !sistemaSeleccionado || !selectedEquipoCatalogo || cantidadAñadir < 1) return;
     
-    const equipoBase = equiposCatalogo.find(eq => eq.id === selectedEquipoCatalogo);
+    const equipoBase = articulosCatalogo.find(articulo => articulo.id === selectedEquipoCatalogo);
     if (!equipoBase) return;
 
     const nuevosEquipos: EquipoInstalado[] = [];
@@ -656,6 +630,7 @@ export default function Centros() {
         codigo: '', // Vacío para que el usuario se lo asigne uno a uno
         nombre: equipoBase.nombre,
         ubicacion: '',
+        revisable: equipoBase.revisable ?? true,
         revisado: false,
         checkAcceso: true,
         checkAltura: true,
@@ -769,6 +744,7 @@ export default function Centros() {
 
   // Filtrado (seguro contra campos undefined)
   const filteredCentros = centros.filter(c => {
+    if (!c) return false;
     const client = clientes.find(cl => cl.id === c?.clienteId);
     // Limpiamos los espacios extras en el termino de busqueda antes de comparar
     const term = (searchTerm || '').toLowerCase().trim();
@@ -783,6 +759,27 @@ export default function Centros() {
            clienteId.includes(term) ||
            poblacion.includes(term) ||
            (clientNombre && clientNombre.includes(term));
+  });
+
+  const filteredArticulosCatalogo = articulosCatalogo.filter(articulo => {
+    if (articulo.revisable !== true) return false;
+
+    if (selectedFamilyForCatalog) {
+      const selectedFamily = familiasFirestore.find(familia => familia.id === selectedFamilyForCatalog);
+      if (articulo.familiaId && articulo.familiaId === selectedFamilyForCatalog) return true;
+      if (!selectedFamily) return false;
+
+      return normalizeFamilyName(articulo.familia || '') === normalizeFamilyName(selectedFamily.nombre);
+    }
+
+    const sistemaFamilia = sistemaSeleccionado?.tipo || sistemaSeleccionado?.familia || '';
+    const familiaSistema = normalizeFamilyName(sistemaFamilia);
+    const familiaArticulo = normalizeFamilyName(articulo.familia || '');
+    if (!familiaSistema) return true;
+
+    return familiaArticulo === familiaSistema ||
+      familiaArticulo.includes(familiaSistema) ||
+      familiaSistema.includes(familiaArticulo);
   });
 
   // ----- RENDERIZADO DE LA LISTA ----- //
@@ -1190,6 +1187,13 @@ export default function Centros() {
                             });
                             setIsClaseOtro(false);
                             setSelectedEquipoCatalogo('');
+                            // Preseleccionar la familia de artículos según el sistema actual.
+                            const sistemaNombre = sist.tipo || sist.familia || '';
+                            const currentFamily = familiasFirestore.find(familia =>
+                              normalizeFamilyName(familia.nombre) === normalizeFamilyName(sistemaNombre)
+                            );
+                            setSelectedFamilyForCatalog(currentFamily ? currentFamily.id : '');
+                            
                             setIsEquipoModalOpen(true); 
                           }} 
                           className="flex items-center gap-1 text-[10px] bg-slate-900 hover:bg-black text-white px-2 py-1 rounded-md font-bold transition-colors"
@@ -1200,9 +1204,9 @@ export default function Centros() {
                     </div>
                     {equiposDelSistema.length === 0 ? (
                       <p className="text-xs text-emerald-600/50 italic py-2 text-center bg-emerald-50/50 rounded-lg border border-emerald-50/50">Sin equipos</p>
-                    ) : (
-                      <div className="space-y-1.5 mt-2">
-                        {equiposDelSistema.map((eq: any, i) => {
+                     ) : (
+                       <div className="space-y-1.5 mt-2">
+                         {equiposDelSistema.filter(eq => eq.revisable !== false).map((eq: any, i) => {
                           const hasAnomalies = Object.keys(eq).some(k => k.startsWith('check') && eq[k] === false);
                           
                           return (
@@ -1328,36 +1332,47 @@ export default function Centros() {
                       </div>
                     </form>
                   ) : (
+                    // Formulario para añadir desde catálogo
                     <form onSubmit={handleAddDesdeCatalogo} className="space-y-4">
                       <div className="space-y-1.5">
-                        <label className="text-sm font-semibold text-emerald-950">Sistema</label>
-                        <div className="px-4 py-2.5 bg-emerald-50/50 border border-emerald-100 rounded-xl text-emerald-950 font-medium text-sm">
-                          {sistemaSeleccionado.tipo || sistemaSeleccionado.familia}
-                        </div>
+                        <label className="text-sm font-semibold text-emerald-950">Familia filtrada</label>
+                        <select
+                          value={selectedFamilyForCatalog}
+                          disabled
+                          onChange={e => {
+                            setSelectedFamilyForCatalog(e.target.value);
+                            setSelectedEquipoCatalogo('');
+                          }}
+                          className="w-full px-4 py-2.5 bg-emerald-50/50 border border-emerald-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-emerald-950 disabled:opacity-80 disabled:cursor-not-allowed"
+                        >
+                          <option value="">{sistemaSeleccionado.tipo || sistemaSeleccionado.familia || 'Familia del sistema'}</option>
+                          {familiasFirestore.map(familia => (
+                            <option key={familia.id} value={familia.id}>{familia.nombre}</option>
+                          ))}
+                        </select>
+                        <p className="text-xs text-emerald-700/70">
+                          Solo se muestran artículos de esta familia marcados como "Equipo revisable en los mantenimientos".
+                        </p>
                       </div>
+
                       <div className="space-y-1.5">
                         <label className="text-sm font-semibold text-emerald-950">Seleccionar Equipo del Catálogo *</label>
                         <select
                           required
                           value={selectedEquipoCatalogo}
+                          disabled={isArticulosLoading || filteredArticulosCatalogo.length === 0}
                           onChange={e => setSelectedEquipoCatalogo(e.target.value)}
-                          className="w-full px-4 py-2.5 bg-emerald-50/50 border border-emerald-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-emerald-950"
+                          className="w-full px-4 py-2.5 bg-emerald-50/50 border border-emerald-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-emerald-950 disabled:opacity-60 disabled:cursor-not-allowed"
                         >
-                          <option value="">-- Elige un equipo --</option>
-                          {equiposCatalogo
-                            .filter(eq => {
-                              const tipo = sistemaSeleccionado.tipo || sistemaSeleccionado.familia || '';
-                              if (tipo.toUpperCase().includes('EXTINTOR')) {
-                                return (eq.familia || '').toUpperCase().includes('EXTINTOR');
-                              }
-                              return true;
-                            })
-                            .map(eq => (
-                              <option key={eq.id} value={eq.id}>{eq.codigo} - {eq.nombre}</option>
-                            ))}
+                          <option value="">{isArticulosLoading ? 'Cargando artículos...' : '-- Elige un equipo --'}</option>
+                           {filteredArticulosCatalogo.map(articulo => (
+                             <option key={articulo.id} value={articulo.id}>{articulo.codigo} - {articulo.nombre}</option>
+                           ))}
                         </select>
-                        {equiposCatalogo.length === 0 && (
-                          <p className="text-xs text-amber-600 font-medium mt-1">No hay equipos en el catálogo. Ve a Equipamientos para añadirlos.</p>
+                        {!isArticulosLoading && filteredArticulosCatalogo.length === 0 && (
+                          <p className="text-xs text-amber-600 font-medium mt-1">
+                            No hay artículos revisables para esta familia. Revisa Artículos y marca "Equipo revisable en los mantenimientos".
+                          </p>
                         )}
                       </div>
                       <div className="space-y-1.5">
@@ -1433,18 +1448,26 @@ export default function Centros() {
                 </div>
                 <form onSubmit={handleAddSistemaFromCatalog} className="p-6 space-y-4">
                   <div className="space-y-1.5">
-                    <label className="text-sm font-semibold text-emerald-950">Seleccionar Sistema del Catálogo *</label>
+                    <label className="text-sm font-semibold text-emerald-950">Seleccionar Sistema desde Firestore *</label>
                     <select
                       required
                       value={selectedCatIdForCentro}
+                      disabled={isFamiliasLoading || familiasFirestore.length === 0}
                       onChange={e => setSelectedCatIdForCentro(e.target.value)}
-                      className="w-full px-4 py-2.5 bg-emerald-50/50 border border-emerald-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-emerald-950"
+                      className="w-full px-4 py-2.5 bg-emerald-50/50 border border-emerald-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-emerald-950 disabled:opacity-60 disabled:cursor-not-allowed"
                     >
-                      <option value="">-- Elige un sistema --</option>
-                      {categoriasSistema.map(cat => (
-                        <option key={cat.id} value={cat.id}>{cat.nombre}</option>
+                      <option value="">
+                        {isFamiliasLoading ? 'Cargando sistemas...' : '-- Elige un sistema --'}
+                      </option>
+                      {familiasFirestore.map(familia => (
+                        <option key={familia.id} value={familia.id}>{familia.nombre}</option>
                       ))}
                     </select>
+                    {!isFamiliasLoading && familiasFirestore.length === 0 && (
+                      <p className="text-xs text-amber-600 font-medium">
+                        No hay sistemas disponibles en Firestore. Añade documentos en la colección "familias".
+                      </p>
+                    )}
                   </div>
                   <div className="pt-2 flex gap-3">
                     <button type="button" onClick={() => setIsAddCatModalOpen(false)} className="flex-1 px-4 py-2.5 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-xl font-medium transition-colors">Cancelar</button>

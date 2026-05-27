@@ -11,7 +11,7 @@ import Centros from './Centros';
 import Catalogo from './Catalogo';
 import Articulos from './Articulos';
 import Servicios from './Servicios';
-import Sistemas from './Sistemas';
+// import Sistemas from './Sistemas'; // Removed as per request
 import Partes from './Partes';
 import Albaranes from './Albaranes';
 import Certificados from './Certificados';
@@ -48,7 +48,7 @@ interface CardItem {
   stat?: number;
 }
 
-function Login({ usuarios, onLogin }: { usuarios: Usuario[], onLogin: (user: Usuario) => void }) {
+function Login({ usuarios: _usuarios, onLogin }: { usuarios: Usuario[], onLogin: (user: Usuario) => void }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [appLogo] = useState(() => {
@@ -106,6 +106,7 @@ function Login({ usuarios, onLogin }: { usuarios: Usuario[], onLogin: (user: Usu
           />
           <button type="submit" className="w-full bg-black hover:bg-zinc-800 text-white py-3.5 sm:py-4 rounded-xl sm:rounded-2xl font-bold shadow-lg transition-all active:scale-95">Entrar</button>
         </form>
+        <p className="text-center text-zinc-400 text-xs mt-4">V.1.5</p>
       </div>
     </div>
   );
@@ -479,33 +480,32 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
       <div className="max-w-7xl w-full">
         {/* Header simple */}
         <div className="flex flex-col items-center md:flex-row md:justify-between mb-10 md:mb-12 gap-6 md:gap-4">
-          <div className="flex flex-col items-center gap-1">
+          <div className="flex flex-row items-center gap-3">
             <img src={appLogo} alt="Logo de la aplicación" className="h-12 md:h-16 max-w-[250px] object-contain" />
             {(loggedUser?.rol === 'super-administrador' || loggedUser?.rol === 'administrador') && (
-              <button
-                onClick={() => { setSettingsView('menu'); setIsSettingsOpen(true); }}
-                className="flex items-center gap-2 bg-white px-4 py-2 rounded-xl border border-zinc-200 hover:bg-zinc-50 transition-all shadow-sm group mt-2"
-              >
-                <Settings className="w-4 h-4 text-zinc-500 group-hover:rotate-90 transition-transform duration-500" />
-                <span className="text-sm font-semibold text-zinc-700">Configuración</span>
-              </button>
+              <>
+                <button
+                  onClick={() => { setSettingsView('menu'); setIsSettingsOpen(true); }}
+                  className="flex items-center gap-2 bg-white px-4 py-2 rounded-xl border border-zinc-200 hover:bg-zinc-50 transition-all shadow-sm group"
+                >
+                  <Settings className="w-4 h-4 text-zinc-500 group-hover:rotate-90 transition-transform duration-500" />
+                  <span className="text-sm font-semibold text-zinc-700">Configuración</span>
+                </button>
+                <button
+                  onClick={handleLogout}
+                  className="flex items-center gap-2 bg-white px-4 py-2 rounded-xl border border-zinc-200 hover:bg-red-50 text-zinc-400 hover:text-red-600 transition-colors group"
+                  title="Cerrar Sesión"
+                >
+                  <Power className="w-4 h-4" />
+                  <span className="text-xs font-bold uppercase tracking-tight">Cerrar Sesión</span>
+                </button>
+              </>
             )}
           </div>
           
           <div className="text-center md:text-right flex flex-col justify-center relative min-w-[200px]">
-            <div className="flex justify-center md:justify-end mb-2">
-              <button
-                onClick={handleLogout}
-                className="flex items-center gap-1.5 text-zinc-400 hover:text-red-600 transition-colors group px-3 py-1.5 rounded-xl border border-zinc-200 hover:bg-red-50 bg-white shadow-sm"
-                title="Cerrar Sesión"
-              >
-                <Power className="w-4 h-4" />
-                <span className="text-xs font-bold uppercase tracking-tight">Cerrar Sesión</span>
-              </button>
-            </div>
             <p className="text-xs md:text-sm font-medium text-zinc-500 capitalize">{formatDate(currentTime)}</p>
             <p className="text-2xl md:text-3xl font-bold text-zinc-900 tracking-tight leading-none mt-1">{formatTime(currentTime)}</p>
-            <span className="text-[10px] text-zinc-400 mt-1 font-medium">v.1.2</span>
           </div>
         </div>
 
@@ -858,11 +858,6 @@ export default function App() {
         <Route path="/partes_trabajo" element={
           <ProtectedRoute allowedRoles={['super-administrador', 'administrador']} user={loggedUser}>
             <Planificacion />
-          </ProtectedRoute>
-        } />
-        <Route path="/sistemas" element={
-          <ProtectedRoute allowedRoles={['super-administrador', 'administrador', 'editor']} user={loggedUser}>
-            <Sistemas />
           </ProtectedRoute>
         } />
         <Route path="/revision-checklist" element={

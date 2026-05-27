@@ -18,6 +18,13 @@ export default function Servicios() {
   const [servicios, setServicios] = useState<Servicio[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   
+  // Familia dropdown state
+  const [familiaOptions, setFamiliaOptions] = useState<string[]>([]);
+  const [filteredFamiliaOptions, setFilteredFamiliaOptions] = useState<string[]>([]);
+  const [showFamiliaDropdown, setShowFamiliaDropdown] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const familiaInputRef = useRef<HTMLInputElement>(null);
+  
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingServicio, setEditingServicio] = useState<Servicio | null>(null);
@@ -30,6 +37,7 @@ export default function Servicios() {
     precioCompra: '',
     precioVenta: ''
   });
+  
   // State for confirmation modal
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [servicioIdToDelete, setServicioIdToDelete] = useState<string | null>(null);
@@ -40,6 +48,27 @@ export default function Servicios() {
       setServicios(JSON.parse(saved));
     }
   }, []);
+
+  // Update familia options when servicios change
+  useEffect(() => {
+    // Extract unique familia values from servicios
+    const familiaValues = [...new Set(servicios.map(s => s.familia).filter(familia => familia.trim() !== ''))];
+    setFamiliaOptions(familiaValues);
+  }, [servicios]);
+
+  // Filter familia options based on current form value
+  useEffect(() => {
+    if (!formData.familia) {
+      setFilteredFamiliaOptions(familiaOptions);
+      return;
+    }
+    const filtered = familiaOptions.filter(option => 
+      option.toLowerCase().includes(formData.familia.toLowerCase())
+    );
+    setFilteredFamiliaOptions(filtered);
+    // Reset highlighted index when filtering
+    setHighlightedIndex(-1);
+  }, [formData.familia, familiaOptions]);
 
   const saveToDb = (data: Servicio[]) => {
     setServicios(data);
@@ -59,6 +88,9 @@ export default function Servicios() {
     } else {
       setEditingServicio(null);
       setFormData({ codigo: '', nombre: '', familia: '', precioCompra: '', precioVenta: '' });
+      // Reset familia dropdown when opening new modal
+      setShowFamiliaDropdown(false);
+      setHighlightedIndex(-1);
     }
     setIsModalOpen(true);
   };
@@ -66,6 +98,9 @@ export default function Servicios() {
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setEditingServicio(null);
+    // Reset familia dropdown when closing modal
+    setShowFamiliaDropdown(false);
+    setHighlightedIndex(-1);
   };
 
   const handleSave = (e: React.FormEvent) => {
@@ -92,21 +127,43 @@ export default function Servicios() {
     setIsConfirmModalOpen(true);
   };
 
-  const confirmDeleteServicio = () => {
-    if (servicioIdToDelete) {
-      setIsConfirmModalOpen(false);
-      saveToDb(servicios.filter(s => s.id !== servicioIdToDelete));
-      setServicioIdToDelete(null);
-    }
-  };
+    const confirmDeleteServicio = () => {
+      if (servicioIdToDelete) {
+        setIsConfirmModalOpen(false);
+        saveToDb(servicios.filter(s => s.id !== servicioIdToDelete));
+        setServicioIdToDelete(null);
+      }
+    };
 
-  const filteredServicios = servicios.filter(s => 
-    s.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    s.codigo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    s.familia.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+    // Helper functions for familia dropdown
+    const selectFamiliaOption = (option: string) => {
+      setFormData({...formData, familia: option});
+      setShowFamiliaDropdown(false);
+      setHighlightedIndex(-1);
+      // Focus the input after selecting
+      familiaInputRef.current?.focus();
+    };
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
+    const updateFilteredOptions = (searchValue: string) => {
+      if (!searchValue) {
+        setFilteredFamiliaOptions(familiaOptions);
+        return;
+      }
+      const filtered = familiaOptions.filter(option => 
+        option.toLowerCase().includes(searchValue.toLowerCase())
+      );
+      setFilteredFamiliaOptions(filtered);
+      // Reset highlighted index when filtering
+      setHighlightedIndex(-1);
+    };
+
+    const filteredServicios = servicios.filter(s => 
+      s.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      s.codigo.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      s.familia.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleExport = () => {
     if (servicios.length === 0) {
@@ -278,9 +335,9 @@ export default function Servicios() {
                       <h3 className="text-lg font-bold text-fuchsia-950 truncate" title={s.nombre}>{s.nombre}</h3>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
-                      <button onClick={() => handleOpenModal(s)} className="p-1.5 text-fuchsia-400 hover:text-fuchsia-700 hover:bg-fuchsia-50 rounded-lg transition-colors">
-                        <Edit className="w-4 h-4" />
-                      </button>
+<button onClick={() => handleOpenModal(s)} className="p-1.5 text-black hover:text-fuchsia-700 hover:bg-fuchsia-50 rounded-lg transition-colors">
+  <Edit className="w-4 h-4" />
+</button>
                       <button onClick={() => handleDelete(s.id)} className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors">
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -336,14 +393,71 @@ export default function Servicios() {
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium text-fuchsia-950">Familia</label>
-                  <input
-                    required
-                    type="text"
-                    value={formData.familia}
-                    onChange={e => setFormData({...formData, familia: e.target.value})}
-                    className="w-full px-4 py-2.5 bg-fuchsia-50/50 border border-fuchsia-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-fuchsia-500/20 focus:border-fuchsia-500 transition-all text-fuchsia-950"
-                    placeholder="Ej: Mano de obra"
-                  />
+                  <div className="relative">
+                    <input
+                      required
+                      type="text"
+                      value={formData.familia}
+                      onChange={e => {
+                        const value = e.target.value;
+                        setFormData({...formData, familia: value});
+                        // Update filtered options when typing
+                        updateFilteredOptions(value);
+                        setShowFamiliaDropdown(true);
+                      }}
+                      onBlur={() => {
+                        // Hide dropdown after a delay to allow click events
+                        setTimeout(() => setShowFamiliaDropdown(false), 200);
+                      }}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' && highlightedIndex >= 0) {
+                          e.preventDefault();
+                          selectFamiliaOption(filteredFamiliaOptions[highlightedIndex]);
+                        } else if (e.key === 'Escape') {
+                          setShowFamiliaDropdown(false);
+                        } else if (e.key === 'ArrowDown') {
+                          e.preventDefault();
+                          setHighlightedIndex(prev => {
+                            if (prev < filteredFamiliaOptions.length - 1) {
+                              return prev + 1;
+                            }
+                            return 0;
+                          });
+                        } else if (e.key === 'ArrowUp') {
+                          e.preventDefault();
+                          setHighlightedIndex(prev => {
+                            if (prev > 0) {
+                              return prev - 1;
+                            }
+                            return filteredFamiliaOptions.length - 1;
+                          });
+                        }
+                      }}
+                      ref={familiaInputRef}
+                      className="w-full px-4 py-2.5 bg-fuchsia-50/50 border border-fuchsia-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-fuchsia-500/20 focus:border-fuchsia-500 transition-all text-fuchsia-950"
+                      placeholder="Ej: Mano de obra"
+                      list="familia-list"
+                    />
+                    <datalist id="familia-list">
+                      {filteredFamiliaOptions.map(option => (
+                        <option key={option} value={option} />
+                      ))}
+                    </datalist>
+                    {showFamiliaDropdown && filteredFamiliaOptions.length > 0 && (
+                      <div className="absolute left-0 right-0 mt-1 bg-white border border-fuchsia-100 rounded-xl shadow-lg z-10 max-h-[200px] overflow-y-auto">
+                        {filteredFamiliaOptions.map((option, index) => (
+                          <div
+                            key={option}
+                            className={`px-4 py-2 cursor-pointer text-sm ${index === highlightedIndex ? 'bg-fuchsia-50' : ''} ${formData.familia.toLowerCase() === option.toLowerCase() ? 'font-medium' : ''}`}
+                            onMouseEnter={() => setHighlightedIndex(index)}
+                            onClick={() => selectFamiliaOption(option)}
+                          >
+                            {option}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
