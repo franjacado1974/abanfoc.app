@@ -55,7 +55,7 @@ export default function RevisionChecklist() {
     const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
     const [equipoIdToDelete, setEquipoIdToDelete] = useState<string | null>(null);
 
-    const handleAddFromCatalog = (sistemaId: string, sistType: string) => {
+    const handleAddFromCatalog = (sistemaId: string) => {
         if (!selectedCatalogItem) {
             alert('Por favor, selecciona un equipo del catálogo.');
             return;
@@ -684,8 +684,7 @@ export default function RevisionChecklist() {
                                 onClick={() => {
                                     if (!addSistemaId) return;
                                     if (selectedCatalogItem) {
-                                        const sist = sistemasDelCentro.find(s => s.id === addSistemaId);
-                                        handleAddFromCatalog(addSistemaId, sist?.tipo || sist?.familia || ''); // Corrected call
+                                        handleAddFromCatalog(addSistemaId); // Corrected call
                                     } else if (newEquipo.codigo.trim() && newEquipo.nombre.trim()) {
                                         handleAddEquipo(addSistemaId);
                                     } else {

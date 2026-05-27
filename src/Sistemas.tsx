@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Layers, ArrowLeft, Plus, Edit, Trash2, X, FileBox, LayoutList, Droplets, BellRing, Wind, Download, Upload, Copy, Search, Cloud, Loader } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { syncSistemas, subscribeSistemasCategorias, saveEquipoToSystemCollection, deleteEquipoFromSystemCollection, subscribeEquiposBySystem, addSistemaCategoria, deleteSistemaCategoria } from './firebase';
+import { syncSistemas, subscribeSistemasCategorias, saveEquipoToSystemCollection, deleteEquipoFromSystemCollection, subscribeEquiposBySystem, addSistemaCategoria, deleteSistemaCategoria, getCollectionName } from './firebase';
 import ConfirmationModal from './ConfirmationModal'; // Ruta corregida
 
 export interface SistemaCategoria {
@@ -109,15 +109,47 @@ export default function Sistemas() {
     };
   }, []);
 
-  // Suscripción dinámica según el sistema seleccionado en la UI
+// Suscripción dinámica según el sistema seleccionado en la UI
+   useEffect(() => {
+      if (!selectedCategoria) return;
+      setEquipos([]); // Clear previous system's equipment
+const unsub = subscribeEquiposBySystem(selectedCategoria.nombre, (newEqs) => {
+         setEquipos(newEqs); // Directly set equipment for the selected category
+         // Guardar en clave específica del sistema
+         const key = `firecheck_db_sistemas_equipos_${getCollectionName(selectedCategoria.nombre)}`;
+         localStorage.setItem(key, JSON.stringify(newEqs));
+         // Reconstruir y guardar el índice maestro
+         const allEquipos: SistemaEquipo[] = [];
+         categorias.forEach(cat => {
+           const catKey = `firecheck_db_sistemas_equipos_${getCollectionName(cat.nombre)}`;
+           const saved = localStorage.getItem(catKey);
+           if (saved) { try { allEquipos.push(...JSON.parse(saved)); } catch {} }
+         });
+         localStorage.setItem('firecheck_db_sistemas_equipos', JSON.stringify(allEquipos));
+         // Notificar a otras pestañas/tabs
+         window.dispatchEvent(new CustomEvent('equiposCatalogoChanged'));
+       });
+      return () => unsub();
+   }, [selectedCategoria]);
+
+  // Sincronizar TODOS los equipos a firecheck_db_sistemas_equipos para Centros
   useEffect(() => {
-    if (!selectedCategoria) return;
-    setEquipos([]); // Clear previous system's equipment
-    const unsub = subscribeEquiposBySystem(selectedCategoria.nombre, (newEqs) => {
-      setEquipos(newEqs); // Directly set equipment for the selected category
-    });
-    return () => unsub();
-  }, [selectedCategoria]);
+    const syncAllEquipos = () => {
+      const allEquipos: SistemaEquipo[] = [];
+      categorias.forEach(cat => {
+        const key = `firecheck_db_sistemas_equipos_${getCollectionName(cat.nombre)}`;
+        const saved = localStorage.getItem(key);
+        if (saved) {
+          try { allEquipos.push(...JSON.parse(saved)); } catch {}
+        }
+      });
+      if (allEquipos.length > 0) {
+        localStorage.setItem('firecheck_db_sistemas_equipos', JSON.stringify(allEquipos));
+        window.dispatchEvent(new CustomEvent('equiposCatalogoChanged'));
+      }
+    };
+    syncAllEquipos();
+  }, [categorias]);
 
   const saveCats = (data: SistemaCategoria[]) => {
     setCategorias(data);
@@ -126,8 +158,38 @@ export default function Sistemas() {
 
   const saveEquipos = (data: SistemaEquipo[]) => {
     setEquipos(data);
-    localStorage.setItem('firecheck_db_sistemas_equipos', JSON.stringify(data));
+    // Only notify, the master index is updated by saveEquiposToSystem or Firestore listener
+    window.dispatchEvent(new CustomEvent('equiposCatalogoChanged'));
   };
+
+  // Guardar equipos del sistema actual y actualizar índice maestro
+  const saveEquiposToSystem = (data: SistemaEquipo[], categoryName: string) => {
+    const key = `firecheck_db_sistemas_equipos_${getCollectionName(categoryName)}`;
+    localStorage.setItem(key, JSON.stringify(data));
+    // Actualizar índice maestro
+    const master = JSON.parse(localStorage.getItem('firecheck_db_sistemas_equipos') || '[]');
+    const withoutCategory = master.filter((e: any) => getCollectionName(categoryName) !== getCollectionName(e.familia || ''));
+    const updatedMaster = [...withoutCategory, ...data];
+    localStorage.setItem('firecheck_db_sistemas_equipos', JSON.stringify(updatedMaster));
+    window.dispatchEvent(new CustomEvent('equiposCatalogoChanged'));
+  };
+
+  // Sincronizar TODOS los equipos a firecheck_db_sistemas_equipos para Centros (cuando cambian las categorías)
+  useEffect(() => {
+    const syncAllEquipos = () => {
+      const allEquipos: SistemaEquipo[] = [];
+      categorias.forEach(cat => {
+        const key = `firecheck_db_sistemas_equipos_${getCollectionName(cat.nombre)}`;
+        const saved = localStorage.getItem(key);
+        if (saved) {
+          try { allEquipos.push(...JSON.parse(saved)); } catch {}
+        }
+      });
+      localStorage.setItem('firecheck_db_sistemas_equipos', JSON.stringify(allEquipos));
+      window.dispatchEvent(new CustomEvent('equiposCatalogoChanged'));
+    };
+    syncAllEquipos();
+  }, [categorias]);
 
   // ----- LOGICA CATEGORÍAS -----
   const handleSaveCat = async (e: React.FormEvent) => {
@@ -164,11 +226,13 @@ export default function Sistemas() {
   const confirmDeleteCat = async () => {
     if (!itemToDelete || itemToDelete.type !== 'cat') return;
     setIsConfirmModalOpen(false);
-    // Actual deletion logic will be moved here
     try {
+      const catToRemove = categorias.find(c => c.id === itemToDelete.id);
       await deleteSistemaCategoria(itemToDelete.id);
       saveCats(categorias.filter(c => c.id !== itemToDelete.id));
-      saveEquipos(equipos.filter(e => e.idCategoria !== itemToDelete.id));
+      const updated = equipos.filter(e => e.idCategoria !== itemToDelete.id);
+      saveEquipos(updated);
+      if (catToRemove) saveEquiposToSystem(updated, catToRemove.nombre);
     } catch (error) {
       alert("Error al eliminar el sistema de Firebase.");
     }
@@ -192,12 +256,16 @@ export default function Sistemas() {
       // Guardar en Firestore automáticamente
       await saveEquipoToSystemCollection(selectedCategoria.nombre, newEquipo);
 
-      // Actualizar estado local
-      if (formEquipo.id) {
-        saveEquipos(equipos.map(eq => eq.id === formEquipo.id ? newEquipo : eq));
-      } else {
-        saveEquipos([...equipos, newEquipo]);
-      }
+// Actualizar estado local
+       if (formEquipo.id) {
+          const updated = equipos.map(eq => eq.id === formEquipo.id ? newEquipo : eq);
+          if (selectedCategoria) saveEquiposToSystem(updated, selectedCategoria.nombre);
+          saveEquipos(updated);
+        } else {
+          const updated = [...equipos, newEquipo];
+          if (selectedCategoria) saveEquiposToSystem(updated, selectedCategoria.nombre);
+          saveEquipos(updated);
+        }
       setIsEquipoModalOpen(false);
     } catch (error) {
       alert("Error al guardar en Firebase. El cambio se mantuvo localmente.");
@@ -212,12 +280,13 @@ export default function Sistemas() {
   const confirmDeleteEquipo = async () => {
     if (!itemToDelete || itemToDelete.type !== 'equipo') return;
     setIsConfirmModalOpen(false);
-    // Actual deletion logic will be moved here
     try {
       if (selectedCategoria) {
         await deleteEquipoFromSystemCollection(selectedCategoria.nombre, itemToDelete.id);
       }
-      saveEquipos(equipos.filter(e => e.id !== itemToDelete.id));
+      const updated = equipos.filter(e => e.id !== itemToDelete.id);
+      saveEquipos(updated);
+      if (selectedCategoria) saveEquiposToSystem(updated, selectedCategoria.nombre);
     } catch (error) {
       alert("Error al eliminar en Firebase.");
     }

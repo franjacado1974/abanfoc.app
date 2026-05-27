@@ -20,7 +20,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 
 import { CATEGORIAS_POR_DEFECTO, getIconForSistema } from './Sistemas';
-import { addCentro, updateCentro, deleteCentro, subscribeCentros } from './firebase';
+import { addCentro, updateCentro, deleteCentro, subscribeCentros, subscribeEquiposBySystem, getCollectionName } from './firebase';
 import ConfirmationModal from './ConfirmationModal'; // Import the new modal component
 
 const MESES = [
@@ -33,6 +33,13 @@ export interface Cliente {
   id: string; // ej: CLI0001
   nombre: string;
   cif: string;
+  direccion: string;
+  poblacion: string;
+  cp: string;
+  provincia: string;
+  telefono: string;
+  contacto: string;
+  correo: string;
 }
 
 // Interfaz del Centro
@@ -391,6 +398,63 @@ export default function Centros() {
     return () => { if (unsub) unsub(); };
   }, []);
 
+  // Escuchar cambios en equipos del catálogo (localStorage + storage events entre pestañas)
+  useEffect(() => {
+    const loadEquiposCatalogo = () => {
+      try {
+        const saved = localStorage.getItem('firecheck_db_sistemas_equipos');
+        let parsed = saved ? JSON.parse(saved) : [];
+        if (parsed.length === 0 && categoriasSistema.length > 0) {
+          const allEquipos = [];
+          categoriasSistema.forEach(cat => {
+            const catNombre = (cat.nombre || '').replace(/^sistema\s+/i, '').toLowerCase().replace(/\s+/g, '_');
+            const key = 'firecheck_db_sistemas_equipos_' + (catNombre || 'unknown');
+            const catEquipos = localStorage.getItem(key);
+            if (catEquipos) { try { allEquipos.push(...JSON.parse(catEquipos)); } catch {} }
+          });
+          parsed = allEquipos;
+        }
+        _setEquiposCatalogo(parsed);
+      } catch { }
+    };
+    loadEquiposCatalogo();
+    const handleStorage = () => loadEquiposCatalogo();
+    const handleCustom = () => loadEquiposCatalogo();
+    window.addEventListener('storage', handleStorage);
+    window.addEventListener('equiposCatalogoChanged', handleCustom);
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('equiposCatalogoChanged', handleCustom);
+    };
+  }, [categoriasSistema]);
+
+  // Escuchar equipos desde Firestore para todas las categorías (cuando cambian)
+  useEffect(() => {
+    if (categoriasSistema.length === 0) return;
+    
+    const unsubs: (() => void)[] = [];
+    categoriasSistema.forEach(cat => {
+      const unsub = subscribeEquiposBySystem(cat.nombre, (newEqs) => {
+        // Guardar en clave individual del sistema
+        const catNombre = (cat.nombre || '').replace(/^sistema\s+/i, '').toLowerCase().replace(/\s+/g, '_');
+        localStorage.setItem('firecheck_db_sistemas_equipos_' + catNombre, JSON.stringify(newEqs));
+        
+        // Reconstruir y guardar el índice maestro
+        const allEquipos: any[] = [];
+        categoriasSistema.forEach(c => {
+          const key = 'firecheck_db_sistemas_equipos_' + (c.nombre || '').replace(/^sistema\s+/i, '').toLowerCase().replace(/\s+/g, '_');
+          const saved = localStorage.getItem(key);
+          if (saved) { try { allEquipos.push(...JSON.parse(saved)); } catch {} }
+        });
+        localStorage.setItem('firecheck_db_sistemas_equipos', JSON.stringify(allEquipos));
+        _setEquiposCatalogo(allEquipos);
+      });
+      unsubs.push(unsub);
+    });
+    
+    return () => unsubs.forEach(u => u());
+  }, [categoriasSistema]);
+
   // ----- LOGICA DE IDs ----- //
   const calculateNextCentroId = (cliId: string, customPart: string) => {
     if (!cliId) return '';
@@ -663,6 +727,22 @@ export default function Centros() {
   // Previsualización del ID mientras se escribe
   const idPreview = form.id ? form.id : calculateNextCentroId(form.clienteId, form.customIdPart);
 
+  // Copiar datos del cliente al centro
+  const handleCopyFromCliente = () => {
+    if (!selectedCliente) return;
+    setForm({
+      ...form,
+      nombre: selectedCliente.nombre,
+      direccion: selectedCliente.direccion || '',
+      poblacion: selectedCliente.poblacion || '',
+      cp: selectedCliente.cp || '',
+      provincia: selectedCliente.provincia || '',
+      contacto: selectedCliente.contacto || '',
+      telefono: selectedCliente.telefono || '',
+      correo: selectedCliente.correo || ''
+    });
+  };
+
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -786,52 +866,51 @@ export default function Centros() {
               <p className="text-zinc-500">No se ha encontrado ningún centro que coincida con "{searchTerm}".</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {filteredCentros.map((c) => {
                 const client = clientes.find(cl => cl.id === c.clienteId);
                 return (
-                  <div key={c.id} className="bg-emerald-50/50 p-3.5 rounded-3xl border-2 border-emerald-200 shadow-sm hover:shadow-xl hover:border-emerald-500 transition-all flex flex-col h-full">
-                    <div className="flex justify-between items-start mb-3">
-                      <div className="flex flex-col gap-0.5 flex-1 min-w-0 mr-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <h3 className="text-base font-bold text-emerald-950 truncate" title={c.nombre}>{c.nombre}</h3>
-                        </div>
-                        <span className="shrink-0 px-1.5 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-mono font-bold rounded block w-max mt-1">
-                          {c.id}
-                        </span>
-                        <span className="text-xs font-medium text-emerald-700/80 truncate mt-1" title={`${client?.nombre || 'Cliente desconocido'} ${client?.cif ? `(${client.cif})` : ''}`}>
-                          {client?.nombre || 'Cliente desconocido'}
-                        </span>
+                  <div key={c.id} className="bg-white p-3.5 rounded-3xl border border-zinc-200 shadow-sm hover:shadow-md transition-all flex flex-col h-full">
+                    <div className="flex flex-col gap-0.5 flex-1 min-w-0 mb-3">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <h3 className="text-base font-bold text-zinc-950 truncate" title={c.nombre}>{c.nombre}</h3>
                       </div>
-                      <div className="flex items-center gap-0.5 shrink-0">
-                        <button onClick={() => handleEdit(c)} className="p-1.5 text-black hover:text-zinc-600 hover:bg-zinc-100 rounded-lg transition-colors">
-                          <Edit className="w-4 h-4" />
-                        </button>
-                        <button onClick={() => handleDelete(c.id)} className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+                      <span className="shrink-0 px-1.5 py-0.5 bg-zinc-100 text-zinc-800 text-[10px] font-mono font-bold rounded block w-max mt-1">
+                        {c.id}
+                      </span>
+                      <span className="text-xs font-medium text-zinc-700/80 truncate mt-1" title={`${client?.nombre || 'Cliente desconocido'} ${client?.cif ? `(${client.cif})` : ''}`}>
+                        {client?.nombre || 'Cliente desconocido'}
+                      </span>
                     </div>
                     
                     <div className="space-y-0.5 text-xs mb-3 flex-1">
-                      {c.direccion && <p className="text-emerald-900/70 truncate" title={c.direccion}>{c.direccion}</p>}
-                      <p className="text-emerald-900/60 truncate" title={`${c.poblacion || ''} ${c.cp || ''} ${c.provincia ? `(${c.provincia})` : ''}`}>
+                      {c.direccion && <p className="text-zinc-900/70 truncate" title={c.direccion}>{c.direccion}</p>}
+                      <p className="text-zinc-900/60 truncate" title={`${c.poblacion || ''} ${c.cp || ''} ${c.provincia ? `(${c.provincia})` : ''}`}>
                         {c.poblacion ? `${c.poblacion}` : 'Sin ubicación'}
                       </p>
                     </div>
                     
-                    <div className="space-y-1 text-xs text-emerald-900/80 mb-3 bg-white/60 p-2 rounded-2xl border border-white/50 shrink-0">
-                      {c.contacto && <p className="truncate"><strong className="text-emerald-950 font-medium">Cont:</strong> {c.contacto}</p>}
-                      {c.telefono && <p className="truncate"><strong className="text-emerald-950 font-medium">Tel:</strong> {c.telefono}</p>}
+                    <div className="space-y-1 text-xs text-zinc-900/80 mb-3 bg-zinc-50 p-2 rounded-2xl border border-zinc-100">
+                      {c.contacto && <p className="truncate"><strong className="text-zinc-950 font-medium">Contacto:</strong> {c.contacto}</p>}
+                      {c.telefono && <p className="truncate"><strong className="text-zinc-950 font-medium">Tel:</strong> {c.telefono}</p>}
                     </div>
 
-                    <div className="pt-2.5 border-t border-emerald-200/50 flex flex-col gap-2 shrink-0">
-                      <span className="text-xs font-medium text-emerald-700 text-center">
-                        <strong className="text-emerald-900">{centroSistemas.filter(s => s.centroId === c.id).length}</strong> sistemas instalados
+                    <div className="flex justify-end gap-0.5">
+                      <button onClick={() => handleEdit(c)} className="p-1.5 text-black hover:text-zinc-600 hover:bg-zinc-100 rounded-lg transition-colors" title="Editar centro">
+                        <Edit className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => handleDelete(c.id)} className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors" title="Eliminar centro">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <div className="pt-3 border-t border-zinc-100 flex flex-col gap-2">
+                      <span className="text-xs font-medium text-zinc-700 text-center">
+                        <strong className="text-zinc-900">{centroSistemas.filter(s => s.centroId === c.id).length}</strong> sistemas instalados
                       </span>
                       <button 
                         onClick={() => openSistemas(c)} 
-                        className="w-full flex items-center justify-center text-sm bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-xl font-medium transition-colors shadow-sm"
+                        className="w-full flex items-center justify-center text-sm bg-zinc-200 hover:bg-zinc-300 text-zinc-700 px-3 py-2 rounded-xl font-medium transition-colors shadow-sm"
                       >
                         Añadir sistemas al centro
                       </button>
@@ -1265,9 +1344,17 @@ export default function Centros() {
                           className="w-full px-4 py-2.5 bg-emerald-50/50 border border-emerald-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-emerald-950"
                         >
                           <option value="">-- Elige un equipo --</option>
-                          {equiposCatalogo.map(eq => (
-                            <option key={eq.id} value={eq.id}>{eq.codigo} - {eq.nombre}</option>
-                          ))}
+                          {equiposCatalogo
+                            .filter(eq => {
+                              const tipo = sistemaSeleccionado.tipo || sistemaSeleccionado.familia || '';
+                              if (tipo.toUpperCase().includes('EXTINTOR')) {
+                                return (eq.familia || '').toUpperCase().includes('EXTINTOR');
+                              }
+                              return true;
+                            })
+                            .map(eq => (
+                              <option key={eq.id} value={eq.id}>{eq.codigo} - {eq.nombre}</option>
+                            ))}
                         </select>
                         {equiposCatalogo.length === 0 && (
                           <p className="text-xs text-amber-600 font-medium mt-1">No hay equipos en el catálogo. Ve a Equipamientos para añadirlos.</p>
@@ -1414,14 +1501,14 @@ export default function Centros() {
           </p>
         </div>
 
-        <div className="bg-white p-6 rounded-[1.5rem] border border-zinc-200 shadow-sm">
-          <form className="space-y-6" onSubmit={handleSave}>
+        <div className="bg-white p-4 rounded-2xl border border-zinc-200 shadow-sm">
+          <form className="space-y-3" onSubmit={handleSave}>
             
             {/* SECCIÓN 1: VINCULACIÓN CON CLIENTE E ID */}
-            <div className="bg-zinc-50 p-5 rounded-xl border border-zinc-100">
-              <h2 className="text-xs font-bold text-zinc-900 mb-3 uppercase tracking-wide">1. Vinculación y Código</h2>
+            <div className="bg-zinc-50 p-4 rounded-xl border border-zinc-100">
+              <h2 className="text-xs font-bold text-zinc-900 mb-2 uppercase tracking-wide">1. Vinculación y Código</h2>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
                 <div>
                   <label className="block text-xs font-semibold text-zinc-900 mb-1.5">SELECCIONAR CLIENTE *</label>
                   <select
@@ -1438,14 +1525,22 @@ export default function Centros() {
                   </select>
                 </div>
                 
-                {selectedCliente && (
-                  <div className="flex items-center bg-white border border-zinc-200 rounded-lg px-3 py-2.5">
-                    <div>
-                      <p className="text-[10px] text-zinc-400 font-semibold mb-0.5">DATOS DEL CLIENTE</p>
-                      <p className="text-sm font-medium text-zinc-900">{selectedCliente.nombre} <span className="text-zinc-400 font-mono ml-1 text-xs">{selectedCliente.cif}</span></p>
-                    </div>
-                  </div>
-                )}
+{selectedCliente && (
+                   <div className="flex items-center bg-white border border-zinc-200 rounded-lg px-3 py-2.5">
+                     <div className="flex-1">
+                       <p className="text-[10px] text-zinc-400 font-semibold mb-0.5">DATOS DEL CLIENTE</p>
+                       <p className="text-sm font-medium text-zinc-900">{selectedCliente.nombre} <span className="text-zinc-400 font-mono ml-1 text-xs">{selectedCliente.cif}</span></p>
+                     </div>
+                     <button 
+                       type="button"
+                       onClick={handleCopyFromCliente}
+                       className="p-1.5 text-zinc-500 hover:text-black hover:bg-zinc-100 rounded-lg transition-colors"
+                       title="Copiar datos del cliente al centro"
+                     >
+                       <Copy className="w-4 h-4" />
+                     </button>
+                   </div>
+                 )}
               </div>
 
               {selectedCliente && (
@@ -1470,82 +1565,82 @@ export default function Centros() {
               )}
             </div>
 
-            <hr className="border-zinc-100" />
+            <hr className="border-zinc-100 my-4" />
 
             {/* SECCIÓN 2: DATOS DEL CENTRO */}
             <div>
-              <h2 className="text-xs font-bold text-zinc-900 mb-3 uppercase tracking-wide">2. Datos del Centro</h2>
-              <div className="space-y-4">
+              <h2 className="text-xs font-bold text-zinc-900 mb-2 uppercase tracking-wide">2. Datos del Centro</h2>
+              <div className="space-y-3">
                 <div>
-                  <label className="block text-xs font-semibold text-zinc-900 mb-1.5">NOMBRE DEL CENTRO *</label>
+                  <label className="block text-xs font-semibold text-zinc-900 mb-1">NOMBRE DEL CENTRO *</label>
                   <input 
                     required type="text" 
                     value={form.nombre} onChange={e => setForm({...form, nombre: e.target.value.toUpperCase()})}
-                    className="w-full px-3 py-2.5 text-sm bg-zinc-50/50 rounded-lg border border-zinc-200 focus:bg-white focus:border-black focus:ring-1 focus:ring-black outline-none transition-all text-zinc-900 placeholder-zinc-400" 
+                    className="w-full px-3 py-2 text-sm bg-zinc-50/50 rounded-lg border border-zinc-200 focus:bg-white focus:border-black focus:ring-1 focus:ring-black outline-none transition-all text-zinc-900 placeholder-zinc-400" 
                     placeholder="Ej. Nave Principal, Sede Norte..." 
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-zinc-900 mb-1.5">DIRECCIÓN</label>
+                  <label className="block text-xs font-semibold text-zinc-900 mb-1">DIRECCIÓN</label>
                   <input 
                     type="text" 
                     value={form.direccion} onChange={e => setForm({...form, direccion: e.target.value})}
-                    className="w-full px-3 py-2.5 text-sm bg-zinc-50/50 rounded-lg border border-zinc-200 focus:bg-white focus:border-black focus:ring-1 focus:ring-black outline-none transition-all text-zinc-900 placeholder-zinc-400" 
+                    className="w-full px-3 py-2 text-sm bg-zinc-50/50 rounded-lg border border-zinc-200 focus:bg-white focus:border-black focus:ring-1 focus:ring-black outline-none transition-all text-zinc-900 placeholder-zinc-400" 
                     placeholder="Calle, Polígono, número..." 
                   />
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <div>
-                    <label className="block text-xs font-semibold text-zinc-900 mb-1.5">POBLACIÓN</label>
+                    <label className="block text-xs font-semibold text-zinc-900 mb-1">POBLACIÓN</label>
                     <input 
                       type="text" 
                       value={form.poblacion} onChange={e => setForm({...form, poblacion: e.target.value})}
-                      className="w-full px-3 py-2.5 text-sm bg-zinc-50/50 rounded-lg border border-zinc-200 focus:bg-white focus:border-black focus:ring-1 focus:ring-black outline-none transition-all text-zinc-900 placeholder-zinc-400" 
+                      className="w-full px-3 py-2 text-sm bg-zinc-50/50 rounded-lg border border-zinc-200 focus:bg-white focus:border-black focus:ring-1 focus:ring-black outline-none transition-all text-zinc-900 placeholder-zinc-400" 
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-zinc-900 mb-1.5">CÓDIGO POSTAL</label>
+                    <label className="block text-xs font-semibold text-zinc-900 mb-1">CÓDIGO POSTAL</label>
                     <input 
                       type="text" 
                       value={form.cp} onChange={e => setForm({...form, cp: e.target.value})}
-                      className="w-full px-3 py-2.5 text-sm bg-zinc-50/50 rounded-lg border border-zinc-200 focus:bg-white focus:border-black focus:ring-1 focus:ring-black outline-none transition-all text-zinc-900 placeholder-zinc-400" 
+                      className="w-full px-3 py-2 text-sm bg-zinc-50/50 rounded-lg border border-zinc-200 focus:bg-white focus:border-black focus:ring-1 focus:ring-black outline-none transition-all text-zinc-900 placeholder-zinc-400" 
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-zinc-900 mb-1.5">PROVINCIA</label>
+                    <label className="block text-xs font-semibold text-zinc-900 mb-1">PROVINCIA</label>
                     <input 
                       type="text" 
                       value={form.provincia} onChange={e => setForm({...form, provincia: e.target.value})}
-                      className="w-full px-3 py-2.5 text-sm bg-zinc-50/50 rounded-lg border border-zinc-200 focus:bg-white focus:border-black focus:ring-1 focus:ring-black outline-none transition-all text-zinc-900 placeholder-zinc-400" 
+                      className="w-full px-3 py-2 text-sm bg-zinc-50/50 rounded-lg border border-zinc-200 focus:bg-white focus:border-black focus:ring-1 focus:ring-black outline-none transition-all text-zinc-900 placeholder-zinc-400" 
                     />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <div>
-                    <label className="block text-xs font-semibold text-zinc-900 mb-1.5">CONTACTO (En el centro)</label>
+                    <label className="block text-xs font-semibold text-zinc-900 mb-1">CONTACTO (En el centro)</label>
                     <input 
                       type="text" 
                       value={form.contacto} onChange={e => setForm({...form, contacto: e.target.value})}
-                      className="w-full px-3 py-2.5 text-sm bg-zinc-50/50 rounded-lg border border-zinc-200 focus:bg-white focus:border-black focus:ring-1 focus:ring-black outline-none transition-all text-zinc-900 placeholder-zinc-400" 
+                      className="w-full px-3 py-2 text-sm bg-zinc-50/50 rounded-lg border border-zinc-200 focus:bg-white focus:border-black focus:ring-1 focus:ring-black outline-none transition-all text-zinc-900 placeholder-zinc-400" 
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-zinc-900 mb-1.5">TELÉFONO</label>
+                    <label className="block text-xs font-semibold text-zinc-900 mb-1">TELÉFONO</label>
                     <input 
                       type="tel" 
                       value={form.telefono} onChange={e => setForm({...form, telefono: e.target.value})}
-                      className="w-full px-3 py-2.5 text-sm bg-zinc-50/50 rounded-lg border border-zinc-200 focus:bg-white focus:border-black focus:ring-1 focus:ring-black outline-none transition-all text-zinc-900 placeholder-zinc-400" 
+                      className="w-full px-3 py-2 text-sm bg-zinc-50/50 rounded-lg border border-zinc-200 focus:bg-white focus:border-black focus:ring-1 focus:ring-black outline-none transition-all text-zinc-900 placeholder-zinc-400" 
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-zinc-900 mb-1.5">CORREO</label>
+                    <label className="block text-xs font-semibold text-zinc-900 mb-1">CORREO</label>
                     <input 
                       type="email" 
                       value={form.correo} onChange={e => setForm({...form, correo: e.target.value})}
-                      className="w-full px-3 py-2.5 text-sm bg-zinc-50/50 rounded-lg border border-zinc-200 focus:bg-white focus:border-black focus:ring-1 focus:ring-black outline-none transition-all text-zinc-900 placeholder-zinc-400" 
+                      className="w-full px-3 py-2 text-sm bg-zinc-50/50 rounded-lg border border-zinc-200 focus:bg-white focus:border-black focus:ring-1 focus:ring-black outline-none transition-all text-zinc-900 placeholder-zinc-400" 
                     />
                   </div>
                 </div>
@@ -1553,8 +1648,8 @@ export default function Centros() {
             </div>
 
             {/* Actions */}
-            <div className="pt-6 flex justify-end">
-              <button type="submit" disabled={!form.clienteId} className="bg-black text-white px-6 py-3 rounded-xl text-sm font-medium hover:bg-zinc-800 disabled:opacity-50 transition-colors flex items-center gap-2 shadow-lg shadow-black/10 active:scale-95">
+            <div className="pt-4 flex justify-end">
+              <button type="submit" disabled={!form.clienteId} className="bg-black text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-zinc-800 disabled:opacity-50 transition-colors flex items-center gap-2 shadow-md active:scale-95">
                 <Save className="w-4 h-4" /> {form.id ? 'Guardar Cambios' : 'Registrar Centro'}
               </button>
             </div>

@@ -224,7 +224,7 @@ export function subscribeCentros(callback: (centros: any[]) => void) {
  * Helper para normalizar el nombre del sistema y usarlo como ID de documento (2ª columna).
  * "SISTEMA EXTINTORES" -> "extintores"
  */
-function getCollectionName(catNombre: string) {
+export function getCollectionName(catNombre: string) {
   return catNombre
     .replace(/^sistema\s+/i, '')
     .toLowerCase()
