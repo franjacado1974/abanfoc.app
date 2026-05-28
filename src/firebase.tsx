@@ -193,6 +193,20 @@ export const subscribeEmpresa = (onUpdate: (data: any) => void) => {
 };
 
 /**
+ * Suscribe a TODAS las empresas (para la lista).
+ */
+export const subscribeEmpresas = (onUpdate: (data: any[]) => void) => {
+  const q = query(collection(db, 'empresa'));
+  return onSnapshot(q, (snapshot) => {
+    const data = snapshot.docs.map(doc => ({ 
+      _docId: doc.id, 
+      ...doc.data() 
+    }));
+    onUpdate(data);
+  });
+};
+
+/**
  * Guarda o actualiza los datos de la empresa en Firestore.
  */
 export const saveEmpresa = async (id: string | null, data: any) => {
@@ -202,6 +216,14 @@ export const saveEmpresa = async (id: string | null, data: any) => {
   } else {
     await addDoc(collection(db, 'empresa'), data);
   }
+};
+
+/**
+ * Elimina una empresa de Firestore.
+ */
+export const deleteEmpresa = async (id: string) => {
+  const docRef = doc(db, 'empresa', id);
+  await deleteDoc(docRef);
 };
 
 /**
