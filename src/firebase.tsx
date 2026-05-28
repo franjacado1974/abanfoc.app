@@ -1,8 +1,8 @@
 // Import the functions you need from the SDKs you need
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
-import { getFirestore, collection, getDocs, query, where, addDoc, doc, setDoc, deleteDoc, onSnapshot, enableIndexedDbPersistence } from "firebase/firestore";
-import { getStorage } from "firebase/storage";
+import { getFirestore, collection, getDocs, query, where, addDoc, doc, updateDoc, setDoc, deleteDoc, onSnapshot, enableIndexedDbPersistence } from "firebase/firestore";
+import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 // TODO: Add SDKs for Firebase products that you want to use
 // https://firebase.google.com/docs/web/setup#available-libraries
 
@@ -151,6 +151,74 @@ export async function verifyUser(username: string, password: string) {
     return null;
   }
 }
+
+/**
+ * Suscribe a los cambios del perfil del ingeniero en Firestore.
+ */
+export const subscribeIngeniero = (onUpdate: (data: any) => void) => {
+  const q = query(collection(db, 'ingeniero'));
+  return onSnapshot(q, (snapshot) => {
+    const data = snapshot.docs.map(doc => ({ 
+      _docId: doc.id, 
+      ...doc.data() 
+    }));
+    onUpdate(data[0] || null);
+  });
+};
+
+/**
+ * Guarda o actualiza los datos del ingeniero en Firestore.
+ */
+export const saveIngeniero = async (id: string | null, data: any) => {
+  if (id) {
+    const docRef = doc(db, 'ingeniero', id);
+    await updateDoc(docRef, data);
+  } else {
+    await addDoc(collection(db, 'ingeniero'), data);
+  }
+};
+
+/**
+ * Suscribe a los cambios de los datos de la empresa en Firestore.
+ */
+export const subscribeEmpresa = (onUpdate: (data: any) => void) => {
+  const q = query(collection(db, 'empresa'));
+  return onSnapshot(q, (snapshot) => {
+    const data = snapshot.docs.map(doc => ({ 
+      _docId: doc.id, 
+      ...doc.data() 
+    }));
+    onUpdate(data[0] || null);
+  });
+};
+
+/**
+ * Guarda o actualiza los datos de la empresa en Firestore.
+ */
+export const saveEmpresa = async (id: string | null, data: any) => {
+  if (id) {
+    const docRef = doc(db, 'empresa', id);
+    await updateDoc(docRef, data);
+  } else {
+    await addDoc(collection(db, 'empresa'), data);
+  }
+};
+
+/**
+ * Sube un archivo a Firebase Storage y devuelve la URL de descarga.
+ * @param file El archivo seleccionado del input.
+ * @param path La ruta de destino en el bucket de storage.
+ */
+export const uploadFile = async (file: File, path: string) => {
+  try {
+    const storageRef = ref(storage, path);
+    await uploadBytes(storageRef, file);
+    return await getDownloadURL(storageRef);
+  } catch (error) {
+    console.error("Error al subir archivo a Firebase Storage:", error);
+    throw error;
+  }
+};
 
 /**
  * Centros - operaciones con Firestore

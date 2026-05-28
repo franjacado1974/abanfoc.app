@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/set-state-in-effect */
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Save, Plus, Search, Edit, Trash2, MapPin, Layers, X, Copy, AlertTriangle, GripHorizontal, Upload, Download, Building2 } from 'lucide-react';
@@ -76,7 +77,7 @@ export interface Parte {
 const generateId = () => {
   try {
     return crypto.randomUUID();
-  } catch (e) {
+  } catch {
     return 'id-' + Math.random().toString(36).substr(2, 9);
   }
 };
@@ -141,7 +142,7 @@ const normalizeFamilyName = (value: string) =>
     .toLowerCase()
     .trim();
 
-function SortableSistemaWrapper({ sist, children }: { sist: any, children: (attrs: any, listeners: any) => React.ReactNode }) {
+function SortableSistemaWrapper({ sist, children }: { sist: { id: string }, children: (attrs: any, listeners: any) => React.ReactNode }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: sist.id });
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -166,7 +167,7 @@ export default function Centros() {
       return saved ? JSON.parse(saved) : [];
     } catch { return []; }
   });
-  const [clientes, _setClientes] = useState<Cliente[]>(() => {
+  const [clientes] = useState<Cliente[]>(() => {
     try {
       const saved = localStorage.getItem('firecheck_db_clientes');
       return saved ? JSON.parse(saved) : [];
@@ -178,7 +179,7 @@ export default function Centros() {
       return saved ? JSON.parse(saved) : [];
     } catch { return []; }
   });
-  const [categoriasSistema, _setCategoriasSistema] = useState<{id: string, nombre: string}[]>(() => {
+  const [categoriasSistema] = useState<{id: string, nombre: string}[]>(() => {
     try {
       const saved = localStorage.getItem('firecheck_db_sistemas_categorias');
       return saved ? JSON.parse(saved) : CATEGORIAS_POR_DEFECTO;
@@ -354,8 +355,8 @@ export default function Centros() {
           if (parts.length >= 3) {
             const newId = `CEN ${parts[0]}-${parts[1]}-${parts[2]}`;
             hasChanges = true;
-            currentSistemas = currentSistemas.map((s: any) => s.centroId === oldId ? { ...s, centroId: newId } : s);
-            currentEquipos = currentEquipos.map((e: any) => e.centroId === oldId ? { ...e, centroId: newId } : e);
+            currentSistemas = currentSistemas.map((s) => s.centroId === oldId ? { ...s, centroId: newId } : s);
+            currentEquipos = currentEquipos.map((e) => e.centroId === oldId ? { ...e, centroId: newId } : e);
             return { ...c, id: newId };
           }
         }
@@ -370,7 +371,9 @@ export default function Centros() {
         setEquiposInstalados(currentEquipos);
         setCentros(finalCentros); 
       }
-    } catch (_e) { }
+    } catch {
+      // Ignorar errores
+    }
   }, [clientes, centros, centroSistemas, equiposInstalados]);
 
   // Revisar si venimos de otra página y queremos abrir un centro directamente

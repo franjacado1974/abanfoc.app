@@ -15,7 +15,7 @@ import Servicios from './Servicios';
 import Partes from './Partes';
 import Albaranes from './Albaranes';
 import Certificados from './Certificados';
-import GestionEmpresa from './GestionEmpresa';
+import ConfiguracionEmpresa from './ConfiguracionEmpresa';
 import Planificacion from './Planificacion';
 import RevisionChecklist from './RevisionChecklist';
 import Revisiones from './Revisiones';
@@ -852,7 +852,7 @@ export default function App() {
         } />
         <Route path="/configuracion-datos" element={
           <ProtectedRoute allowedRoles={['super-administrador', 'administrador']} user={loggedUser}>
-            <GestionEmpresa />
+            <ConfiguracionEmpresa />
           </ProtectedRoute>
         } />
         <Route path="/partes_trabajo" element={
