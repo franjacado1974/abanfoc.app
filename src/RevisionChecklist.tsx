@@ -55,6 +55,27 @@ export default function RevisionChecklist() {
     const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
     const [equipoIdToDelete, setEquipoIdToDelete] = useState<string | null>(null);
 
+    const saveEquiposProgress = (currentEquipos: EquipoInstalado[] = equiposInstalados) => {
+        const allEquipos = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
+        const equiposOtrosCentros = allEquipos.filter((eq: EquipoInstalado) => eq.centroId !== centroId);
+        const updatedAllEquipos = [...equiposOtrosCentros, ...currentEquipos];
+        localStorage.setItem('firecheck_db_equipos_instalados', JSON.stringify(updatedAllEquipos));
+        return updatedAllEquipos;
+    };
+
+    const updateParte = (changes: Partial<Parte>) => {
+        if (!parteId) return;
+
+        const storedPartes = JSON.parse(localStorage.getItem('firecheck_db_partes') || '[]');
+        const updatedPartes = storedPartes.map((p: Parte) =>
+            p.id === parteId ? { ...p, ...changes } : p
+        );
+        const updatedParte = updatedPartes.find((p: Parte) => p.id === parteId);
+
+        localStorage.setItem('firecheck_db_partes', JSON.stringify(updatedPartes));
+        if (updatedParte) setParte(updatedParte);
+    };
+
     const handleAddFromCatalog = (sistemaId: string) => {
         if (!selectedCatalogItem) {
             alert('Por favor, selecciona un equipo del catálogo.');
@@ -84,7 +105,7 @@ export default function RevisionChecklist() {
 
         const updatedEquipos = [...equiposInstalados, ...newItems];
         setEquiposInstalados(updatedEquipos);
-        localStorage.setItem('firecheck_db_equipos_instalados', JSON.stringify(updatedEquipos)); // Update all equipos
+        saveEquiposProgress(updatedEquipos);
         closeAddModal();
     };
 
@@ -159,21 +180,21 @@ export default function RevisionChecklist() {
             return;
         }
 
-        const allEquipos = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
-        const updatedAllEquipos = allEquipos.map((eq: EquipoInstalado) => {
-            const updatedEq = equiposInstalados.find(e => e.id === eq.id);
-            return updatedEq || eq;
-        });
-        localStorage.setItem('firecheck_db_equipos_instalados', JSON.stringify(updatedAllEquipos));
-
-        const storedPartes = JSON.parse(localStorage.getItem('firecheck_db_partes') || '[]');
         const numMant = `MANT-${new Date().getFullYear()}-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`;
-        const updatedPartes = storedPartes.map((p: any) =>
-            p.id === parteId ? { ...p, estado: 'Finalizado', numeroMantenimiento: numMant } : p
-        );
-        localStorage.setItem('firecheck_db_partes', JSON.stringify(updatedPartes));
+        saveEquiposProgress();
+        updateParte({ estado: 'Finalizado', numeroMantenimiento: numMant });
 
         alert('Revisión finalizada y guardada.');
+        navigate('/partes');
+    };
+
+    const handlePauseRevision = () => {
+        if (!parteId) return;
+
+        saveEquiposProgress();
+        updateParte({ estado: 'Descargado (Offline)' });
+
+        alert('Revisión pausada. Todos los datos se han guardado.');
         navigate('/partes');
     };
 
@@ -574,10 +595,16 @@ export default function RevisionChecklist() {
                 </div>
 
                 {/* Bottom Actions */}
-                <div className="mt-10 pt-6 border-t border-slate-200 flex justify-end">
+                <div className="mt-10 pt-6 border-t border-slate-200 flex flex-col sm:flex-row justify-end gap-3">
+                    <button
+                        onClick={handlePauseRevision}
+                        className="inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-xl font-semibold text-white bg-red-600 hover:bg-red-700 shadow-lg shadow-red-200 transition-all text-sm"
+                    >
+                        <Save className="w-5 h-5" /> Pausar Revisión
+                    </button>
                     <button
                         onClick={handleSaveRevision}
-                        className="inline-flex items-center gap-2 px-8 py-3.5 rounded-xl font-semibold text-white bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all text-sm"
+                        className="inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-xl font-semibold text-white bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all text-sm"
                     >
                         <Save className="w-5 h-5" /> Finalizar Revisión
                     </button>

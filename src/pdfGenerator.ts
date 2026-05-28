@@ -656,7 +656,14 @@ export const generarAlbaranPDF = (
   try {
     const logoBase64 = localStorage.getItem('firecheck_db_logo');
     if (logoBase64) {
-      doc.addImage(logoBase64, 'PNG', pageWidth - 65, 10, 55, 13);
+      const logoProps = doc.getImageProperties(logoBase64);
+      const maxLogoWidth = 55;
+      const maxLogoHeight = 9;
+      const logoRatio = logoProps.width / logoProps.height;
+      const logoWidth = Math.min(maxLogoWidth, maxLogoHeight * logoRatio);
+      const logoHeight = logoWidth / logoRatio;
+
+      doc.addImage(logoBase64, 'PNG', pageWidth - 10 - logoWidth, 12, logoWidth, logoHeight);
     }
   } catch (_e) { }
 
@@ -694,7 +701,7 @@ export const generarAlbaranPDF = (
     body: tableData,
     theme: 'grid',
     headStyles: { fillColor: [128, 0, 32], halign: 'center' },
-    columnStyles: { 0: { halign: 'center', cellWidth: 30 }, 1: { cellWidth: 'auto' } }
+    columnStyles: { 0: { halign: 'center', cellWidth: 22 }, 1: { cellWidth: 'auto' } }
   });
 
   const finalY = (doc as any).lastAutoTable.finalY + 20;

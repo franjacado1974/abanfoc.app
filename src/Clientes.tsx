@@ -313,22 +313,11 @@ export default function Clientes() {
                   <div key={c.id} className="bg-blue-50/50 p-3.5 rounded-3xl border border-blue-100 shadow-sm hover:shadow-md hover:border-blue-200 transition-all">
                     <div className="flex justify-between items-start mb-3">
                       <div className="flex flex-col gap-0.5 flex-1 min-w-0 mr-4">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <h3 className="text-base font-bold text-blue-950 truncate" title={c.nombre}>{c.nombre}</h3>
-                          <span className="shrink-0 px-1.5 py-0.5 bg-blue-100 text-blue-800 text-[10px] font-mono font-bold rounded block w-max">
-                            {c.id || 'CLI----'}
-                          </span>
-                        </div>
+                        <span className="shrink-0 px-1.5 py-0.5 bg-blue-100 text-blue-800 text-[10px] font-mono font-bold rounded block w-max mb-1">
+                          {c.id || 'CLI----'}
+                        </span>
+                        <h3 className="text-base font-bold text-blue-950 truncate" title={c.nombre}>{c.nombre}</h3>
                         {c.cif && <span className="text-xs font-medium text-blue-700/70 truncate" title={c.cif}>{c.cif}</span>}
-                      </div>
-                      {/* Botones de acción (Editar / Borrar) */}
-                      <div className="flex items-center gap-0.5 shrink-0">
-                      <button onClick={() => handleEdit(c)} className="p-1.5 text-black hover:text-zinc-600 hover:bg-zinc-100 rounded-lg transition-colors" title="Editar cliente">
-                          <Edit className="w-4 h-4" />
-                        </button>
-                        <button onClick={() => handleDelete(c.id)} className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors" title="Eliminar cliente">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
                       </div>
                     </div>
                     
@@ -341,6 +330,16 @@ export default function Clientes() {
                       {c.contacto && <p className="truncate"><strong className="text-blue-950 font-medium">Contacto:</strong> {c.contacto}</p>}
                       {c.telefono && <p className="truncate"><strong className="text-blue-950 font-medium">Tel:</strong> {c.telefono}</p>}
                       {c.correo && <p className="truncate"><strong className="text-blue-950 font-medium">Email:</strong> {c.correo}</p>}
+                    </div>
+
+                    {/* Botones de acción (Editar / Borrar) */}
+                    <div className="flex justify-end gap-0.5 mt-auto">
+                      <button onClick={() => handleEdit(c)} className="p-1.5 text-black hover:text-zinc-600 hover:bg-zinc-100 rounded-lg transition-colors" title="Editar cliente">
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => handleDelete(c.id)} className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors" title="Eliminar cliente">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                     </div>
 
                     <div className="pt-3 border-t border-blue-200/50">
