@@ -402,6 +402,18 @@ export default function Centros() {
     setCentros(data);
   };
 
+  const normalizeSelectedValues = (values?: string[] | string | null) => {
+    if (Array.isArray(values)) {
+      return values.filter(value => typeof value === 'string' && value.trim() !== '');
+    }
+
+    if (typeof values === 'string' && values.trim() !== '') {
+      return [values];
+    }
+
+    return [];
+  };
+
   // Sincronización en tiempo real desde Firestore
   useEffect(() => {
     let unsub: (() => void) | null = null;
@@ -462,7 +474,13 @@ export default function Centros() {
       }
     }
 
-    const newCentro: any = { ...form, id: finalId, nombre: form.nombre.toUpperCase() };
+    const newCentro: any = {
+      ...form,
+      id: finalId,
+      nombre: form.nombre.toUpperCase(),
+      periodicidad: normalizeSelectedValues(form.periodicidad),
+      mesesRevision: normalizeSelectedValues(form.mesesRevision),
+    };
     
     try {
       if ((form as any)._docId) {
@@ -503,13 +521,31 @@ export default function Centros() {
     setIsEquipoModalOpen(true);
   };
 
-  const handleSavePeriodicidad = (e: React.FormEvent) => {
+  const handleSavePeriodicidad = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!centroForPeriodicidad) return;
 
+    const periodicidad = normalizeSelectedValues(formPeriodicidad.periodicidad);
+    const mesesRevision = normalizeSelectedValues(formPeriodicidad.mesesRevision);
+    const updatedCentro = {
+      ...centroForPeriodicidad,
+      periodicidad,
+      mesesRevision,
+    };
+    const docId = (centroForPeriodicidad as any)._docId || centroForPeriodicidad.id;
+    const { _docId, ...centroData } = updatedCentro as any;
+
+    try {
+      await updateCentro(docId, centroData);
+    } catch (err) {
+      console.error('Error guardando periodicidad en Firestore:', err);
+      alert('Error al guardar la periodicidad en Firestore');
+      return;
+    }
+
     const updatedCentros = centros.map(c =>
       c.id === centroForPeriodicidad.id
-        ? { ...c, ...formPeriodicidad }
+        ? { ...updatedCentro, _docId: (c as any)._docId || _docId }
         : c
     );
 
