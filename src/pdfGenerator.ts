@@ -639,7 +639,7 @@ export const guardarDatosEmpresa = (data: any) => {
 export const obtenerDatosEmpresa = () => cargaDatosEmpresa();
 
 // ============ ALBARÁN Y CERTIFICADO ============
-export const generarAlbaranPDF = (
+export const generarAlbaranPDF = async (
   cliente: Record<string, any>,
   centro: Record<string, any>,
   equiposTodos: Record<string, any>[],
@@ -647,76 +647,177 @@ export const generarAlbaranPDF = (
   tecnicoNombre?: string,
   firmaCliente?: string,
   firmaTecnico?: string,
-  nombreFirmante?: string
+  nombreFirmante?: string,
+  items?: { cantidad: number; concepto: string; descripcion: string; precioUnidad: number; subtotal: number }[],
+  empresa?: Record<string, any>
 ) => {
   const doc = new jsPDF('p', 'mm', 'a4');
   const pageWidth = doc.internal.pageSize.getWidth();
 
-  // Logo a la derecha
+  // Datos de empresa: usar la empresa pasada como parámetro, o cargar de localStorage
+  const empData = empresa || cargaDatosEmpresa() || {};
+
+  // ── CABECERA: Logo + Datos empresa ──
+  let headerY = 12;
+
+  // Logo a la derecha - cargar desde URL si es necesario
   try {
-    const logoBase64 = localStorage.getItem('firecheck_db_logo');
-    if (logoBase64) {
-      const logoProps = doc.getImageProperties(logoBase64);
+    const logoUrl = empData?.logoUrl || localStorage.getItem('firecheck_db_logo');
+    if (logoUrl) {
+      let logoData = logoUrl;
+      // Si es una URL externa (no base64), convertir a base64
+      if (logoUrl.startsWith('http')) {
+        const response = await fetch(logoUrl);
+        const blob = await response.blob();
+        logoData = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(blob);
+        });
+      }
+      const logoProps = doc.getImageProperties(logoData);
       const maxLogoWidth = 55;
-      const maxLogoHeight = 9;
+      const maxLogoHeight = 18;
       const logoRatio = logoProps.width / logoProps.height;
       const logoWidth = Math.min(maxLogoWidth, maxLogoHeight * logoRatio);
       const logoHeight = logoWidth / logoRatio;
-
-      doc.addImage(logoBase64, 'PNG', pageWidth - 10 - logoWidth, 12, logoWidth, logoHeight);
+      doc.addImage(logoData, 'PNG', pageWidth - 10 - logoWidth, headerY, logoWidth, logoHeight);
     }
   } catch (_e) { }
 
+  // Título del documento
   doc.setFontSize(18);
   doc.setFont("helvetica", "bold");
-  doc.text('ALBARÁN DE TRABAJO', pageWidth - 14, 70, { align: 'right' });
+  doc.setTextColor(40, 40, 40);
+  doc.text('ALBARÁN DE TRABAJO', pageWidth - 14, headerY + 47, { align: 'right' });
 
   doc.setFontSize(10);
   doc.setFont("helvetica", "normal");
-  doc.text(`Referencia: ${numeroMantenimiento || 'S/R'}`, 14, 20);
-  doc.text(`Fecha: ${new Date().toLocaleDateString()}`, 14, 25);
-  doc.text(`Técnico: ${tecnicoNombre || 'N/A'}`, 14, 30);
+  doc.setTextColor(0, 0, 0);
+  doc.text(`Referencia: ${numeroMantenimiento || 'S/R'}`, 14, headerY + 8);
+  doc.text(`Fecha: ${new Date().toLocaleDateString()}`, 14, headerY + 14);
+  doc.text(`Técnico: ${tecnicoNombre || 'N/A'}`, 14, headerY + 20);
+
+  // Línea separadora
+  doc.setDrawColor(200, 200, 200);
+  doc.setLineWidth(0.3);
+  doc.line(14, headerY + 26, pageWidth - 14, headerY + 26);
 
   doc.setFont("helvetica", "bold");
-  doc.text('DATOS DE LA INSTALACIÓN:', 14, 40);
+  doc.setFontSize(10);
+  doc.setTextColor(0, 0, 0);
+  doc.text('DATOS DE LA INSTALACIÓN:', 14, headerY + 34);
   doc.setFont("helvetica", "normal");
-  doc.text(`${cliente?.nombre || 'Cliente'}`, 14, 45);
-  doc.text(`${centro?.nombre || 'Centro'} - ${centro?.direccion || ''}`, 14, 50);
+  doc.text(`${cliente?.nombre || 'Cliente'}`, 14, headerY + 40);
+  doc.text(`${centro?.nombre || 'Centro'} - ${centro?.direccion || ''}`, 14, headerY + 46);
 
-  // Agrupar equipos por nombre/modelo
-  const conteoPorModelo: Record<string, number> = {};
-  equiposTodos.forEach(eq => {
-    const modelo = eq.nombre?.trim() || eq.clase?.trim() || 'Equipo';
-    conteoPorModelo[modelo] = (conteoPorModelo[modelo] || 0) + 1;
-  });
+  // Si hay items del albarán, usarlos; si no, agrupar equipos por modelo
+  let tableData: string[][];
+  let subtotalTotal = 0;
+  let useItems = items && items.length > 0;
 
-  const tableData = Object.entries(conteoPorModelo).map(([modelo, cantidad]) => [
-    `${cantidad} und.`,
-    modelo
-  ]);
+  if (useItems && items) {
+    tableData = items.map(item => [
+      String(item.cantidad),
+      item.concepto || '',
+      item.descripcion || '',
+      item.precioUnidad.toFixed(2) + ' \u20ac',
+      item.subtotal.toFixed(2) + ' \u20ac'
+    ]);
+    subtotalTotal = items.reduce((acc, item) => acc + (item.subtotal || 0), 0);
+  } else {
+    const conteoPorModelo: Record<string, number> = {};
+    equiposTodos.forEach(eq => {
+      const modelo = eq.nombre?.trim() || eq.clase?.trim() || 'Equipo';
+      conteoPorModelo[modelo] = (conteoPorModelo[modelo] || 0) + 1;
+    });
+    tableData = Object.entries(conteoPorModelo).map(([modelo, cantidad]) => [
+      `${cantidad} und.`, modelo, '', '', ''
+    ]);
+    subtotalTotal = equiposTodos.reduce((acc, eq) => acc + (parseFloat(eq.precioUnidad || eq.precio || 0) || 0), 0);
+  }
+
+  const ivaPorc = 21;
+  const ivaImporte = subtotalTotal * ivaPorc / 100;
+  const totalConIva = subtotalTotal + ivaImporte;
+  const totalRows = tableData.length;
+
+  const tableDataConTotales = [
+    ...tableData,
+    ['', '', '', 'Total:', subtotalTotal.toFixed(2) + ' \u20ac'],
+    ['', '', '', `IVA (${ivaPorc}%):`, ivaImporte.toFixed(2) + ' \u20ac'],
+    ['', '', '', 'Total + IVA:', totalConIva.toFixed(2) + ' \u20ac'],
+  ];
 
   autoTable(doc, {
-    startY: 75,
-    head: [['CANTIDAD', 'EQUIPOS REVISADOS']],
-    body: tableData,
+    startY: headerY + 55,
+    head: [['Cant.', 'Concepto', 'Descripción', 'Precio ud.', 'Subtotal']],
+    body: tableDataConTotales,
     theme: 'grid',
-    headStyles: { fillColor: [128, 0, 32], halign: 'center' },
-    columnStyles: { 0: { halign: 'center', cellWidth: 22 }, 1: { cellWidth: 'auto' } }
+    headStyles: { fillColor: [128, 0, 32], halign: 'center', lineColor: [255, 255, 255], lineWidth: 0.3 },
+    bodyStyles: { lineColor: [255, 255, 255], lineWidth: 0.3 },
+    columnStyles: {
+      0: { halign: 'center', cellWidth: 16 },
+      1: { cellWidth: 40 },
+      2: { cellWidth: 'auto' },
+      3: { halign: 'right', cellWidth: 25 },
+      4: { halign: 'right', cellWidth: 25 }
+    },
+    didParseCell: (data: any) => {
+      if (data.section === 'body' && data.row.index >= totalRows) {
+        data.cell.styles.fillColor = [255, 255, 255];
+        data.cell.styles.fontStyle = 'bold';
+      }
+    }
   });
 
   const finalY = (doc as any).lastAutoTable.finalY + 20;
   doc.setFont("helvetica", "bold");
   doc.text('Firma del Técnico:', 14, finalY);
+  doc.setDrawColor(200, 200, 200);
+  doc.setLineWidth(0.2);
+  doc.rect(14, finalY + 3, 70, 35);
   if (firmaTecnico) {
-    doc.addImage(firmaTecnico, 'PNG', 14, finalY + 2, 40, 20);
+    doc.addImage(firmaTecnico, 'PNG', 15, finalY + 4, 68, 33);
   }
-  doc.text(`Nombre: ${tecnicoNombre || 'N/A'}`, 14, finalY + 25);
+  doc.text(`Nombre: ${tecnicoNombre || 'N/A'}`, 14, finalY + 42);
 
-  doc.text('Conformidad del Cliente:', 120, finalY);
+  doc.text('Conformidad del Cliente:', 110, finalY);
+  doc.rect(110, finalY + 3, 70, 35);
   if (firmaCliente) {
-    doc.addImage(firmaCliente, 'PNG', 120, finalY + 2, 40, 20);
+    doc.addImage(firmaCliente, 'PNG', 111, finalY + 4, 68, 33);
   }
-  doc.text(`Nombre: ${nombreFirmante || 'N/A'}`, 120, finalY + 25);
+  doc.text(`Nombre: ${nombreFirmante || 'N/A'}`, 110, finalY + 42);
+
+  // ── PIE DE PÁGINA: Datos de la empresa (todas las páginas) ──
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const totalPagesAlb = (doc.internal as any).getNumberOfPages();
+  for (let i = 1; i <= totalPagesAlb; i++) {
+    doc.setPage(i);
+    // Línea separadora del pie
+    doc.setDrawColor(200, 200, 200);
+    doc.setLineWidth(0.2);
+    doc.line(14, pageHeight - 18, pageWidth - 14, pageHeight - 18);
+    // Línea 1: Nombre empresa en negrita + CIF + RASIC
+    const rasic = empData?.rasic ? `  |  RASIC: ${empData.rasic}` : '';
+    const cifText = empData?.cif ? `CIF: ${empData.cif}` : '';
+    doc.setFontSize(7.5);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(60, 60, 60);
+    const line1 = `${empData?.nombre || ''}`;
+    doc.text(line1, pageWidth / 2, pageHeight - 13, { align: 'center' });
+    // Nombre en negrita, luego CIF y RASIC sin negrita en la misma línea
+    const nombreWidth = doc.getTextWidth(line1);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 100, 100);
+    const cifRasic = `  ${cifText}${rasic}`;
+    doc.text(cifRasic, pageWidth / 2 + nombreWidth / 2, pageHeight - 13);
+    // Línea 2: Dirección y teléfono centrados
+    const dirParts = [empData?.direccion, empData?.localidad, empData?.provincia, empData?.codigoPostal].filter(Boolean).join(', ');
+    const telPart = empData?.telefono ? `  |  Tel: ${empData.telefono}` : '';
+    doc.setFontSize(7);
+    doc.text(`${dirParts}${telPart}`, pageWidth / 2, pageHeight - 8, { align: 'center' });
+  }
 
   doc.save(`Albaran_${centro?.nombre || 'Centro'}_${numeroMantenimiento}.pdf`);
 };
