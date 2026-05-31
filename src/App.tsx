@@ -106,7 +106,7 @@ function Login({ usuarios: _usuarios, onLogin }: { usuarios: Usuario[], onLogin:
           />
           <button type="submit" className="w-full bg-black hover:bg-zinc-800 text-white py-3.5 sm:py-4 rounded-xl sm:rounded-2xl font-bold shadow-lg transition-all active:scale-95">Entrar</button>
         </form>
-        <p className="text-center text-zinc-400 text-xs mt-4">V.1.6</p>
+        <p className="text-center text-zinc-400 text-xs mt-4">V.01.06.26</p>
       </div>
     </div>
   );
@@ -236,6 +236,8 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
     let clientes = 0;
     let centros = 0;
     let catalogo = 0;
+    let albaranes = 0;
+    let partes = 0;
     try {
       const savedClientes = localStorage.getItem('firecheck_db_clientes');
       if (savedClientes) {
@@ -259,8 +261,20 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
         : 0;
 
       catalogo = articulosCount + serviciosCount;
+
+      const savedAlbaranes = localStorage.getItem('firecheck_db_albaranes');
+      if (savedAlbaranes) {
+        const parsed = JSON.parse(savedAlbaranes);
+        albaranes = Array.isArray(parsed) ? parsed.length : 0;
+      }
+
+      const savedPartes = localStorage.getItem('firecheck_db_partes');
+      if (savedPartes) {
+        const parsed = JSON.parse(savedPartes);
+        partes = Array.isArray(parsed) ? parsed.length : 0;
+      }
     } catch { /* ignore error in initial state */ }
-    return { clientes, centros, catalogo };
+    return { clientes, centros, catalogo, albaranes, partes };
   });
 
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -472,6 +486,8 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
     if (c.id === 'clientes') return { ...c, stat: stats.clientes };
     if (c.id === 'centros') return { ...c, stat: stats.centros };
     if (c.id === 'catalogo') return { ...c, stat: stats.catalogo };
+    if (c.id === 'albaranes') return { ...c, stat: stats.albaranes };
+    if (c.id === 'partes') return { ...c, stat: stats.partes };
     return c;
   });
 
