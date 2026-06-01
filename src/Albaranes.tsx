@@ -1,12 +1,21 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, FileDigit, Download, Search, CheckCircle2, Circle, Clock, Trash2, Plus, Building2, MapPin, Save, Trash, Edit } from 'lucide-react'; // Removed unused X
+import { ArrowLeft, FileDigit, Download, Search, CheckCircle2, Circle, Clock, Trash2, Plus, Building2, MapPin, Save, Trash, Edit, Eye } from 'lucide-react'; // Removed unused X
 import { addAlbaran, updateAlbaran, deleteAlbaran, subscribeAlbaranes, subscribeEmpresas, subscribeTecnicos, subscribeCentros, subscribeClientes, type Albaran, type Cliente, type Centro, type Equipo, type Tecnico, type Empresa } from './firebase';
 import { generarAlbaranPDF } from './pdfGenerator';
 import ConfirmationModal from './ConfirmationModal';
 
 export default function Albaranes() {
   const navigate = useNavigate();
+
+  // Obtener rol del usuario logueado
+  const loggedUser = useMemo(() => {
+    try {
+      const session = sessionStorage.getItem('firecheck_logged_user');
+      return session ? JSON.parse(session) : null;
+    } catch { return null; }
+  }, []);
+  const isVisualizador = loggedUser?.rol === 'visualizador';
 
   // Cargar desde localStorage en el estado inicial para evitar setState dentro de useEffect
   const [albaranes, setAlbaranes] = useState<Albaran[]>(() => { try { return JSON.parse(localStorage.getItem('firecheck_db_albaranes') || '[]'); } catch { return []; } });
@@ -301,28 +310,30 @@ export default function Albaranes() {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          <button
-            onClick={() => {
-              setEditingId(null);
-              const nextId = generateNextAlbaranId();
-              setForm({
-                id: nextId,
-                empresaId: '',
-                clienteId: '',
-                centroId: '',
-                fechaCreacion: new Date().toISOString(),
-                items: [{ cantidad: 1, concepto: 'Revisión', descripcion: '', precioUnidad: 0, subtotal: 0 }],
-                nombreFirmante: '',
-                tecnicoId: '',
-                facturado: false,
-                numeroPedido: ''
-              });
-              setView('form');
-            }}
-            className="px-6 py-3.5 bg-black text-white rounded-2xl font-bold text-sm hover:bg-zinc-800 transition-all flex items-center justify-center gap-2 shadow-lg shadow-black/10 active:scale-95 whitespace-nowrap"
-          >
-            <Plus className="w-5 h-5" /> Nuevo Albarán
-          </button>
+          {!isVisualizador && (
+            <button
+              onClick={() => {
+                setEditingId(null);
+                const nextId = generateNextAlbaranId();
+                setForm({
+                  id: nextId,
+                  empresaId: '',
+                  clienteId: '',
+                  centroId: '',
+                  fechaCreacion: new Date().toISOString(),
+                  items: [{ cantidad: 1, concepto: 'Revisión', descripcion: '', precioUnidad: 0, subtotal: 0 }],
+                  nombreFirmante: '',
+                  tecnicoId: '',
+                  facturado: false,
+                  numeroPedido: ''
+                });
+                setView('form');
+              }}
+              className="px-6 py-3.5 bg-black text-white rounded-2xl font-bold text-sm hover:bg-zinc-800 transition-all flex items-center justify-center gap-2 shadow-lg shadow-black/10 active:scale-95 whitespace-nowrap"
+            >
+              <Plus className="w-5 h-5" /> Nuevo Albarán
+            </button>
+          )}
           <button
             onClick={() => setShowOnlyPending(!showOnlyPending)}
             className={`px-6 py-3.5 rounded-2xl font-bold text-sm transition-all flex items-center justify-center gap-2 border shadow-sm ${
@@ -345,7 +356,7 @@ export default function Albaranes() {
             <div className="w-32">Fecha</div>
             <div className="flex-1">Cliente</div>
             <div className="w-40 text-center">Estado Facturación</div>
-            <div className="w-32 text-right">Acciones</div>
+            <div className="w-44 text-right">Acciones</div>
           </div>
 
           <div className="divide-y divide-zinc-200">
@@ -401,7 +412,14 @@ export default function Albaranes() {
                         {alb.facturado ? 'Facturado' : 'Sin Facturar'}
                       </button>
                     </div>
-                    <div className="w-full md:w-32 flex justify-center md:justify-end gap-1 pt-2 md:pt-0">
+                    <div className="w-full md:w-44 flex justify-center md:justify-end gap-1 pt-2 md:pt-0">
+                      <button 
+                        onClick={() => handleEditAlbaran(alb)}
+                        className="p-2.5 text-zinc-400 hover:text-violet-600 hover:bg-violet-50 rounded-xl transition-all"
+                        title="Ver albarán"
+                      >
+                        <Eye className="w-5 h-5" />
+                      </button>
                       <button 
                         onClick={async () => {
                           const eqsDelCentro = equipos.filter(e => e.centroId === alb.centroId); // Removed type assertion
@@ -431,20 +449,24 @@ export default function Albaranes() {
                       >
                         <Download className="w-5 h-5" />
                       </button>
-                      <button 
-                        onClick={() => handleEditAlbaran(alb)}
-                        className="p-2.5 text-zinc-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
-                        title="Editar albarán"
-                      >
-                        <Edit className="w-5 h-5" />
-                      </button>
-                      <button 
-                        onClick={() => handleDeleteAlbaran(alb.id)}
-                        className="p-2.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
-                        title="Eliminar albarán"
-                      >
-                        <Trash2 className="w-5 h-5" />
-                      </button>
+                      {!isVisualizador && (
+                        <button 
+                          onClick={() => handleEditAlbaran(alb)}
+                          className="p-2.5 text-zinc-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
+                          title="Editar albarán"
+                        >
+                          <Edit className="w-5 h-5" />
+                        </button>
+                      )}
+                      {!isVisualizador && (
+                        <button 
+                          onClick={() => handleDeleteAlbaran(alb.id)}
+                          className="p-2.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
+                          title="Eliminar albarán"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
