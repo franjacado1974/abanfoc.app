@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Calendar, ChevronLeft, ChevronRight, Building2, FileText, AlertTriangle, CheckCheck } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, Building2, FileText, AlertTriangle, CheckCheck } from 'lucide-react';
 
 const MESES = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -23,7 +22,6 @@ interface Parte {
 
 
 export default function Planificacion() {
-  const navigate = useNavigate();
   const [partes, setPartes] = useState<Parte[]>([]);
   const [tecnicos, setTecnicos] = useState<any[]>([]);
   const [centros, setCentros] = useState<any[]>([]);
@@ -196,9 +194,6 @@ export default function Planificacion() {
     <div className="min-h-screen bg-amber-50/40 p-4 md:p-8">
       <div className="max-w-[1600px] mx-auto">
         <div className="flex items-center gap-4 mb-8">
-          <button onClick={() => navigate('/')} className="p-2 bg-white rounded-full border border-sky-100 hover:bg-sky-50 text-sky-600 transition-colors shadow-sm">
-            <ArrowLeft className="w-5 h-5" />
-          </button>
           <h1 className="text-2xl md:text-3xl font-bold text-sky-950 flex items-center gap-3">
             <Calendar className="w-8 h-8 text-sky-500" /> Planificación
           </h1>

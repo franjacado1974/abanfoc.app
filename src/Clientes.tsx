@@ -3,7 +3,7 @@ import { db } from "./firebase";
 import { useState, useEffect, useRef, useMemo } from 'react';
 import ConfirmationModal from './ConfirmationModal';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Save, Building2, Plus, Download, Upload, Users, Search, Edit, Trash2, CreditCard, Phone, Mail, MapPin, ChevronRight, Eye } from 'lucide-react';
+import { ArrowLeft, Save, Building2, Plus, Download, Upload, Users, Search, Edit, Trash2, CreditCard, Phone, Mail, MapPin, Eye } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import DetailModal from './components/DetailModal';
 
@@ -47,10 +47,10 @@ const emptyCliente: Cliente = {
   formaPago: '', vencimiento: '', iban: '', notas: ''
 };
 
-export default function Clientes() {
+export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) {
   const navigate = useNavigate();
   const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [centros, setCentros] = useState<any[]>([]);
+  const [_centros, setCentros] = useState<any[]>([]);
   const [view, setView] = useState<'list' | 'form'>('list');
   const [form, setForm] = useState<Cliente>(emptyCliente);
   const [searchTerm, setSearchTerm] = useState('');
@@ -233,8 +233,9 @@ export default function Clientes() {
   if (view === 'list') {
     return (
       <>
-        <div className="px-4 md:px-8 py-6">
+        <div className={hideHeader ? '' : 'px-4 md:px-8 py-6'}>
           {/* Header */}
+          {!hideHeader ? (
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
             <div>
               <button onClick={() => navigate('/')} className="flex items-center gap-1.5 text-xs font-medium text-zinc-500 hover:text-zinc-900 mb-3 transition-colors">
@@ -243,23 +244,20 @@ export default function Clientes() {
               <h1 className="text-2xl font-bold text-zinc-900 tracking-tight">Directorio de Clientes</h1>
               <p className="text-sm text-zinc-500 mt-1">{clientes.length} registrados en la base de datos.</p>
             </div>
-
             <div className="flex flex-wrap items-center gap-2">
               <input type="file" accept=".xlsx, .xls, .csv" className="hidden" ref={fileInputRef} onChange={handleImportExcel} />
-              
               <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-1.5 bg-white border border-zinc-200 text-zinc-700 px-3.5 py-2 rounded-lg font-medium hover:bg-zinc-50 hover:border-zinc-300 transition-all text-xs shadow-sm" title="Importar Excel">
                 <Download className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Importar</span>
               </button>
-              
               <button onClick={handleExportExcel} className="flex items-center gap-1.5 bg-white border border-zinc-200 text-zinc-700 px-3.5 py-2 rounded-lg font-medium hover:bg-zinc-50 hover:border-zinc-300 transition-all text-xs shadow-sm" title="Exportar Excel">
                 <Upload className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Exportar</span>
               </button>
-              
               <button onClick={handleOpenNewForm} className="flex items-center gap-1.5 bg-black text-white px-4 py-2 rounded-lg font-medium hover:bg-zinc-800 transition-all text-xs shadow-md shadow-black/10">
                 <Plus className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Nuevo Cliente</span><span className="sm:hidden">Nuevo</span>
               </button>
             </div>
           </div>
+          ) : null}
 
           {/* Buscador */}
           <div className="relative mb-5">
@@ -296,22 +294,20 @@ export default function Clientes() {
               <p className="text-zinc-500">No se ha encontrado ningún cliente que coincida con "{searchTerm}".</p>
             </div>
           ) : (
-            <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden">
+            <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden overflow-x-auto">
               {/* Table header */}
               <div className="hidden md:flex items-center bg-[#f9f7f4] border-b-2 border-zinc-200 px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-zinc-500">
-                <div className="w-24">Código</div>
-                <div className="flex-1">Cliente</div>
-                <div className="w-40">CIF / NIF</div>
-                <div className="w-48">Población</div>
-                <div className="w-36">Contacto</div>
-                <div className="w-36">Teléfono</div>
-                <div className="w-28 text-right">Acciones</div>
+                <div className="w-24 shrink-0">Código</div>
+                <div className="flex-1 min-w-0">Cliente</div>
+                <div className="w-36 shrink-0">CIF / NIF</div>
+                <div className="w-44 shrink-0">Población</div>
+                <div className="w-36 shrink-0">Teléfono</div>
+                <div className="w-28 shrink-0 text-right">Acciones</div>
               </div>
 
               {/* Table rows */}
-              <div className="divide-y divide-zinc-100">
+              <div className="divide-y divide-zinc-200">
                 {filteredClientes.map((cliente) => {
-                  const clientCentrosCount = centros.filter(centro => centro.clienteId === cliente.id).length;
                   return (
                     <div
                       key={cliente.id}
@@ -338,20 +334,19 @@ export default function Clientes() {
 
                       {/* Desktop cells */}
                       <div className="hidden md:flex items-center w-full">
-                        <div className="w-24">
+                        <div className="w-24 shrink-0">
                           <span className="text-[11px] font-mono font-bold text-zinc-500 bg-zinc-100 px-1.5 py-0.5 rounded">{cliente.id}</span>
                         </div>
                         <div className="flex-1 min-w-0 pr-2">
                           <p className="text-sm font-bold text-zinc-900 truncate group-hover:text-blue-900 transition-colors">{cliente.nombre}</p>
                         </div>
-                        <div className="w-40 text-sm text-zinc-600 truncate pr-2">{cliente.cif || '-'}</div>
-                        <div className="w-48 text-sm text-zinc-600 truncate pr-2 flex items-center gap-1">
+                        <div className="w-36 shrink-0 text-sm text-zinc-600 truncate pr-2">{cliente.cif || '-'}</div>
+                        <div className="w-44 shrink-0 text-sm text-zinc-600 truncate pr-2 flex items-center gap-1">
                           <MapPin className="w-3 h-3 text-zinc-400 shrink-0" />
                           {cliente.poblacion || '-'}
                         </div>
-                        <div className="w-36 text-sm text-zinc-600 truncate pr-2">{cliente.contacto || '-'}</div>
-                        <div className="w-36 text-sm text-zinc-600 truncate pr-2">{cliente.telefono || '-'}</div>
-                        <div className="w-28 flex items-center justify-end gap-1">
+                        <div className="w-36 shrink-0 text-sm text-zinc-600 truncate pr-2">{cliente.telefono || '-'}</div>
+                        <div className="w-28 shrink-0 flex items-center justify-end gap-1">
                           <button
                             onClick={(e) => { e.stopPropagation(); handleViewDetail(cliente); }}
                             className="p-1.5 text-zinc-400 hover:text-blue-900 hover:bg-blue-50 rounded-lg transition-colors"

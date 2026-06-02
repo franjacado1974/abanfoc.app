@@ -471,13 +471,15 @@ const handleSaveEquipo = async (e: React.FormEvent) => {
   return (
     <div className="min-h-screen bg-fuchsia-50/40 p-6 md:p-12">
       <div className="max-w-5xl mx-auto w-full">
-        <button 
-          onClick={() => selectedCategoria ? setSelectedCategoria(null) : navigate('/')} 
-          className="text-sm font-medium text-fuchsia-600 hover:text-fuchsia-950 mb-8 flex items-center gap-2 transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4" /> 
-          {selectedCategoria ? 'Volver a Sistemas' : 'Volver al panel'}
-        </button>
+        {selectedCategoria && (
+          <button 
+            onClick={() => setSelectedCategoria(null)} 
+            className="text-sm font-medium text-fuchsia-600 hover:text-fuchsia-950 mb-8 flex items-center gap-2 transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" /> 
+            Volver a Sistemas
+          </button>
+        )}
 
         {selectForCentroId && (
           <div className="bg-emerald-100 border border-emerald-300 text-emerald-800 px-4 py-3 rounded-2xl mb-8 flex justify-between items-center shadow-sm">

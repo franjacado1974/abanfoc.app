@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, Save, FileText, DownloadCloud, RefreshCw, Calendar, User as UserIcon, Building2, MapPin, Trash2, CheckCircle2, X, Search } from 'lucide-react';
+import { Save, FileText, DownloadCloud, RefreshCw, Calendar, User as UserIcon, Building2, MapPin, Trash2, CheckCircle2, X, Search } from 'lucide-react';
 import { addAlbaran, type Albaran, type Tecnico } from './firebase'; // Import addAlbaran and type
 import type { Parte, Centro, Cliente, CentroSistema, EquipoInstalado } from './Centros';
 import { generarActaExtintoresPDF, generarAlbaranPDF, generarCertificadoPDF } from './pdfGenerator';
@@ -433,11 +433,8 @@ export default function Partes() {
       <div className="max-w-6xl w-full">
         {/* HEADER */}
         <div className="mb-8 space-y-4">
-          <div className="flex items-center gap-4">
-            <button onClick={() => navigate(-1)} className="p-2 bg-white rounded-full border border-sky-100 hover:bg-sky-50 text-sky-600 transition-colors shadow-sm">
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-            <h1 className="text-2xl md:text-3xl font-bold text-sky-950 flex items-center gap-3">
+          <div className="text-center">
+            <h1 className="text-2xl md:text-3xl font-bold text-sky-950 flex items-center justify-center gap-3">
               <Calendar className="w-8 h-8 text-sky-500" />
               Gestión de partes
             </h1>

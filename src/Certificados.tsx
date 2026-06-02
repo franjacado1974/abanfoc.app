@@ -1,12 +1,10 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, FileCheck, Download, Search, CheckCircle2, CircleX, Clock, Trash2, Eye, Building2, MapPin, User, CalendarDays, AlertTriangle } from 'lucide-react';
+import { FileCheck, Download, Search, CheckCircle2, CircleX, Clock, Trash2, Eye, Building2, MapPin, User, CalendarDays, AlertTriangle } from 'lucide-react';
 import ConfirmationModal from './ConfirmationModal';
 import { generarCertificadoPDF } from './pdfGenerator';
 import DetailModal from './components/DetailModal';
 
 export default function Certificados() {
-  const navigate = useNavigate();
   const [certificados, setCertificados] = useState<any[]>([]);
   const [clientes] = useState<any[]>(() => JSON.parse(localStorage.getItem('firecheck_db_clientes') || '[]'));
   const [centros] = useState<any[]>(() => JSON.parse(localStorage.getItem('firecheck_db_centros') || '[]'));
@@ -107,16 +105,12 @@ export default function Certificados() {
   return (
     <>
       <div className="px-4 md:px-8 py-6">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <button onClick={() => navigate('/')} className="p-1.5 bg-white rounded-lg border border-zinc-200 hover:bg-zinc-50 text-zinc-600 transition-colors shadow-sm">
-              <ArrowLeft className="w-4 h-4" />
-            </button>
-            <h1 className="text-2xl font-bold text-zinc-900 flex items-center gap-2">
-              <FileCheck className="w-6 h-6 text-cyan-600" />
-              Todos los Certificados
-            </h1>
-          </div>
+        <div className="mb-6 text-center">
+          <h1 className="text-2xl font-bold text-zinc-900 flex items-center justify-center gap-2">
+            <FileCheck className="w-6 h-6 text-cyan-600" />
+            Todos los Certificados
+          </h1>
+          <p className="text-sm text-zinc-500 mt-1">Historial de certificados generados.</p>
         </div>
 
         <div className="relative mb-5">

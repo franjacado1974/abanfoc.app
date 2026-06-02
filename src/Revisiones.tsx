@@ -1,21 +1,13 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { CalendarDays } from 'lucide-react';
 
 export default function Revisiones() {
-  const navigate = useNavigate();
   const [showCalendar, setShowCalendar] = useState(false);
 
   if (showCalendar) {
     return (
       <div className="min-h-screen bg-indigo-50/40 p-6 md:p-12">
         <div className="max-w-7xl mx-auto w-full flex flex-col" style={{ height: 'calc(100vh - 100px)' }}>
-          <button 
-            onClick={() => setShowCalendar(false)} 
-            className="text-sm font-medium text-zinc-500 hover:text-black mb-6 flex items-center gap-2"
-          >
-            ← Volver a Revisiones
-          </button>
           <div className="flex-grow bg-white rounded-3xl border border-zinc-200 shadow-sm overflow-hidden relative">
             <iframe 
               src="https://calendar.google.com/calendar/embed?src=c_8588530bae585174640b0ed606693f595e85658ef39bbf980bb745c85a6c223c%40group.calendar.google.com&ctz=Europe%2FMadrid" 
@@ -32,10 +24,6 @@ export default function Revisiones() {
   return (
     <div className="min-h-screen bg-indigo-50/40 p-6 md:p-12">
       <div className="max-w-7xl mx-auto w-full">
-        <button onClick={() => navigate('/')} className="text-sm font-medium text-zinc-500 hover:text-black mb-8 flex items-center gap-2">
-          ← Volver al inicio
-        </button>
-        
         <div className="mb-12">
           <h1 className="text-3xl font-bold text-zinc-900 tracking-tight">Revisiones Preventivas</h1>
           <p className="text-zinc-500 mt-2">Planificación y seguimiento de mantenimientos periódicos.</p>

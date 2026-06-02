@@ -1,13 +1,10 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, FileDigit, Download, Search, CheckCircle2, Circle, Clock, Trash2, Plus, Building2, MapPin, Save, Trash, Edit, Eye } from 'lucide-react'; // Removed unused X
+import { ArrowLeft, FileDigit, Download, Search, CheckCircle2, Circle, Clock, Trash2, Plus, Building2, MapPin, Save, Trash, Edit, Eye } from 'lucide-react';
 import { addAlbaran, updateAlbaran, deleteAlbaran, subscribeAlbaranes, subscribeEmpresas, subscribeTecnicos, subscribeCentros, subscribeClientes, type Albaran, type Cliente, type Centro, type Equipo, type Tecnico, type Empresa } from './firebase';
 import { generarAlbaranPDF } from './pdfGenerator';
 import ConfirmationModal from './ConfirmationModal';
 
 export default function Albaranes() {
-  const navigate = useNavigate();
-
   // Obtener rol del usuario logueado
   const loggedUser = useMemo(() => {
     try {
@@ -280,216 +277,120 @@ export default function Albaranes() {
 
   if (view === 'list') {
     return (
-    <div className="min-h-screen bg-zinc-50 p-4 md:p-8">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-4">
-            <button onClick={() => navigate('/')} className="p-2 bg-white rounded-full border border-zinc-200 hover:bg-zinc-50 text-zinc-600 transition-colors shadow-sm">
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-            <h1 className="text-2xl font-bold text-zinc-900 flex items-center gap-3">
-              <FileDigit className="w-8 h-8 text-violet-500" />
+      <div className="px-4 md:px-8 py-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+          <div className="text-center md:text-left">
+            <h1 className="text-2xl font-bold text-zinc-900 tracking-tight flex items-center justify-center md:justify-start gap-3">
               Registro de Albaranes
               {pendingCount > 0 && (
-                <span className="px-2.5 py-0.5 bg-amber-100 text-amber-700 text-[11px] font-bold rounded-full border border-amber-200 shadow-sm animate-in fade-in zoom-in duration-300">
-                  {pendingCount} {pendingCount === 1 ? 'pendiente' : 'pendientes'}
+                <span className="px-2.5 py-0.5 bg-amber-100 text-amber-700 text-[10px] font-bold rounded-full border border-amber-200">
+                  {pendingCount} pendiente{pendingCount !== 1 ? 's' : ''}
                 </span>
               )}
             </h1>
+            <p className="text-sm text-zinc-500 mt-1">{albaranes.length} albaranes en el sistema.</p>
           </div>
-        </div>
-
-        <div className="flex flex-col md:flex-row gap-4 mb-6">
-          <div className="relative flex-1">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-400" />
-            <input 
-              type="text"
-              placeholder="Buscar por número, tipo trabajo o cliente..."
-              className="w-full pl-12 pr-4 py-3.5 bg-white border border-zinc-200 rounded-2xl focus:ring-2 focus:ring-violet-500/20 outline-none transition-all shadow-sm"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-          {!isVisualizador && (
+          <div className="flex flex-wrap items-center gap-2">
             <button
-              onClick={() => {
-                setEditingId(null);
-                const nextId = generateNextAlbaranId();
-                setForm({
-                  id: nextId,
-                  empresaId: '',
-                  clienteId: '',
-                  centroId: '',
-                  fechaCreacion: new Date().toISOString(),
-                  items: [{ cantidad: 1, concepto: 'Revisión', descripcion: '', precioUnidad: 0, subtotal: 0 }],
-                  nombreFirmante: '',
-                  tecnicoId: '',
-                  facturado: false,
-                  numeroPedido: ''
-                });
-                setView('form');
-              }}
-              className="px-6 py-3.5 bg-black text-white rounded-2xl font-bold text-sm hover:bg-zinc-800 transition-all flex items-center justify-center gap-2 shadow-lg shadow-black/10 active:scale-95 whitespace-nowrap"
+              onClick={() => setShowOnlyPending(!showOnlyPending)}
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg font-medium transition-all text-xs shadow-sm border ${
+                showOnlyPending ? 'bg-amber-100 border-amber-200 text-amber-700' : 'bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-50'
+              }`}
             >
-              <Plus className="w-5 h-5" /> Nuevo Albarán
+              <Clock className="w-3.5 h-3.5" />
+              {showOnlyPending ? 'Pendientes' : 'Todos'}
             </button>
-          )}
-          <button
-            onClick={() => setShowOnlyPending(!showOnlyPending)}
-            className={`px-6 py-3.5 rounded-2xl font-bold text-sm transition-all flex items-center justify-center gap-2 border shadow-sm ${
-              showOnlyPending 
-              ? 'bg-amber-100 border-amber-200 text-amber-700' 
-              : 'bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-50'
-            }`}
-          >
-            <Clock className="w-4 h-4" />
-            {showOnlyPending ? 'Viendo solo pendientes' : 'Ver solo pendientes'}
-          </button>
-        </div>
-
-        <div className="bg-white rounded-3xl border border-zinc-200 shadow-sm overflow-hidden">
-          {/* Cabecera de la lista */}
-          <div className="hidden md:flex items-center gap-4 px-6 py-4 bg-zinc-900 text-white text-[11px] font-bold uppercase tracking-wider">
-            <div className="w-32">Nº Albarán</div>
-            <div className="w-24">Nº Pedido</div>
-            <div className="w-40">Tipo Trabajo</div>
-            <div className="w-32">Fecha</div>
-            <div className="flex-1">Cliente</div>
-            <div className="w-40 text-center">Estado Facturación</div>
-            <div className="w-44 text-right">Acciones</div>
-          </div>
-
-          <div className="divide-y divide-zinc-200">
-            {filtered.length === 0 ? (
-              <div className="p-20 text-center text-zinc-400">
-                No se han encontrado albaranes generados.
-              </div>
-            ) : (
-              filtered.map((alb) => {
-                const cliente = clientes.find(c => c.id === alb.clienteId);
-                const centro = centros.find(c => c.id === alb.centroId); // Removed type assertion
-                const tech = tecnicos.find(t => t.id === alb.tecnicoId); // Removed type assertion
-                const nombreTecnico = tech ? `${tech.nombre} ${tech.apellidos}` : 'N/A'; // Removed type assertion
-
-                return (
-                  <div key={alb.id} className="flex flex-col md:flex-row md:items-center gap-2 md:gap-4 px-4 md:px-6 py-4 md:py-5 hover:bg-zinc-50/50 transition-colors">
-                    <div className="w-full md:w-32 flex justify-between items-center md:block">
-                      <span className="text-[10px] font-bold text-zinc-400 uppercase md:hidden tracking-wider">Nº Albarán</span>
-                      <div className="font-mono font-bold text-zinc-900 text-sm">{alb.id}</div>
-                    </div>
-                    <div className="w-full md:w-24 flex justify-between items-center md:block">
-                      <span className="text-[10px] font-bold text-zinc-400 uppercase md:hidden tracking-wider">Nº Pedido</span>
-                      <div className="text-zinc-600 text-sm">{alb.numeroPedido || '-'}</div>
-                    </div>
-                    <div className="w-full md:w-40 flex justify-between items-center md:block">
-                      <span className="text-[10px] font-bold text-zinc-400 uppercase md:hidden tracking-wider">Tipo Trabajo</span>
-                      <span className="px-2 py-1 bg-violet-50 text-violet-700 rounded-lg text-[10px] font-bold border border-violet-100 uppercase">
-                        {alb.numeroMantenimiento || (alb.items && alb.items.length > 0 ? alb.items[0].concepto : 'MANUAL')}
-                      </span>
-                    </div>
-                    <div className="w-full md:w-32 text-zinc-500 text-sm flex justify-between items-center md:justify-start md:gap-1.5">
-                      <span className="text-[10px] font-bold text-zinc-400 uppercase md:hidden tracking-wider">Fecha</span>
-                      <div className="flex items-center gap-1.5">
-                        <Clock className="w-3.5 h-3.5" />
-                        {new Date(alb.fechaCreacion).toLocaleDateString()}
-                      </div>
-                    </div>
-                    <div className="w-full md:flex-1 py-2 md:py-0 border-y md:border-none border-zinc-50/50 my-1 md:my-0">
-                      <p className="font-bold text-zinc-900 text-sm leading-tight">{cliente?.nombre || 'Desconocido'}</p>
-                      <p className="text-[11px] text-zinc-400 truncate">{centro?.nombre || 'Sin centro'}</p>
-                    </div>
-                    <div className="w-full md:w-40 flex justify-between md:justify-center items-center py-1 md:py-0">
-                      <span className="text-[10px] font-bold text-zinc-400 uppercase md:hidden tracking-wider">Estado</span>
-                      <button
-                        onClick={() => toggleFacturado(alb.id)}
-                        className={`w-full max-w-[140px] py-2 px-3 rounded-xl text-[10px] font-black uppercase tracking-tighter transition-all flex items-center justify-center gap-2 border ${
-                          alb.facturado 
-                          ? 'bg-blue-600 border-blue-700 text-white shadow-sm' 
-                          : 'bg-zinc-100 border-zinc-200 text-zinc-500'
-                        }`}
-                      >
-                        {alb.facturado ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Circle className="w-3.5 h-3.5" />}
-                        {alb.facturado ? 'Facturado' : 'Sin Facturar'}
-                      </button>
-                    </div>
-                    <div className="w-full md:w-44 flex justify-center md:justify-end gap-1 pt-2 md:pt-0">
-                      <button 
-                        onClick={() => handleEditAlbaran(alb)}
-                        className="p-2.5 text-zinc-400 hover:text-violet-600 hover:bg-violet-50 rounded-xl transition-all"
-                        title="Ver albarán"
-                      >
-                        <Eye className="w-5 h-5" />
-                      </button>
-                      <button 
-                        onClick={async () => {
-                          const eqsDelCentro = equipos.filter(e => e.centroId === alb.centroId); // Removed type assertion
-                          if (!cliente) {
-                            alert('No se puede generar el PDF: cliente no encontrado');
-                            return;
-                          }
-                          if (!centro) {
-                            alert('No se puede generar el PDF: centro no encontrado');
-                            return;
-                          }
-                          const empresa = empresas.find(e => e._docId === alb.empresaId);
-                          await generarAlbaranPDF(
-                            cliente as Record<string, any>, 
-                            centro as Record<string, any>, 
-                            eqsDelCentro as Record<string, any>[], 
-                            alb.numeroMantenimiento || alb.id, 
-                            nombreTecnico,
-                            alb.firmaCliente,
-                            alb.firmaTecnico,
-                            alb.nombreFirmante,
-                            alb.items,
-                            empresa as Record<string, any>
-                          );
-                        }}
-                        className="p-2.5 text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100 rounded-xl transition-all"
-                      >
-                        <Download className="w-5 h-5" />
-                      </button>
-                      {!isVisualizador && (
-                        <button 
-                          onClick={() => handleEditAlbaran(alb)}
-                          className="p-2.5 text-zinc-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
-                          title="Editar albarán"
-                        >
-                          <Edit className="w-5 h-5" />
-                        </button>
-                      )}
-                      {!isVisualizador && (
-                        <button 
-                          onClick={() => handleDeleteAlbaran(alb.id)}
-                          className="p-2.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
-                          title="Eliminar albarán"
-                        >
-                          <Trash2 className="w-5 h-5" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })
+            {!isVisualizador && (
+              <button
+                onClick={() => {
+                  setEditingId(null);
+                  const nextId = generateNextAlbaranId();
+                  setForm({ id: nextId, empresaId: '', clienteId: '', centroId: '', fechaCreacion: new Date().toISOString(), items: [{ cantidad: 1, concepto: 'Revisión', descripcion: '', precioUnidad: 0, subtotal: 0 }], nombreFirmante: '', tecnicoId: '', facturado: false, numeroPedido: '' });
+                  setView('form');
+                }}
+                className="flex items-center gap-1.5 bg-black text-white px-4 py-2 rounded-lg font-medium hover:bg-zinc-800 transition-all text-xs shadow-md shadow-black/10"
+              >
+                <Plus className="w-3.5 h-3.5" /> Nuevo Albarán
+              </button>
             )}
           </div>
         </div>
+
+        <div className="relative mb-5">
+          <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none"><Search className="w-4 h-4 text-zinc-400" /></div>
+          <input type="text" className="w-full pl-10 pr-4 py-2.5 bg-white rounded-lg border border-zinc-200 focus:border-blue-900 focus:ring-2 focus:ring-blue-900/10 outline-none transition-all shadow-sm text-sm text-zinc-900 placeholder-zinc-400" placeholder="Buscar por número, tipo trabajo o cliente..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+        </div>
+
+        {filtered.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-zinc-200 p-16 text-center shadow-sm">
+            <div className="w-16 h-16 bg-zinc-100 rounded-2xl flex items-center justify-center mx-auto mb-6"><FileDigit className="w-8 h-8 text-zinc-400" /></div>
+            <h3 className="text-xl font-bold text-zinc-900 mb-2">No hay albaranes</h3>
+            <p className="text-zinc-500 mb-8 max-w-md mx-auto">No se han encontrado albaranes{searchTerm ? ` que coincidan con "${searchTerm}"` : ' generados'}.</p>
+          </div>
+        ) : (
+          <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden">
+            <div className="hidden md:flex items-center bg-[#f9f7f4] border-b-2 border-zinc-200 px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-zinc-500">
+              <div className="w-28">Nº Albarán</div>
+              <div className="w-20">Nº Pedido</div>
+              <div className="flex-1">Cliente</div>
+              <div className="w-32">Centro</div>
+              <div className="w-28">Fecha</div>
+              <div className="w-28 text-center">Estado</div>
+              <div className="w-32 text-right">Acciones</div>
+            </div>
+            <div className="divide-y divide-zinc-100">
+              {filtered.map((alb) => {
+                const cliente = clientes.find(c => c.id === alb.clienteId);
+                const centro = centros.find(c => c.id === alb.centroId);
+                return (
+                  <div key={alb.id} className="flex flex-col md:flex-row md:items-center px-4 py-3.5 hover:bg-zinc-50/80 transition-colors group">
+                    <div className="flex md:hidden items-center justify-between mb-2">
+                      <span className="text-[10px] font-mono font-bold text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded">{alb.id}</span>
+                      <button onClick={() => handleEditAlbaran(alb)} className="p-1.5 text-zinc-400 hover:text-blue-900 hover:bg-blue-50 rounded-lg transition-colors"><Eye className="w-4 h-4" /></button>
+                    </div>
+                    <div className="flex md:hidden">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-zinc-900 truncate">{cliente?.nombre || 'Desconocido'}</p>
+                        <p className="text-xs text-zinc-500">{new Date(alb.fechaCreacion).toLocaleDateString()}</p>
+                      </div>
+                    </div>
+                    <div className="hidden md:flex items-center w-full">
+                      <div className="w-28"><span className="text-[11px] font-mono font-bold text-zinc-500 bg-zinc-100 px-1.5 py-0.5 rounded">{alb.id}</span></div>
+                      <div className="w-20 text-sm text-zinc-600 truncate pr-2">{alb.numeroPedido || '-'}</div>
+                      <div className="flex-1 min-w-0 pr-2"><p className="text-sm font-bold text-zinc-900 truncate">{cliente?.nombre || 'Desconocido'}</p></div>
+                      <div className="w-32 text-sm text-zinc-600 truncate pr-2 flex items-center gap-1"><MapPin className="w-3 h-3 text-zinc-400 shrink-0" />{centro?.nombre || '-'}</div>
+                      <div className="w-28 text-sm text-zinc-600 pr-2">{new Date(alb.fechaCreacion).toLocaleDateString()}</div>
+                      <div className="w-28 flex justify-center pr-2">
+                        <button onClick={() => toggleFacturado(alb.id)} className={`text-[10px] font-bold px-2 py-1 rounded-lg border flex items-center gap-1 ${
+                          alb.facturado ? 'bg-blue-600 border-blue-700 text-white' : 'bg-zinc-100 border-zinc-200 text-zinc-500'
+                        }`}>
+                          {alb.facturado ? <CheckCircle2 className="w-3 h-3" /> : <Circle className="w-3 h-3" />}
+                          {alb.facturado ? 'Facturado' : 'Pendiente'}
+                        </button>
+                      </div>
+                      <div className="w-32 flex items-center justify-end gap-1">
+                        <button onClick={() => handleEditAlbaran(alb)} className="p-1.5 text-zinc-400 hover:text-blue-900 hover:bg-blue-50 rounded-lg transition-colors" title="Ver albarán"><Eye className="w-4 h-4" /></button>
+                        <button onClick={async () => {
+                          const eqsDelCentro = equipos.filter(e => e.centroId === alb.centroId);
+                          if (!cliente || !centro) { alert('No se puede generar el PDF: datos incompletos'); return; }
+                          const empresa = empresas.find(e => e._docId === alb.empresaId);
+                          await generarAlbaranPDF(cliente as any, centro as any, eqsDelCentro as any[], alb.numeroMantenimiento || alb.id, '', alb.firmaCliente, alb.firmaTecnico, alb.nombreFirmante, alb.items, empresa as any);
+                        }} className="p-1.5 text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100 rounded-lg transition-colors" title="Descargar PDF"><Download className="w-4 h-4" /></button>
+                        {!isVisualizador && <button onClick={() => handleEditAlbaran(alb)} className="p-1.5 text-zinc-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors" title="Editar"><Edit className="w-4 h-4" /></button>}
+                        {!isVisualizador && <button onClick={() => handleDeleteAlbaran(alb.id)} className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Eliminar"><Trash2 className="w-4 h-4" /></button>}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {isConfirmModalOpen && albaranIdToDelete && (
+          <ConfirmationModal isOpen={isConfirmModalOpen} onClose={() => setIsConfirmModalOpen(false)} onConfirm={confirmDeleteAlbaran} title="Confirmar Eliminación" message="ATENCIÓN SE PROCEDE A BORRAR EL ELEMENTO Y SUS REGISTROS ¿ CONFIRMA SU PETICIÓN ?" confirmText="Sí, eliminar" cancelText="No, cancelar" />
+        )}
       </div>
-
-      {/* Confirmation Modal */}
-      {isConfirmModalOpen && albaranIdToDelete && (
-        <ConfirmationModal
-          isOpen={isConfirmModalOpen}
-          onClose={() => setIsConfirmModalOpen(false)}
-          onConfirm={confirmDeleteAlbaran}
-          title="Confirmar Eliminación"
-          message="ATENCIÓN SE PROCEDE A BORRAR EL ELEMENTO Y SUS REGISTROS ¿ CONFIRMA SU PETICIÓN ?"
-          confirmText="Sí, eliminar"
-          cancelText="No, cancelar"
-        />
-      )}
-
-    </div>
     );
   }
 

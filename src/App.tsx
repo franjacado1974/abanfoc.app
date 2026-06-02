@@ -1,14 +1,15 @@
-import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
 import { 
   Users, Building2, Calculator, FileText,
   FileCheck, HardHat,
   SearchCheck, Wrench, Receipt, FileDigit, Package, CalendarDays,
-  Settings, X, Plus, Trash2, ShieldCheck, ArrowLeft,
-  TrendingUp, Activity, Clock, AlertTriangle, CheckCircle2
+  X, Plus, Trash2, ShieldCheck, ArrowLeft,
+  Clock
 } from 'lucide-react';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import Clientes from './Clientes';
 import Centros from './Centros';
+import ClientesCentros from './ClientesCentros';
 import Catalogo from './Catalogo';
 import Articulos from './Articulos';
 import Servicios from './Servicios';
@@ -21,7 +22,6 @@ import RevisionChecklist from './RevisionChecklist';
 import Revisiones from './Revisiones';
 import ConfirmationModal from './ConfirmationModal';
 import Sidebar from './components/Sidebar';
-import DetailModal from './components/DetailModal';
 import { verifyUser, addUserToFirestore } from './firebase';
 
 const generateId = () => {
@@ -43,11 +43,13 @@ interface Usuario {
 function Login({ usuarios: _usuarios, onLogin }: { usuarios: Usuario[], onLogin: (user: Usuario) => void }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const LOGO_URL = "/favicon.png";
+
   const [appLogo] = useState(() => {
     try {
-      return localStorage.getItem('firecheck_db_logo') || '/logo.png';
+      return localStorage.getItem('firecheck_db_logo') || LOGO_URL;
     } catch {
-      return '/logo.png';
+      return LOGO_URL;
     }
   });
 
@@ -75,7 +77,7 @@ function Login({ usuarios: _usuarios, onLogin }: { usuarios: Usuario[], onLogin:
     >
       <div className="bg-white/85 backdrop-blur-md p-5 sm:p-6 rounded-2xl shadow-2xl w-full max-w-xs sm:max-w-sm border border-white/20">
         <div className="flex flex-col items-center mb-6">
-          <img src={appLogo} alt="Logo" className="h-12 sm:h-14 md:h-16 mb-4 sm:mb-6 object-contain" />
+          <img src={appLogo} alt="Logo" className="h-12 sm:h-14 md:h-16 mb-4 sm:mb-6 object-contain" onError={(e) => { (e.target as HTMLImageElement).src = '/favicon.png'; }} />
           <h2 className="text-xl sm:text-2xl font-bold text-zinc-900 text-center">acceso al sistema</h2>
           <p className="text-zinc-500 text-sm text-center">introduce tus credenciales para continuar</p>
         </div>
@@ -98,7 +100,7 @@ function Login({ usuarios: _usuarios, onLogin }: { usuarios: Usuario[], onLogin:
           />
           <button type="submit" className="w-full bg-black hover:bg-zinc-800 text-white py-3.5 sm:py-4 rounded-xl sm:rounded-2xl font-bold shadow-lg transition-all active:scale-95">Entrar</button>
         </form>
-        <p className="text-center text-zinc-400 text-xs mt-4">V.02.06.26</p>
+        <p className="text-center text-zinc-400 text-xs mt-4">V03.06.26</p>
       </div>
     </div>
   );
@@ -136,32 +138,6 @@ function ProtectedRoute({ allowedRoles, user, children }: { allowedRoles: string
   return <>{children}</>;
 }
 
-function DashboardMetric({ label, value, Icon, color, subtitle }: { label: string; value: number; Icon: React.ElementType; color: string; subtitle?: string }) {
-  const colorClasses: Record<string, { bg: string; icon: string; text: string; border: string }> = {
-    blue: { bg: 'bg-blue-50', icon: 'text-blue-600', text: 'text-blue-900', border: 'border-blue-200' },
-    emerald: { bg: 'bg-emerald-50', icon: 'text-emerald-600', text: 'text-emerald-900', border: 'border-emerald-200' },
-    amber: { bg: 'bg-amber-50', icon: 'text-amber-600', text: 'text-amber-900', border: 'border-amber-200' },
-    violet: { bg: 'bg-violet-50', icon: 'text-violet-600', text: 'text-violet-900', border: 'border-violet-200' },
-    rose: { bg: 'bg-rose-50', icon: 'text-rose-600', text: 'text-rose-900', border: 'border-rose-200' },
-    cyan: { bg: 'bg-cyan-50', icon: 'text-cyan-600', text: 'text-cyan-900', border: 'border-cyan-200' },
-    orange: { bg: 'bg-orange-50', icon: 'text-orange-600', text: 'text-orange-900', border: 'border-orange-200' },
-  };
-  const c = colorClasses[color] || colorClasses.blue;
-
-  return (
-    <div className={`metric-card ${c.bg} ${c.border}`}>
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-xs font-bold uppercase tracking-wider text-zinc-500">{label}</span>
-        <div className={`w-9 h-9 rounded-xl ${c.bg} flex items-center justify-center ${c.icon}`}>
-          <Icon className="w-5 h-5" />
-        </div>
-      </div>
-      <p className={`text-3xl font-black ${c.text} tracking-tight`}>{value}</p>
-      {subtitle && <p className="text-xs text-zinc-400 mt-1">{subtitle}</p>}
-    </div>
-  );
-}
-
 function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: () => void }) {
   const handleLogout = () => {
     if (confirm('¿Estás seguro de que quieres cerrar la sesión?')) {
@@ -171,11 +147,13 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
   };
 
   const navigate = useNavigate();
+  const LOGO_URL = "/favicon.png";
+
   const [appLogo] = useState(() => {
     try {
-      return localStorage.getItem('firecheck_db_logo') || '/logo.png';
+      return localStorage.getItem('firecheck_db_logo') || LOGO_URL;
     } catch {
-      return '/logo.png';
+      return LOGO_URL;
     }
   });
 
@@ -234,7 +212,6 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
   };
 
   const stats = useMemo(() => getStats(), []);
-  const [currentTime, setCurrentTime] = useState(new Date());
 
   // Settings State
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -273,11 +250,6 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
   // State for confirmation modal
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<{ type: 'tecnico' | 'usuario', id: string } | null>(null);
-
-  useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
 
   const handleAddTecnico = (e: React.FormEvent) => {
     e.preventDefault();
@@ -383,25 +355,6 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
     localStorage.setItem('firecheck_db_usuarios', JSON.stringify(updated));
   };
 
-  const formatDate = (date: Date) => {
-    return new Intl.DateTimeFormat('es-ES', { 
-      weekday: 'long', 
-      day: 'numeric', 
-      month: 'long', 
-      year: 'numeric' 
-    }).format(date);
-  };
-
-  const formatTime = (date: Date) => {
-    return new Intl.DateTimeFormat('es-ES', { 
-      hour: '2-digit', 
-      minute: '2-digit',
-      second: '2-digit'
-    }).format(date);
-  };
-
-  const showConfig = loggedUser?.rol === 'super-administrador' || loggedUser?.rol === 'administrador';
-
   return (
     <div className="flex h-screen bg-[#f8f6f3]">
       <Sidebar user={loggedUser} onLogout={handleLogout} appLogo={appLogo} />
@@ -409,25 +362,10 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
       <main className="flex-1 overflow-y-auto">
         {/* Top Bar */}
         <div className="sticky top-0 z-40 bg-[#f8f6f3]/80 backdrop-blur-md border-b border-zinc-200/60">
-          <div className="flex items-center justify-between px-6 py-4">
-            <div>
+          <div className="flex items-center justify-center px-6 py-4">
+            <div className="text-center">
               <h1 className="text-xl font-bold text-zinc-900">Panel de Control</h1>
               <p className="text-xs text-zinc-500 mt-0.5">Bienvenido, {loggedUser.nombre}</p>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="text-right">
-                <p className="text-xs text-zinc-500 font-medium capitalize">{formatDate(currentTime)}</p>
-                <p className="text-lg font-bold text-zinc-900 tracking-tight">{formatTime(currentTime)}</p>
-              </div>
-              {showConfig && (
-                <button
-                  onClick={() => { setSettingsView('menu'); setIsSettingsOpen(true); }}
-                  className="flex items-center gap-2 bg-white px-4 py-2.5 rounded-xl border border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50 transition-all shadow-sm group"
-                >
-                  <Settings className="w-4 h-4 text-zinc-500 group-hover:rotate-90 transition-transform duration-500" />
-                  <span className="text-sm font-semibold text-zinc-700 hidden sm:inline">Configuración</span>
-                </button>
-              )}
             </div>
           </div>
         </div>
@@ -787,9 +725,10 @@ function PlaceholderPage({ title, bgColor = "bg-zinc-50" }: { title: string, bgC
   );
 }
 
-function PageLayout({ children }: { children: React.ReactNode }) {
+function PageLayout({ user, onLogout, appLogo, children }: { user: Usuario | null; onLogout: () => void; appLogo: string; children: React.ReactNode }) {
   return (
     <div className="flex h-screen bg-[#f8f6f3]">
+      <Sidebar user={user} onLogout={onLogout} appLogo={appLogo} />
       <div className="flex-1 overflow-y-auto">
         {children}
       </div>
@@ -811,13 +750,21 @@ export default function App() {
     } catch { return []; }
   });
 
+  const LOGO_URL = "/favicon.png";
+
   const [appLogo] = useState(() => {
     try {
-      return localStorage.getItem('firecheck_db_logo') || '/logo.png';
+      return localStorage.getItem('firecheck_db_logo') || LOGO_URL;
     } catch {
-      return '/logo.png';
+      return LOGO_URL;
     }
   });
+
+  const handleLogout = () => {
+    setLoggedUser(null);
+    const stored = localStorage.getItem('firecheck_db_usuarios');
+    if (stored) setAvailableUsers(JSON.parse(stored));
+  };
 
   if (!loggedUser) {
     return <Login usuarios={availableUsers} onLogin={setLoggedUser} />;
@@ -826,90 +773,91 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Dashboard loggedUser={loggedUser!} onLogout={() => { 
-          setLoggedUser(null); 
-          const stored = localStorage.getItem('firecheck_db_usuarios');
-          if (stored) setAvailableUsers(JSON.parse(stored));
-        }} />} />
+        <Route path="/" element={<Dashboard loggedUser={loggedUser!} onLogout={handleLogout} />} />
         
+        <Route path="/clientes-centros" element={
+          <ProtectedRoute allowedRoles={['super-administrador', 'administrador', 'editor']} user={loggedUser}>
+            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><ClientesCentros /></PageLayout>
+          </ProtectedRoute>
+        } />
         <Route path="/clientes" element={
           <ProtectedRoute allowedRoles={['super-administrador', 'administrador', 'editor']} user={loggedUser}>
-            <PageLayout><Clientes /></PageLayout>
+            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Clientes /></PageLayout>
           </ProtectedRoute>
         } />
         <Route path="/centros" element={
           <ProtectedRoute allowedRoles={['super-administrador', 'administrador']} user={loggedUser}>
-            <PageLayout><Centros /></PageLayout>
+            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Centros /></PageLayout>
           </ProtectedRoute>
         } />
         <Route path="/presupuestos" element={
           <ProtectedRoute allowedRoles={['super-administrador', 'administrador']} user={loggedUser}>
-            <PlaceholderPage title="Gestión de Presupuestos" bgColor="bg-zinc-50" />
+            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><PlaceholderPage title="Gestión de Presupuestos" bgColor="bg-zinc-50" /></PageLayout>
           </ProtectedRoute>
         } />
         <Route path="/albaranes" element={
           <ProtectedRoute allowedRoles={['super-administrador', 'administrador', 'visualizador']} user={loggedUser}>
-            <PageLayout><Albaranes /></PageLayout>
+            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Albaranes /></PageLayout>
           </ProtectedRoute>
         } />
         <Route path="/facturas" element={
           <ProtectedRoute allowedRoles={['super-administrador', 'administrador']} user={loggedUser}>
-            <PlaceholderPage title="Facturación" bgColor="bg-zinc-50" />
+            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><PlaceholderPage title="Facturación" bgColor="bg-zinc-50" /></PageLayout>
           </ProtectedRoute>
         } />
         <Route path="/partes" element={
           <ProtectedRoute allowedRoles={['super-administrador', 'administrador', 'editor', 'visualizador']} user={loggedUser}>
-            <PageLayout><Partes /></PageLayout>
+            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Partes /></PageLayout>
           </ProtectedRoute>
         } />
         <Route path="/certificados" element={
           <ProtectedRoute allowedRoles={['super-administrador', 'administrador']} user={loggedUser}>
-            <PageLayout><Certificados /></PageLayout>
+            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Certificados /></PageLayout>
           </ProtectedRoute>
         } />
         <Route path="/instalaciones" element={
           <ProtectedRoute allowedRoles={['super-administrador', 'administrador']} user={loggedUser}>
-            <PlaceholderPage title="Instalaciones" bgColor="bg-zinc-50" />
+            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><PlaceholderPage title="Instalaciones" bgColor="bg-zinc-50" /></PageLayout>
           </ProtectedRoute>
         } />
         <Route path="/revisiones" element={
           <ProtectedRoute allowedRoles={['super-administrador', 'administrador']} user={loggedUser}>
-            <PageLayout><Revisiones /></PageLayout>
+            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Revisiones /></PageLayout>
           </ProtectedRoute>
         } />
         <Route path="/reparaciones" element={
           <ProtectedRoute allowedRoles={['super-administrador', 'administrador']} user={loggedUser}>
-            <PlaceholderPage title="Reparaciones y Averías" bgColor="bg-zinc-50" />
+            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><PlaceholderPage title="Reparaciones y Averías" bgColor="bg-zinc-50" /></PageLayout>
           </ProtectedRoute>
         } />
         <Route path="/catalogo" element={
           <ProtectedRoute allowedRoles={['super-administrador', 'administrador', 'editor']} user={loggedUser}>
-            <PageLayout><Catalogo /></PageLayout>
+            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Catalogo /></PageLayout>
           </ProtectedRoute>
         } />
         <Route path="/articulos" element={
           <ProtectedRoute allowedRoles={['super-administrador', 'administrador', 'editor']} user={loggedUser}>
-            <PageLayout><Articulos /></PageLayout>
+            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Articulos /></PageLayout>
           </ProtectedRoute>
         } />
         <Route path="/servicios" element={
           <ProtectedRoute allowedRoles={['super-administrador', 'administrador', 'editor']} user={loggedUser}>
-            <PageLayout><Servicios /></PageLayout>
+            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Servicios /></PageLayout>
           </ProtectedRoute>
         } />
         <Route path="/configuracion-datos" element={
           <ProtectedRoute allowedRoles={['super-administrador', 'administrador']} user={loggedUser}>
-            <PageLayout><ConfiguracionEmpresa /></PageLayout>
+            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><ConfiguracionEmpresa /></PageLayout>
           </ProtectedRoute>
         } />
         <Route path="/partes_trabajo" element={
           <ProtectedRoute allowedRoles={['super-administrador', 'administrador']} user={loggedUser}>
-            <PageLayout><Planificacion /></PageLayout>
+            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Planificacion /></PageLayout>
           </ProtectedRoute>
         } />
         <Route path="/revision-checklist" element={
           <ProtectedRoute allowedRoles={['super-administrador', 'administrador', 'editor']} user={loggedUser}>
-            <PageLayout><RevisionChecklist /></PageLayout>
+            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><RevisionChecklist /></PageLayout>
           </ProtectedRoute>
         } />
       </Routes>

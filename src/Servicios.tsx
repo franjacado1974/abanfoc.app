@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Wrench, Plus, Search, Edit, Trash2, X, Download, Upload } from 'lucide-react';
 import ConfirmationModal from './ConfirmationModal';
 import * as XLSX from 'xlsx';
@@ -14,7 +13,6 @@ export interface Servicio {
 }
 
 export default function Servicios() {
-  const navigate = useNavigate();
   const [servicios, setServicios] = useState<Servicio[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -250,9 +248,6 @@ export default function Servicios() {
   return (
     <div className="min-h-screen bg-fuchsia-50/40 p-6 md:p-12">
       <div className="max-w-5xl mx-auto w-full">
-        <button onClick={() => navigate('/catalogo')} className="text-sm font-medium text-fuchsia-600 hover:text-fuchsia-950 mb-8 flex items-center gap-2 transition-colors">
-          ← Volver a Catálogo
-        </button>
 
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
           <div>
