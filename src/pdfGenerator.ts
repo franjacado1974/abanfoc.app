@@ -689,14 +689,25 @@ export const generarAlbaranPDF = async (
   doc.setFontSize(18);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(40, 40, 40);
-  doc.text('ALBARÁN DE TRABAJO', pageWidth - 14, headerY + 47, { align: 'right' });
+  doc.text('ALBARÁN DE TRABAJO', pageWidth - 14, headerY + 35.5, { align: 'right' });
 
   doc.setFontSize(10);
-  doc.setFont("helvetica", "normal");
   doc.setTextColor(0, 0, 0);
-  doc.text(`Referencia: ${numeroMantenimiento || 'S/R'}`, 14, headerY + 8);
-  doc.text(`Fecha: ${new Date().toLocaleDateString()}`, 14, headerY + 14);
-  doc.text(`Técnico: ${tecnicoNombre || 'N/A'}`, 14, headerY + 20);
+
+  doc.setFont("helvetica", "normal");
+  doc.text('Referencia: ', 14, headerY + 8);
+  doc.setFont("helvetica", "bold");
+  doc.text(numeroMantenimiento || 'S/R', 14 + doc.getTextWidth('Referencia: '), headerY + 8);
+
+  doc.setFont("helvetica", "normal");
+  doc.text('Fecha: ', 14, headerY + 14);
+  doc.setFont("helvetica", "bold");
+  doc.text(new Date().toLocaleDateString(), 14 + doc.getTextWidth('Fecha: '), headerY + 14);
+
+  doc.setFont("helvetica", "normal");
+  doc.text('Técnico: ', 14, headerY + 20);
+  doc.setFont("helvetica", "bold");
+  doc.text(tecnicoNombre || 'N/A', 14 + doc.getTextWidth('Técnico: '), headerY + 20);
 
   // Línea separadora
   doc.setDrawColor(200, 200, 200);
@@ -708,8 +719,9 @@ export const generarAlbaranPDF = async (
   doc.setTextColor(0, 0, 0);
   doc.text('DATOS DE LA INSTALACIÓN:', 14, headerY + 34);
   doc.setFont("helvetica", "normal");
-  doc.text(`${cliente?.nombre || 'Cliente'}`, 14, headerY + 40);
-  doc.text(`${centro?.nombre || 'Centro'} - ${centro?.direccion || ''}`, 14, headerY + 46);
+  doc.text(`${cliente?.nombre || 'Cliente'} - ${centro?.nombre || 'Centro'}`, 14, headerY + 40);
+  doc.text(`${centro?.direccion || ''}`, 14, headerY + 46);
+  doc.text(`${[centro?.poblacion, centro?.provincia].filter(Boolean).join(', ')}`, 14, headerY + 52);
 
   // Si hay items del albarán, usarlos; si no, agrupar equipos por modelo
   let tableData: string[][];
@@ -720,7 +732,7 @@ export const generarAlbaranPDF = async (
     tableData = items.map(item => [
       String(item.cantidad),
       item.concepto || '',
-      item.descripcion || '',
+      (item.descripcion ? item.descripcion.charAt(0).toUpperCase() + item.descripcion.slice(1) : ''),
       item.precioUnidad.toFixed(2) + ' \u20ac',
       item.subtotal.toFixed(2) + ' \u20ac'
     ]);
@@ -767,6 +779,13 @@ export const generarAlbaranPDF = async (
       if (data.section === 'body' && data.row.index >= totalRows) {
         data.cell.styles.fillColor = [255, 255, 255];
         data.cell.styles.fontStyle = 'bold';
+      }
+    },
+    didDrawCell: (data: any) => {
+      if (data.section === 'body' && data.row.index === totalRows) {
+        doc.setDrawColor(180, 180, 180);
+        doc.setLineWidth(0.4);
+        doc.line(data.cell.x, data.cell.y, data.cell.x + data.cell.width, data.cell.y);
       }
     }
   });
