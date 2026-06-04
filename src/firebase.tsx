@@ -854,4 +854,85 @@ export function subscribeAlbaranes(callback: (albaranes: Albaran[]) => void) {
   }
 }
 
+/**
+ * PARTES - operaciones con Firestore (colección "partes").
+ */
+
+export interface ParteFirestore {
+  id: string;
+  centroId: string;
+  nombreCentro?: string;
+  clienteId: string;
+  fechaCreacion: string;
+  tecnicoId: string;
+  empresaId?: string;
+  periodicidad: string;
+  mesesRevision: string;
+  estado: 'Planificado' | 'Descargado (Offline)' | 'Finalizado' | 'Cerrado';
+  tipoTrabajo?: string;
+  numeroMantenimiento?: string;
+  fechaProgramada?: string;
+  _docId?: string;
+}
+
+export async function addParte(parte: ParteFirestore) {
+  try {
+    const parteToSave = { ...parte, updatedAt: new Date().toISOString() };
+    if (parte.id) {
+      const ref = doc(db, 'partes', parte.id);
+      await setDoc(ref, parteToSave);
+      return { ...parteToSave, _docId: parte.id };
+    } else {
+      const col = collection(db, 'partes');
+      const ref = await addDoc(col, parteToSave);
+      return { ...parteToSave, _docId: ref.id, id: ref.id };
+    }
+  } catch (e) {
+    console.error('addParte error:', e);
+    throw e;
+  }
+}
+
+export async function updateParte(id: string, parte: Partial<ParteFirestore>) {
+  try {
+    const ref = doc(db, 'partes', id);
+    await setDoc(ref, { ...parte, updatedAt: new Date().toISOString() }, { merge: true });
+    return { _docId: id, ...parte };
+  } catch (e) {
+    console.error('updateParte error:', e);
+    throw e;
+  }
+}
+
+export async function deleteParte(id: string) {
+  try {
+    const ref = doc(db, 'partes', id);
+    await deleteDoc(ref);
+    return true;
+  } catch (e) {
+    console.error('deleteParte error:', e);
+    throw e;
+  }
+}
+
+export function subscribePartes(callback: (partes: ParteFirestore[]) => void) {
+  try {
+    const col = collection(db, 'partes');
+    const unsub = onSnapshot(col, (snap) => {
+      const items = snap.docs.map(d => {
+        const data = d.data() as any;
+        return { _docId: d.id, id: data?.id ?? d.id, ...data };
+      }) as ParteFirestore[];
+      callback(items);
+    }, (err) => {
+      console.error('subscribePartes error:', err);
+      callback([]);
+    });
+    return unsub;
+  } catch (e) {
+    console.error('subscribePartes error:', e);
+    return () => {};
+  }
+}
+
 export {app, storage, db, analytics};

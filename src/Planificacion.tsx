@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Calendar, ChevronLeft, ChevronRight, Building2, FileText, AlertTriangle, CheckCheck } from 'lucide-react';
+import { addParte, updateParte, subscribePartes } from './firebase';
 
 const MESES = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -41,11 +42,20 @@ export default function Planificacion() {
     };
 
     try {
-      setPartes(safeParse('firecheck_db_partes'));
       setTecnicos(safeParse('firecheck_db_tecnicos'));
       setCentros(safeParse('firecheck_db_centros'));
       setClientes(safeParse('firecheck_db_clientes'));
     } catch (e) { console.error("Error loading data:", e); }
+  }, []);
+
+  // Suscripción en tiempo real a Firestore (colección "partes")
+  useEffect(() => {
+    const unsub = subscribePartes((items) => {
+      const mapped = items.map((d: any) => ({ ...d })) as Parte[];
+      setPartes(mapped);
+      localStorage.setItem('firecheck_db_partes', JSON.stringify(mapped));
+    });
+    return () => unsub();
   }, []);
 
   // Determinar qué tipo de revisión tiene un centro en un mes dado
@@ -110,11 +120,6 @@ export default function Planificacion() {
         })
     : [];
 
-  const savePartes = (updatedPartes: Parte[]) => {
-    setPartes(updatedPartes);
-    localStorage.setItem('firecheck_db_partes', JSON.stringify(updatedPartes));
-  };
-
   const getCalendarDays = () => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
@@ -130,10 +135,10 @@ export default function Planificacion() {
   };
 
   const formatDate = (date: Date) => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}-${month}-${year}`;
   };
 
   const onDragStart = (e: React.DragEvent, parteId: string) => {
@@ -146,7 +151,7 @@ export default function Planificacion() {
     e.dataTransfer.setData('dragType', 'centro');
   };
   const onDragOver = (e: React.DragEvent) => e.preventDefault();
-  const onDrop = (e: React.DragEvent, dateStr: string) => {
+  const onDrop = async (e: React.DragEvent, dateStr: string) => {
     e.preventDefault();
     const dragType = e.dataTransfer.getData('dragType');
     if (dragType === 'centro') {
@@ -154,26 +159,29 @@ export default function Planificacion() {
       const revisionType = e.dataTransfer.getData('revisionType');
       const centro = centros.find(c => c.id === centroId);
       if (!centro) return;
-      const newParte: Parte = {
+      const newParte = {
         id: `PARTE-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
         centroId: centro.id,
+        nombreCentro: centro.nombre || '',
         clienteId: centro.clienteId || '',
         fechaCreacion: new Date().toISOString(),
         tecnicoId: centro.tecnicoId || (tecnicos.length > 0 ? tecnicos[0].id : ''),
         empresaId: centro.empresaId || '',
         periodicidad: revisionType,
         mesesRevision: (centro.mesesRevision || []).join(', '),
-        estado: 'Planificado',
+        estado: 'Planificado' as const,
         fechaProgramada: dateStr,
       };
-      const updated = [...partes, newParte];
-      savePartes(updated);
-      // Mark this centro as used so it can only be dragged once
+      // Guardar en Firestore (la suscripción actualizará el estado local)
+      try { await addParte(newParte as any); } catch (err) { console.error('Error creando parte en Firestore:', err); }
       setUsedCentroIds(prev => [...prev, centroId]);
     } else {
+      // Cambio de fecha: actualizar en Firestore
       const parteId = e.dataTransfer.getData('parteId');
-      const updated = partes.map(p => p.id === parteId ? { ...p, fechaProgramada: dateStr } : p);
-      savePartes(updated);
+      const parte = partes.find(p => p.id === parteId);
+      if (!parte) return;
+      const docId = (parte as any)._docId || parteId;
+      try { await updateParte(docId, { fechaProgramada: dateStr }); } catch (err) { console.error('Error actualizando fecha en Firestore:', err); }
     }
   };
 
@@ -306,10 +314,9 @@ export default function Planificacion() {
                               {centro?.nombre || '...'}
                             </div>
                             <button
-                              onClick={() => {
-                                const updated = partes.map(part => part.id === p.id ? { ...part, fechaProgramada: undefined } : part);
-                                savePartes(updated);
-                                // Allow centro to appear again in search results
+                              onClick={async () => {
+                                const docId = (p as any)._docId || p.id;
+                                try { await updateParte(docId, { fechaProgramada: '' }); } catch (err) { console.error(err); }
                                 if (p.centroId) {
                                   setUsedCentroIds(prev => prev.filter(id => id !== p.centroId));
                                 }
