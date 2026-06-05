@@ -405,9 +405,9 @@ export default function RevisionChecklist() {
                         </div>
                     ) : (
                         sistemasDelCentro.map(sist => (
-                            <div key={sist.id} className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm transition-shadow hover:shadow-md">
-                                {/* Accordion Header */}
-                                <div className="sticky top-[57px] z-10 bg-white px-6 py-4 border-b border-slate-100">
+                            <div key={sist.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm transition-shadow hover:shadow-md">
+                                {/* Accordion Header - sticky respecto al viewport */}
+                                <div className="sticky top-[57px] z-10 bg-white px-6 py-4 border-b border-slate-100 rounded-t-2xl shadow-sm">
                                     <div className="flex items-center justify-between">
                                         <button
                                             type="button"
