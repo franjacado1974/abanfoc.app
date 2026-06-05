@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Save, Building2, Layers, MapPin, FileText, ChevronDown, ChevronRight, Plus, X, CheckCircle2, XCircle, Trash2, AlertTriangle } from 'lucide-react';
 import type { Centro, Parte, Cliente, CentroSistema, EquipoInstalado } from './Centros';
-import { updateEquipoInstalado } from './firebase';
+import { updateEquipoInstalado, subscribePartes, subscribeCentros, subscribeClientes, subscribeCentroSistemas, subscribeEquiposInstalados } from './firebase';
 import ConfirmationModal from './ConfirmationModal';
 
 const CHECKLIST_ITEMS = [
@@ -27,24 +27,12 @@ export default function RevisionChecklist() {
     const location = useLocation();
     const { centroId, parteId } = location.state || {};
 
-    const [centro, setCentro] = useState<Centro | null>(() => {
-        const stored = JSON.parse(localStorage.getItem('firecheck_db_centros') || '[]');
-        return stored.find((c: any) => c.id === (location.state?.centroId)) || null;
-    });
-    const [parte, setParte] = useState<Parte | null>(() => {
-        const stored = JSON.parse(localStorage.getItem('firecheck_db_partes') || '[]');
-        return stored.find((p: any) => p.id === (location.state?.parteId)) || null;
-    });
-    const [sistemasDelCentro, setSistemasDelCentro] = useState<CentroSistema[]>(() => {
-        const stored = JSON.parse(localStorage.getItem('firecheck_db_centro_sistemas') || '[]');
-        return stored.filter((s: any) => s.centroId === (location.state?.centroId));
-    });
-    const [equiposInstalados, setEquiposInstalados] = useState<EquipoInstalado[]>(() => {
-        const stored = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
-        return stored.filter((e: any) => e.centroId === (location.state?.centroId));
-    });
-    const [equiposCatalogo, setEquiposCatalogo] = useState<any[]>(() => JSON.parse(localStorage.getItem('firecheck_db_sistemas_equipos') || '[]'));
-    const [categoriasSistema, setCategoriasSistema] = useState<any[]>(() => JSON.parse(localStorage.getItem('firecheck_db_sistemas_categorias') || '[]'));
+    const [centro, setCentro] = useState<Centro | null>(null);
+    const [parte, setParte] = useState<Parte | null>(null);
+    const [sistemasDelCentro, setSistemasDelCentro] = useState<CentroSistema[]>([]);
+    const [equiposInstalados, setEquiposInstalados] = useState<EquipoInstalado[]>([]);
+    const [equiposCatalogo] = useState<any[]>(() => JSON.parse(localStorage.getItem('firecheck_db_sistemas_equipos') || '[]'));
+    const [categoriasSistema] = useState<any[]>(() => JSON.parse(localStorage.getItem('firecheck_db_sistemas_categorias') || '[]'));
     const [loading, setLoading] = useState(true);
     const [clientes, setClientes] = useState<Cliente[]>(() => JSON.parse(localStorage.getItem('firecheck_db_clientes') || '[]'));
     const [openSistemas, setOpenSistemas] = useState<Record<string, boolean>>({});
@@ -55,6 +43,81 @@ export default function RevisionChecklist() {
 
     const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
     const [equipoIdToDelete, setEquipoIdToDelete] = useState<string | null>(null);
+
+    // ── Carga inicial desde Firestore ──────────────────────────────────────────
+    useEffect(() => {
+        if (!centroId || !parteId) {
+            alert('Faltan datos para iniciar la revisión.');
+            navigate(-1);
+            return;
+        }
+
+        // 1. Cargar clientes
+        const unsubClientes = subscribeClientes((items) => {
+            setClientes(items as Cliente[]);
+            localStorage.setItem('firecheck_db_clientes', JSON.stringify(items));
+        });
+
+        // 2. Cargar centros y encontrar el centro actual
+        const unsubCentros = subscribeCentros((items) => {
+            const found = items.find((c: any) => c.id === centroId) as Centro | undefined;
+            if (found) setCentro(found);
+            localStorage.setItem('firecheck_db_centros', JSON.stringify(items));
+        });
+
+        // 3. Cargar partes y encontrar el parte actual
+        const unsubPartes = subscribePartes((items) => {
+            const found = items.find((p: any) => p.id === parteId) as Parte | undefined;
+            if (found) {
+                setParte(found);
+                // Si está planificado, marcarlo como descargado
+                if (found.estado === 'Planificado') {
+                    const storedPartes = JSON.parse(localStorage.getItem('firecheck_db_partes') || '[]');
+                    const updatedPartes = storedPartes.map((p: any) =>
+                        p.id === parteId ? { ...p, estado: 'Descargado (Offline)' } : p
+                    );
+                    localStorage.setItem('firecheck_db_partes', JSON.stringify(updatedPartes));
+                    setParte({ ...found, estado: 'Descargado (Offline)' });
+                }
+            }
+            localStorage.setItem('firecheck_db_partes', JSON.stringify(items));
+            setLoading(false);
+        });
+
+        // 4. Cargar sistemas del centro
+        const unsubSistemas = subscribeCentroSistemas(centroId, (items: CentroSistema[]) => {
+            setSistemasDelCentro(items);
+            // Inicializar acordeones cerrados
+            setOpenSistemas(prev => {
+                const next = { ...prev };
+                items.forEach(s => { if (!(s.id in next)) next[s.id] = false; });
+                return next;
+            });
+            localStorage.setItem('firecheck_db_centro_sistemas', JSON.stringify(items));
+        });
+
+        return () => {
+            unsubClientes();
+            unsubCentros();
+            unsubPartes();
+            unsubSistemas();
+        };
+    }, [centroId, parteId, navigate]);
+
+    // 5. Cargar equipos de cada sistema en tiempo real
+    useEffect(() => {
+        if (!centroId || sistemasDelCentro.length === 0) return;
+
+        const unsubs = sistemasDelCentro.map(sist =>
+            subscribeEquiposInstalados(centroId, sist.id, (items: EquipoInstalado[]) => {
+                setEquiposInstalados(prev => {
+                    const otros = prev.filter(e => e.sistemaId !== sist.id);
+                    return [...otros, ...items];
+                });
+            })
+        );
+        return () => unsubs.forEach(u => u());
+    }, [centroId, sistemasDelCentro.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const saveEquiposProgress = async (currentEquipos: EquipoInstalado[] = equiposInstalados) => {
         const allEquipos = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
@@ -90,7 +153,6 @@ export default function RevisionChecklist() {
         const itemBase = equiposCatalogo.find(e => e.id === selectedCatalogItem);
         if (!itemBase) return;
 
-        // Calcular correlativo para añadir desde catálogo
         const eqDelSist = equiposInstalados.filter(eq => eq.sistemaId === sistemaId);
         let startNum = 1;
         if (eqDelSist.length > 0) {
@@ -104,12 +166,11 @@ export default function RevisionChecklist() {
                 id: `EQ-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
                 centroId: centroId,
                 sistemaId: sistemaId,
-                codigo: (startNum + i).toString().padStart(2, '0'), // Asignación correlativa automática
+                codigo: (startNum + i).toString().padStart(2, '0'),
                 nombre: itemBase.nombre,
                 ubicacion: '',
                 placa: '',
                 revisado: false,
-                // Initialize all checks to true by default
                 checkAcceso: true, checkAltura: true, checkSoporte: true, checkSenalizacion: true, checkManguera: true,
                 checkPeso: true, checkManometro: true, checkMarcado: true, checkEtiquetas: true, checkRetimbre: true,
                 checkRiesgo: true, checkDistancia: true, checkPasador: true, checkMovilidad: true
@@ -121,55 +182,6 @@ export default function RevisionChecklist() {
         saveEquiposProgress(updatedEquipos);
         closeAddModal();
     };
-
-    useEffect(() => {
-        if (!centroId || !parteId) {
-            alert('Faltan datos para iniciar la revisión.');
-            navigate('/partes');
-            return;
-        }
-
-        try {
-            const storedCentros = JSON.parse(localStorage.getItem('firecheck_db_centros') || '[]');
-            const storedPartes = JSON.parse(localStorage.getItem('firecheck_db_partes') || '[]');
-            const storedSistemas = JSON.parse(localStorage.getItem('firecheck_db_centro_sistemas') || '[]');
-            const storedEquipos = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
-            const storedClientes = JSON.parse(localStorage.getItem('firecheck_db_clientes') || '[]');
-            const storedCat = JSON.parse(localStorage.getItem('firecheck_db_sistemas_equipos') || '[]');
-            const storedCategories = JSON.parse(localStorage.getItem('firecheck_db_sistemas_categorias') || '[]');
-
-            const currentCentro = storedCentros.find((c: any) => c.id === centroId);
-            const currentParte = storedPartes.find((p: any) => p.id === parteId);
-            const sistemas = storedSistemas.filter((s: CentroSistema) => s.centroId === centroId);
-            const equipos = storedEquipos.filter((e: EquipoInstalado) => e.centroId === centroId);
-
-            setCentro(currentCentro);
-            setParte(currentParte);
-            setSistemasDelCentro(sistemas);
-            setEquiposInstalados(equipos);
-            setEquiposCatalogo(storedCat);
-            setCategoriasSistema(storedCategories);
-            setClientes(storedClientes);
-            const initialOpen: Record<string, boolean> = {};
-            sistemas.forEach((s: CentroSistema) => { initialOpen[s.id] = false; });
-            setOpenSistemas(initialOpen);
-
-            if (currentParte && currentParte.estado === 'Planificado') {
-                const updatedPartes = storedPartes.map((p: any) =>
-                    p.id === parteId ? { ...p, estado: 'Descargado (Offline)' } : p
-                );
-                localStorage.setItem('firecheck_db_partes', JSON.stringify(updatedPartes));
-                setParte({ ...currentParte, estado: 'Descargado (Offline)' });
-            }
-
-        } catch (e) {
-            console.error("Error loading data for checklist:", e);
-            alert('Error al cargar los datos de la revisión.');
-            navigate('/partes');
-        } finally {
-            setLoading(false);
-        }
-    }, [centroId, parteId, navigate]);
 
     const handleCheckChange = (equipoId: string, checkKey: keyof EquipoInstalado, value: boolean) => {
         setEquiposInstalados(prevEquipos =>
@@ -198,7 +210,7 @@ export default function RevisionChecklist() {
         updateParte({ estado: 'Finalizado', numeroMantenimiento: numMant });
 
         alert('Revisión finalizada y guardada.');
-        navigate('/partes');
+        navigate(-1);
     };
 
     const handlePauseRevision = () => {
@@ -208,7 +220,7 @@ export default function RevisionChecklist() {
         updateParte({ estado: 'Descargado (Offline)' });
 
         alert('Revisión pausada. Todos los datos se han guardado.');
-        navigate('/partes');
+        navigate(-1);
     };
 
     const handleDeleteEquipo = (id: string) => {
@@ -228,17 +240,13 @@ export default function RevisionChecklist() {
     };
 
     const toggleSistema = (sistemaId: string) => {
-        setOpenSistemas(prev => {
-            const isCurrentlyOpen = prev[sistemaId];
-            return { ...prev, [sistemaId]: !isCurrentlyOpen };
-        });
+        setOpenSistemas(prev => ({ ...prev, [sistemaId]: !prev[sistemaId] }));
     };
 
     const openAddModal = (sistemaId: string) => {
         setAddSistemaId(sistemaId);
         setSelectedCatalogItem('');
-        
-        // Calcular correlativo para pre-rellenar el campo manual
+
         const eqDelSist = equiposInstalados.filter(eq => eq.sistemaId === sistemaId);
         let nextCode = '01';
         if (eqDelSist.length > 0) {
@@ -273,20 +281,9 @@ export default function RevisionChecklist() {
             ubicacion: newEquipo.ubicacion.trim(),
             placa: newEquipo.placa.trim(),
             revisado: false,
-            checkAcceso: true,
-            checkAltura: true,
-            checkSoporte: true,
-            checkSenalizacion: true,
-            checkManguera: true,
-            checkPeso: true,
-            checkManometro: true,
-            checkMarcado: true,
-            checkEtiquetas: true,
-            checkRetimbre: true,
-            checkRiesgo: true,
-            checkDistancia: true,
-            checkPasador: true,
-            checkMovilidad: true
+            checkAcceso: true, checkAltura: true, checkSoporte: true, checkSenalizacion: true, checkManguera: true,
+            checkPeso: true, checkManometro: true, checkMarcado: true, checkEtiquetas: true, checkRetimbre: true,
+            checkRiesgo: true, checkDistancia: true, checkPasador: true, checkMovilidad: true
         };
 
         const updatedEquipos = [...equiposInstalados, nuevoEquipo];
@@ -346,15 +343,15 @@ export default function RevisionChecklist() {
     if (!centro || !parte) {
         return (
             <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-                <div className="bg-white rounded-2xl p-8 shadow-sm border border-red-100 text-center max-w-md">
-                    <XCircle className="w-10 h-10 text-red-400 mx-auto mb-3" />
-                    <p className="text-red-600 font-medium">Error: No se pudo cargar la información del centro o parte.</p>
+                <div className="bg-white rounded-2xl p-8 shadow-sm border border-amber-100 text-center max-w-md">
+                    <div className="w-8 h-8 border-2 border-amber-300 border-t-amber-600 rounded-full animate-spin mx-auto mb-4" />
+                    <p className="text-amber-700 font-medium">Cargando datos del parte...</p>
+                    <p className="text-xs text-zinc-400 mt-2">Conectando con Firestore</p>
                 </div>
             </div>
         );
     }
 
-    // Movemos esto aquí para evitar errores si centro es null
     const clientInfo = clientes.find(cl => cl.id === centro.clienteId);
     const currentAddSistema = sistemasDelCentro.find(s => s.id === addSistemaId);
     const filteredCatalog = currentAddSistema ? getFilteredCatalog(currentAddSistema.tipo || currentAddSistema.familia || '') : [];
@@ -365,10 +362,10 @@ export default function RevisionChecklist() {
             <div className="sticky top-0 z-20 bg-white/80 backdrop-blur-md border-b border-slate-200 px-6 py-3">
                 <div className="max-w-5xl mx-auto flex items-center justify-between">
                     <button
-                        onClick={() => navigate('/partes')}
+                        onClick={() => navigate(-1)}
                         className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-slate-800 transition-colors px-3 py-1.5 rounded-lg hover:bg-slate-100"
                     >
-                        <ArrowLeft className="w-4 h-4" /> Volver a Partes
+                        <ArrowLeft className="w-4 h-4" /> Volver
                     </button>
                     <span className="text-xs font-semibold text-slate-400 uppercase tracking-widest">Revisión técnica</span>
                 </div>
@@ -409,7 +406,7 @@ export default function RevisionChecklist() {
                     ) : (
                         sistemasDelCentro.map(sist => (
                             <div key={sist.id} className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm transition-shadow hover:shadow-md">
-                                {/* Accordion Header - Sticky */}
+                                {/* Accordion Header */}
                                 <div className="sticky top-[57px] z-10 bg-white px-6 py-4 border-b border-slate-100">
                                     <div className="flex items-center justify-between">
                                         <button
@@ -433,12 +430,8 @@ export default function RevisionChecklist() {
                                             {openSistemas[sist.id] && (
                                                 <button
                                                     type="button"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        openAddModal(sist.id);
-                                                    }}
+                                                    onClick={(e) => { e.stopPropagation(); openAddModal(sist.id); }}
                                                     className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-bold transition-colors border border-indigo-200"
-                                                    title="Añadir otro equipo a este sistema"
                                                 >
                                                     <Plus className="w-3.5 h-3.5" /> Añadir
                                                 </button>
@@ -449,11 +442,7 @@ export default function RevisionChecklist() {
                                                 </span>
                                             )}
                                             <div className={`w-7 h-7 rounded-full flex items-center justify-center transition-colors ${openSistemas[sist.id] ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-50 text-slate-400'}`}>
-                                                {openSistemas[sist.id] ? (
-                                                    <ChevronDown className="w-4 h-4" />
-                                                ) : (
-                                                    <ChevronRight className="w-4 h-4" />
-                                                )}
+                                                {openSistemas[sist.id] ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                                             </div>
                                         </div>
                                     </div>
@@ -466,147 +455,139 @@ export default function RevisionChecklist() {
                                             <p className="text-sm text-slate-500 mb-5 px-1">{sist.descripcion}</p>
                                         )}
 
-                                        {/* Add Equipment Button */}
                                         <div className="mb-5">
                                             <button
                                                 type="button"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    openAddModal(sist.id);
-                                                }}
+                                                onClick={(e) => { e.stopPropagation(); openAddModal(sist.id); }}
                                                 className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold transition-all shadow-sm shadow-indigo-200"
                                             >
                                                 <Plus className="w-4 h-4" /> Añadir equipo
                                             </button>
                                         </div>
 
-                                        {/* Equipment List */}
                                         <div className="space-y-4">
                                             {(() => {
                                                 const filteredEqs = equiposInstalados.filter(eq => eq.sistemaId === sist.id);
                                                 return filteredEqs.length === 0 ? (
-                                                <div className="text-center py-10 bg-slate-50 rounded-xl border border-slate-100 border-dashed">
-                                                    <Layers className="w-8 h-8 text-slate-200 mx-auto mb-2" />
-                                                    <p className="text-sm text-slate-400 font-medium">No hay equipos instalados en este sistema.</p>
-                                                </div>
-                                            ) : (
-                                                filteredEqs.map((eq, i) => {
-                                                    const algunCheckRojo = CHECKLIST_ITEMS.some((item) => eq[item.key as keyof EquipoInstalado] === false);
-                                                    const anomaliaObligatoriaVacia = algunCheckRojo && (!eq.anomalias || eq.anomalias.trim() === '');
-                                                    const stats = getCheckStats(eq);
+                                                    <div className="text-center py-10 bg-slate-50 rounded-xl border border-slate-100 border-dashed">
+                                                        <Layers className="w-8 h-8 text-slate-200 mx-auto mb-2" />
+                                                        <p className="text-sm text-slate-400 font-medium">No hay equipos instalados en este sistema.</p>
+                                                    </div>
+                                                ) : (
+                                                    filteredEqs.map((eq, i) => {
+                                                        const algunCheckRojo = CHECKLIST_ITEMS.some((item) => eq[item.key as keyof EquipoInstalado] === false);
+                                                        const anomaliaObligatoriaVacia = algunCheckRojo && (!eq.anomalias || eq.anomalias.trim() === '');
+                                                        const stats = getCheckStats(eq);
 
-                                                    return (
-                                                    <div key={eq.id} className={`rounded-xl border transition-all ${algunCheckRojo ? 'bg-red-50/30 border-red-200' : 'bg-slate-50 border-slate-150'}`}>
-                                                        <div className="px-4 py-3 flex flex-wrap items-center justify-between gap-2">
-                                                            <div className="flex flex-wrap items-center gap-2">
-                                                                <span className="px-3 py-1 bg-black text-white text-sm font-mono font-bold rounded-lg shadow-md min-w-[36px] text-center">
-                                                                    {eq.codigo || (i + 1).toString().padStart(2, '0')}
-                                                                </span>
-                                                                <span className="text-sm font-semibold text-slate-700">
-                                                                    {eq.nombre}
-                                                                    {eq.placa && <span className="text-xs text-slate-400 font-medium ml-1"> / #{eq.placa}</span>}
-                                                                    {eq.ubicacion && (
-                                                                        <span className="text-xs text-slate-400 font-medium inline-flex items-center gap-1 ml-1"> / <MapPin className="w-3 h-3 text-slate-400" />{eq.ubicacion}</span>
-                                                                    )}
-                                                                    {eq.fechaFabricacion && (
-                                                                        <span className="text-xs text-slate-400 font-medium ml-1"> / F. Fabricación: {eq.fechaFabricacion.split('-').reverse().join('-')}</span>
-                                                                    )}
-                                                                    {eq.ultimoRetimbre && (
-                                                                        <span className="text-xs text-slate-400 font-medium ml-1"> / F. Retimbre: {eq.ultimoRetimbre.split('-').reverse().join('-')}</span>
-                                                                    )}
-                                                                </span>
-                                                            </div>
-                                                            <div className="flex items-center gap-2 text-xs">
-                                                                <div className="flex items-center gap-1.5 mr-2 pr-2 border-r border-slate-200">
-                                                                    <span className="flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded-lg font-medium">
-                                                                        <CheckCircle2 className="w-3 h-3" /> {stats.ok}
-                                                                    </span>
-                                                                    {stats.fail > 0 && (
-                                                                        <span className="flex items-center gap-1 px-2 py-1 bg-red-100 text-red-700 rounded-lg font-medium">
-                                                                            <XCircle className="w-3 h-3" /> {stats.fail}
+                                                        return (
+                                                            <div key={eq.id} className={`rounded-xl border transition-all ${algunCheckRojo ? 'bg-red-50/30 border-red-200' : 'bg-slate-50 border-slate-150'}`}>
+                                                                <div className="px-4 py-3 flex flex-wrap items-center justify-between gap-2">
+                                                                    <div className="flex flex-wrap items-center gap-2">
+                                                                        <span className="px-3 py-1 bg-black text-white text-sm font-mono font-bold rounded-lg shadow-md min-w-[36px] text-center">
+                                                                            {eq.codigo || (i + 1).toString().padStart(2, '0')}
                                                                         </span>
-                                                                    )}
-                                                                    {stats.pending > 0 && (
-                                                                        <span className="px-2 py-1 bg-slate-200 text-slate-500 rounded-lg font-medium">
-                                                                            {stats.pending} pend.
+                                                                        <span className="text-sm font-semibold text-slate-700">
+                                                                            {eq.nombre}
+                                                                            {eq.placa && <span className="text-xs text-slate-400 font-medium ml-1"> / #{eq.placa}</span>}
+                                                                            {eq.ubicacion && (
+                                                                                <span className="text-xs text-slate-400 font-medium inline-flex items-center gap-1 ml-1"> / <MapPin className="w-3 h-3 text-slate-400" />{eq.ubicacion}</span>
+                                                                            )}
+                                                                            {eq.fechaFabricacion && (
+                                                                                <span className="text-xs text-slate-400 font-medium ml-1"> / F. Fabricación: {eq.fechaFabricacion.split('-').reverse().join('-')}</span>
+                                                                            )}
+                                                                            {eq.ultimoRetimbre && (
+                                                                                <span className="text-xs text-slate-400 font-medium ml-1"> / F. Retimbre: {eq.ultimoRetimbre.split('-').reverse().join('-')}</span>
+                                                                            )}
                                                                         </span>
-                                                                    )}
-                                                                </div>
-                                                                <button
-                                                                    onClick={() => handleDeleteEquipo(eq.id)}
-                                                                    className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                                                    title="Eliminar equipo de la revisión"
-                                                                >
-                                                                    <Trash2 className="w-4 h-4" />
-                                                                </button>
-                                                            </div>
-                                                        </div>
-
-                                                        <div className="px-4 pb-3">
-                                                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-3 gap-y-1.5">
-                                                                {CHECKLIST_ITEMS.map(item => {
-                                                                    const isChecked = eq[item.key as keyof EquipoInstalado] === true;
-                                                                    const isUnchecked = eq[item.key as keyof EquipoInstalado] === false;
-                                                                    return (
-                                                                        <label
-                                                                            key={item.key}
-                                                                            className={`flex items-center gap-2 cursor-pointer text-xs px-2 py-1.5 rounded-lg transition-all select-none ${
-                                                                                isUnchecked
-                                                                                    ? 'text-red-600 font-semibold bg-red-50 hover:bg-red-100'
-                                                                                    : isChecked
-                                                                                    ? 'text-green-700 font-medium bg-green-50 hover:bg-green-100'
-                                                                                    : 'text-slate-500 bg-white hover:bg-slate-100 border border-slate-150'
-                                                                            }`}
+                                                                    </div>
+                                                                    <div className="flex items-center gap-2 text-xs">
+                                                                        <div className="flex items-center gap-1.5 mr-2 pr-2 border-r border-slate-200">
+                                                                            <span className="flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded-lg font-medium">
+                                                                                <CheckCircle2 className="w-3 h-3" /> {stats.ok}
+                                                                            </span>
+                                                                            {stats.fail > 0 && (
+                                                                                <span className="flex items-center gap-1 px-2 py-1 bg-red-100 text-red-700 rounded-lg font-medium">
+                                                                                    <XCircle className="w-3 h-3" /> {stats.fail}
+                                                                                </span>
+                                                                            )}
+                                                                            {stats.pending > 0 && (
+                                                                                <span className="px-2 py-1 bg-slate-200 text-slate-500 rounded-lg font-medium">
+                                                                                    {stats.pending} pend.
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+                                                                        <button
+                                                                            onClick={() => handleDeleteEquipo(eq.id)}
+                                                                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                                                                         >
-                                                                            <input
-                                                                                type="checkbox"
-                                                                                checked={!!eq[item.key as keyof EquipoInstalado]}
-                                                                                onChange={(e) => handleCheckChange(eq.id, item.key as keyof EquipoInstalado, e.target.checked)}
-                                                                                className={`w-3.5 h-3.5 rounded cursor-pointer ${
-                                                                                    isUnchecked
-                                                                                        ? 'text-red-500 border-red-300 focus:ring-red-400'
-                                                                                        : isChecked
-                                                                                        ? 'text-green-500 border-green-300 focus:ring-green-400'
-                                                                                        : 'text-slate-400 border-slate-300 focus:ring-slate-400'
-                                                                                }`}
-                                                                            />
-                                                                            {item.label}
-                                                                            {isChecked && <CheckCircle2 className="w-3 h-3 text-green-500 ml-auto" />}
-                                                                            {isUnchecked && <XCircle className="w-3 h-3 text-red-400 ml-auto" />}
-                                                                        </label>
-                                                                    );
-                                                                })}
-                                                            </div>
-                                                        </div>
+                                                                            <Trash2 className="w-4 h-4" />
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
 
-                                                        <div className={`px-4 pb-4 ${algunCheckRojo ? 'border-t border-red-200 pt-3' : 'border-t border-slate-200 pt-3'}`}>
-                                                            <label className={`block text-xs font-semibold mb-1.5 ${
-                                                                anomaliaObligatoriaVacia ? 'text-red-600' : 'text-slate-600'
-                                                            }`}>
-                                                                Anomalías / Observaciones {algunCheckRojo ? <span className="text-red-500">(obligatorio)</span> : ''}
-                                                            </label>
-                                                            <textarea
-                                                                value={eq.anomalias || ''}
-                                                                onChange={(e) => setEquiposInstalados(prevEquipos =>
-                                                                    prevEquipos.map(currEq =>
-                                                                        currEq.id === eq.id ? { ...currEq, anomalias: e.target.value } : currEq
-                                                                    )
-                                                                )}
-                                                                className={`w-full px-3 py-2.5 rounded-lg text-sm resize-none outline-none transition-all ${
-                                                                    anomaliaObligatoriaVacia
-                                                                        ? 'bg-red-50 border-2 border-red-300 text-red-700 placeholder-red-400 focus:ring-2 focus:ring-red-500/20'
-                                                                        : 'bg-white border border-slate-200 text-slate-700 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500'
-                                                                }`}
-                                                                rows={2}
-                                                                placeholder={algunCheckRojo ? 'Obligatorio: describe la anomalía encontrada...' : 'Añadir anomalías, observaciones o notas...'}
-                                                            />
-                                                         </div>
-                                                     </div>
-                                                  );
-                                              })
-                                          )
-                                      })()}
-                                         </div>
+                                                                <div className="px-4 pb-3">
+                                                                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-3 gap-y-1.5">
+                                                                        {CHECKLIST_ITEMS.map(item => {
+                                                                            const isChecked = eq[item.key as keyof EquipoInstalado] === true;
+                                                                            const isUnchecked = eq[item.key as keyof EquipoInstalado] === false;
+                                                                            return (
+                                                                                <label
+                                                                                    key={item.key}
+                                                                                    className={`flex items-center gap-2 cursor-pointer text-xs px-2 py-1.5 rounded-lg transition-all select-none ${
+                                                                                        isUnchecked
+                                                                                            ? 'text-red-600 font-semibold bg-red-50 hover:bg-red-100'
+                                                                                            : isChecked
+                                                                                            ? 'text-green-700 font-medium bg-green-50 hover:bg-green-100'
+                                                                                            : 'text-slate-500 bg-white hover:bg-slate-100 border border-slate-150'
+                                                                                    }`}
+                                                                                >
+                                                                                    <input
+                                                                                        type="checkbox"
+                                                                                        checked={!!eq[item.key as keyof EquipoInstalado]}
+                                                                                        onChange={(e) => handleCheckChange(eq.id, item.key as keyof EquipoInstalado, e.target.checked)}
+                                                                                        className={`w-3.5 h-3.5 rounded cursor-pointer ${
+                                                                                            isUnchecked
+                                                                                                ? 'text-red-500 border-red-300 focus:ring-red-400'
+                                                                                                : isChecked
+                                                                                                ? 'text-green-500 border-green-300 focus:ring-green-400'
+                                                                                                : 'text-slate-400 border-slate-300 focus:ring-slate-400'
+                                                                                        }`}
+                                                                                    />
+                                                                                    {item.label}
+                                                                                    {isChecked && <CheckCircle2 className="w-3 h-3 text-green-500 ml-auto" />}
+                                                                                    {isUnchecked && <XCircle className="w-3 h-3 text-red-400 ml-auto" />}
+                                                                                </label>
+                                                                            );
+                                                                        })}
+                                                                    </div>
+                                                                </div>
+
+                                                                <div className={`px-4 pb-4 ${algunCheckRojo ? 'border-t border-red-200 pt-3' : 'border-t border-slate-200 pt-3'}`}>
+                                                                    <label className={`block text-xs font-semibold mb-1.5 ${anomaliaObligatoriaVacia ? 'text-red-600' : 'text-slate-600'}`}>
+                                                                        Anomalías / Observaciones {algunCheckRojo ? <span className="text-red-500">(obligatorio)</span> : ''}
+                                                                    </label>
+                                                                    <textarea
+                                                                        value={eq.anomalias || ''}
+                                                                        onChange={(e) => setEquiposInstalados(prevEquipos =>
+                                                                            prevEquipos.map(currEq =>
+                                                                                currEq.id === eq.id ? { ...currEq, anomalias: e.target.value } : currEq
+                                                                            )
+                                                                        )}
+                                                                        className={`w-full px-3 py-2.5 rounded-lg text-sm resize-none outline-none transition-all ${
+                                                                            anomaliaObligatoriaVacia
+                                                                                ? 'bg-red-50 border-2 border-red-300 text-red-700 placeholder-red-400 focus:ring-2 focus:ring-red-500/20'
+                                                                                : 'bg-white border border-slate-200 text-slate-700 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500'
+                                                                        }`}
+                                                                        rows={2}
+                                                                        placeholder={algunCheckRojo ? 'Obligatorio: describe la anomalía encontrada...' : 'Añadir anomalías, observaciones o notas...'}
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })
+                                                );
+                                            })()}
+                                        </div>
                                     </div>
                                 )}
                             </div>
@@ -641,7 +622,7 @@ export default function RevisionChecklist() {
                                 <X className="w-5 h-5" />
                             </button>
                         </div>
-                        
+
                         <div className="overflow-y-auto p-6">
                             <div className="space-y-4">
                                 <div>
@@ -657,7 +638,7 @@ export default function RevisionChecklist() {
                                         ))}
                                     </select>
                                 </div>
-                                
+
                                 {selectedCatalogItem && (
                                     <div>
                                         <label className="block text-xs font-semibold text-slate-500 mb-1.5">Cantidad</label>
@@ -669,49 +650,25 @@ export default function RevisionChecklist() {
                                         />
                                     </div>
                                 )}
-                                
+
                                 <div className="border-t border-slate-100 pt-4">
                                     <p className="text-xs font-semibold text-slate-400 mb-3 uppercase tracking-wider">O introduce los datos manualmente</p>
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                         <div>
                                             <label className="block text-xs font-semibold text-slate-500 mb-1.5">Código</label>
-                                            <input
-                                                type="text"
-                                                value={newEquipo.codigo}
-                                                onChange={(e) => setNewEquipo(prev => ({ ...prev, codigo: e.target.value }))}
-                                                className="w-full px-3 py-2.5 bg-white rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
-                                                placeholder=""
-                                            />
+                                            <input type="text" value={newEquipo.codigo} onChange={(e) => setNewEquipo(prev => ({ ...prev, codigo: e.target.value }))} className="w-full px-3 py-2.5 bg-white rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" />
                                         </div>
                                         <div>
                                             <label className="block text-xs font-semibold text-slate-500 mb-1.5">Nombre</label>
-                                            <input
-                                                type="text"
-                                                value={newEquipo.nombre}
-                                                onChange={(e) => setNewEquipo(prev => ({ ...prev, nombre: e.target.value }))}
-                                                className="w-full px-3 py-2.5 bg-white rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
-                                                placeholder="Ej: Extintor CO2 5kg"
-                                            />
+                                            <input type="text" value={newEquipo.nombre} onChange={(e) => setNewEquipo(prev => ({ ...prev, nombre: e.target.value }))} className="w-full px-3 py-2.5 bg-white rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" placeholder="Ej: Extintor CO2 5kg" />
                                         </div>
                                         <div>
                                             <label className="block text-xs font-semibold text-slate-500 mb-1.5">Ubicación</label>
-                                            <input
-                                                type="text"
-                                                value={newEquipo.ubicacion}
-                                                onChange={(e) => setNewEquipo(prev => ({ ...prev, ubicacion: e.target.value }))}
-                                                className="w-full px-3 py-2.5 bg-white rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
-                                                placeholder="Ej: Planta baja, entrada"
-                                            />
+                                            <input type="text" value={newEquipo.ubicacion} onChange={(e) => setNewEquipo(prev => ({ ...prev, ubicacion: e.target.value }))} className="w-full px-3 py-2.5 bg-white rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" placeholder="Ej: Planta baja, entrada" />
                                         </div>
                                         <div>
                                             <label className="block text-xs font-semibold text-slate-500 mb-1.5">Placa</label>
-                                            <input
-                                                type="text"
-                                                value={newEquipo.placa}
-                                                onChange={(e) => setNewEquipo(prev => ({ ...prev, placa: e.target.value }))}
-                                                className="w-full px-3 py-2.5 bg-white rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
-                                                placeholder="Ej: PL-12345"
-                                            />
+                                            <input type="text" value={newEquipo.placa} onChange={(e) => setNewEquipo(prev => ({ ...prev, placa: e.target.value }))} className="w-full px-3 py-2.5 bg-white rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" placeholder="Ej: PL-12345" />
                                         </div>
                                     </div>
                                 </div>
@@ -719,11 +676,7 @@ export default function RevisionChecklist() {
                         </div>
 
                         <div className="px-6 py-4 border-t border-slate-100 flex gap-3 shrink-0">
-                            <button
-                                type="button"
-                                onClick={closeAddModal}
-                                className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100 transition-colors"
-                            >
+                            <button type="button" onClick={closeAddModal} className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100 transition-colors">
                                 Cancelar
                             </button>
                             <button
@@ -731,7 +684,7 @@ export default function RevisionChecklist() {
                                 onClick={() => {
                                     if (!addSistemaId) return;
                                     if (selectedCatalogItem) {
-                                        handleAddFromCatalog(addSistemaId); // Corrected call
+                                        handleAddFromCatalog(addSistemaId);
                                     } else if (newEquipo.codigo.trim() && newEquipo.nombre.trim()) {
                                         handleAddEquipo(addSistemaId);
                                     } else {

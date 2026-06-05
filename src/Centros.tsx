@@ -1,11 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/set-state-in-effect */
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, Save, Plus, Search, Edit, Trash2, MapPin, Layers, X, Copy, AlertTriangle, GripHorizontal, Upload, Download, Building2, UserCheck, Eye, Phone, Mail, Users, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Save, Plus, Search, Edit, Trash2, MapPin, Layers, X, Copy, AlertTriangle, Upload, Download, Building2, UserCheck, Eye, Phone, Mail, Users, ChevronRight } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors, closestCenter } from '@dnd-kit/core';
-import { arrayMove, SortableContext, rectSortingStrategy, useSortable, sortableKeyboardCoordinates } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
 import { CATEGORIAS_POR_DEFECTO, getIconForSistema } from './Sistemas';
 import { addCentro, updateCentro, deleteCentro, subscribeCentros, subscribeFamilias, subscribeArticulos, subscribeTecnicos, subscribeEmpresas, addCentroSistema, deleteCentroSistema, subscribeCentroSistemas, addEquipoInstalado, updateEquipoInstalado, deleteEquipoInstalado, subscribeEquiposInstalados, sistemaToSlug } from './firebase';
 import type { Articulo, Familia, Tecnico } from './firebase';
@@ -126,15 +123,6 @@ const emptyCentro: Centro = {
 const normalizeFamilyName = (value: string) =>
   value.replace(/^sistema\s+/i, '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 
-function SortableSistemaWrapper({ sist, children }: { sist: { id: string }, children: (attrs: any, listeners: any) => React.ReactNode }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: sist.id });
-  const style = { transform: CSS.Transform.toString(transform), transition, zIndex: isDragging ? 50 : 'auto', position: 'relative' as const };
-  return (
-    <div ref={setNodeRef} style={style} className={`h-full ${isDragging ? 'opacity-50' : ''}`}>
-      {children(attributes, listeners)}
-    </div>
-  );
-}
 
 export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
   const navigate = useNavigate();
@@ -171,7 +159,7 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
   const [selectedCatIdForCentro, setSelectedCatIdForCentro] = useState('');
   const [centroForNewSistema, setCentroForNewSistema] = useState<Centro | null>(null);
   const [familiasFirestore, setFamiliasFirestore] = useState<Familia[]>([]);
-  const [isFamiliasLoading, setIsFamiliasLoading] = useState(true);
+  const [_isFamiliasLoading, setIsFamiliasLoading] = useState(true);
   const [selectedEquipoCatalogo, setSelectedEquipoCatalogo] = useState('');
   const [cantidadAñadir, setCantidadAñadir] = useState(1);
   const [selectedFamilyForCatalog, setSelectedFamilyForCatalog] = useState('');
@@ -599,13 +587,6 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
     setForm({ ...form, nombre: selectedCliente.nombre, direccion: selectedCliente.direccion || '', poblacion: selectedCliente.poblacion || '', cp: selectedCliente.cp || '', provincia: selectedCliente.provincia || '', contacto: selectedCliente.contacto || '', telefono: selectedCliente.telefono || '', correo: selectedCliente.correo || '' });
   };
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
-
-  const handleDragEndSistemas = (event: any) => {
-    const { active, over } = event;
-    if (active.id !== over?.id) { setCentroSistemas((items) => { const oldIndex = items.findIndex((i) => i.id === active.id); const newIndex = items.findIndex((i) => i.id === over.id); const newOrder = arrayMove(items, oldIndex, newIndex); localStorage.setItem('firecheck_db_centro_sistemas', JSON.stringify(newOrder)); return newOrder; }); }
-  };
-
   const filteredArticulosCatalogo = articulosCatalogo.filter(articulo => {
     if (articulo.revisable !== true) return false;
     if (selectedFamilyForCatalog) {
@@ -920,7 +901,7 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
                     <div key={sist.id}>
                       {/* FILA DEL SISTEMA */}
                       <div
-                        className="flex items-center px-4 py-3.5 hover:bg-zinc-50/80 transition-colors cursor-pointer group min-w-[600px]"
+                        className="flex items-center px-4 py-3.5 bg-zinc-100 hover:bg-zinc-200/70 transition-colors cursor-pointer group min-w-[600px]"
                         onClick={() => setExpandedSistemaId(isExpanded ? null : sist.id)}
                       >
                         <div className="w-8 shrink-0 flex items-center justify-center">
