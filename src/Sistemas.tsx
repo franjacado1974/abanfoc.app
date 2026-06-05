@@ -113,23 +113,37 @@ export default function Sistemas() {
 // Suscripción dinámica según el sistema seleccionado en la UI
    useEffect(() => {
       if (!selectedCategoria) return;
-      setEquipos([]); // Clear previous system's equipment
-const unsub = subscribeEquiposBySystem(selectedCategoria.nombre, (newEqs) => {
-         setEquipos(newEqs); // Directly set equipment for the selected category
-         // Guardar en clave específica del sistema
-         const key = `firecheck_db_sistemas_equipos_${getCollectionName(selectedCategoria.nombre)}`;
-         localStorage.setItem(key, JSON.stringify(newEqs));
-         // Reconstruir y guardar el índice maestro
-         const allEquipos: SistemaEquipo[] = [];
-         categorias.forEach(cat => {
-           const catKey = `firecheck_db_sistemas_equipos_${getCollectionName(cat.nombre)}`;
-           const saved = localStorage.getItem(catKey);
-           if (saved) { try { allEquipos.push(...JSON.parse(saved)); } catch {} }
-         });
-         localStorage.setItem('firecheck_db_sistemas_equipos', JSON.stringify(allEquipos));
-         // Notificar a otras pestañas/tabs
-         window.dispatchEvent(new CustomEvent('equiposCatalogoChanged'));
-       });
+      
+      // Primero cargar equipos desde localStorage para UI inmediata
+      const key = `firecheck_db_sistemas_equipos_${getCollectionName(selectedCategoria.nombre)}`;
+      const savedLocal = localStorage.getItem(key);
+      if (savedLocal) {
+        try {
+          const parsed = JSON.parse(savedLocal);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setEquipos(parsed);
+          }
+        } catch {}
+      }
+
+      const unsub = subscribeEquiposBySystem(selectedCategoria.nombre, (newEqs) => {
+        // Solo actualizar si Firestore devuelve datos con elementos, para no sobrescribir datos locales
+        if (Array.isArray(newEqs) && newEqs.length > 0) {
+          setEquipos(newEqs);
+          // Guardar en clave específica del sistema
+          localStorage.setItem(key, JSON.stringify(newEqs));
+          // Reconstruir y guardar el índice maestro
+          const allEquipos: SistemaEquipo[] = [];
+          categorias.forEach(cat => {
+            const catKey = `firecheck_db_sistemas_equipos_${getCollectionName(cat.nombre)}`;
+            const saved = localStorage.getItem(catKey);
+            if (saved) { try { allEquipos.push(...JSON.parse(saved)); } catch {} }
+          });
+          localStorage.setItem('firecheck_db_sistemas_equipos', JSON.stringify(allEquipos));
+          // Notificar a otras pestañas/tabs
+          window.dispatchEvent(new CustomEvent('equiposCatalogoChanged'));
+        }
+      });
       return () => unsub();
    }, [selectedCategoria]);
 
@@ -254,23 +268,24 @@ const handleSaveEquipo = async (e: React.FormEvent) => {
       revisable: formEquipo.revisable
     };
 
-    try {
-      // Guardar en Firestore automáticamente
-      await saveEquipoToSystemCollection(selectedCategoria.nombre, newEquipo);
+    // Actualizar estado local SIEMPRE primero (antes de intentar Firestore)
+    let updatedEquipos: SistemaEquipo[];
+    if (formEquipo.id) {
+      updatedEquipos = equipos.map(eq => eq.id === formEquipo.id ? newEquipo : eq);
+    } else {
+      updatedEquipos = [...equipos, newEquipo];
+    }
 
-      // Actualizar estado local
-      if (formEquipo.id) {
-        const updated = equipos.map(eq => eq.id === formEquipo.id ? newEquipo : eq);
-        if (selectedCategoria) saveEquiposToSystem(updated, selectedCategoria.nombre);
-        saveEquipos(updated);
-      } else {
-        const updated = [...equipos, newEquipo];
-        if (selectedCategoria) saveEquiposToSystem(updated, selectedCategoria.nombre);
-        saveEquipos(updated);
-      }
-      setIsEquipoModalOpen(false);
+    // Guardar en localStorage inmediatamente
+    if (selectedCategoria) saveEquiposToSystem(updatedEquipos, selectedCategoria.nombre);
+    saveEquipos(updatedEquipos);
+    setIsEquipoModalOpen(false);
+
+    // Intentar guardar en Firestore (en segundo plano, no bloqueante)
+    try {
+      await saveEquipoToSystemCollection(selectedCategoria.nombre, newEquipo);
     } catch (error) {
-      alert("Error al guardar en Firebase. El cambio se mantuvo localmente.");
+      console.warn('No se pudo guardar en Firestore, los datos están en localStorage:', error);
     }
   };
 

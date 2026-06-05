@@ -595,12 +595,11 @@ export async function saveEquipoToSystemCollection(catNombre: string, equipo: Si
     const ref = doc(db, 'sistemas', systemId, 'equipos', equipo.id);
     await setDoc(ref, { 
       ...equipo, 
-      idCategoria: systemId,
       updatedAt: new Date().toISOString() 
     });
     return true;
   } catch (e) {
-    console.error('Error al guardar equipo en Firestore:', e); // Changed _e to e
+    console.error('Error al guardar equipo en Firestore:', e);
     throw e;
   }
 }
@@ -637,7 +636,6 @@ export async function syncSistemas(categorias: SistemaCategoria[], equipos: Sist
         const ref = doc(db, 'sistemas', systemId, 'equipos', eq.id);
         await setDoc(ref, { 
           ...eq, 
-          idCategoria: systemId,
           updatedAt: new Date().toISOString() 
         });
       }
@@ -931,6 +929,257 @@ export function subscribePartes(callback: (partes: ParteFirestore[]) => void) {
     return unsub;
   } catch (e) {
     console.error('subscribePartes error:', e);
+    return () => {};
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CENTROS → SISTEMAS → EQUIPOS
+//
+// Estructura en Firestore (todo dentro de centros, sin colecciones raíz):
+//   centros/{centroId}/{sistemaSlug}/_info        ← metadatos del sistema
+//   centros/{centroId}/{sistemaSlug}/{equipoId}   ← equipos (IDs autogenerados)
+//
+// El sistemaSlug se genera a partir del nombre del sistema:
+//   "SISTEMA EXTINTORES" → "sistema_extintores"
+//   "SISTEMA BIES"       → "sistema_bies"
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Convierte el nombre de un sistema en un slug válido para usar como nombre de subcolección */
+export function sistemaToSlug(nombre: string): string {
+  return nombre
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, '_')
+    .replace(/[^a-z0-9_]/g, '')
+    .trim();
+}
+
+export interface CentroSistemaFirestore {
+  id: string;        // slug del sistema, ej: "sistema_extintores"
+  centroId: string;  // ID del documento centro en Firestore
+  tipo: string;
+  familia: string;
+  descripcion: string;
+  _docId?: string;
+}
+
+// ── Sistemas (subcolección directa dentro del centro) ─────────────────────────
+
+/** Crea un sistema en la colección inventario del centro.
+ *  Guarda en centros/{centroId}/inventario/{sistemaSlug} */
+export async function addCentroSistema(sistema: CentroSistemaFirestore) {
+  try {
+    const slug = sistemaToSlug(sistema.tipo || sistema.familia || sistema.id);
+    const ref = doc(db, 'centros', sistema.centroId, 'inventario', slug);
+    await setDoc(ref, {
+      id: slug,
+      centroId: sistema.centroId,
+      tipo: sistema.tipo,
+      familia: sistema.familia,
+      descripcion: sistema.descripcion || '',
+      updatedAt: new Date().toISOString()
+    });
+    return { ...sistema, id: slug, _docId: slug };
+  } catch (e) {
+    console.error('addCentroSistema error:', e);
+    throw e;
+  }
+}
+
+/** Actualiza metadatos de un sistema existente en inventario */
+export async function updateCentroSistema(centroId: string, sistemaId: string, sistema: Partial<CentroSistemaFirestore>) {
+  try {
+    const ref = doc(db, 'centros', centroId, 'inventario', sistemaId);
+    await setDoc(ref, { ...sistema, updatedAt: new Date().toISOString() }, { merge: true });
+    return { _docId: sistemaId, ...sistema };
+  } catch (e) {
+    console.error('updateCentroSistema error:', e);
+    throw e;
+  }
+}
+
+/** Elimina un sistema de la colección inventario */
+export async function deleteCentroSistema(centroId: string, sistemaId: string) {
+  try {
+    const ref = doc(db, 'centros', centroId, 'inventario', sistemaId);
+    await deleteDoc(ref);
+    return true;
+  } catch (e) {
+    console.error('deleteCentroSistema error:', e);
+    throw e;
+  }
+}
+
+/** Suscripción en tiempo real a los sistemas de un centro.
+ *  Escucha la colección "inventario" del centro que contiene los sistemas. */
+export function subscribeCentroSistemas(centroId: string, callback: (sistemas: CentroSistemaFirestore[]) => void) {
+  try {
+    // Escuchar la colección "inventario" que contiene los sistemas del centro
+    const colInventario = collection(db, 'centros', centroId, 'inventario');
+    const unsub = onSnapshot(colInventario, (snap) => {
+      const sistemas = snap.docs.map(d => {
+        const data = d.data() as any;
+        return {
+          _docId: d.id,
+          id: data?.id || d.id,
+          centroId: data?.centroId || centroId,
+          tipo: data?.tipo || d.id,
+          familia: data?.familia || data?.tipo || d.id,
+          descripcion: data?.descripcion || ''
+        } as CentroSistemaFirestore;
+      });
+      callback(sistemas);
+    }, (err) => {
+      console.error('subscribeCentroSistemas error:', err);
+      callback([]);
+    });
+
+    return unsub;
+  } catch (e) {
+    console.error('subscribeCentroSistemas error:', e);
+    return () => {};
+  }
+}
+
+// ── Equipos (documentos dentro de cada sistema, con ID autogenerado) ──────────
+
+export interface EquipoInstaladoFirestore {
+  id: string;
+  centroId: string;
+  sistemaId: string;  // slug del sistema, ej: "sistema_extintores"
+  codigo: string;
+  nombre: string;
+  ubicacion: string;
+  revisable?: boolean;
+  revisado?: boolean;
+  placa?: string;
+  clase?: string;
+  fabricante?: string;
+  fechaFabricacion?: string;
+  ultimoRetimbre?: string;
+  pesoCapacidad?: string;
+  anomalias?: string;
+  longitud?: string;
+  pruebaHidraulica?: string;
+  checkAcceso?: boolean;
+  checkAltura?: boolean;
+  checkSoporte?: boolean;
+  checkSenalizacion?: boolean;
+  checkManguera?: boolean;
+  checkPeso?: boolean;
+  checkManometro?: boolean;
+  checkMarcado?: boolean;
+  checkEtiquetas?: boolean;
+  checkRetimbre?: boolean;
+  checkRiesgo?: boolean;
+  checkDistancia?: boolean;
+  checkPasador?: boolean;
+  checkMovilidad?: boolean;
+  _docId?: string;
+}
+
+/** Añade un equipo en centros/{centroId}/inventario/{sistemaSlug}/equipos/{equipoId}
+ *  Si el equipo tiene id, lo usa; si no, Firestore genera uno automáticamente */
+export async function addEquipoInstalado(equipo: EquipoInstaladoFirestore) {
+  try {
+    console.log('addEquipoInstalado: centroId=', equipo.centroId, 'sistemaId=', equipo.sistemaId, 'equipoId=', equipo.id);
+    const equipoData = {
+      centroId: equipo.centroId,
+      sistemaId: equipo.sistemaId,
+      codigo: equipo.codigo || '',
+      nombre: equipo.nombre || '',
+      ubicacion: equipo.ubicacion || '',
+      revisable: equipo.revisable,
+      revisado: equipo.revisado,
+      placa: equipo.placa,
+      clase: equipo.clase,
+      fabricante: equipo.fabricante,
+      fechaFabricacion: equipo.fechaFabricacion,
+      ultimoRetimbre: equipo.ultimoRetimbre,
+      pesoCapacidad: equipo.pesoCapacidad,
+      anomalias: equipo.anomalias,
+      longitud: equipo.longitud,
+      pruebaHidraulica: equipo.pruebaHidraulica,
+      checkAcceso: equipo.checkAcceso,
+      checkAltura: equipo.checkAltura,
+      checkSoporte: equipo.checkSoporte,
+      checkSenalizacion: equipo.checkSenalizacion,
+      checkManguera: equipo.checkManguera,
+      checkPeso: equipo.checkPeso,
+      checkManometro: equipo.checkManometro,
+      checkMarcado: equipo.checkMarcado,
+      checkEtiquetas: equipo.checkEtiquetas,
+      checkRetimbre: equipo.checkRetimbre,
+      checkRiesgo: equipo.checkRiesgo,
+      checkDistancia: equipo.checkDistancia,
+      checkPasador: equipo.checkPasador,
+      checkMovilidad: equipo.checkMovilidad,
+      updatedAt: new Date().toISOString()
+    };
+
+    // Ruta: centros/{centroId}/inventario/{sistemaSlug}/equipos/{equipoId}
+    if (equipo.id) {
+      const ref = doc(db, 'centros', equipo.centroId, 'inventario', equipo.sistemaId, 'equipos', equipo.id);
+      await setDoc(ref, { ...equipoData, id: equipo.id });
+      return { ...equipo, _docId: equipo.id };
+    } else {
+      const col = collection(db, 'centros', equipo.centroId, 'inventario', equipo.sistemaId, 'equipos');
+      const ref = await addDoc(col, equipoData);
+      return { ...equipo, id: ref.id, _docId: ref.id };
+    }
+  } catch (e) {
+    console.error('addEquipoInstalado error:', e);
+    throw e;
+  }
+}
+
+/** Actualiza un equipo existente */
+export async function updateEquipoInstalado(id: string, equipo: Partial<EquipoInstaladoFirestore>) {
+  try {
+    if (!equipo.centroId || !equipo.sistemaId) {
+      console.warn('updateEquipoInstalado: faltan centroId o sistemaId');
+      return { _docId: id, ...equipo };
+    }
+    const ref = doc(db, 'centros', equipo.centroId, 'inventario', equipo.sistemaId, 'equipos', id);
+    await setDoc(ref, { ...equipo, updatedAt: new Date().toISOString() }, { merge: true });
+    return { _docId: id, ...equipo };
+  } catch (e) {
+    console.error('updateEquipoInstalado error:', e);
+    throw e;
+  }
+}
+
+/** Elimina un equipo de centros/{centroId}/inventario/{sistemaSlug}/equipos/{equipoId} */
+export async function deleteEquipoInstalado(centroId: string, sistemaId: string, equipoId: string) {
+  try {
+    const ref = doc(db, 'centros', centroId, 'inventario', sistemaId, 'equipos', equipoId);
+    await deleteDoc(ref);
+    return true;
+  } catch (e) {
+    console.error('deleteEquipoInstalado error:', e);
+    throw e;
+  }
+}
+
+/** Suscripción en tiempo real a los equipos de un sistema concreto.
+ *  Escucha centros/{centroId}/inventario/{sistemaSlug}/equipos */
+export function subscribeEquiposInstalados(centroId: string, sistemaId: string, callback: (equipos: EquipoInstaladoFirestore[]) => void) {
+  try {
+    const col = collection(db, 'centros', centroId, 'inventario', sistemaId, 'equipos');
+    const unsub = onSnapshot(col, (snap) => {
+      const items = snap.docs.map(d => {
+        const data = d.data() as any;
+        return { _docId: d.id, id: d.id, ...data } as EquipoInstaladoFirestore;
+      });
+      callback(items);
+    }, (err) => {
+      console.error('subscribeEquiposInstalados error:', err);
+      callback([]);
+    });
+    return unsub;
+  } catch (e) {
+    console.error('subscribeEquiposInstalados error:', e);
     return () => {};
   }
 }

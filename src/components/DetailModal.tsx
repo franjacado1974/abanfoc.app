@@ -1,5 +1,5 @@
-import { X } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { X, ArrowLeft } from 'lucide-react';
+import { useEffect } from 'react';
 
 interface DetailModalProps {
   isOpen: boolean;
@@ -9,9 +9,7 @@ interface DetailModalProps {
   size?: 'sm' | 'md' | 'lg' | 'xl';
 }
 
-export default function DetailModal({ isOpen, onClose, title, children, size = 'lg' }: DetailModalProps) {
-  const overlayRef = useRef<HTMLDivElement>(null);
-
+export default function DetailModal({ isOpen, onClose, title, children }: DetailModalProps) {
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -28,27 +26,19 @@ export default function DetailModal({ isOpen, onClose, title, children, size = '
 
   if (!isOpen) return null;
 
-  const sizeClasses = {
-    sm: 'max-w-md',
-    md: 'max-w-xl',
-    lg: 'max-w-3xl',
-    xl: 'max-w-5xl',
-  };
-
   return (
-    <div
-      ref={overlayRef}
-      className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
-      onClick={(e) => {
-        if (e.target === overlayRef.current) onClose();
-      }}
-    >
-      <div
-        className={`bg-white rounded-2xl shadow-2xl w-full ${sizeClasses[size]} max-h-[90vh] flex flex-col animate-in fade-in zoom-in-95 duration-200`}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-200 shrink-0">
-          <h2 className="text-lg font-bold text-zinc-900">{title}</h2>
+    <div className="fixed inset-0 z-[300] flex flex-col bg-[#f8f6f3]">
+      {/* Header */}
+      <div className="sticky top-0 z-10 bg-[#f8f6f3]/90 backdrop-blur-md border-b border-zinc-200/60 shrink-0">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-4">
+          <button
+            onClick={onClose}
+            className="flex items-center gap-2 text-sm font-medium text-zinc-500 hover:text-zinc-900 transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Volver</span>
+          </button>
+          <h2 className="text-base sm:text-lg font-bold text-zinc-900 text-center flex-1 mx-4 truncate">{title}</h2>
           <button
             onClick={onClose}
             className="p-2 text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100 rounded-xl transition-all"
@@ -56,11 +46,11 @@ export default function DetailModal({ isOpen, onClose, title, children, size = '
             <X className="w-5 h-5" />
           </button>
         </div>
+      </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
-          {children}
-        </div>
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+        {children}
       </div>
     </div>
   );

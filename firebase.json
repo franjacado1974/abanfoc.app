@@ -1,5 +1,6 @@
 {
   "hosting": {
+    "site": "app-abanfoc",
     "public": "dist",
     "ignore": [
       "firebase.json",

@@ -35,7 +35,8 @@ const navItems: NavItem[] = [
   { id: 'certificados', path: '/certificados', title: 'Certificados', Icon: FileCheck, allowedRoles: ['super-administrador', 'administrador'], section: 'documentacion' },
   { id: 'albaranes', path: '/albaranes', title: 'Albaranes', Icon: FileDigit, allowedRoles: ['super-administrador', 'administrador', 'visualizador'], section: 'documentacion' },
   { id: 'facturas', path: '/facturas', title: 'Facturas', Icon: Receipt, allowedRoles: ['super-administrador', 'administrador'], section: 'documentacion' },
-  { id: 'configuracion', path: '/configuracion-datos', title: 'Configuración', Icon: Settings, allowedRoles: ['super-administrador', 'administrador'], section: 'configuracion' },
+  { id: 'configuracion', path: '/configuracion-datos', title: 'Configuracion', Icon: Settings, allowedRoles: ['super-administrador', 'administrador'], section: 'configuracion' },
+  { id: 'ajustes', path: '/ajustes', title: 'Ajustes del Sistema', Icon: Settings, allowedRoles: ['super-administrador', 'administrador'], section: 'configuracion' },
 ];
 
 export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
@@ -99,11 +100,11 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
           };
           return (
             <div key={section} className="mb-3">
-              {!collapsed && (
-                <p className={`px-4 py-1.5 text-[9px] font-bold uppercase tracking-widest ${sectionColors[section] || 'text-orange-400'} opacity-60`}>
-                  {sectionLabels[section] || section}
-                </p>
-              )}
+               {!collapsed && (
+                 <p className={`px-4 py-1.5 text-[9px] font-bold uppercase tracking-widest ${sectionColors[section] || 'text-orange-500'} opacity-100`}>
+                   {sectionLabels[section] || section}
+                 </p>
+               )}
               {items.map((item) => {
                 const active = isActive(item.path);
                 return (
@@ -113,13 +114,13 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
                     className={`w-full flex items-center gap-3 px-3 py-2.5 mx-2 rounded-xl text-sm font-medium transition-all duration-200 ${
                       collapsed ? 'justify-center mx-0 px-0 w-16' : ''
                     } ${
-                      active
-                        ? 'bg-orange-500/20 text-orange-300 shadow-sm shadow-orange-500/10 border border-orange-500/20'
-                        : 'text-blue-200/70 hover:text-orange-300 hover:bg-blue-800/40'
+                       active
+                         ? 'bg-orange-500/20 text-orange-300 shadow-sm shadow-orange-500/10 border border-orange-500/20'
+                         : 'text-white hover:text-orange-500 hover:bg-blue-800/40'
                     }`}
                     title={collapsed ? item.title : undefined}
                   >
-                    <div className={`flex items-center justify-center w-5 h-5 ${active ? 'text-orange-400' : 'text-blue-300/70'}`}>
+                    <div className={`flex items-center justify-center w-5 h-5 ${active ? 'text-white' : 'text-white'}`}>
                       <item.Icon className="w-4 h-4" strokeWidth={1.5} />
                     </div>
                     {!collapsed && <span className="truncate">{item.title}</span>}
@@ -151,7 +152,7 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
         )}
         <button
           onClick={onLogout}
-          className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-blue-300/70 hover:text-orange-400 hover:bg-blue-800/40 transition-all uppercase tracking-wider ${
+          className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-white hover:text-orange-500 hover:bg-blue-800/40 transition-all uppercase tracking-wider ${
             collapsed ? 'justify-center' : ''
           }`}
           title="Cerrar Sesión"

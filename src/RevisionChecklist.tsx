@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Save, Building2, Layers, MapPin, FileText, ChevronDown, ChevronRight, Plus, X, CheckCircle2, XCircle, Trash2, AlertTriangle } from 'lucide-react';
 import type { Centro, Parte, Cliente, CentroSistema, EquipoInstalado } from './Centros';
+import { updateEquipoInstalado } from './firebase';
 import ConfirmationModal from './ConfirmationModal';
 
 const CHECKLIST_ITEMS = [
@@ -55,11 +56,15 @@ export default function RevisionChecklist() {
     const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
     const [equipoIdToDelete, setEquipoIdToDelete] = useState<string | null>(null);
 
-    const saveEquiposProgress = (currentEquipos: EquipoInstalado[] = equiposInstalados) => {
+    const saveEquiposProgress = async (currentEquipos: EquipoInstalado[] = equiposInstalados) => {
         const allEquipos = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
         const equiposOtrosCentros = allEquipos.filter((eq: EquipoInstalado) => eq.centroId !== centroId);
         const updatedAllEquipos = [...equiposOtrosCentros, ...currentEquipos];
         localStorage.setItem('firecheck_db_equipos_instalados', JSON.stringify(updatedAllEquipos));
+        // Sincronizar con Firestore
+        for (const eq of currentEquipos) {
+            try { await updateEquipoInstalado(eq.id, eq as any); } catch (err) { console.error('Error sincronizando equipo en Firestore:', err); }
+        }
         return updatedAllEquipos;
     };
 

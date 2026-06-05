@@ -1,13 +1,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/set-state-in-effect */
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, Save, Plus, Search, Edit, Trash2, MapPin, Layers, X, Copy, AlertTriangle, GripHorizontal, Upload, Download, Building2, UserCheck, Eye, Phone, Mail, Users } from 'lucide-react';
+import { ArrowLeft, Save, Plus, Search, Edit, Trash2, MapPin, Layers, X, Copy, AlertTriangle, GripHorizontal, Upload, Download, Building2, UserCheck, Eye, Phone, Mail, Users, ChevronRight } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors, closestCenter } from '@dnd-kit/core';
 import { arrayMove, SortableContext, rectSortingStrategy, useSortable, sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { CATEGORIAS_POR_DEFECTO, getIconForSistema } from './Sistemas';
-import { addCentro, updateCentro, deleteCentro, subscribeCentros, subscribeFamilias, subscribeArticulos, subscribeTecnicos, subscribeEmpresas } from './firebase';
+import { addCentro, updateCentro, deleteCentro, subscribeCentros, subscribeFamilias, subscribeArticulos, subscribeTecnicos, subscribeEmpresas, addCentroSistema, deleteCentroSistema, subscribeCentroSistemas, addEquipoInstalado, updateEquipoInstalado, deleteEquipoInstalado, subscribeEquiposInstalados, sistemaToSlug } from './firebase';
 import type { Articulo, Familia, Tecnico } from './firebase';
 import ConfirmationModal from './ConfirmationModal';
 import DetailModal from './components/DetailModal';
@@ -143,7 +143,7 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
   const [clientes] = useState<Cliente[]>(() => { try { const saved = localStorage.getItem('firecheck_db_clientes'); return saved ? JSON.parse(saved) : []; } catch { return []; } });
   const [centroSistemas, setCentroSistemas] = useState<CentroSistema[]>(() => { try { const saved = localStorage.getItem('firecheck_db_centro_sistemas'); return saved ? JSON.parse(saved) : []; } catch { return []; } });
   const [categoriasSistema] = useState<{id: string, nombre: string}[]>(() => { const saved = localStorage.getItem('firecheck_db_sistemas_categorias'); return saved ? JSON.parse(saved) : CATEGORIAS_POR_DEFECTO; });
-  const [view, setView] = useState<'list' | 'form' | 'sistemas'>('list');
+  const [view, setView] = useState<'list' | 'form' | 'sistemas' | 'periodicidad' | 'asignar-tecnico'>('list');
   const [form, setForm] = useState<Centro>(emptyCentro);
   const [centroSeleccionado, setCentroSeleccionado] = useState<Centro | null>(null);
   const [sistemaSeleccionado, setSistemaSeleccionado] = useState<CentroSistema | null>(null);
@@ -166,6 +166,7 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
   const [isArticulosLoading, setIsArticulosLoading] = useState(true);
   const [formEquipo, setFormEquipo] = useState<EquipoInstalado>({ id: '', centroId: '', sistemaId: '', codigo: '', nombre: '', ubicacion: '' });
   const [isEquipoModalOpen, setIsEquipoModalOpen] = useState(false);
+  const [equipoModalMode, setEquipoModalMode] = useState<'catalogo' | 'manual' | 'editar'>('catalogo');
   const [isAddCatModalOpen, setIsAddCatModalOpen] = useState(false);
   const [selectedCatIdForCentro, setSelectedCatIdForCentro] = useState('');
   const [centroForNewSistema, setCentroForNewSistema] = useState<Centro | null>(null);
@@ -179,6 +180,7 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
   const [searchTerm, setSearchTerm] = useState(location.state?.search || '');
   const [selectedCentro, setSelectedCentro] = useState<Centro | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [expandedSistemaId, setExpandedSistemaId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleExportExcel = () => {
@@ -299,6 +301,44 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
     return () => { if (unsub) unsub(); };
   }, []);
 
+  // Suscripción en tiempo real a los sistemas del centro seleccionado
+  useEffect(() => {
+    if (!centroSeleccionado?.id) return;
+    const centroId = centroSeleccionado.id;
+    const unsub = subscribeCentroSistemas(centroId, (items: CentroSistema[]) => {
+      // Actualizar solo los sistemas de este centro
+      setCentroSistemas(prev => {
+        const otrosCentros = prev.filter(s => s.centroId !== centroId);
+        const merged = [...otrosCentros, ...items];
+        localStorage.setItem('firecheck_db_centro_sistemas', JSON.stringify(merged));
+        return merged;
+      });
+    });
+    return () => unsub();
+  }, [centroSeleccionado?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Suscripción en tiempo real a los equipos de los sistemas del centro seleccionado
+  // Se re-ejecuta cuando cambia el centro O cuando cambia la lista de sistemas de ese centro
+  useEffect(() => {
+    if (!centroSeleccionado?.id) return;
+    const centroId = centroSeleccionado.id;
+    const sistDelCentro = centroSistemas.filter(s => s.centroId === centroId);
+    if (sistDelCentro.length === 0) return;
+
+    const unsubs = sistDelCentro.map(sist => {
+      const sistemaId = sist.id;
+      return subscribeEquiposInstalados(centroId, sistemaId, (items: EquipoInstalado[]) => {
+        setEquiposInstalados(prev => {
+          const otrosSistemas = prev.filter(e => e.sistemaId !== sistemaId);
+          const merged = [...otrosSistemas, ...items];
+          localStorage.setItem('firecheck_db_equipos_instalados', JSON.stringify(merged));
+          return merged;
+        });
+      });
+    });
+    return () => unsubs.forEach(u => u());
+  }, [centroSeleccionado?.id, centroSistemas.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     setIsArticulosLoading(true);
     const unsubscribe = subscribeArticulos((articulos) => { setArticulosCatalogo(articulos.filter(articulo => articulo.revisable === true)); setIsArticulosLoading(false); });
@@ -336,6 +376,7 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
     setFormEquipo(eq);
     const opcionesClase = ['POLVO', 'CO2', 'ESPUMA', 'GAS', 'AGUA', 'ADITIVO'];
     setIsClaseOtro(eq.clase ? !opcionesClase.includes(eq.clase.toUpperCase()) : false);
+    setEquipoModalMode('editar');
     setIsEquipoModalOpen(true);
   };
 
@@ -352,6 +393,10 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
     saveToDB(updatedCentros);
     setIsPeriodicidadModalOpen(false);
     setCentroForPeriodicidad(null);
+    // Volver a mostrar el detalle del centro con los datos actualizados
+    const centroActualizado = updatedCentros.find(c => c.id === updatedCentro.id) || updatedCentro;
+    setSelectedCentro(centroActualizado);
+    setIsDetailOpen(true);
   };
 
   const handleSaveTecnicoAsignado = async (e: React.FormEvent) => {
@@ -368,6 +413,10 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
     setIsTecnicoModalOpen(false);
     setCentroForTecnico(null);
     setSelectedTecnicoId('');
+    // Volver a mostrar el detalle del centro con los datos actualizados
+    const centroActualizado = updatedCentros.find(c => c.id === updatedCentro.id) || updatedCentro;
+    setSelectedCentro(centroActualizado);
+    setIsDetailOpen(true);
   };
 
   const handleSaveEmpresaAsignada = async (e: React.FormEvent) => {
@@ -403,28 +452,29 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
 
   const openSistemas = (c: Centro) => { setCentroSeleccionado(c); setView('sistemas'); };
 
-  const handleSaveSistema = (e: React.FormEvent) => {
+  const handleSaveSistema = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!centroSeleccionado) return;
     let familiaReal = formSistema.familia;
     if (!familiaReal && formSistema.tipo) { const cat = categoriasSistema.find(c => c.nombre === formSistema.tipo); if (cat) familiaReal = cat.nombre; }
-    let db: CentroSistema[];
-    if (formSistema.id) { db = centroSistemas.map(s => s.id === formSistema.id ? { ...formSistema, familia: familiaReal, centroId: centroSeleccionado.id } : s); }
-    else { db = [...centroSistemas, { ...formSistema, familia: familiaReal, id: generateId(), centroId: centroSeleccionado.id }]; }
-    setCentroSistemas(db);
-    localStorage.setItem('firecheck_db_centro_sistemas', JSON.stringify(db));
+    const sistemaData: CentroSistema = { ...formSistema, familia: familiaReal, centroId: centroSeleccionado.id };
+    if (!sistemaData.id) sistemaData.id = generateId();
+    // Guardar en Firestore
+    try { await addCentroSistema(sistemaData); } catch (err) { console.error('Error guardando sistema en Firestore:', err); }
     setIsSistemaModalOpen(false);
   };
 
-  const handleAddSistemaFromCatalog = (e: React.FormEvent) => {
+  const handleAddSistemaFromCatalog = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!centroForNewSistema || !selectedCatIdForCentro) return;
-    const sistemaFirestore = familiasFirestore.find(familia => familia.id === selectedCatIdForCentro);
-    if (!sistemaFirestore) return;
-    const newSistema: CentroSistema = { id: generateId(), centroId: centroForNewSistema.id, tipo: sistemaFirestore.nombre, familia: sistemaFirestore.nombre, descripcion: '' };
-    const db = [...centroSistemas, newSistema];
-    setCentroSistemas(db);
-    localStorage.setItem('firecheck_db_centro_sistemas', JSON.stringify(db));
+    const sistemaCategoria = categoriasSistema.find(cat => cat.id === selectedCatIdForCentro);
+    if (!sistemaCategoria) return;
+    // El slug se genera en addCentroSistema a partir del tipo/familia
+    // Usamos el slug como id para que coincida con el documento en Firestore
+    const slug = sistemaToSlug(sistemaCategoria.nombre);
+    const newSistema: CentroSistema = { id: slug, centroId: centroForNewSistema.id, tipo: sistemaCategoria.nombre, familia: sistemaCategoria.nombre, descripcion: '' };
+    // Guardar en Firestore → centros/{centroId}/inventario/{slug}
+    try { await addCentroSistema(newSistema); } catch (err) { console.error('Error guardando sistema en Firestore:', err); }
     setIsAddCatModalOpen(false);
     setSelectedCatIdForCentro('');
     setCentroForNewSistema(null);
@@ -432,60 +482,112 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
 
   const handleDeleteSistema = (id: string) => { setItemToDelete({ type: 'sistema', id }); setIsConfirmModalOpen(true); };
 
-  const confirmDeleteSistema = () => {
+  const confirmDeleteSistema = async () => {
     if (!itemToDelete || itemToDelete.type !== 'sistema') return;
     setIsConfirmModalOpen(false);
-    const db = centroSistemas.filter(s => s.id !== itemToDelete.id);
-    setCentroSistemas(db);
-    localStorage.setItem('firecheck_db_centro_sistemas', JSON.stringify(db));
-    const dbEq = equiposInstalados.filter(e => e.sistemaId !== itemToDelete.id);
-    setEquiposInstalados(dbEq);
-    localStorage.setItem('firecheck_db_equipos_instalados', JSON.stringify(dbEq));
+    const sistemaId = itemToDelete.id;
+    // Obtener el centroId del sistema
+    const sistemaObj = centroSistemas.find(s => s.id === sistemaId);
+    const centroIdDelSistema = sistemaObj?.centroId || '';
+    // Borrar sistema en Firestore (subcolección + raíz)
+    try { await deleteCentroSistema(centroIdDelSistema, sistemaId); } catch (err) { console.error('Error borrando sistema en Firestore:', err); }
+    // Borrar equipos del sistema en Firestore
+    const equiposDelSistema = equiposInstalados.filter(e => e.sistemaId === sistemaId);
+    for (const eq of equiposDelSistema) {
+      try { await deleteEquipoInstalado(centroIdDelSistema, sistemaId, eq.id); } catch (err) { console.error('Error borrando equipo en Firestore:', err); }
+    }
     setItemToDelete(null);
   };
 
-  const handleAddDesdeCatalogo = (e: React.FormEvent) => {
+  const handleAddEquipoManual = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!centroSeleccionado || !sistemaSeleccionado || !formEquipo.nombre.trim()) return;
+    const nuevoEquipo: EquipoInstalado = {
+      ...formEquipo,
+      id: formEquipo.id || generateId(),
+      centroId: centroSeleccionado.id,
+      sistemaId: sistemaSeleccionado.id,
+      revisable: formEquipo.revisable ?? true,
+      revisado: false,
+      checkAcceso: true,
+      checkAltura: true,
+      checkSoporte: true,
+      checkSenalizacion: true,
+      checkManguera: true,
+      checkPeso: true,
+      checkManometro: true,
+      checkMarcado: true,
+      checkEtiquetas: true,
+      checkRetimbre: true,
+      checkRiesgo: true,
+      checkDistancia: true,
+      checkPasador: true,
+      checkMovilidad: true
+    };
+    // Guardar localmente primero
+    const updatedEquipos = [...equiposInstalados, nuevoEquipo];
+    localStorage.setItem('firecheck_db_equipos_instalados', JSON.stringify(updatedEquipos));
+    setEquiposInstalados(updatedEquipos);
+    setFormEquipo({ id: '', centroId: '', sistemaId: '', codigo: '', nombre: '', ubicacion: '' });
+    setIsEquipoModalOpen(false);
+    // Intentar Firestore en segundo plano
+    try { await addEquipoInstalado(nuevoEquipo); } catch (err) { console.warn('Error guardando equipo en Firestore, datos en localStorage:', err); }
+  };
+
+  const handleAddDesdeCatalogo = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!centroSeleccionado || !sistemaSeleccionado || !selectedEquipoCatalogo || cantidadAñadir < 1) return;
     const equipoBase = articulosCatalogo.find(articulo => articulo.id === selectedEquipoCatalogo);
     if (!equipoBase) return;
+    
     const nuevosEquipos: EquipoInstalado[] = [];
     for (let i = 0; i < cantidadAñadir; i++) {
       const eqDelSist = equiposInstalados.filter(eq => eq.sistemaId === sistemaSeleccionado.id);
       let startNum = 1;
       if (eqDelSist.length > 0) { const nums = eqDelSist.map(eq => parseInt(eq.codigo)).filter(n => !isNaN(n)); startNum = nums.length > 0 ? Math.max(...nums) + 1 : eqDelSist.length + 1; }
       const codigoNum = startNum + i;
-      nuevosEquipos.push({ id: generateId(), centroId: centroSeleccionado.id, sistemaId: sistemaSeleccionado.id, codigo: codigoNum.toString().padStart(2, '0'), nombre: equipoBase.nombre, ubicacion: '', revisable: equipoBase.revisable ?? true, revisado: false, checkAcceso: true, checkAltura: true, checkSoporte: true, checkSenalizacion: true, checkManguera: true, checkPeso: true, checkManometro: true, checkMarcado: true, checkEtiquetas: true, checkRetimbre: true, checkRiesgo: true, checkDistancia: true, checkPasador: true, checkMovilidad: true });
+      const nuevoEquipo: EquipoInstalado = { id: generateId(), centroId: centroSeleccionado.id, sistemaId: sistemaSeleccionado.id, codigo: codigoNum.toString().padStart(2, '0'), nombre: equipoBase.nombre, ubicacion: '', revisable: equipoBase.revisable ?? true, revisado: false, checkAcceso: true, checkAltura: true, checkSoporte: true, checkSenalizacion: true, checkManguera: true, checkPeso: true, checkManometro: true, checkMarcado: true, checkEtiquetas: true, checkRetimbre: true, checkRiesgo: true, checkDistancia: true, checkPasador: true, checkMovilidad: true };
+      nuevosEquipos.push(nuevoEquipo);
     }
-    const db = [...equiposInstalados, ...nuevosEquipos];
-    setEquiposInstalados(db);
-    localStorage.setItem('firecheck_db_equipos_instalados', JSON.stringify(db));
+    
+    // Guardar localmente primero
+    const updatedEquipos = [...equiposInstalados, ...nuevosEquipos];
+    localStorage.setItem('firecheck_db_equipos_instalados', JSON.stringify(updatedEquipos));
+    setEquiposInstalados(updatedEquipos);
     setIsEquipoModalOpen(false);
     setSelectedEquipoCatalogo('');
     setCantidadAñadir(1);
+    
+    // Intentar Firestore en segundo plano
+    for (const eq of nuevosEquipos) {
+      try { await addEquipoInstalado(eq); } catch (err) { console.warn('Error guardando equipo en Firestore, datos en localStorage:', err); }
+    }
   };
 
-  const handleDuplicateEquipoCentro = (eq: EquipoInstalado) => { const newEquipo = { ...eq, id: generateId(), codigo: eq.codigo ? `${eq.codigo}-COPIA` : '' }; const db = [...equiposInstalados, newEquipo]; setEquiposInstalados(db); localStorage.setItem('firecheck_db_equipos_instalados', JSON.stringify(db)); };
+  const handleDuplicateEquipoCentro = async (eq: EquipoInstalado) => {
+    const newEquipo = { ...eq, id: generateId(), codigo: eq.codigo ? `${eq.codigo}-COPIA` : '' };
+    try { await addEquipoInstalado(newEquipo); } catch (err) { console.error('Error duplicando equipo en Firestore:', err); }
+  };
 
-  const handleUpdateEquipo = (e: React.FormEvent) => {
+  const handleUpdateEquipo = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formEquipo.id) return;
-    const exists = equiposInstalados.some(eq => eq.id === formEquipo.id);
-    const db = exists ? equiposInstalados.map(eq => eq.id === formEquipo.id ? { ...formEquipo, revisado: true } : eq) : [...equiposInstalados, { ...formEquipo, revisado: true }];
-    setEquiposInstalados(db);
-    localStorage.setItem('firecheck_db_equipos_instalados', JSON.stringify(db));
+    const equipoActualizado = { ...formEquipo, revisado: true };
+    try { await updateEquipoInstalado(formEquipo.id, equipoActualizado); } catch (err) { console.error('Error actualizando equipo en Firestore:', err); }
     setFormEquipo({ id: '', centroId: '', sistemaId: '', codigo: '', nombre: '', ubicacion: '' });
     setIsEquipoModalOpen(false);
   };
 
   const handleDeleteEquipo = (id: string) => { setItemToDelete({ type: 'equipo', id }); setIsConfirmModalOpen(true); };
 
-  const confirmDeleteEquipo = () => {
+  const confirmDeleteEquipo = async () => {
     if (!itemToDelete || itemToDelete.type !== 'equipo') return;
     setIsConfirmModalOpen(false);
-    const db = equiposInstalados.filter(eq => eq.id !== itemToDelete.id);
-    setEquiposInstalados(db);
-    localStorage.setItem('firecheck_db_equipos_instalados', JSON.stringify(db));
+    // Buscar el equipo para obtener centroId y sistemaId
+    const equipoObj = equiposInstalados.find(e => e.id === itemToDelete.id);
+    const centroIdEq = equipoObj?.centroId || '';
+    const sistemaIdEq = equipoObj?.sistemaId || '';
+    try { await deleteEquipoInstalado(centroIdEq, sistemaIdEq, itemToDelete.id); } catch (err) { console.error('Error borrando equipo en Firestore:', err); }
     setItemToDelete(null);
   };
 
@@ -575,8 +677,8 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
           </div>
         ) : (
           <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden overflow-x-auto">
-            <div className="hidden md:flex items-center bg-[#f9f7f4] border-b-2 border-zinc-200 px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-zinc-500 min-w-[700px]">
-              <div className="w-24 shrink-0">Código</div><div className="flex-1 min-w-0">Centro</div><div className="w-36 shrink-0">Cliente</div><div className="w-32 shrink-0">Población</div><div className="w-28 shrink-0">Teléfono</div><div className="w-16 shrink-0 text-center">Sist.</div><div className="w-24 shrink-0 text-right">Acciones</div>
+            <div className="hidden md:flex items-center bg-[#f9f7f4] border-b-2 border-zinc-200 px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-zinc-500 min-w-[800px]">
+              <div className="w-48 shrink-0">Código</div><div className="flex-1 min-w-0">Centro</div><div className="w-36 shrink-0">Cliente</div><div className="w-32 shrink-0">Población</div><div className="w-28 shrink-0">Teléfono</div><div className="w-16 shrink-0 text-center">Sist.</div><div className="w-24 shrink-0 text-right">Acciones</div>
             </div>
             <div className="divide-y divide-zinc-200">
               {filteredCentros.map((c) => {
@@ -593,8 +695,8 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
                     </div>
                     <div className="flex md:hidden"><div className="flex-1 min-w-0"><p className="text-sm font-bold text-zinc-900 truncate">{c.nombre}</p>{client && <p className="text-xs text-zinc-500 truncate">{client.nombre}</p>}</div></div>
                     <div className="flex md:hidden items-center gap-3 mt-2">{c.poblacion && <span className="text-xs text-zinc-500">{c.poblacion}</span>}{c.telefono && <span className="text-xs text-zinc-500">{c.telefono}</span>}</div>
-                    <div className="hidden md:flex items-center w-full min-w-[700px]">
-                      <div className="w-24 shrink-0"><span className="text-[11px] font-mono font-bold text-zinc-500 bg-zinc-100 px-1.5 py-0.5 rounded">{c.id}</span></div>
+                    <div className="hidden md:flex items-center w-full min-w-[800px]">
+                      <div className="w-48 shrink-0"><span className="text-[11px] font-mono font-bold text-zinc-500 bg-zinc-100 px-1.5 py-0.5 rounded whitespace-nowrap">{c.id}</span></div>
                       <div className="flex-1 min-w-0 pr-2"><p className="text-sm font-bold text-zinc-900 truncate group-hover:text-blue-900 transition-colors">{c.nombre}</p></div>
                       <div className="w-36 shrink-0 text-sm text-zinc-600 truncate pr-2">{client?.nombre || '-'}</div>
                       <div className="w-32 shrink-0 text-sm text-zinc-600 truncate pr-2 flex items-center gap-1"><MapPin className="w-3 h-3 text-zinc-400 shrink-0" />{c.poblacion || '-'}</div>
@@ -657,9 +759,11 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
                     <p className="text-sm text-zinc-700 bg-zinc-50 rounded-xl p-3.5">{selectedCentro.periodicidad.join(', ')}{selectedCentro.mesesRevision?.length ? ` — Revisión en ${selectedCentro.mesesRevision[0]}` : ''}</p>
                   </div>
                 )}
-                <div className="flex items-center justify-end gap-3 pt-4 border-t border-zinc-200">
-                  <button onClick={() => { setIsDetailOpen(false); handleEdit(selectedCentro); }} className="flex items-center gap-1.5 bg-zinc-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-zinc-800 transition-colors"><Edit className="w-4 h-4" /> Editar Centro</button>
-                  <button onClick={() => { setIsDetailOpen(false); openSistemas(selectedCentro); }} className="flex items-center gap-1.5 bg-white border border-zinc-200 text-zinc-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-zinc-50 transition-colors"><Layers className="w-4 h-4" /> Ver Sistemas</button>
+                <div className="grid grid-cols-2 gap-3 pt-4 border-t border-zinc-200">
+                  <button onClick={() => { setIsDetailOpen(false); setCentroForPeriodicidad(selectedCentro); setFormPeriodicidad({ periodicidad: selectedCentro.periodicidad || [], mesesRevision: selectedCentro.mesesRevision || [] }); setIsPeriodicidadModalOpen(true); }} className="flex items-center justify-center gap-1.5 bg-blue-400 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-blue-500 transition-colors border-2 border-blue-600"><Layers className="w-4 h-4" /> Periodicidad</button>
+                  <button onClick={() => { setIsDetailOpen(false); setCentroForTecnico(selectedCentro); setSelectedTecnicoId(selectedCentro.tecnicoId || ''); setIsTecnicoModalOpen(true); }} className="flex items-center justify-center gap-1.5 bg-green-400 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-green-500 transition-colors border-2 border-green-600"><UserCheck className="w-4 h-4" /> Asignar Técnico</button>
+                  <button onClick={() => { setIsDetailOpen(false); handleEdit(selectedCentro); }} className="flex items-center justify-center gap-1.5 bg-zinc-400 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-zinc-500 transition-colors border-2 border-zinc-600"><Edit className="w-4 h-4" /> Editar Centro</button>
+                  <button onClick={() => { setIsDetailOpen(false); openSistemas(selectedCentro); }} className="flex items-center justify-center gap-1.5 bg-orange-200 text-orange-800 px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-orange-300 transition-colors border-2 border-orange-400"><Layers className="w-4 h-4" /> Ver Sistemas</button>
                 </div>
               </div>
             );
@@ -778,90 +882,136 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
     const sistDelCentro = centroSistemas.filter(s => s.centroId === centroSeleccionado.id);
     const clientInfo = clientes.find(cl => cl.id === centroSeleccionado.clienteId);
     return (
-      <div className="min-h-screen bg-red-50/40 p-6 md:p-12">
-        <div className="max-w-4xl mx-auto w-full">
-          <button onClick={() => setView('list')} className="text-sm font-medium text-red-600 hover:text-red-950 mb-8 flex items-center gap-2 transition-colors"><ArrowLeft className="w-4 h-4" /> Volver a Centros</button>
-          <div className="mb-8">
-            <div className="mb-5">
-              <span className="text-xs font-bold text-red-600 uppercase tracking-wider mb-1 block">{clientInfo?.nombre || 'Cliente'} &bull; {centroSeleccionado.nombre}</span>
-              <h1 className="text-3xl font-bold text-red-950 tracking-tight flex items-center gap-3"><div className="w-10 h-10 bg-red-100 text-red-600 rounded-xl flex items-center justify-center"><Layers className="w-5 h-5" /></div>Sistemas del Centro</h1>
-              <p className="text-red-900/60 mt-1">Sistemas vinculados a este centro de trabajo</p>
+      <div className="px-4 md:px-8 py-6">
+        <div className="max-w-5xl mx-auto w-full">
+          <button onClick={() => setView('list')} className="flex items-center gap-1.5 text-xs font-medium text-zinc-500 hover:text-zinc-900 mb-5 transition-colors"><ArrowLeft className="w-3.5 h-3.5" /> Volver a Centros</button>
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+            <div>
+              <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-1">{clientInfo?.nombre || 'Cliente'} · {centroSeleccionado.nombre}</p>
+              <h1 className="text-2xl font-bold text-zinc-900 tracking-tight flex items-center gap-2"><Layers className="w-6 h-6 text-zinc-500" />Sistemas del Centro</h1>
+              <p className="text-sm text-zinc-500 mt-1">{sistDelCentro.length} sistemas instalados</p>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <button onClick={(e) => { e.preventDefault(); setCentroForNewSistema(centroSeleccionado); setSelectedCatIdForCentro(''); setIsAddCatModalOpen(true); }} className="flex items-center justify-center gap-2 bg-slate-900 hover:bg-black text-white px-5 py-2.5 rounded-xl font-medium transition-colors shadow-sm"><Plus className="w-5 h-5" /> Añadir sistemas</button>
-            </div>
+            <button onClick={(e) => { e.preventDefault(); setCentroForNewSistema(centroSeleccionado); setSelectedCatIdForCentro(''); setIsAddCatModalOpen(true); }} className="flex items-center gap-1.5 bg-black text-white px-4 py-2 rounded-lg font-medium hover:bg-zinc-800 transition-all text-xs shadow-md shadow-black/10"><Plus className="w-3.5 h-3.5" /> Añadir sistema</button>
           </div>
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEndSistemas}>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {sistDelCentro.length === 0 ? (
-                <div className="col-span-full text-center py-12 bg-white rounded-3xl border border-red-100 border-dashed"><Layers className="w-12 h-12 text-red-200 mx-auto mb-3" /><p className="text-red-900/50 font-medium">Este centro no tiene sistemas registrados.</p></div>
-              ) : (
-                <SortableContext items={sistDelCentro.map(s => s.id)} strategy={rectSortingStrategy}>
-                  {sistDelCentro.map(sist => {
-                    const equiposDelSistema = equiposInstalados.filter(e => e.sistemaId === sist.id);
-                    const equiposCount = equiposDelSistema.length;
-                    const IconoCat = getIconForSistema(sist.tipo || sist.familia || '');
-                    return (
-                      <SortableSistemaWrapper key={sist.id} sist={sist}>
-                        {(attrs, listeners) => (
-                          <div className="bg-white p-4 rounded-3xl border-2 border-red-100 shadow-sm hover:shadow-xl hover:border-red-400 transition-all flex flex-col group h-full relative overflow-hidden">
-                            <div {...attrs} {...listeners} onClick={(e) => e.stopPropagation()} className="absolute top-2 right-14 p-1.5 text-slate-300 hover:text-slate-500 cursor-grab active:cursor-grabbing md:opacity-0 group-hover:opacity-100 transition-opacity z-20"><GripHorizontal className="w-5 h-5" /></div>
-                            <div className="flex justify-between items-start mb-3 relative z-10">
-                              <div className="flex items-center gap-3 min-w-0">
-                                <div className="w-9 h-9 bg-red-50 rounded-xl flex items-center justify-center text-red-600 overflow-hidden relative z-10 shrink-0">{IconoCat && (typeof IconoCat === 'string' ? <img src={IconoCat} alt="Icon" className="w-6 h-6 object-contain opacity-80" /> : <IconoCat className="w-5 h-5" />)}</div>
-                                <div className="min-w-0"><span className="text-[10px] font-bold text-red-600 uppercase tracking-wider block mb-0.5">{sist.tipo}</span><div className="flex items-center gap-2"><h3 className="font-bold text-red-950 text-base leading-tight truncate">{sist.familia || sist.tipo}</h3><span className="shrink-0 px-1.5 py-0.5 bg-red-100 text-red-800 text-[10px] font-mono font-bold rounded" title="Equipos registrados">{equiposCount}</span></div></div>
-                              </div>
-                              <div className="flex items-center gap-1 relative z-10">
-                                <button onClick={(e) => { e.stopPropagation(); setFormSistema(sist); setIsSistemaModalOpen(true); }} className="p-1.5 text-black hover:text-zinc-600 hover:bg-zinc-100 rounded-lg transition-colors"><Edit className="w-4 h-4" /></button>
-                                <button onClick={(e) => { e.stopPropagation(); handleDeleteSistema(sist.id); }} className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
-                              </div>
-                            </div>
-                            {sist.descripcion && (<div className="bg-red-50/50 p-3 rounded-xl border border-red-50 mt-2 relative z-10"><p className="text-sm text-red-900/70">{sist.descripcion}</p></div>)}
-                            <div className="mt-4 pt-4 border-t border-red-50 relative z-10">
-                              <div className="flex items-center justify-between mb-3">
-                                <h4 className="text-xs font-bold text-red-950 uppercase tracking-wider">Equipos en el sistema</h4>
-                                <div className="flex gap-2">
-                                  <button onClick={(e) => { e.stopPropagation(); setSistemaSeleccionado(sist); setFormEquipo({ id: '', centroId: centroSeleccionado!.id, sistemaId: sist.id, codigo: '', nombre: '', ubicacion: '', clase: '', checkAcceso: true, checkAltura: true, checkSoporte: true, checkSenalizacion: true, checkManguera: true, checkPeso: true, checkManometro: true, checkMarcado: true, checkEtiquetas: true, checkRetimbre: true, checkRiesgo: true, checkDistancia: true, checkPasador: true, checkMovilidad: true }); setIsClaseOtro(false); setSelectedEquipoCatalogo(''); const sistemaNombre = sist.tipo || sist.familia || ''; const currentFamily = familiasFirestore.find(familia => normalizeFamilyName(familia.nombre) === normalizeFamilyName(sistemaNombre)); setSelectedFamilyForCatalog(currentFamily ? currentFamily.id : ''); setIsEquipoModalOpen(true); }} className="flex items-center gap-1 text-[10px] bg-slate-900 hover:bg-black text-white px-2 py-1 rounded-md font-bold transition-colors"><Plus className="w-3 h-3" /> Añadir equipos</button>
-                                </div>
-                              </div>
-                              {equiposDelSistema.length === 0 ? (<p className="text-xs text-red-600/50 italic py-2 text-center bg-red-50/50 rounded-lg border border-red-50/50">Sin equipos</p>) : (
-                                <div className="space-y-1.5 mt-2">
-                                  {equiposDelSistema.filter(eq => eq.revisable !== false).map((eq: any, i) => {
-                                    const hasAnomalies = Object.keys(eq).some(k => k.startsWith('check') && eq[k] === false);
-                                    return (
-                                      <div key={eq.id} className="flex justify-between items-center text-sm p-2 rounded-lg bg-white border border-slate-200 hover:border-slate-300 transition-colors">
-                                        <span className="font-medium text-slate-700 truncate pr-2 flex items-center gap-2"><span className="px-2 py-0.5 bg-black text-white text-xs font-mono font-bold rounded-lg shadow-sm min-w-[28px] text-center">{eq.codigo || (i+1).toString().padStart(2, '0')}</span> {eq.nombre || eq.modelo || 'Equipo sin nombre'}</span>
-                                        <div className="flex items-center gap-1.5 shrink-0">
-                                          {hasAnomalies && <span title="Anomalías detectadas"><AlertTriangle className="w-4 h-4 text-red-500" /></span>}
-                                          <button onClick={(e) => { e.stopPropagation(); handleDuplicateEquipoCentro(eq); }} className="p-1 text-slate-400 hover:text-sky-600 hover:bg-sky-50 rounded transition-colors" title="Duplicar equipo"><Copy className="w-3.5 h-3.5" /></button>
-                                          <button onClick={(e) => { e.stopPropagation(); handleEditEquipo(eq, sist); }} className="p-1 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded transition-colors" title="Editar equipo"><Edit className="w-3.5 h-3.5" /></button>
-                                          <button onClick={(e) => { e.stopPropagation(); handleDeleteEquipo(eq.id); }} className="p-1 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors" title="Eliminar equipo"><Trash2 className="w-3.5 h-3.5" /></button>
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              )}
+          {/* TABLA TIPO LISTA CON ACORDEÓN */}
+          {sistDelCentro.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-zinc-200 p-16 text-center shadow-sm">
+              <div className="w-16 h-16 bg-zinc-100 rounded-2xl flex items-center justify-center mx-auto mb-6"><Layers className="w-8 h-8 text-zinc-400" /></div>
+              <h3 className="text-xl font-bold text-zinc-900 mb-2">Sin sistemas instalados</h3>
+              <p className="text-zinc-500 mb-8 max-w-md mx-auto">Este centro no tiene sistemas registrados. Añade el primer sistema con el botón de arriba.</p>
+            </div>
+          ) : (
+            <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden overflow-x-auto">
+              {/* Cabecera de tabla */}
+              <div className="hidden md:flex items-center bg-[#f9f7f4] border-b-2 border-zinc-200 px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-zinc-500 min-w-[600px]">
+                <div className="w-8 shrink-0"></div>
+                <div className="w-10 shrink-0"></div>
+                <div className="flex-1 min-w-0 pl-2">Sistema</div>
+                <div className="w-24 shrink-0 text-center">Equipos</div>
+                <div className="w-32 shrink-0 text-right">Acciones</div>
+              </div>
+              <div className="divide-y divide-zinc-100">
+                {sistDelCentro.map(sist => {
+                  const equiposDelSistema = equiposInstalados.filter(e => e.sistemaId === sist.id);
+                  const equiposCount = equiposDelSistema.length;
+                  const isExpanded = expandedSistemaId === sist.id;
+                  const IconoCat = getIconForSistema(sist.tipo || sist.familia || '');
+                  return (
+                    <div key={sist.id}>
+                      {/* FILA DEL SISTEMA */}
+                      <div
+                        className="flex items-center px-4 py-3.5 hover:bg-zinc-50/80 transition-colors cursor-pointer group min-w-[600px]"
+                        onClick={() => setExpandedSistemaId(isExpanded ? null : sist.id)}
+                      >
+                        <div className="w-8 shrink-0 flex items-center justify-center">
+                          <div className={`transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}>
+                            <ChevronRight className="w-4 h-4 text-zinc-400" />
+                          </div>
+                        </div>
+                        <div className="w-10 h-10 bg-zinc-100 rounded-xl flex items-center justify-center text-zinc-600 overflow-hidden shrink-0">
+                          {IconoCat && (typeof IconoCat === 'string' ? <img src={IconoCat} alt="Icon" className="w-6 h-6 object-contain opacity-80" /> : <IconoCat className="w-5 h-5" />)}
+                        </div>
+                        <div className="flex-1 min-w-0 pl-3">
+                          <p className="text-sm font-bold text-zinc-900 truncate group-hover:text-blue-900 transition-colors">{sist.familia || sist.tipo}</p>
+                          {sist.descripcion && <p className="text-xs text-zinc-400 truncate mt-0.5">{sist.descripcion}</p>}
+                        </div>
+                        <div className="w-24 shrink-0 text-center">
+                          <span className="bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded text-[11px] font-bold">{equiposCount}</span>
+                        </div>
+                        <div className="w-32 shrink-0 flex items-center justify-end gap-1">
+                          <button onClick={(e) => { e.stopPropagation(); setSistemaSeleccionado(sist); setFormEquipo({ id: '', centroId: centroSeleccionado!.id, sistemaId: sist.id, codigo: '', nombre: '', ubicacion: '' }); setEquipoModalMode('manual'); setSelectedEquipoCatalogo(''); setIsEquipoModalOpen(true); }} className="p-1.5 text-zinc-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors" title="Añadir equipo manualmente"><Plus className="w-4 h-4" /></button>
+                          <button onClick={(e) => { e.stopPropagation(); setFormSistema(sist); setIsSistemaModalOpen(true); }} className="p-1.5 text-zinc-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Editar sistema"><Edit className="w-4 h-4" /></button>
+                          <button onClick={(e) => { e.stopPropagation(); handleDeleteSistema(sist.id); }} className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Eliminar sistema"><Trash2 className="w-4 h-4" /></button>
+                        </div>
+                      </div>
+                      {/* CONTENIDO DEL ACORDEÓN (EQUIPOS) */}
+                      {isExpanded && (
+                        <div className="bg-zinc-50/60 border-t border-zinc-100 px-4 md:px-14 py-4">
+                          <div className="flex items-center justify-between mb-3">
+                            <h5 className="text-xs font-bold text-zinc-600 uppercase tracking-wider">Equipos del sistema</h5>
+                            <div className="flex gap-2">
+                              <button onClick={(e) => { e.stopPropagation(); setSistemaSeleccionado(sist); setFormEquipo({ id: '', centroId: centroSeleccionado!.id, sistemaId: sist.id, codigo: '', nombre: '', ubicacion: '', clase: '', checkAcceso: true, checkAltura: true, checkSoporte: true, checkSenalizacion: true, checkManguera: true, checkPeso: true, checkManometro: true, checkMarcado: true, checkEtiquetas: true, checkRetimbre: true, checkRiesgo: true, checkDistancia: true, checkPasador: true, checkMovilidad: true }); setIsClaseOtro(false); setEquipoModalMode('catalogo'); setSelectedEquipoCatalogo(''); const sistemaNombre = sist.tipo || sist.familia || ''; const currentFamily = familiasFirestore.find(familia => normalizeFamilyName(familia.nombre) === normalizeFamilyName(sistemaNombre)); setSelectedFamilyForCatalog(currentFamily ? currentFamily.id : ''); setIsEquipoModalOpen(true); }} className="text-[10px] bg-black hover:bg-zinc-800 text-white px-2.5 py-1.5 rounded-md font-bold transition-colors flex items-center gap-1"><Plus className="w-3 h-3" /> Catálogo</button>
+                              <button onClick={(e) => { e.stopPropagation(); setSistemaSeleccionado(sist); setFormEquipo({ id: '', centroId: centroSeleccionado!.id, sistemaId: sist.id, codigo: '', nombre: '', ubicacion: '' }); setEquipoModalMode('manual'); setSelectedEquipoCatalogo(''); setIsEquipoModalOpen(true); }} className="text-[10px] bg-zinc-600 hover:bg-zinc-700 text-white px-2.5 py-1.5 rounded-md font-bold transition-colors flex items-center gap-1"><Plus className="w-3 h-3" /> Manual</button>
                             </div>
                           </div>
-                        )}
-                      </SortableSistemaWrapper>
-                    );
-                  })}
-                </SortableContext>
-              )}
+                          {equiposDelSistema.length === 0 ? (
+                            <p className="text-xs text-zinc-400 italic py-4 text-center bg-white rounded-lg border border-dashed border-zinc-200">No hay equipos en este sistema. Añade equipos con los botones de arriba.</p>
+                          ) : (
+                            <div className="space-y-1.5">
+                              <div className="hidden md:flex items-center px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                                <div className="w-16 shrink-0">Código</div>
+                                <div className="flex-1 min-w-0">Nombre</div>
+                                <div className="w-36 shrink-0">Ubicación</div>
+                                <div className="w-20 shrink-0 text-right">Acciones</div>
+                              </div>
+                              {equiposDelSistema.filter(eq => eq.revisable !== false).map((eq: any, i) => {
+                                const hasAnomalies = Object.keys(eq).some(k => k.startsWith('check') && eq[k] === false);
+                                return (
+                                  <div key={eq.id} className="flex flex-col md:flex-row md:items-center px-3 py-2.5 rounded-lg bg-white border border-zinc-200 hover:border-zinc-300 transition-colors">
+                                    <div className="flex md:hidden items-center justify-between mb-1">
+                                      <span className="text-[10px] font-mono font-bold text-zinc-400">#{eq.codigo || (i+1).toString().padStart(2, '0')}</span>
+                                      <div className="flex items-center gap-1">
+                                        {hasAnomalies && <AlertTriangle className="w-3.5 h-3.5 text-red-500" />}
+                                      </div>
+                                    </div>
+                                    <div className="w-full md:w-16 shrink-0 hidden md:block">
+                                      <span className="px-1.5 py-0.5 bg-zinc-900 text-white text-[10px] font-mono font-bold rounded-lg">{eq.codigo || (i+1).toString().padStart(2, '0')}</span>
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <span className="text-sm font-semibold text-zinc-800">{eq.nombre || eq.modelo || 'Equipo sin nombre'}</span>
+                                    </div>
+                                    <div className="w-full md:w-36 shrink-0 text-xs text-zinc-500 truncate mt-0.5 md:mt-0">{eq.ubicacion || '—'}</div>
+                                    <div className="flex items-center gap-1 shrink-0 mt-1 md:mt-0 justify-end">
+                                      {hasAnomalies && <span className="hidden md:inline" title="Anomalías detectadas"><AlertTriangle className="w-3.5 h-3.5 text-red-500" /></span>}
+                                      <button onClick={(e) => { e.stopPropagation(); handleDuplicateEquipoCentro(eq); }} className="p-1 text-zinc-400 hover:text-sky-600 hover:bg-sky-50 rounded transition-colors" title="Duplicar equipo"><Copy className="w-3.5 h-3.5" /></button>
+                                      <button onClick={(e) => { e.stopPropagation(); handleEditEquipo(eq, sist); }} className="p-1 text-zinc-400 hover:text-amber-600 hover:bg-amber-50 rounded transition-colors" title="Editar equipo"><Edit className="w-3.5 h-3.5" /></button>
+                                      <button onClick={(e) => { e.stopPropagation(); handleDeleteEquipo(eq.id); }} className="p-1 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors" title="Eliminar equipo"><Trash2 className="w-3.5 h-3.5" /></button>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-          </DndContext>
+          )}
 
           {isEquipoModalOpen && sistemaSeleccionado && centroSeleccionado && (
             <div className="fixed inset-0 bg-red-950/20 backdrop-blur-sm flex items-center justify-center p-4 z-50">
               <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
                 <div className="px-6 py-4 border-b border-red-100 flex items-center justify-between bg-red-50/30 shrink-0">
-                  <h2 className="text-lg font-bold text-red-950">{formEquipo.id ? 'Editar Equipo' : 'Añadir desde Catálogo'}</h2>
+                  <h2 className="text-lg font-bold text-red-950">
+                    {equipoModalMode === 'editar' ? 'Editar Equipo' : equipoModalMode === 'manual' ? 'Añadir Equipo Manualmente' : 'Añadir desde Catálogo'}
+                  </h2>
                   <button onClick={() => { setIsEquipoModalOpen(false); setFormEquipo({ id: '', centroId: '', sistemaId: '', codigo: '', nombre: '', ubicacion: '' }); setSelectedEquipoCatalogo(''); setIsClaseOtro(false); }} className="p-2 text-red-400 hover:text-red-700 hover:bg-white rounded-xl transition-colors"><X className="w-5 h-5" /></button>
                 </div>
                 <div className="overflow-y-auto p-6">
-                  {formEquipo.id ? (
+                  {equipoModalMode === 'editar' ? (
                     <form onSubmit={handleUpdateEquipo} className="space-y-6">
                       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                         <div className="space-y-1.5"><label className="text-sm font-semibold text-red-950">Nº orden</label><input type="text" value={formEquipo.codigo} onChange={e => setFormEquipo({...formEquipo, codigo: e.target.value.toUpperCase()})} className="w-full px-4 py-2 bg-red-50/50 border border-red-100 rounded-xl text-red-950" /></div>
@@ -892,6 +1042,27 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
                       <div className="pt-2 flex gap-3">
                         <button type="button" onClick={() => { setIsEquipoModalOpen(false); setFormEquipo({ id: '', centroId: '', sistemaId: '', codigo: '', nombre: '', ubicacion: '' }); setIsClaseOtro(false); }} className="flex-1 px-4 py-2.5 text-red-700 bg-red-50 hover:bg-red-100 rounded-xl font-medium transition-colors">Cancelar</button>
                         <button type="submit" className="flex-1 px-4 py-2.5 text-white bg-red-600 hover:bg-red-700 rounded-xl font-medium transition-colors shadow-sm">Guardar Datos</button>
+                      </div>
+                    </form>
+                  ) : equipoModalMode === 'manual' ? (
+                    <form onSubmit={handleAddEquipoManual} className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <label className="text-sm font-semibold text-red-950">Código / Nº Serie</label>
+                          <input type="text" value={formEquipo.codigo} onChange={e => setFormEquipo({...formEquipo, codigo: e.target.value.toUpperCase()})} className="w-full px-4 py-2.5 bg-red-50/50 border border-red-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all text-red-950 uppercase" placeholder="Ej: EXT-001" />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-sm font-semibold text-red-950">Nombre / Tipo *</label>
+                          <input required type="text" value={formEquipo.nombre} onChange={e => setFormEquipo({...formEquipo, nombre: e.target.value})} className="w-full px-4 py-2.5 bg-red-50/50 border border-red-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all text-red-950" placeholder="Ej: Extintor Polvo ABC 6Kg" />
+                        </div>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-sm font-semibold text-red-950">Ubicación</label>
+                        <input type="text" value={formEquipo.ubicacion} onChange={e => setFormEquipo({...formEquipo, ubicacion: e.target.value})} className="w-full px-4 py-2.5 bg-red-50/50 border border-red-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all text-red-950" placeholder="Ej: Planta baja, junto a puerta principal" />
+                      </div>
+                      <div className="pt-2 flex gap-3">
+                        <button type="button" onClick={() => { setIsEquipoModalOpen(false); setFormEquipo({ id: '', centroId: '', sistemaId: '', codigo: '', nombre: '', ubicacion: '' }); }} className="flex-1 px-4 py-2.5 text-red-700 bg-red-50 hover:bg-red-100 rounded-xl font-medium transition-colors">Cancelar</button>
+                        <button type="submit" disabled={!formEquipo.nombre.trim()} className="flex-1 px-4 py-2.5 text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 rounded-xl font-medium transition-colors shadow-sm">Añadir Equipo</button>
                       </div>
                     </form>
                   ) : (
@@ -952,12 +1123,12 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
                 </div>
                 <form onSubmit={handleAddSistemaFromCatalog} className="p-6 space-y-4">
                   <div className="space-y-1.5">
-                    <label className="text-sm font-semibold text-zinc-900">Seleccionar Sistema desde Firestore *</label>
-                    <select required value={selectedCatIdForCentro} disabled={isFamiliasLoading || familiasFirestore.length === 0} onChange={e => setSelectedCatIdForCentro(e.target.value)} className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-zinc-900/20 transition-all text-zinc-900 disabled:opacity-60 disabled:cursor-not-allowed">
-                      <option value="">{isFamiliasLoading ? 'Cargando sistemas...' : '-- Elige un sistema --'}</option>
-                      {familiasFirestore.map(familia => (<option key={familia.id} value={familia.id}>{familia.nombre}</option>))}
+                    <label className="text-sm font-semibold text-zinc-900">Seleccionar Sistema *</label>
+                    <select required value={selectedCatIdForCentro} onChange={e => setSelectedCatIdForCentro(e.target.value)} className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-zinc-900/20 transition-all text-zinc-900">
+                      <option value="">-- Elige un sistema --</option>
+                      {categoriasSistema.map(cat => (<option key={cat.id} value={cat.id}>{cat.nombre}</option>))}
                     </select>
-                    {!isFamiliasLoading && familiasFirestore.length === 0 && (<p className="text-xs text-amber-600 font-medium">No hay sistemas disponibles en Firestore. Añade documentos en la colección "familias".</p>)}
+                    {categoriasSistema.length === 0 && (<p className="text-xs text-amber-600 font-medium">No hay sistemas disponibles. Ve a la sección Sistemas para crear categorías.</p>)}
                   </div>
                   <div className="pt-2 flex gap-3"><button type="button" onClick={() => setIsAddCatModalOpen(false)} className="flex-1 px-4 py-3 rounded-xl font-bold text-zinc-500 hover:bg-zinc-100 transition-colors">Cancelar</button><button type="submit" disabled={!selectedCatIdForCentro} className="flex-1 px-4 py-2.5 text-white bg-zinc-900 hover:bg-black disabled:opacity-50 rounded-xl font-medium transition-colors shadow-sm">Añadir al Centro</button></div>
                 </form>
