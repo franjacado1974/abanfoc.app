@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, Save, Building2, Layers, MapPin, FileText, ChevronDown, ChevronRight, Plus, X, CheckCircle2, XCircle, Trash2, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Save, Building2, Layers, MapPin, FileText, ChevronDown, ChevronRight, Plus, X, CheckCircle2, XCircle, Trash2, AlertTriangle, Pencil } from 'lucide-react';
 import type { Centro, Parte, Cliente, CentroSistema, EquipoInstalado } from './Centros';
 import { updateEquipoInstalado, subscribePartes, subscribeCentros, subscribeClientes, subscribeCentroSistemas, subscribeEquiposInstalados } from './firebase';
 import ConfirmationModal from './ConfirmationModal';
@@ -43,6 +43,9 @@ export default function RevisionChecklist() {
 
     const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
     const [equipoIdToDelete, setEquipoIdToDelete] = useState<string | null>(null);
+
+    // Estado para modal de edición de equipo
+    const [editEquipo, setEditEquipo] = useState<{ id: string; codigo: string; nombre: string; ubicacion: string; placa: string; fechaFabricacion: string; ultimoRetimbre: string } | null>(null);
 
     // ── Carga inicial desde Firestore ──────────────────────────────────────────
     useEffect(() => {
@@ -482,46 +485,27 @@ export default function RevisionChecklist() {
                                                         return (
                                                             <div key={eq.id} className={`rounded-xl border transition-all ${algunCheckRojo ? 'bg-red-50/30 border-red-200' : 'bg-slate-50 border-slate-150'}`}>
                                                                 <div className="px-4 py-3 flex flex-wrap items-center justify-between gap-2">
-                                                                    <div className="flex flex-wrap items-center gap-2">
-                                                                        <span className="px-3 py-1 bg-black text-white text-sm font-mono font-bold rounded-lg shadow-md min-w-[36px] text-center">
+                                                                    <div className="flex flex-wrap items-center gap-2 min-w-0">
+                                                                        <span className="px-3 py-1 bg-black text-white text-sm font-mono font-bold rounded-lg shadow-md min-w-[36px] text-center shrink-0">
                                                                             {eq.codigo || (i + 1).toString().padStart(2, '0')}
                                                                         </span>
-                                                                        <span className="text-sm font-semibold text-slate-700">
-                                                                            {eq.nombre}
-                                                                            {eq.placa && <span className="text-xs text-slate-400 font-medium ml-1"> / #{eq.placa}</span>}
+                                                                        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 min-w-0 uppercase">
+                                                                            <span className="text-sm font-semibold text-slate-700">{eq.nombre}</span>
+                                                                            {eq.placa && (
+                                                                                <><span className="text-slate-300 font-light">/</span><span className="text-sm font-medium text-slate-500">#{eq.placa}</span></>
+                                                                            )}
                                                                             {eq.ubicacion && (
-                                                                                <span className="text-xs text-slate-400 font-medium inline-flex items-center gap-1 ml-1"> / <MapPin className="w-3 h-3 text-slate-400" />{eq.ubicacion}</span>
+                                                                                <><span className="text-slate-300 font-light">/</span><span className="text-sm font-medium text-slate-500">{eq.ubicacion}</span></>
                                                                             )}
                                                                             {eq.fechaFabricacion && (
-                                                                                <span className="text-xs text-slate-400 font-medium ml-1"> / F. Fabricación: {eq.fechaFabricacion.split('-').reverse().join('-')}</span>
+                                                                                <><span className="text-slate-300 font-light">/</span><span className="text-sm font-medium text-slate-500">F. Fabricación {eq.fechaFabricacion.substring(0,7).split('-').reverse().join('-')}</span></>
                                                                             )}
                                                                             {eq.ultimoRetimbre && (
-                                                                                <span className="text-xs text-slate-400 font-medium ml-1"> / F. Retimbre: {eq.ultimoRetimbre.split('-').reverse().join('-')}</span>
-                                                                            )}
-                                                                        </span>
-                                                                    </div>
-                                                                    <div className="flex items-center gap-2 text-xs">
-                                                                        <div className="flex items-center gap-1.5 mr-2 pr-2 border-r border-slate-200">
-                                                                            <span className="flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded-lg font-medium">
-                                                                                <CheckCircle2 className="w-3 h-3" /> {stats.ok}
-                                                                            </span>
-                                                                            {stats.fail > 0 && (
-                                                                                <span className="flex items-center gap-1 px-2 py-1 bg-red-100 text-red-700 rounded-lg font-medium">
-                                                                                    <XCircle className="w-3 h-3" /> {stats.fail}
-                                                                                </span>
-                                                                            )}
-                                                                            {stats.pending > 0 && (
-                                                                                <span className="px-2 py-1 bg-slate-200 text-slate-500 rounded-lg font-medium">
-                                                                                    {stats.pending} pend.
-                                                                                </span>
+                                                                                <><span className="text-slate-300 font-light">/</span><span className="text-sm font-medium text-slate-500">F. Retimbre {eq.ultimoRetimbre.substring(0,7).split('-').reverse().join('-')}</span></>
                                                                             )}
                                                                         </div>
-                                                                        <button
-                                                                            onClick={() => handleDeleteEquipo(eq.id)}
-                                                                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                                                        >
-                                                                            <Trash2 className="w-4 h-4" />
-                                                                        </button>
+                                                                    </div>
+                                                                    <div className="flex items-center gap-1.5">
                                                                     </div>
                                                                 </div>
 
@@ -563,9 +547,41 @@ export default function RevisionChecklist() {
                                                                 </div>
 
                                                                 <div className={`px-4 pb-4 ${algunCheckRojo ? 'border-t border-red-200 pt-3' : 'border-t border-slate-200 pt-3'}`}>
-                                                                    <label className={`block text-xs font-semibold mb-1.5 ${anomaliaObligatoriaVacia ? 'text-red-600' : 'text-slate-600'}`}>
-                                                                        Anomalías / Observaciones {algunCheckRojo ? <span className="text-red-500">(obligatorio)</span> : ''}
-                                                                    </label>
+                                                                    <div className="flex items-center justify-between mb-1.5">
+                                                                        <label className={`text-xs font-semibold ${anomaliaObligatoriaVacia ? 'text-red-600' : 'text-slate-600'}`}>
+                                                                            Anomalías / Observaciones {algunCheckRojo ? <span className="text-red-500">(obligatorio)</span> : ''}
+                                                                        </label>
+                                                                        <div className="flex items-center gap-1.5">
+                                                                            <span className="flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded-lg text-xs font-bold">
+                                                                                <CheckCircle2 className="w-3 h-3" /> {stats.ok}
+                                                                            </span>
+                                                                            {stats.fail > 0 && (
+                                                                                <span className="flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-700 rounded-lg text-xs font-bold">
+                                                                                    <XCircle className="w-3 h-3" /> {stats.fail}
+                                                                                </span>
+                                                                            )}
+                                                                            {stats.pending > 0 && (
+                                                                                <span className="px-2 py-0.5 bg-slate-200 text-slate-500 rounded-lg text-xs font-bold">
+                                                                                    {stats.pending}?
+                                                                                </span>
+                                                                            )}
+                                                                            <div className="w-px h-4 bg-slate-200 mx-0.5" />
+                                                                            <button
+                                                                                onClick={() => setEditEquipo({ id: eq.id, codigo: eq.codigo || '', nombre: eq.nombre || '', ubicacion: eq.ubicacion || '', placa: eq.placa || '', fechaFabricacion: eq.fechaFabricacion || '', ultimoRetimbre: eq.ultimoRetimbre || '' })}
+                                                                                className="p-1 text-slate-700 hover:bg-slate-200 rounded-lg transition-colors"
+                                                                                title="Editar equipo"
+                                                                            >
+                                                                                <Pencil className="w-3.5 h-3.5" />
+                                                                            </button>
+                                                                            <button
+                                                                                onClick={() => handleDeleteEquipo(eq.id)}
+                                                                                className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                                                                                title="Eliminar equipo"
+                                                                            >
+                                                                                <Trash2 className="w-3.5 h-3.5" />
+                                                                            </button>
+                                                                        </div>
+                                                                    </div>
                                                                     <textarea
                                                                         value={eq.anomalias || ''}
                                                                         onChange={(e) => setEquiposInstalados(prevEquipos =>
@@ -694,6 +710,111 @@ export default function RevisionChecklist() {
                                 className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 shadow-sm transition-all"
                             >
                                 Guardar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* MODAL EDITAR EQUIPO */}
+            {editEquipo && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[100]">
+                    <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl flex flex-col animate-in fade-in zoom-in-95 duration-200">
+                        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                            <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                                <Pencil className="w-5 h-5 text-slate-600" /> Editar equipo
+                            </h2>
+                            <button onClick={() => setEditEquipo(null)} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-500 mb-1.5">Código</label>
+                                    <input
+                                        type="text"
+                                        value={editEquipo.codigo}
+                                        onChange={e => setEditEquipo(prev => prev ? { ...prev, codigo: e.target.value } : null)}
+                                        className="w-full px-3 py-2.5 bg-white rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-500 mb-1.5">Placa</label>
+                                    <input
+                                        type="text"
+                                        value={editEquipo.placa}
+                                        onChange={e => setEditEquipo(prev => prev ? { ...prev, placa: e.target.value } : null)}
+                                        className="w-full px-3 py-2.5 bg-white rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
+                                        placeholder="Ej: PL-12345"
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-500 mb-1.5">Nombre</label>
+                                <input
+                                    type="text"
+                                    value={editEquipo.nombre}
+                                    onChange={e => setEditEquipo(prev => prev ? { ...prev, nombre: e.target.value } : null)}
+                                    className="w-full px-3 py-2.5 bg-white rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
+                                    placeholder="Ej: Extintor CO2 5kg"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-500 mb-1.5">Ubicación</label>
+                                <input
+                                    type="text"
+                                    value={editEquipo.ubicacion}
+                                    onChange={e => setEditEquipo(prev => prev ? { ...prev, ubicacion: e.target.value } : null)}
+                                    className="w-full px-3 py-2.5 bg-white rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
+                                    placeholder="Ej: Planta baja, entrada"
+                                />
+                            </div>
+                            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-500 mb-1.5">F. Fabricación</label>
+                                    <input
+                                        type="month"
+                                        value={editEquipo.fechaFabricacion ? editEquipo.fechaFabricacion.substring(0, 7) : ''}
+                                        onChange={e => setEditEquipo(prev => prev ? { ...prev, fechaFabricacion: e.target.value ? e.target.value + '-01' : '' } : null)}
+                                        className="w-full px-3 py-2.5 bg-white rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-500 mb-1.5">F. Retimbre</label>
+                                    <input
+                                        type="month"
+                                        value={editEquipo.ultimoRetimbre ? editEquipo.ultimoRetimbre.substring(0, 7) : ''}
+                                        onChange={e => setEditEquipo(prev => prev ? { ...prev, ultimoRetimbre: e.target.value ? e.target.value + '-01' : '' } : null)}
+                                        className="w-full px-3 py-2.5 bg-white rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                        <div className="px-6 py-4 border-t border-slate-100 flex gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setEditEquipo(null)}
+                                className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100 transition-colors"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    if (!editEquipo) return;
+                                    const updated = equiposInstalados.map(eq =>
+                                        eq.id === editEquipo.id
+                                            ? { ...eq, codigo: editEquipo.codigo, nombre: editEquipo.nombre, ubicacion: editEquipo.ubicacion, placa: editEquipo.placa, fechaFabricacion: editEquipo.fechaFabricacion, ultimoRetimbre: editEquipo.ultimoRetimbre }
+                                            : eq
+                                    );
+                                    setEquiposInstalados(updated);
+                                    saveEquiposProgress(updated);
+                                    setEditEquipo(null);
+                                }}
+                                className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 shadow-sm transition-all"
+                            >
+                                Guardar cambios
                             </button>
                         </div>
                     </div>

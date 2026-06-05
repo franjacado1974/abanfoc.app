@@ -85,7 +85,7 @@ function Login({ usuarios: _usuarios, onLogin }: { usuarios: Usuario[], onLogin:
           />
           <button type="submit" className="w-full bg-black hover:bg-zinc-800 text-white py-3.5 sm:py-4 rounded-xl sm:rounded-2xl font-bold shadow-lg transition-all active:scale-95">Entrar</button>
         </form>
-        <p className="text-center text-zinc-400 text-xs mt-4">V.05.06.26</p>
+        <p className="text-center text-zinc-400 text-xs mt-4">V05.06.26.02</p>
       </div>
     </div>
   );
