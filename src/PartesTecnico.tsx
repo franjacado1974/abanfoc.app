@@ -3,7 +3,7 @@ import {
   ArrowLeft, Calendar, MapPin, Search, X,
   ChevronRight, Layers, Clock
 } from 'lucide-react';
-import { subscribePartes, subscribeCentroSistemas, subscribeClientes, subscribeCentros } from './firebase';
+import { subscribePartes, subscribeCentroSistemas, subscribeClientes, subscribeCentros, updateParte } from './firebase';
 import { useNavigate } from 'react-router-dom';
 import type { Parte, Centro, Cliente, CentroSistema } from './Centros';
 import type { Tecnico } from './firebase';
@@ -113,6 +113,8 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
     switch (estado) {
       case 'Planificado':
         return 'bg-blue-100 text-blue-700';
+      case 'Abierto':
+        return 'bg-amber-100 text-amber-700';
       case 'Descargado (Offline)':
         return 'bg-sky-100 text-sky-700';
       case 'Finalizado':
@@ -124,8 +126,21 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
     }
   };
 
-  // Al pulsar un parte → ir directamente a la revisión
-  const handleAbrirParte = (parte: Parte) => {
+  // Al pulsar un parte → cambiar estado a Abierto si estaba Planificado, luego ir a revisión
+  const handleAbrirParte = async (parte: Parte) => {
+    if (parte.estado === 'Planificado') {
+      try {
+        await updateParte(parte.id, { estado: 'Abierto' } as any);
+        // Actualizar también en localStorage
+        const storedPartes = JSON.parse(localStorage.getItem('firecheck_db_partes') || '[]');
+        const updatedPartes = storedPartes.map((p: any) =>
+          p.id === parte.id ? { ...p, estado: 'Abierto' } : p
+        );
+        localStorage.setItem('firecheck_db_partes', JSON.stringify(updatedPartes));
+      } catch (err) {
+        console.error('Error actualizando estado del parte:', err);
+      }
+    }
     navigate('/revision-checklist', {
       state: { centroId: parte.centroId, parteId: parte.id }
     });
@@ -204,6 +219,8 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
                   className={`w-full bg-white rounded-2xl border-2 transition-all text-left shadow-sm hover:shadow-md active:scale-[0.98] ${
                     isPlanificado
                       ? 'border-blue-200 hover:border-blue-400'
+                      : parte.estado === 'Abierto'
+                      ? 'border-amber-200 hover:border-amber-400'
                       : parte.estado === 'Finalizado'
                       ? 'border-emerald-200 hover:border-emerald-400'
                       : parte.estado === 'Cerrado'

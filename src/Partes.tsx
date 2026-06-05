@@ -43,9 +43,10 @@ function VistaTecnicoMovil({ partes, centros, clientes, tecnicos }: {
     t.nombre?.toLowerCase() === loggedUser?.nombre?.toLowerCase()
   );
 
-  // Filtrar partes planificados asignados a este técnico
+  // Filtrar partes activos (Planificado o Abierto) asignados a este técnico
+  // Los partes borrados del calendario desaparecen automáticamente gracias a la suscripción en tiempo real
   const partesAsignados = partes.filter(p =>
-    p.estado === 'Planificado' &&
+    (p.estado === 'Planificado' || p.estado === 'Abierto') &&
     (tecnicoLogueado ? (p.tecnicoId === tecnicoLogueado.id || p.tecnicoId === tecnicoLogueado._docId) : true)
   ).sort((a, b) => {
     const fa = a.fechaProgramada || a.fechaCreacion || '';
@@ -112,7 +113,14 @@ function VistaTecnicoMovil({ partes, centros, clientes, tecnicos }: {
                 return (
                   <button
                     key={sist.id}
-                    onClick={() => navigate('/revision-checklist', { state: { centroId: parteSeleccionado.centroId, parteId: parteSeleccionado.id, sistemaId: sist.id } })}
+                    onClick={async () => {
+                      // Cambiar estado a "Abierto" solo al entrar en un sistema
+                      if (parteSeleccionado.estado === 'Planificado') {
+                        const docId = (parteSeleccionado as any)._docId || parteSeleccionado.id;
+                        try { await updateParte(docId, { estado: 'Abierto' }); } catch (e) { console.error(e); }
+                      }
+                      navigate('/revision-checklist', { state: { centroId: parteSeleccionado.centroId, parteId: parteSeleccionado.id, sistemaId: sist.id } });
+                    }}
                     className="w-full bg-white rounded-2xl p-4 border border-zinc-200 hover:border-blue-300 active:scale-[0.98] transition-all text-left flex items-center gap-4"
                   >
                     <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center shrink-0">
@@ -140,7 +148,14 @@ function VistaTecnicoMovil({ partes, centros, clientes, tecnicos }: {
 
           {/* Botón ir a revisión completa */}
           <button
-            onClick={() => navigate('/revision-checklist', { state: { centroId: parteSeleccionado.centroId, parteId: parteSeleccionado.id } })}
+            onClick={async () => {
+              // Cambiar estado a "Abierto" solo al entrar en la revisión
+              if (parteSeleccionado.estado === 'Planificado') {
+                const docId = (parteSeleccionado as any)._docId || parteSeleccionado.id;
+                try { await updateParte(docId, { estado: 'Abierto' }); } catch (e) { console.error(e); }
+              }
+              navigate('/revision-checklist', { state: { centroId: parteSeleccionado.centroId, parteId: parteSeleccionado.id } });
+            }}
             className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-blue-200 active:scale-[0.98] transition-all mt-4"
           >
             <Edit className="w-5 h-5" /> Iniciar revisión completa
@@ -183,12 +198,8 @@ function VistaTecnicoMovil({ partes, centros, clientes, tecnicos }: {
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs text-zinc-400 font-medium truncate mb-0.5">{cliente?.nombre || 'Cliente'}</p>
-                    <h3 className="text-base font-bold text-zinc-900 truncate">{centro?.nombre || 'Centro desconocido'}</h3>
-                    <p className="text-xs text-zinc-500 mt-1 flex items-center gap-1">
-                      <MapPin className="w-3 h-3 shrink-0" />
-                      {centro?.poblacion || 'Sin ubicación'}
-                    </p>
+                    <p className="text-sm font-bold text-zinc-900 truncate">{cliente?.nombre || 'Cliente'}</p>
+                    <p className="text-xs text-zinc-500 truncate mt-0.5">{centro?.nombre || 'Centro desconocido'}</p>
                   </div>
                   <ChevronRight className="w-5 h-5 text-zinc-400 shrink-0 mt-1" />
                 </div>
@@ -797,13 +808,14 @@ export default function Partes() {
                 const cliente = clientes.find(cl => cl.id === parte.clienteId); // Find the client for display
                 const isOffline = parte.estado === 'Descargado (Offline)';
                 const isCerrado = parte.estado === 'Cerrado';
+                const isPreCerrado = parte.estado === 'Pre-Cerrado';
                 const isPlanificado = parte.estado === 'Planificado';
 
                 return (
-                  <div key={parte.id} className={`bg-white rounded-3xl p-6 border-2 shadow-sm transition-all flex flex-col ${isCerrado ? 'border-black bg-zinc-50/50' : isFinalizado ? 'border-emerald-500 bg-emerald-50/30' : isPlanificado ? 'border-blue-500 hover:shadow-md' : isOffline ? 'border-sky-300 bg-sky-50/30' : 'border-sky-100 hover:shadow-md'}`}>
+                  <div key={parte.id} className={`bg-white rounded-3xl p-6 border-2 shadow-sm transition-all flex flex-col ${isCerrado ? 'border-blue-900 bg-blue-950/5' : isPreCerrado ? 'border-blue-700 bg-blue-50/30' : isFinalizado ? 'border-emerald-500 bg-emerald-50/30' : isPlanificado ? 'border-blue-500 hover:shadow-md' : isOffline ? 'border-sky-300 bg-sky-50/30' : 'border-sky-100 hover:shadow-md'}`}>
                     <div className="flex justify-between items-start mb-4">
                       <span className="text-[10px] font-mono font-bold text-zinc-400 bg-zinc-100 px-2 py-1 rounded">{parte.id}</span>
-                      <span className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wider ${isCerrado ? 'bg-black text-white' : isFinalizado ? 'bg-emerald-100 text-emerald-700' : isOffline ? 'bg-sky-100 text-sky-700' : 'bg-sky-100 text-sky-700'}`}>
+                      <span className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wider ${isCerrado ? 'bg-blue-900 text-white' : isPreCerrado ? 'bg-blue-700 text-white' : isFinalizado ? 'bg-emerald-100 text-emerald-700' : isOffline ? 'bg-sky-100 text-sky-700' : 'bg-sky-100 text-sky-700'}`}>
                         {parte.estado}
                       </span>
                     </div>

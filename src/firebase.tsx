@@ -866,7 +866,7 @@ export interface ParteFirestore {
   empresaId?: string;
   periodicidad: string;
   mesesRevision: string;
-  estado: 'Planificado' | 'Descargado (Offline)' | 'Finalizado' | 'Cerrado';
+  estado: 'Planificado' | 'Abierto' | 'Descargado (Offline)' | 'Finalizado' | 'Cerrado' | 'Pre-Cerrado';
   tipoTrabajo?: string;
   numeroMantenimiento?: string;
   fechaProgramada?: string;

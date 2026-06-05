@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, Save, Building2, Layers, MapPin, FileText, ChevronDown, ChevronRight, Plus, X, CheckCircle2, XCircle, Trash2, AlertTriangle, Pencil } from 'lucide-react';
+import { ArrowLeft, Save, Building2, Layers, MapPin, FileText, ChevronDown, ChevronRight, Plus, X, CheckCircle2, XCircle, Trash2, AlertTriangle, Pencil, PenLine, RotateCcw } from 'lucide-react';
 import type { Centro, Parte, Cliente, CentroSistema, EquipoInstalado } from './Centros';
-import { updateEquipoInstalado, subscribePartes, subscribeCentros, subscribeClientes, subscribeCentroSistemas, subscribeEquiposInstalados } from './firebase';
+import { updateEquipoInstalado, updateParte as updateParteFirestore, subscribePartes, subscribeCentros, subscribeClientes, subscribeCentroSistemas, subscribeEquiposInstalados } from './firebase';
 import ConfirmationModal from './ConfirmationModal';
 
 const CHECKLIST_ITEMS = [
@@ -47,6 +47,17 @@ export default function RevisionChecklist() {
     // Estado para modal de edición de equipo
     const [editEquipo, setEditEquipo] = useState<{ id: string; codigo: string; nombre: string; ubicacion: string; placa: string; fechaFabricacion: string; ultimoRetimbre: string } | null>(null);
 
+    // Estados para pre-cierre y firmas
+    const [showPreCierreModal, setShowPreCierreModal] = useState(false);
+    const [showFirmasModal, setShowFirmasModal] = useState(false);
+    const canvasClienteRef = useRef<HTMLCanvasElement>(null);
+    const canvasTecnicoRef = useRef<HTMLCanvasElement>(null);
+    const [drawingCliente, setDrawingCliente] = useState(false);
+    const [drawingTecnico, setDrawingTecnico] = useState(false);
+    const [firmaClienteOk, setFirmaClienteOk] = useState(false);
+    const [firmaTecnicoOk, setFirmaTecnicoOk] = useState(false);
+    const [nombreClienteFirma, setNombreClienteFirma] = useState('');
+
     // ── Carga inicial desde Firestore ──────────────────────────────────────────
     useEffect(() => {
         if (!centroId || !parteId) {
@@ -73,14 +84,14 @@ export default function RevisionChecklist() {
             const found = items.find((p: any) => p.id === parteId) as Parte | undefined;
             if (found) {
                 setParte(found);
-                // Si está planificado, marcarlo como descargado
+                // Si está planificado, marcarlo como Abierto
                 if (found.estado === 'Planificado') {
                     const storedPartes = JSON.parse(localStorage.getItem('firecheck_db_partes') || '[]');
                     const updatedPartes = storedPartes.map((p: any) =>
-                        p.id === parteId ? { ...p, estado: 'Descargado (Offline)' } : p
+                        p.id === parteId ? { ...p, estado: 'Abierto' } : p
                     );
                     localStorage.setItem('firecheck_db_partes', JSON.stringify(updatedPartes));
-                    setParte({ ...found, estado: 'Descargado (Offline)' });
+                    setParte({ ...found, estado: 'Abierto' });
                 }
             }
             localStorage.setItem('firecheck_db_partes', JSON.stringify(items));
@@ -208,11 +219,102 @@ export default function RevisionChecklist() {
             return;
         }
 
-        const numMant = `MANT-${new Date().getFullYear()}-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`;
-        saveEquiposProgress();
-        updateParte({ estado: 'Finalizado', numeroMantenimiento: numMant });
+        // Mostrar modal de pre-cierre
+        setShowPreCierreModal(true);
+    };
 
-        alert('Revisión finalizada y guardada.');
+    const handleConfirmarPreCierre = () => {
+        setShowPreCierreModal(false);
+        setFirmaClienteOk(false);
+        setFirmaTecnicoOk(false);
+        setShowFirmasModal(true);
+        // Limpiar canvas al abrir
+        setTimeout(() => {
+            [canvasClienteRef, canvasTecnicoRef].forEach(ref => {
+                const canvas = ref.current;
+                if (canvas) {
+                    const ctx = canvas.getContext('2d');
+                    if (ctx) { ctx.clearRect(0, 0, canvas.width, canvas.height); }
+                }
+            });
+        }, 100);
+    };
+
+    const getCanvasPos = (canvas: HTMLCanvasElement, e: React.MouseEvent | React.TouchEvent) => {
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        if ('touches' in e) {
+            return {
+                x: (e.touches[0].clientX - rect.left) * scaleX,
+                y: (e.touches[0].clientY - rect.top) * scaleY,
+            };
+        }
+        return {
+            x: ((e as React.MouseEvent).clientX - rect.left) * scaleX,
+            y: ((e as React.MouseEvent).clientY - rect.top) * scaleY,
+        };
+    };
+
+    const startDraw = (canvasRef: React.RefObject<HTMLCanvasElement | null>, setDrawing: (v: boolean) => void, e: React.MouseEvent | React.TouchEvent) => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        setDrawing(true);
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        const pos = getCanvasPos(canvas, e);
+        ctx.beginPath();
+        ctx.moveTo(pos.x, pos.y);
+    };
+
+    const draw = (canvasRef: React.RefObject<HTMLCanvasElement | null>, drawing: boolean, e: React.MouseEvent | React.TouchEvent) => {
+        if (!drawing) return;
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        const pos = getCanvasPos(canvas, e);
+        ctx.lineWidth = 2.5;
+        ctx.lineCap = 'round';
+        ctx.strokeStyle = '#1e293b';
+        ctx.lineTo(pos.x, pos.y);
+        ctx.stroke();
+    };
+
+    const stopDraw = (setDrawing: (v: boolean) => void, setFirmaOk: (v: boolean) => void, canvasRef: React.RefObject<HTMLCanvasElement | null>) => {
+        setDrawing(false);
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+        const hasContent = Array.from(data).some((v, i) => i % 4 === 3 && v > 0);
+        setFirmaOk(hasContent);
+    };
+
+    const clearCanvas = (canvasRef: React.RefObject<HTMLCanvasElement | null>, setFirmaOk: (v: boolean) => void) => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+        setFirmaOk(false);
+    };
+
+    const handleFinalizarConFirmas = async () => {
+        const numMant = `MANT-${new Date().getFullYear()}-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`;
+        await saveEquiposProgress();
+        // Actualizar localStorage
+        updateParte({ estado: 'Pre-Cerrado', numeroMantenimiento: numMant });
+        // Sincronizar con Firestore
+        const storedPartes = JSON.parse(localStorage.getItem('firecheck_db_partes') || '[]');
+        const parteActual = storedPartes.find((p: any) => p.id === parteId);
+        const docId = parteActual?._docId || parteId;
+        try {
+            await updateParteFirestore(docId, { estado: 'Pre-Cerrado', numeroMantenimiento: numMant });
+        } catch (err) {
+            console.error('Error actualizando estado en Firestore:', err);
+        }
+        setShowFirmasModal(false);
         navigate(-1);
     };
 
@@ -832,6 +934,164 @@ export default function RevisionChecklist() {
                     cancelText="No, cancelar"
                 />
             )}
+
+            {/* MODAL PRE-CIERRE */}
+            {showPreCierreModal && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[200]">
+                    <div className="bg-white rounded-3xl w-full max-w-sm shadow-2xl flex flex-col animate-in fade-in zoom-in-95 duration-200 overflow-hidden">
+                        <div className="px-6 py-5 bg-indigo-50 border-b border-indigo-100 text-center">
+                            <div className="w-14 h-14 bg-indigo-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                                <PenLine className="w-7 h-7 text-indigo-600" />
+                            </div>
+                            <h2 className="text-lg font-bold text-indigo-900">¿Pre-cerrar la revisión?</h2>
+                            <p className="text-sm text-indigo-600 mt-1">Se solicitarán las firmas del cliente y del técnico para finalizar el parte.</p>
+                        </div>
+                        <div className="p-6 flex flex-col gap-3">
+                            <button
+                                onClick={handleConfirmarPreCierre}
+                                className="w-full px-4 py-3 rounded-xl font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors shadow-sm"
+                            >
+                                Sí, continuar con las firmas
+                            </button>
+                            <button
+                                onClick={() => setShowPreCierreModal(false)}
+                                className="w-full px-4 py-3 rounded-xl font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
+                            >
+                                Volver a la revisión
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* MODAL FIRMAS */}
+            {showFirmasModal && (() => {
+                const tecnicos: any[] = JSON.parse(localStorage.getItem('firecheck_db_tecnicos') || '[]');
+                const tecnico = tecnicos.find((t: any) => t.id === parte?.tecnicoId || t._docId === parte?.tecnicoId);
+                const nombreTecnico = tecnico ? `${tecnico.nombre} ${tecnico.apellidos}` : (JSON.parse(localStorage.getItem('firecheck_logged_user') || '{}')?.nombre || 'Técnico');
+                return (
+                <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-[200]">
+                    <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl flex flex-col animate-in fade-in zoom-in-95 duration-200 overflow-hidden max-h-[95vh]">
+                        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
+                            <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                                <PenLine className="w-5 h-5 text-indigo-600" /> Firmas de conformidad
+                            </h2>
+                            <button
+                                onClick={() => setShowFirmasModal(false)}
+                                className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <div className="overflow-y-auto p-6 space-y-6">
+                            {/* Firma Cliente */}
+                            <div>
+                                <div className="flex items-center justify-between mb-2">
+                                    <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                                        <span className="w-6 h-6 bg-slate-900 text-white rounded-full flex items-center justify-center text-xs font-bold">C</span>
+                                        Firma del Cliente
+                                        {firmaClienteOk && <CheckCircle2 className="w-4 h-4 text-green-500" />}
+                                    </label>
+                                    <button
+                                        onClick={() => clearCanvas(canvasClienteRef, setFirmaClienteOk)}
+                                        className="flex items-center gap-1 text-xs text-slate-500 hover:text-red-600 transition-colors px-2 py-1 rounded-lg hover:bg-red-50"
+                                    >
+                                        <RotateCcw className="w-3.5 h-3.5" /> Borrar
+                                    </button>
+                                </div>
+                                {/* Campo nombre cliente */}
+                                <div className="mb-3">
+                                    <input
+                                        type="text"
+                                        value={nombreClienteFirma}
+                                        onChange={e => setNombreClienteFirma(e.target.value)}
+                                        placeholder="Nombre y apellidos del cliente..."
+                                        className="w-full px-3 py-2.5 bg-white rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-slate-400/20 focus:border-slate-400 outline-none transition-all"
+                                    />
+                                </div>
+                                <div className={`rounded-xl border-2 overflow-hidden transition-colors ${firmaClienteOk ? 'border-green-400' : 'border-slate-200'}`}>
+                                    <canvas
+                                        ref={canvasClienteRef}
+                                        width={600}
+                                        height={240}
+                                        className="w-full touch-none bg-slate-50 cursor-crosshair"
+                                        style={{ display: 'block' }}
+                                        onMouseDown={e => startDraw(canvasClienteRef, setDrawingCliente, e)}
+                                        onMouseMove={e => draw(canvasClienteRef, drawingCliente, e)}
+                                        onMouseUp={() => stopDraw(setDrawingCliente, setFirmaClienteOk, canvasClienteRef)}
+                                        onMouseLeave={() => stopDraw(setDrawingCliente, setFirmaClienteOk, canvasClienteRef)}
+                                        onTouchStart={e => { e.preventDefault(); startDraw(canvasClienteRef, setDrawingCliente, e); }}
+                                        onTouchMove={e => { e.preventDefault(); draw(canvasClienteRef, drawingCliente, e); }}
+                                        onTouchEnd={() => stopDraw(setDrawingCliente, setFirmaClienteOk, canvasClienteRef)}
+                                    />
+                                </div>
+                                <p className="text-xs text-slate-400 mt-1 text-center">Firme con el dedo o el ratón en el recuadro</p>
+                            </div>
+
+                            {/* Firma Técnico */}
+                            <div>
+                                <div className="flex items-center justify-between mb-2">
+                                    <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                                        <span className="w-6 h-6 bg-indigo-600 text-white rounded-full flex items-center justify-center text-xs font-bold">T</span>
+                                        Firma del Técnico
+                                        {firmaTecnicoOk && <CheckCircle2 className="w-4 h-4 text-green-500" />}
+                                    </label>
+                                    <button
+                                        onClick={() => clearCanvas(canvasTecnicoRef, setFirmaTecnicoOk)}
+                                        className="flex items-center gap-1 text-xs text-slate-500 hover:text-red-600 transition-colors px-2 py-1 rounded-lg hover:bg-red-50"
+                                    >
+                                        <RotateCcw className="w-3.5 h-3.5" /> Borrar
+                                    </button>
+                                </div>
+                                {/* Nombre técnico automático */}
+                                <div className="mb-3">
+                                    <div className="w-full px-3 py-2.5 bg-indigo-50 rounded-xl border border-indigo-100 text-sm font-semibold text-indigo-700 flex items-center gap-2">
+                                        <span className="w-4 h-4 text-indigo-400">👤</span>
+                                        {nombreTecnico}
+                                    </div>
+                                </div>
+                                <div className={`rounded-xl border-2 overflow-hidden transition-colors ${firmaTecnicoOk ? 'border-green-400' : 'border-slate-200'}`}>
+                                    <canvas
+                                        ref={canvasTecnicoRef}
+                                        width={600}
+                                        height={240}
+                                        className="w-full touch-none bg-slate-50 cursor-crosshair"
+                                        style={{ display: 'block' }}
+                                        onMouseDown={e => startDraw(canvasTecnicoRef, setDrawingTecnico, e)}
+                                        onMouseMove={e => draw(canvasTecnicoRef, drawingTecnico, e)}
+                                        onMouseUp={() => stopDraw(setDrawingTecnico, setFirmaTecnicoOk, canvasTecnicoRef)}
+                                        onMouseLeave={() => stopDraw(setDrawingTecnico, setFirmaTecnicoOk, canvasTecnicoRef)}
+                                        onTouchStart={e => { e.preventDefault(); startDraw(canvasTecnicoRef, setDrawingTecnico, e); }}
+                                        onTouchMove={e => { e.preventDefault(); draw(canvasTecnicoRef, drawingTecnico, e); }}
+                                        onTouchEnd={() => stopDraw(setDrawingTecnico, setFirmaTecnicoOk, canvasTecnicoRef)}
+                                    />
+                                </div>
+                                <p className="text-xs text-slate-400 mt-1 text-center">Firme con el dedo o el ratón en el recuadro</p>
+                            </div>
+                        </div>
+
+                        <div className="px-6 py-4 border-t border-slate-100 flex gap-3 shrink-0">
+                            <button
+                                type="button"
+                                onClick={() => setShowFirmasModal(false)}
+                                className="flex-1 px-4 py-3 rounded-xl text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
+                            >
+                                Volver
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleFinalizarConFirmas}
+                                disabled={!firmaClienteOk || !firmaTecnicoOk || !nombreClienteFirma.trim()}
+                                className="flex-1 px-4 py-3 rounded-xl text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm"
+                            >
+                                {firmaClienteOk && firmaTecnicoOk && nombreClienteFirma.trim() ? '✓ Finalizar Parte' : 'Faltan datos'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                );
+            })()}
         </div>
     );
 }
