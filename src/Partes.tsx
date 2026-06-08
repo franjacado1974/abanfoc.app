@@ -680,8 +680,8 @@ export default function Partes() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-50 flex items-start justify-center p-4 md:p-8">
-      <div className="max-w-6xl w-full">
+    <div className="min-h-screen bg-zinc-50 p-4 md:p-6">
+      <div className="w-full">
         {/* HEADER */}
         <div className="mb-8 space-y-4">
           <div className="text-center">
