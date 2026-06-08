@@ -1181,7 +1181,28 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
                 </div>
               </div>
             </div>
-            <div className="pt-4 flex justify-end">
+            <div className="pt-4 flex items-center justify-end gap-3">
+              {form.id && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const centroActual = centros.find(c => c.id === form.id);
+                    if (centroActual) {
+                      setCentroForEmpresa(centroActual);
+                      setSelectedEmpresaId(centroActual.empresaId || '');
+                      setIsEmpresaModalOpen(true);
+                    }
+                  }}
+                  className="flex items-center gap-2 bg-rose-50 hover:bg-rose-100 text-rose-900 border border-rose-200 px-5 py-2.5 rounded-xl text-sm font-medium transition-colors shadow-sm active:scale-95"
+                >
+                  <Building2 className="w-4 h-4" />
+                  {(() => {
+                    const centroActual = centros.find(c => c.id === form.id);
+                    const emp = centroActual?.empresaId ? empresas.find(e => e._docId === centroActual.empresaId) : null;
+                    return emp ? emp.nombre : 'Empresa Mantenedora';
+                  })()}
+                </button>
+              )}
               <button type="submit" disabled={!form.clienteId} className="bg-black text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-zinc-800 disabled:opacity-50 transition-colors flex items-center gap-2 shadow-md active:scale-95"><Save className="w-4 h-4" /> {form.id ? 'Guardar Cambios' : 'Registrar Centro'}</button>
             </div>
           </form>
