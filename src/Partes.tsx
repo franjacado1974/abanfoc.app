@@ -788,9 +788,9 @@ export default function Partes() {
             </form>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="w-full">
             {filteredPartes.length === 0 ? (
-              <div className="col-span-full text-center py-16 bg-white rounded-3xl border border-sky-100 border-dashed">
+              <div className="text-center py-16 bg-white rounded-2xl border border-sky-100 border-dashed">
                 <Search className="w-16 h-16 text-sky-200 mx-auto mb-4" />
                 <h3 className="text-lg font-bold text-sky-900 mb-2">
                   {searchTerm ? 'Sin resultados' : 'No hay partes planificados'}
@@ -800,117 +800,161 @@ export default function Partes() {
                 </p>
               </div>
             ) : (
-              filteredPartes.map(parte => {
-                const centro = centros.find(c => c.id === parte.centroId);
-                const tecnico = tecnicos.find(t => t.id === parte.tecnicoId);
-                const empresa = empresas.find(emp => emp._docId === parte.empresaId);
-                const isFinalizado = parte.estado === 'Finalizado';
-                const cliente = clientes.find(cl => cl.id === parte.clienteId); // Find the client for display
-                const isOffline = parte.estado === 'Descargado (Offline)';
-                const isCerrado = parte.estado === 'Cerrado';
-                const isPreCerrado = parte.estado === 'Pre-Cerrado';
-                const isPlanificado = parte.estado === 'Planificado';
+              <div className="bg-white rounded-2xl border border-zinc-200 overflow-hidden shadow-sm">
+                {/* Cabecera de la tabla */}
+                <div className="grid grid-cols-[2fr_2fr_1.5fr_1.5fr_1fr_1fr_auto] gap-0 bg-zinc-50 border-b border-zinc-200 px-4 py-3 text-xs font-bold text-zinc-500 uppercase tracking-wider">
+                  <div>Cliente / Centro</div>
+                  <div>Técnico / Empresa</div>
+                  <div>Fecha Prog.</div>
+                  <div>Tipo / Periodicidad</div>
+                  <div>Ref. Trabajo</div>
+                  <div>Estado</div>
+                  <div className="text-right">Acciones</div>
+                </div>
+                {/* Filas */}
+                {filteredPartes.map((parte, idx) => {
+                  const centro = centros.find(c => c.id === parte.centroId);
+                  const tecnico = tecnicos.find(t => t.id === parte.tecnicoId);
+                  const empresa = empresas.find(emp => emp._docId === parte.empresaId);
+                  const isFinalizado = parte.estado === 'Finalizado';
+                  const cliente = clientes.find(cl => cl.id === parte.clienteId);
+                  const isOffline = parte.estado === 'Descargado (Offline)';
+                  const isCerrado = parte.estado === 'Cerrado';
+                  const isPreCerrado = parte.estado === 'Pre-Cerrado';
+                  const isPlanificado = parte.estado === 'Planificado';
+                  const isAbierto = parte.estado === 'Abierto';
 
-                return (
-                  <div key={parte.id} className={`bg-white rounded-3xl p-6 border-2 shadow-sm transition-all flex flex-col ${isCerrado ? 'border-blue-900 bg-blue-950/5' : isPreCerrado ? 'border-blue-700 bg-blue-50/30' : isFinalizado ? 'border-emerald-500 bg-emerald-50/30' : isPlanificado ? 'border-blue-500 hover:shadow-md' : isOffline ? 'border-sky-300 bg-sky-50/30' : 'border-sky-100 hover:shadow-md'}`}>
-                    <div className="flex justify-between items-start mb-4">
-                      <span className="text-[10px] font-mono font-bold text-zinc-400 bg-zinc-100 px-2 py-1 rounded">{parte.id}</span>
-                      <span className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wider ${isCerrado ? 'bg-blue-900 text-white' : isPreCerrado ? 'bg-blue-700 text-white' : isFinalizado ? 'bg-emerald-100 text-emerald-700' : isOffline ? 'bg-sky-100 text-sky-700' : 'bg-sky-100 text-sky-700'}`}>
-                        {parte.estado}
-                      </span>
-                    </div>
+                  const rowBg = isCerrado
+                    ? 'bg-blue-950/5 border-l-4 border-l-blue-900'
+                    : isPreCerrado
+                    ? 'bg-blue-50/40 border-l-4 border-l-blue-700'
+                    : isFinalizado
+                    ? 'bg-emerald-50/40 border-l-4 border-l-emerald-500'
+                    : isAbierto
+                    ? 'bg-amber-50/30 border-l-4 border-l-amber-400'
+                    : isPlanificado
+                    ? 'bg-white border-l-4 border-l-blue-400'
+                    : isOffline
+                    ? 'bg-sky-50/30 border-l-4 border-l-sky-400'
+                    : 'bg-white border-l-4 border-l-zinc-200';
 
-                    <h3 className="text-lg font-bold text-zinc-900 mb-1 line-clamp-1">{centro?.nombre || 'Centro Desconocido'}</h3>
-                    <p className="text-xs text-zinc-500 mb-2 flex items-center gap-1"><MapPin className="w-3 h-3"/> {centro?.poblacion || 'Sin ubicación'}</p>
-                    {cliente && (
-                      <p className="text-xs text-zinc-500 mb-4 flex items-center gap-1.5">
-                        <Building2 className="w-3 h-3" /> {cliente.nombre}
-                      </p>
-                    )}
+                  const badgeClass = isCerrado
+                    ? 'bg-blue-900 text-white'
+                    : isPreCerrado
+                    ? 'bg-blue-700 text-white'
+                    : isFinalizado
+                    ? 'bg-emerald-100 text-emerald-700'
+                    : isAbierto
+                    ? 'bg-amber-100 text-amber-700'
+                    : isOffline
+                    ? 'bg-sky-100 text-sky-700'
+                    : 'bg-blue-100 text-blue-700';
 
-                    <div className="space-y-3 mb-6 flex-1">
-                      <div className="flex justify-between items-center text-sm border-b border-zinc-50 pb-2">
-                        <span className="text-zinc-500 flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5"/> Fecha Programada</span>
-                        <span className="font-bold text-sky-600">
-                          {parte.fechaProgramada ? parte.fechaProgramada.replace(/-/g, '/') : 'No programada'}
+                  return (
+                    <div
+                      key={parte.id}
+                      className={`grid grid-cols-[2fr_2fr_1.5fr_1.5fr_1fr_1fr_auto] gap-0 px-4 py-3 items-center transition-colors hover:bg-zinc-50/80 ${rowBg} ${idx !== filteredPartes.length - 1 ? 'border-b border-zinc-100' : ''}`}
+                    >
+                      {/* Cliente / Centro */}
+                      <div className="min-w-0 pr-3">
+                        <p className="text-sm font-bold text-zinc-900 truncate">{cliente?.nombre || '—'}</p>
+                        <p className="text-xs text-zinc-500 truncate flex items-center gap-1 mt-0.5">
+                          <MapPin className="w-3 h-3 shrink-0" />{centro?.nombre || 'Centro desconocido'}
+                        </p>
+                        <p className="text-[10px] font-mono text-zinc-400 mt-0.5">{parte.id}</p>
+                      </div>
+
+                      {/* Técnico / Empresa */}
+                      <div className="min-w-0 pr-3">
+                        <p className="text-sm text-zinc-800 truncate flex items-center gap-1">
+                          <UserIcon className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                          {tecnico ? `${tecnico.nombre} ${tecnico.apellidos}` : 'No asignado'}
+                        </p>
+                        <p className="text-xs text-zinc-500 truncate flex items-center gap-1 mt-0.5">
+                          <Building2 className="w-3 h-3 shrink-0" />{empresa?.nombre || 'Sin empresa'}
+                        </p>
+                      </div>
+
+                      {/* Fecha Programada */}
+                      <div className="pr-3">
+                        <p className="text-sm font-bold text-sky-600">
+                          {parte.fechaProgramada ? parte.fechaProgramada.replace(/-/g, '/') : '—'}
+                        </p>
+                        <p className="text-xs text-zinc-400 mt-0.5">{parte.mesesRevision || ''}</p>
+                      </div>
+
+                      {/* Tipo / Periodicidad */}
+                      <div className="pr-3">
+                        <p className="text-sm text-zinc-800">{parte.tipoTrabajo || 'Mantenimiento'}</p>
+                        <p className="text-xs text-zinc-500 mt-0.5">{parte.periodicidad || '—'}</p>
+                      </div>
+
+                      {/* Ref. Trabajo */}
+                      <div className="pr-3">
+                        {parte.numeroMantenimiento ? (
+                          <span className="text-xs font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
+                            {parte.numeroMantenimiento}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-zinc-400">—</span>
+                        )}
+                      </div>
+
+                      {/* Estado */}
+                      <div>
+                        <span className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wider whitespace-nowrap ${badgeClass}`}>
+                          {parte.estado}
                         </span>
                       </div>
-                      <div className="flex justify-between items-center text-sm border-b border-zinc-50 pb-2">
-                        <span className="text-zinc-500 flex items-center gap-1.5"><UserIcon className="w-3.5 h-3.5"/> Técnico</span>
-                        <span className="font-medium text-zinc-800">{tecnico ? `${tecnico.nombre} ${tecnico.apellidos}` : 'No asignado'}</span>
-                      </div>
-                      <div className="flex justify-between items-center text-sm border-b border-zinc-50 pb-2">
-                        <span className="text-zinc-500 flex items-center gap-1.5"><Building2 className="w-3.5 h-3.5"/> Empresa</span>
-                        <span className="font-medium text-zinc-800 text-right line-clamp-1">{empresa ? empresa.nombre : 'No asignada'}</span>
-                      </div>
-                      <div className="flex justify-between items-center text-sm border-b border-zinc-50 pb-2">
-                        <span className="text-zinc-500 flex items-center gap-1.5"><FileText className="w-3.5 h-3.5"/> Tipo Trabajo</span>
-                        <span className="font-medium text-zinc-800">{parte.tipoTrabajo || 'Mantenimiento'}</span>
-                      </div>
-                      <div className="flex justify-between items-center text-sm border-b border-zinc-50 pb-2">
-                        <span className="text-zinc-500 flex items-center gap-1.5"><RefreshCw className="w-3.5 h-3.5"/> Periodicidad</span>
-                          <span className="font-medium text-zinc-800">{parte.periodicidad || 'No especificado'}</span>
-                      </div>
-                      <div className="flex flex-col text-sm border-b border-zinc-50 pb-2 gap-1.5">
-                        <span className="text-zinc-500 flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5"/> Meses planificados</span>
-                        <span className="font-medium text-zinc-800 leading-tight">{parte.mesesRevision}</span>
-                      </div>
-                      {(isFinalizado || isCerrado) && parte.numeroMantenimiento && (
-                        <div className="flex justify-between items-center text-sm bg-emerald-100 p-2 rounded-lg mt-2">
-                          <span className="text-emerald-800 font-bold">Ref. Trabajo:</span>
-                          <span className="font-mono font-bold text-emerald-900">{parte.numeroMantenimiento}</span>
-                        </div>
-                      )}
-                    </div>
 
-                    <div className="flex flex-wrap gap-2 mt-auto">
-                      {!isFinalizado && !isOffline && !isCerrado && (
-                        <button onClick={() => handleDescargarOffline(parte.id)} className="flex-1 min-w-[120px] flex items-center justify-center gap-1.5 bg-zinc-900 hover:bg-black text-white px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-sm">
-                          <DownloadCloud className="w-4 h-4" /> descargar off line
-                        </button>
-                      )}
-                      {!isCerrado && (
-                        <button onClick={() => {
-                          navigate('/revision-checklist', { state: { centroId: parte.centroId, parteId: parte.id } });
-                        }} className="flex-1 min-w-[120px] flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-sm">
-                          <Building2 className="w-4 h-4" /> Ir a la revisión
-                        </button>
-                      )}
-                      {!isFinalizado && isOffline && !isCerrado && (
-                        <button onClick={() => handleSincronizar(parte.id)} className="flex-1 min-w-[120px] flex items-center justify-center gap-1.5 bg-sky-600 hover:bg-sky-700 text-white px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-sm">
-                          <RefreshCw className="w-4 h-4" /> Sincronizar Fin
-                        </button>
-                      )}
-                      {isFinalizado && !isCerrado && (
-                        <button onClick={() => handleCerrarParte(parte.id)} className="flex-1 min-w-[120px] flex items-center justify-center gap-1.5 bg-black hover:bg-zinc-800 text-white px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-sm">
-                          <CheckCircle2 className="w-4 h-4" /> Cerrar Parte
-                        </button>
-                      )}
-                      {isCerrado && (
-                        <div className="w-full flex flex-col gap-2">
-                          <button onClick={() => handleReabrirParte(parte.id)} className="w-full flex items-center justify-center gap-1.5 bg-amber-400 hover:bg-amber-500 text-amber-900 px-3 py-2 rounded-xl text-[10px] font-bold transition-all shadow-sm" title="Re-abrir el parte para revisarlo de nuevo">
-                            <RefreshCw className="w-4 h-4" /> Re-abrir parte
+                      {/* Acciones */}
+                      <div className="flex items-center gap-1 justify-end pl-2">
+                        {!isFinalizado && !isOffline && !isCerrado && (
+                          <button onClick={() => handleDescargarOffline(parte.id)} className="p-1.5 bg-zinc-800 hover:bg-black text-white rounded-lg transition-all" title="Descargar offline">
+                            <DownloadCloud className="w-3.5 h-3.5" />
                           </button>
-                          <button onClick={() => handleAbrirDocumentos(parte)} className="w-full flex items-center justify-center gap-1.5 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 px-3 py-2 rounded-xl text-[10px] font-bold transition-all shadow-sm" title="Seleccionar y descargar documentos">
-                            <FileText className="w-4 h-4" /> Documentos
+                        )}
+                        {!isCerrado && (
+                          <button onClick={() => navigate('/revision-checklist', { state: { centroId: parte.centroId, parteId: parte.id } })} className="p-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-all" title="Ir a la revisión">
+                            <Edit className="w-3.5 h-3.5" />
                           </button>
-                        </div>
-                      )}
-                      <button onClick={async () => {
-                        if (
-                          window.confirm('¿Estás seguro de que quieres eliminar este parte?') &&
-                          window.confirm('ATENCIÓN SE PROCEDE A BORRAR EL ELEMENTO Y SUS REGISTROS ¿ CONFIRMA SU PETICIÓN ?')
-                        ) {
-                          const docId = (parte as any)._docId || parte.id;
-                          try { await deleteParte(docId); } catch (e) { console.error(e); }
-                        }
-                      }} className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-xl transition-colors border border-zinc-200 hover:border-red-200" title="Eliminar Parte">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                        )}
+                        {!isFinalizado && isOffline && !isCerrado && (
+                          <button onClick={() => handleSincronizar(parte.id)} className="p-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-lg transition-all" title="Sincronizar">
+                            <RefreshCw className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        {isFinalizado && !isCerrado && (
+                          <button onClick={() => handleCerrarParte(parte.id)} className="p-1.5 bg-black hover:bg-zinc-800 text-white rounded-lg transition-all" title="Cerrar parte">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        {isCerrado && (
+                          <>
+                            <button onClick={() => handleReabrirParte(parte.id)} className="p-1.5 bg-amber-400 hover:bg-amber-500 text-amber-900 rounded-lg transition-all" title="Re-abrir parte">
+                              <RefreshCw className="w-3.5 h-3.5" />
+                            </button>
+                            <button onClick={() => handleAbrirDocumentos(parte)} className="p-1.5 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded-lg transition-all" title="Documentos">
+                              <FileText className="w-3.5 h-3.5" />
+                            </button>
+                          </>
+                        )}
+                        <button onClick={async () => {
+                          if (
+                            window.confirm('¿Estás seguro de que quieres eliminar este parte?') &&
+                            window.confirm('ATENCIÓN SE PROCEDE A BORRAR EL ELEMENTO Y SUS REGISTROS ¿ CONFIRMA SU PETICIÓN ?')
+                          ) {
+                            const docId = (parte as any)._docId || parte.id;
+                            try { await deleteParte(docId); } catch (e) { console.error(e); }
+                          }
+                        }} className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors border border-zinc-200 hover:border-red-200" title="Eliminar">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                );
-              })
+                  );
+                })}
+              </div>
             )}
           </div>
         )}
