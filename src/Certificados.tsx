@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { FileCheck, Download, Search, CheckCircle2, CircleX, Clock, Trash2, Eye, Building2, MapPin, User, CalendarDays, AlertTriangle } from 'lucide-react';
 import ConfirmationModal from './ConfirmationModal';
-import { generarCertificadoPDF } from './pdfGenerator';
+import { generarCertificadoPDF, generarCertificadoPDFView } from './pdfGenerator';
 import DetailModal from './components/DetailModal';
 
 export default function Certificados() {
@@ -97,6 +97,36 @@ export default function Certificados() {
     }
   };
 
+  const handleViewPDF = async (cert: any) => {
+    try {
+      const centro = centros.find(c => c.id === cert.centroId);
+      const cliente = clientes.find(cl => cl.id === cert.clienteId);
+      const tecnico = tecnicos.find(t => t.id === cert.tecnicoId);
+      if (!centro || !cliente) return;
+      const sistemasDelCentro = sistemas.filter((s: any) => s.centroId === centro.id);
+      const equiposDelCentro = equipos.filter((e: any) => e.centroId === centro.id);
+      const albaranes = JSON.parse(localStorage.getItem('firecheck_db_albaranes') || '[]');
+      const albaranData = albaranes.find((a: any) => a.parteId === cert.parteId);
+      const nombreTecnico = tecnico ? `${tecnico.nombre} ${tecnico.apellidos}` : 'No asignado';
+      
+      const pdfBlobUrl = await generarCertificadoPDFView(
+        cliente, 
+        centro, 
+        cert, 
+        nombreTecnico, 
+        cert.estado, 
+        sistemasDelCentro, 
+        equiposDelCentro,
+        albaranData?.firmaCliente,
+        albaranData?.firmaTecnico,
+        albaranData?.nombreFirmante
+      );
+      window.open(pdfBlobUrl, '_blank');
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const handleViewDetail = (cert: any) => {
     setSelectedCert(cert);
     setIsDetailOpen(true);
@@ -188,6 +218,13 @@ export default function Certificados() {
                           <Download className="w-4 h-4" />
                         </button>
                         <button
+                          onClick={(e) => { e.stopPropagation(); handleViewPDF(cert); }}
+                          className="p-1.5 text-zinc-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                          title="Ver PDF"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                        <button
                           onClick={(e) => { e.stopPropagation(); handleDeleteCertificado(cert.id); }}
                           className="p-1.5 text-red-400 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
                           title="Eliminar"
@@ -234,6 +271,13 @@ export default function Certificados() {
                           title="Descargar PDF"
                         >
                           <Download className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleViewPDF(cert); }}
+                          className="p-1.5 text-zinc-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                          title="Ver PDF"
+                        >
+                          <Eye className="w-4 h-4" />
                         </button>
                         <button
                           onClick={(e) => { e.stopPropagation(); handleDeleteCertificado(cert.id); }}

@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, Save, Building2, Layers, MapPin, FileText, ChevronDown, ChevronRight, Plus, X, CheckCircle2, XCircle, Trash2, AlertTriangle, Pencil, PenLine, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Save, Building2, Layers, MapPin, FileText, ChevronDown, ChevronRight, Plus, X, CheckCircle2, XCircle, Trash2, AlertTriangle, Pencil, PenLine, RotateCcw, CheckCheck, Eye } from 'lucide-react';
+import { addAlbaran, updateEquipoInstalado, updateParte as updateParteFirestore, subscribePartes, subscribeCentros, subscribeClientes, subscribeCentroSistemas, subscribeEquiposInstalados, subscribeArticulos, subscribeSistemasCategorias, type Albaran, type Tecnico } from './firebase';
 import type { Centro, Parte, Cliente, CentroSistema, EquipoInstalado } from './Centros';
-import { updateEquipoInstalado, updateParte as updateParteFirestore, subscribePartes, subscribeCentros, subscribeClientes, subscribeCentroSistemas, subscribeEquiposInstalados } from './firebase';
 import ConfirmationModal from './ConfirmationModal';
+import { getIconForSistema } from './Sistemas';
+import { generarActaExtintoresPDFView } from './pdfGenerator';
 
 const CHECKLIST_ITEMS = [
     { key: 'checkAcceso', label: 'Acceso' },
@@ -31,14 +33,13 @@ export default function RevisionChecklist() {
     const [parte, setParte] = useState<Parte | null>(null);
     const [sistemasDelCentro, setSistemasDelCentro] = useState<CentroSistema[]>([]);
     const [equiposInstalados, setEquiposInstalados] = useState<EquipoInstalado[]>([]);
-    const [equiposCatalogo] = useState<any[]>(() => JSON.parse(localStorage.getItem('firecheck_db_sistemas_equipos') || '[]'));
-    const [categoriasSistema] = useState<any[]>(() => JSON.parse(localStorage.getItem('firecheck_db_sistemas_categorias') || '[]'));
+    const [equiposCatalogo, setEquiposCatalogo] = useState<any[]>(() => JSON.parse(localStorage.getItem('firecheck_db_sistemas_equipos') || '[]'));
+    const [categoriasSistema, setCategoriasSistema] = useState<any[]>(() => JSON.parse(localStorage.getItem('firecheck_db_sistemas_categorias') || '[]'));
     const [loading, setLoading] = useState(true);
     const [clientes, setClientes] = useState<Cliente[]>(() => JSON.parse(localStorage.getItem('firecheck_db_clientes') || '[]'));
     const [openSistemas, setOpenSistemas] = useState<Record<string, boolean>>({});
     const [selectedCatalogItem, setSelectedCatalogItem] = useState<string>('');
-    const [addQuantity, setAddQuantity] = useState(1);
-    const [newEquipo, setNewEquipo] = useState<{ codigo: string; nombre: string; ubicacion: string; placa: string }>({ codigo: '', nombre: '', ubicacion: '', placa: '' });
+    const [newEquipo, setNewEquipo] = useState<{ codigo: string; nombre: string; ubicacion: string; placa: string; fechaFabricacion: string; ultimoRetimbre: string }>({ codigo: '', nombre: '', ubicacion: '', placa: '', fechaFabricacion: '', ultimoRetimbre: '' });
     const [addSistemaId, setAddSistemaId] = useState<string | null>(null);
 
     const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
@@ -58,6 +59,14 @@ export default function RevisionChecklist() {
     const [firmaTecnicoOk, setFirmaTecnicoOk] = useState(false);
     const [nombreClienteFirma, setNombreClienteFirma] = useState('');
 
+    // ── Si el parte está Cerrado, redirigir ───────────────────────────
+    useEffect(() => {
+        if (parte?.estado === 'Cerrado') {
+            alert('Este parte está cerrado y no puede ser modificado.');
+            navigate(-1);
+        }
+    }, [parte?.estado, navigate]);
+
     // ── Carga inicial desde Firestore ──────────────────────────────────────────
     useEffect(() => {
         if (!centroId || !parteId) {
@@ -66,8 +75,8 @@ export default function RevisionChecklist() {
             return;
         }
 
-        // 1. Cargar clientes
-        const unsubClientes = subscribeClientes((items) => {
+    // 1. Cargar clientes
+    const unsubClientes = subscribeClientes((items) => {
             setClientes(items as Cliente[]);
             localStorage.setItem('firecheck_db_clientes', JSON.stringify(items));
         });
@@ -84,15 +93,8 @@ export default function RevisionChecklist() {
             const found = items.find((p: any) => p.id === parteId) as Parte | undefined;
             if (found) {
                 setParte(found);
-                // Si está planificado, marcarlo como Abierto
-                if (found.estado === 'Planificado') {
-                    const storedPartes = JSON.parse(localStorage.getItem('firecheck_db_partes') || '[]');
-                    const updatedPartes = storedPartes.map((p: any) =>
-                        p.id === parteId ? { ...p, estado: 'Abierto' } : p
-                    );
-                    localStorage.setItem('firecheck_db_partes', JSON.stringify(updatedPartes));
-                    setParte({ ...found, estado: 'Abierto' });
-                }
+                // Ya NO cambiamos automáticamente a "Abierto" al entrar
+                // El estado solo cambiará cuando se pulse un botón "Revisado"
             }
             localStorage.setItem('firecheck_db_partes', JSON.stringify(items));
             setLoading(false);
@@ -110,11 +112,22 @@ export default function RevisionChecklist() {
             localStorage.setItem('firecheck_db_centro_sistemas', JSON.stringify(items));
         });
 
+        // 5. Cargar categorías de sistemas (catálogo) para el autocompletado
+        const unsubSst = subscribeSistemasCategorias((items) => {
+            setCategoriasSistema(items);
+            localStorage.setItem('firecheck_db_sistemas_categorias', JSON.stringify(items));
+        });
+
+        // 6. Cargar artículos (catálogo de equipos) para el autocompletado
+        const unsubArt = subscribeArticulos((items) => {
+            const revisables = items.filter(a => a.revisable === true);
+            setEquiposCatalogo(revisables);
+            localStorage.setItem('firecheck_db_sistemas_equipos', JSON.stringify(revisables));
+        });
+
         return () => {
-            unsubClientes();
-            unsubCentros();
-            unsubPartes();
-            unsubSistemas();
+            unsubClientes(); unsubCentros(); unsubPartes(); unsubSistemas();
+            unsubSst(); unsubArt();
         };
     }, [centroId, parteId, navigate]);
 
@@ -124,14 +137,30 @@ export default function RevisionChecklist() {
 
         const unsubs = sistemasDelCentro.map(sist =>
             subscribeEquiposInstalados(centroId, sist.id, (items: EquipoInstalado[]) => {
+                // Normalizar equipos según el estado del parte
+                const normalizedItems = items.map(eq => {
+                    // Si el parte está en "Planificado", es una nueva revisión
+                    // Resetear todos los checks a null para que el técnico revise de nuevo
+                    if (parte?.estado === 'Planificado') {
+                        const normalized = { ...eq, revisado: false };
+                        CHECKLIST_ITEMS.forEach(item => {
+                            (normalized as any)[item.key] = null;
+                        });
+                        // Mantener las anomalías anteriores como referencia pero limpiar para nueva revisión
+                        normalized.anomalias = '';
+                        return normalized;
+                    }
+                    // Si el parte ya está en otro estado (Abierto, etc.), mantener los valores actuales
+                    return eq;
+                });
                 setEquiposInstalados(prev => {
                     const otros = prev.filter(e => e.sistemaId !== sist.id);
-                    return [...otros, ...items];
+                    return [...otros, ...normalizedItems];
                 });
             })
         );
         return () => unsubs.forEach(u => u());
-    }, [centroId, sistemasDelCentro.length]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [centroId, sistemasDelCentro.length, parte?.estado]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const saveEquiposProgress = async (currentEquipos: EquipoInstalado[] = equiposInstalados) => {
         const allEquipos = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
@@ -158,55 +187,52 @@ export default function RevisionChecklist() {
         if (updatedParte) setParte(updatedParte);
     };
 
-    const handleAddFromCatalog = (sistemaId: string) => {
-        if (!selectedCatalogItem) {
-            alert('Por favor, selecciona un equipo del catálogo.');
-            return;
-        }
-
-        const itemBase = equiposCatalogo.find(e => e.id === selectedCatalogItem);
-        if (!itemBase) return;
-
-        const eqDelSist = equiposInstalados.filter(eq => eq.sistemaId === sistemaId);
-        let startNum = 1;
-        if (eqDelSist.length > 0) {
-            const nums = eqDelSist.map(eq => parseInt(eq.codigo)).filter(n => !isNaN(n));
-            startNum = nums.length > 0 ? Math.max(...nums) + 1 : eqDelSist.length + 1;
-        }
-
-        const newItems: EquipoInstalado[] = [];
-        for (let i = 0; i < addQuantity; i++) {
-            newItems.push({
-                id: `EQ-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
-                centroId: centroId,
-                sistemaId: sistemaId,
-                codigo: (startNum + i).toString().padStart(2, '0'),
-                nombre: itemBase.nombre,
-                ubicacion: '',
-                placa: '',
-                revisado: false,
-                checkAcceso: true, checkAltura: true, checkSoporte: true, checkSenalizacion: true, checkManguera: true,
-                checkPeso: true, checkManometro: true, checkMarcado: true, checkEtiquetas: true, checkRetimbre: true,
-                checkRiesgo: true, checkDistancia: true, checkPasador: true, checkMovilidad: true
-            });
-        }
-
-        const updatedEquipos = [...equiposInstalados, ...newItems];
-        setEquiposInstalados(updatedEquipos);
-        saveEquiposProgress(updatedEquipos);
-        closeAddModal();
-    };
-
     const handleCheckChange = (equipoId: string, checkKey: keyof EquipoInstalado, value: boolean) => {
         setEquiposInstalados(prevEquipos =>
             prevEquipos.map(eq =>
-                eq.id === equipoId ? { ...eq, [checkKey]: value } : eq
+                eq.id === equipoId ? { ...eq, [checkKey]: value, revisado: true } : eq
             )
         );
     };
 
+  const handlePreviewPDF = async () => {
+    try {
+      const cliente = clientes.find(cl => cl.id === centro?.clienteId);
+      const tecnicos: Tecnico[] = JSON.parse(localStorage.getItem('firecheck_db_tecnicos') || '[]');
+      const tecnico = tecnicos.find(t => t.id === parte?.tecnicoId);
+      const nombreTecnico = tecnico ? `${tecnico.nombre} ${tecnico.apellidos}` : 'Técnico';
+      
+      if (!centro || !cliente) return;
+
+      const pdfBlobUrl = await generarActaExtintoresPDFView(
+        cliente as Record<string, any>,
+        centro as Record<string, any>,
+        sistemasDelCentro as Record<string, any>[],
+        equiposInstalados
+          .filter(e => e.centroId === centroId)
+          .sort((a, b) => (a.codigo || '').localeCompare(b.codigo || '', undefined, { numeric: true })),
+        parte?.numeroMantenimiento || parte?.id,
+        nombreTecnico,
+        undefined,
+        undefined, // Sin firma cliente aún
+        undefined, // Sin firma técnico aún
+        ''
+      );
+      window.open(pdfBlobUrl, '_blank');
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
     const handleSaveRevision = () => {
         if (!parteId) return;
+
+        // 1. Verificar que todos los equipos han sido procesados (Revisados o No encontrados)
+        const equiposSinRevisar = equiposInstalados.filter(eq => !eq.revisado);
+        if (equiposSinRevisar.length > 0) {
+            alert(`Atención: Quedan ${equiposSinRevisar.length} equipos sin revisar. Todos los equipos deben marcarse como 'Revisado', 'No encontrado' o ser inspeccionados manualmente antes de finalizar.`);
+            return;
+        }
 
         const equiposInvalidos = equiposInstalados.filter((eq) => {
             const algunCheckRojo = CHECKLIST_ITEMS.some((item) => eq[item.key as keyof EquipoInstalado] === false);
@@ -301,21 +327,78 @@ export default function RevisionChecklist() {
     };
 
     const handleFinalizarConFirmas = async () => {
-        const numMant = `MANT-${new Date().getFullYear()}-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`;
-        await saveEquiposProgress();
-        // Actualizar localStorage
-        updateParte({ estado: 'Pre-Cerrado', numeroMantenimiento: numMant });
-        // Sincronizar con Firestore
-        const storedPartes = JSON.parse(localStorage.getItem('firecheck_db_partes') || '[]');
-        const parteActual = storedPartes.find((p: any) => p.id === parteId);
-        const docId = parteActual?._docId || parteId;
-        try {
-            await updateParteFirestore(docId, { estado: 'Pre-Cerrado', numeroMantenimiento: numMant });
-        } catch (err) {
-            console.error('Error actualizando estado en Firestore:', err);
+        if (!nombreClienteFirma.trim()) {
+            alert('Por favor, introduce el nombre del cliente.');
+            return;
         }
-        setShowFirmasModal(false);
-        navigate(-1);
+
+        const firmaCliente = canvasClienteRef.current?.toDataURL('image/png') || '';
+        const firmaTecnico = canvasTecnicoRef.current?.toDataURL('image/png') || '';
+
+        // 1. Generar ID correlativo de Albarán para guardar las firmas
+        const albaranesExistentes: Albaran[] = JSON.parse(localStorage.getItem('firecheck_db_albaranes') || '[]');
+        const year = new Date().getFullYear().toString().slice(-2);
+        const prefix = `ALB-${year}-`;
+        const patterned = albaranesExistentes.filter((alb) => alb.id?.startsWith(prefix));
+        let nextNum = 1;
+        if (patterned.length > 0) {
+            const nums = patterned.map((alb) => {
+                const parts = alb.id.split('-');
+                return parseInt(parts[parts.length - 1]);
+            }).filter((n) => !isNaN(n));
+            if (nums.length > 0) nextNum = Math.max(...nums) + 1;
+        }
+        const nextId = `${prefix}${nextNum.toString().padStart(3, '0')}`;
+
+        const numMantenimiento = `MANT-${new Date().getFullYear()}-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`;
+
+        const nuevoAlbaran: Albaran = {
+            id: nextId,
+            centroId: centro?.id || '',
+            clienteId: centro?.clienteId || '',
+            empresaId: centro?.empresaId || '',
+            parteId: parteId,
+            tecnicoId: parte?.tecnicoId || '',
+            numeroMantenimiento: numMantenimiento,
+            fechaCreacion: new Date().toISOString(),
+            facturado: false,
+            items: [], // Se puede poblar basándose en los equipos revisados
+            firmaCliente,
+            firmaTecnico,
+            nombreFirmante: nombreClienteFirma
+        };
+
+        await saveEquiposProgress();
+
+        try {
+            // Guardar Albarán con las firmas
+            await addAlbaran(nuevoAlbaran);
+            
+            // Cambiar estado a Pre-Cerrado y guardar firmas en el parte
+            const docId = (parte as any)?._docId || parteId;
+            await updateParteFirestore(docId, { 
+                estado: 'Pre-Cerrado', 
+                numeroMantenimiento: numMantenimiento,
+                firmaCliente,
+                firmaTecnico,
+                nombreFirmante: nombreClienteFirma
+            } as any);
+
+            // Actualizar localmente
+            updateParte({ 
+                estado: 'Pre-Cerrado', 
+                numeroMantenimiento: numMantenimiento,
+                firmaCliente,
+                firmaTecnico,
+                nombreFirmante: nombreClienteFirma
+            });
+
+            setShowFirmasModal(false);
+            navigate(-1);
+        } catch (err) {
+            console.error('Error al finalizar el parte:', err);
+            alert('Error al guardar los datos finales y las firmas.');
+        }
     };
 
     const handlePauseRevision = () => {
@@ -360,15 +443,13 @@ export default function RevisionChecklist() {
             nextCode = startNum.toString().padStart(2, '0');
         }
 
-        setNewEquipo({ codigo: nextCode, nombre: '', ubicacion: '', placa: '' });
-        setAddQuantity(1);
+        setNewEquipo({ codigo: nextCode, nombre: '', ubicacion: '', placa: '', fechaFabricacion: '', ultimoRetimbre: '' });
     };
 
     const closeAddModal = () => {
         setAddSistemaId(null);
-        setNewEquipo({ codigo: '', nombre: '', ubicacion: '', placa: '' });
+        setNewEquipo({ codigo: '', nombre: '', ubicacion: '', placa: '', fechaFabricacion: '', ultimoRetimbre: '' });
         setSelectedCatalogItem('');
-        setAddQuantity(1);
     };
 
     const handleAddEquipo = (sistemaId: string) => {
@@ -385,10 +466,12 @@ export default function RevisionChecklist() {
             nombre: newEquipo.nombre.trim(),
             ubicacion: newEquipo.ubicacion.trim(),
             placa: newEquipo.placa.trim(),
+            fechaFabricacion: newEquipo.fechaFabricacion,
+            ultimoRetimbre: newEquipo.ultimoRetimbre,
             revisado: false,
-            checkAcceso: true, checkAltura: true, checkSoporte: true, checkSenalizacion: true, checkManguera: true,
-            checkPeso: true, checkManometro: true, checkMarcado: true, checkEtiquetas: true, checkRetimbre: true,
-            checkRiesgo: true, checkDistancia: true, checkPasador: true, checkMovilidad: true
+            checkAcceso: null, checkAltura: null, checkSoporte: null, checkSenalizacion: null, checkManguera: null,
+            checkPeso: null, checkManometro: null, checkMarcado: null, checkEtiquetas: null, checkRetimbre: null,
+            checkRiesgo: null, checkDistancia: null, checkPasador: null, checkMovilidad: null
         };
 
         const updatedEquipos = [...equiposInstalados, nuevoEquipo];
@@ -397,18 +480,32 @@ export default function RevisionChecklist() {
         const allEquipos = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
         localStorage.setItem('firecheck_db_equipos_instalados', JSON.stringify([...allEquipos, nuevoEquipo]));
 
-        setNewEquipo({ codigo: '', nombre: '', ubicacion: '', placa: '' });
+        setNewEquipo({ codigo: '', nombre: '', ubicacion: '', placa: '', fechaFabricacion: '', ultimoRetimbre: '' });
         setSelectedCatalogItem('');
-        setAddQuantity(1);
         closeAddModal();
     };
 
-    const getFilteredCatalog = (sistType: string) => {
+    const getFilteredCatalog = (sistName: string) => {
+        if (!sistName) return [];
+        const normalize = (s: string) => 
+            (s || '')
+             .toLowerCase()
+             .normalize('NFD')
+             .replace(/[\u0300-\u036f]/g, '') // Quita tildes
+             .replace(/^sistema\s+/i, '')     // Quita el prefijo "Sistema "
+             .trim();
+             
+        const target = normalize(sistName);
+        if (!target) return [];
+
         return equiposCatalogo.filter(eq => {
-            const cat = categoriasSistema.find(c => c.id === eq.idCategoria);
-            if (!cat) return false;
-            const searchType = sistType.toUpperCase();
-            return searchType.includes(cat.nombre.toUpperCase());
+            const eqFam = normalize(eq.familia);
+            // Validamos que eqFam no esté vacío para evitar que target.includes("") devuelva true
+            if (eqFam && (eqFam === target || eqFam.includes(target) || target.includes(eqFam))) return true;
+            
+            const cat = categoriasSistema.find(c => c.id === eq.idCategoria || c.id === eq.familiaId);
+            const catName = cat ? normalize(cat.nombre) : '';
+            return catName && (catName === target || catName.includes(target) || target.includes(catName));
         });
     };
 
@@ -509,8 +606,10 @@ export default function RevisionChecklist() {
                             <p className="text-slate-400 font-medium">Este centro no tiene sistemas registrados.</p>
                         </div>
                     ) : (
-                        sistemasDelCentro.map(sist => (
-                            <div key={sist.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm transition-shadow hover:shadow-md">
+                        sistemasDelCentro.map(sist => {
+                            const IconoCat = getIconForSistema(sist.tipo || sist.familia || '');
+                            return (
+                                <div key={sist.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm transition-shadow hover:shadow-md">
                                 {/* Accordion Header - sticky respecto al viewport */}
                                 <div className="sticky top-[57px] z-10 bg-white px-6 py-4 border-b border-slate-100 rounded-t-2xl shadow-sm">
                                     <div className="flex items-center justify-between">
@@ -519,8 +618,12 @@ export default function RevisionChecklist() {
                                             onClick={() => toggleSistema(sist.id)}
                                             className="flex items-center gap-3 text-left flex-1 min-w-0"
                                         >
-                                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center transition-colors shrink-0 ${openSistemas[sist.id] ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-500'}`}>
-                                                <Layers className="w-5 h-5" />
+                                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center transition-colors shrink-0 overflow-hidden ${openSistemas[sist.id] ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-500'}`}>
+                                                {typeof IconoCat === 'string' ? (
+                                                    <img src={IconoCat} alt="Icon" className="w-6 h-6 object-contain opacity-80" />
+                                                ) : (
+                                                    <IconoCat className="w-5 h-5" />
+                                                )}
                                             </div>
                                             <div className="min-w-0">
                                                 <h2 className="text-lg font-semibold text-slate-800 truncate">
@@ -560,7 +663,8 @@ export default function RevisionChecklist() {
                                             <p className="text-sm text-slate-500 mb-5 px-1">{sist.descripcion}</p>
                                         )}
 
-                                        <div className="mb-5">
+                                        {/* Botones de acción del sistema - parte superior */}
+                                        <div className="mb-5 flex flex-wrap gap-2">
                                             <button
                                                 type="button"
                                                 onClick={(e) => { e.stopPropagation(); openAddModal(sist.id); }}
@@ -568,11 +672,45 @@ export default function RevisionChecklist() {
                                             >
                                                 <Plus className="w-4 h-4" /> Añadir equipo
                                             </button>
+                                            <button
+                                                type="button"
+                                                onClick={async (e) => {
+                                                    e.stopPropagation();
+                                                    // Revisar todos los equipos del sistema
+                                                    const updatedEquipos = equiposInstalados.map(eq => {
+                                                        if (eq.sistemaId === sist.id) {
+                                                            return {
+                                                                ...eq,
+                                                                revisado: true,
+                                                                checkAcceso: true, checkAltura: true, checkSoporte: true, checkSenalizacion: true, checkManguera: true,
+                                                                checkPeso: true, checkManometro: true, checkMarcado: true, checkEtiquetas: true, checkRetimbre: true,
+                                                                checkRiesgo: true, checkDistancia: true, checkPasador: true, checkMovilidad: true
+                                                            };
+                                                        }
+                                                        return eq;
+                                                    });
+                                                    setEquiposInstalados(updatedEquipos);
+                                                    saveEquiposProgress(updatedEquipos);
+                                                    // Cambiar estado del parte a "Abierto" si estaba en "Planificado"
+                                                    if (parte?.estado === 'Planificado') {
+                                                        updateParte({ estado: 'Abierto' });
+                                                        const storedPartes = JSON.parse(localStorage.getItem('firecheck_db_partes') || '[]');
+                                                        const parteActual = storedPartes.find((p: any) => p.id === parteId);
+                                                        const docId = parteActual?._docId || parteId;
+                                                        try { await updateParteFirestore(docId, { estado: 'Abierto' }); } catch (err) { console.error('Error actualizando estado en Firestore:', err); }
+                                                    }
+                                                }}
+                                                className="inline-flex items-center gap-2 px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl text-sm font-semibold transition-all shadow-sm shadow-green-200"
+                                            >
+                                                <CheckCheck className="w-4 h-4" /> Revisar todo
+                                            </button>
                                         </div>
 
                                         <div className="space-y-4">
                                             {(() => {
-                                                const filteredEqs = equiposInstalados.filter(eq => eq.sistemaId === sist.id);
+                                                const filteredEqs = equiposInstalados
+                                                    .filter(eq => eq.sistemaId === sist.id)
+                                                    .sort((a, b) => (a.codigo || '').localeCompare(b.codigo || '', undefined, { numeric: true, sensitivity: 'base' }));
                                                 return filteredEqs.length === 0 ? (
                                                     <div className="text-center py-10 bg-slate-50 rounded-xl border border-slate-100 border-dashed">
                                                         <Layers className="w-8 h-8 text-slate-200 mx-auto mb-2" />
@@ -614,8 +752,9 @@ export default function RevisionChecklist() {
                                                                 <div className="px-4 pb-3">
                                                                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-3 gap-y-1.5">
                                                                         {CHECKLIST_ITEMS.map(item => {
-                                                                            const isChecked = eq[item.key as keyof EquipoInstalado] === true;
-                                                                            const isUnchecked = eq[item.key as keyof EquipoInstalado] === false;
+                                                                            const val = eq[item.key as keyof EquipoInstalado];
+                                                                            const isChecked = val === true;
+                                                                            const isUnchecked = val === false;
                                                                             return (
                                                                                 <label
                                                                                     key={item.key}
@@ -624,12 +763,12 @@ export default function RevisionChecklist() {
                                                                                             ? 'text-red-600 font-semibold bg-red-50 hover:bg-red-100'
                                                                                             : isChecked
                                                                                             ? 'text-green-700 font-medium bg-green-50 hover:bg-green-100'
-                                                                                            : 'text-slate-500 bg-white hover:bg-slate-100 border border-slate-150'
+                                                                                            : 'text-slate-600 font-medium bg-white hover:bg-slate-50 border border-slate-200'
                                                                                     }`}
                                                                                 >
                                                                                     <input
                                                                                         type="checkbox"
-                                                                                        checked={!!eq[item.key as keyof EquipoInstalado]}
+                                                                                        checked={isChecked}
                                                                                         onChange={(e) => handleCheckChange(eq.id, item.key as keyof EquipoInstalado, e.target.checked)}
                                                                                         className={`w-3.5 h-3.5 rounded cursor-pointer ${
                                                                                             isUnchecked
@@ -688,7 +827,7 @@ export default function RevisionChecklist() {
                                                                         value={eq.anomalias || ''}
                                                                         onChange={(e) => setEquiposInstalados(prevEquipos =>
                                                                             prevEquipos.map(currEq =>
-                                                                                currEq.id === eq.id ? { ...currEq, anomalias: e.target.value } : currEq
+                                                                                currEq.id === eq.id ? { ...currEq, anomalias: e.target.value, revisado: true } : currEq
                                                                             )
                                                                         )}
                                                                         className={`w-full px-3 py-2.5 rounded-lg text-sm resize-none outline-none transition-all ${
@@ -699,6 +838,89 @@ export default function RevisionChecklist() {
                                                                         rows={2}
                                                                         placeholder={algunCheckRojo ? 'Obligatorio: describe la anomalía encontrada...' : 'Añadir anomalías, observaciones o notas...'}
                                                                     />
+                                                                    <div className="mt-2 flex flex-wrap gap-2">
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={async () => {
+                                                                                const updatedEquipos = equiposInstalados.map(currEq => {
+                                                                                    if (currEq.id === eq.id) {
+                                                                                        return {
+                                                                                            ...currEq,
+                                                                                            revisado: true,
+                                                                                            checkAcceso: true, checkAltura: true, checkSoporte: true, checkSenalizacion: true, checkManguera: true,
+                                                                                            checkPeso: true, checkManometro: true, checkMarcado: true, checkEtiquetas: true, checkRetimbre: true,
+                                                                                            checkRiesgo: true, checkDistancia: true, checkPasador: true, checkMovilidad: true
+                                                                                        };
+                                                                                    }
+                                                                                    return currEq;
+                                                                                });
+                                                                                setEquiposInstalados(updatedEquipos);
+                                                                                saveEquiposProgress(updatedEquipos);
+                                                                                // Cambiar estado del parte a "Abierto" si estaba en "Planificado"
+                                                                                if (parte?.estado === 'Planificado') {
+                                                                                    updateParte({ estado: 'Abierto' });
+                                                                                    const storedPartes = JSON.parse(localStorage.getItem('firecheck_db_partes') || '[]');
+                                                                                    const parteActual = storedPartes.find((p: any) => p.id === parteId);
+                                                                                    const docId = parteActual?._docId || parteId;
+                                                                                    try { await updateParteFirestore(docId, { estado: 'Abierto' }); } catch (err) { console.error('Error actualizando estado en Firestore:', err); }
+                                                                                }
+                                                                            }}
+                                                                            className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-semibold transition-all shadow-sm"
+                                                                        >
+                                                                            <CheckCheck className="w-4 h-4" /> Revisado
+                                                                        </button>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={async () => {
+                                                                                const updatedEquipos = equiposInstalados.map(currEq => {
+                                                                                    if (currEq.id === eq.id) {
+                                                                                        return {
+                                                                                            ...currEq,
+                                                                                            revisado: true,
+                                                                                    checkAcceso: false, checkAltura: false, checkSoporte: false, checkSenalizacion: false, checkManguera: false,
+                                                                                    checkPeso: false, checkManometro: false, checkMarcado: false, checkEtiquetas: false, checkRetimbre: false,
+                                                                                    checkRiesgo: false, checkDistancia: false, checkPasador: false, checkMovilidad: false,
+                                                                                            anomalias: 'Equipo no revisado por no localizarse en su lugar.'
+                                                                                        };
+                                                                                    }
+                                                                                    return currEq;
+                                                                                });
+                                                                                setEquiposInstalados(updatedEquipos);
+                                                                                saveEquiposProgress(updatedEquipos);
+                                                                                // Cambiar estado del parte a "Abierto" si estaba en "Planificado"
+                                                                                if (parte?.estado === 'Planificado') {
+                                                                                    updateParte({ estado: 'Abierto' });
+                                                                                    const storedPartes = JSON.parse(localStorage.getItem('firecheck_db_partes') || '[]');
+                                                                                    const parteActual = storedPartes.find((p: any) => p.id === parteId);
+                                                                                    const docId = parteActual?._docId || parteId;
+                                                                                    try { await updateParteFirestore(docId, { estado: 'Abierto' }); } catch (err) { console.error('Error actualizando estado en Firestore:', err); }
+                                                                                }
+                                                                            }}
+                                                                            className="inline-flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-semibold transition-all shadow-sm"
+                                                                        >
+                                                                            <AlertTriangle className="w-4 h-4" /> Equipo no encontrado
+                                                                        </button>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={async () => {
+                                                                                const updatedEquipos = equiposInstalados.map(currEq => {
+                                                                                    if (currEq.id === eq.id) {
+                                                                                        const cleanedEq = { ...currEq, revisado: false, anomalias: '' };
+                                                                                        CHECKLIST_ITEMS.forEach(item => {
+                                                                                            (cleanedEq as any)[item.key] = null;
+                                                                                        });
+                                                                                        return cleanedEq;
+                                                                                    }
+                                                                                    return currEq;
+                                                                                });
+                                                                                setEquiposInstalados(updatedEquipos);
+                                                                                saveEquiposProgress(updatedEquipos);
+                                                                            }}
+                                                                            className="inline-flex items-center gap-2 px-4 py-2 bg-slate-400 hover:bg-slate-500 text-white rounded-lg text-xs font-semibold transition-all shadow-sm"
+                                                                        >
+                                                                            <RotateCcw className="w-4 h-4" /> Limpiar
+                                                                        </button>
+                                                                    </div>
                                                                 </div>
                                                             </div>
                                                         );
@@ -709,23 +931,30 @@ export default function RevisionChecklist() {
                                     </div>
                                 )}
                             </div>
-                        ))
+                            );
+                        })
                     )}
                 </div>
 
                 {/* Bottom Actions */}
                 <div className="mt-10 pt-6 border-t border-slate-200 flex flex-col sm:flex-row justify-end gap-3">
                     <button
-                        onClick={handlePauseRevision}
-                        className="inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-xl font-semibold text-white bg-red-600 hover:bg-red-700 shadow-lg shadow-red-200 transition-all text-sm"
+                        onClick={handlePreviewPDF}
+                        className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition-all text-sm sm:w-auto"
                     >
-                        <Save className="w-5 h-5" /> Pausar Revisión
+                        <Eye className="w-4 h-4" /> Previsualizar Acta
+                    </button>
+                    <button
+                        onClick={handlePauseRevision}
+                        className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-white bg-red-600 hover:bg-red-700 shadow-lg shadow-red-200 transition-all text-sm sm:w-auto"
+                    >
+                        <Save className="w-4 h-4" /> Pausar Revisión
                     </button>
                     <button
                         onClick={handleSaveRevision}
-                        className="inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-xl font-semibold text-white bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all text-sm"
+                        className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-white bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all text-sm sm:w-auto"
                     >
-                        <Save className="w-5 h-5" /> Finalizar Revisión
+                        <Save className="w-4 h-4" /> Finalizar Revisión
                     </button>
                 </div>
             </div>
@@ -733,85 +962,119 @@ export default function RevisionChecklist() {
             {/* MODAL AÑADIR EQUIPO */}
             {addSistemaId && (
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[100]">
-                    <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl max-h-[90vh] flex flex-col animate-in fade-in zoom-in-95 duration-200">
-                        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
-                            <h2 className="text-lg font-bold text-slate-800">Añadir equipo al sistema</h2>
+                    <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl flex flex-col animate-in fade-in zoom-in-95 duration-200">
+                        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                            <div>
+                                <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                                    <Plus className="w-5 h-5 text-slate-600" /> Añadir equipo
+                                </h2>
+                                <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">
+                                    Sistema: {currentAddSistema?.familia || currentAddSistema?.tipo}
+                                </p>
+                            </div>
                             <button onClick={closeAddModal} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors">
                                 <X className="w-5 h-5" />
                             </button>
                         </div>
+                        <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+                            {/* Catalog Helper */}
+                            <div className="pb-4 border-b border-slate-100">
+                                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Autocompletar desde catálogo</label>
+                                <select
+                                    value={selectedCatalogItem}
+                                    onChange={e => {
+                                        const val = e.target.value;
+                                        setSelectedCatalogItem(val);
+                                        const itemBase = equiposCatalogo.find(eq => eq.id === val);
+                                        if (itemBase) {
+                                            setNewEquipo(prev => ({ ...prev, nombre: itemBase.nombre }));
+                                        }
+                                    }}
+                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-indigo-500/20"
+                                >
+                                    <option value="">-- Selecciona para cargar nombre --</option>
+                                    {filteredCatalog.map((eq: any) => (
+                                        <option key={eq.id} value={eq.id}>{eq.codigo} - {eq.nombre}</option>
+                                    ))}
+                                </select>
+                            </div>
 
-                        <div className="overflow-y-auto p-6">
-                            <div className="space-y-4">
+                            <div className="grid grid-cols-2 gap-3">
                                 <div>
-                                    <label className="block text-xs font-semibold text-slate-500 mb-1.5">Seleccionar del catálogo</label>
-                                    <select
-                                        value={selectedCatalogItem}
-                                        onChange={e => setSelectedCatalogItem(e.target.value)}
-                                        className="w-full px-3 py-2.5 bg-white rounded-lg border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-indigo-500/20"
-                                    >
-                                        <option value="">-- Elige un equipo --</option>
-                                        {filteredCatalog.map((eq: any) => (
-                                            <option key={eq.id} value={eq.id}>{eq.codigo} - {eq.nombre}</option>
-                                        ))}
-                                    </select>
+                                    <label className="block text-xs font-semibold text-slate-500 mb-1.5">Código</label>
+                                    <input
+                                        type="text"
+                                        value={newEquipo.codigo}
+                                        onChange={e => setNewEquipo(prev => ({ ...prev, codigo: e.target.value }))}
+                                        className="w-full px-3 py-2.5 bg-white rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
+                                    />
                                 </div>
-
-                                {selectedCatalogItem && (
-                                    <div>
-                                        <label className="block text-xs font-semibold text-slate-500 mb-1.5">Cantidad</label>
-                                        <input
-                                            type="number" min={1} max={100}
-                                            value={addQuantity}
-                                            onChange={e => setAddQuantity(parseInt(e.target.value) || 1)}
-                                            className="w-full px-3 py-2.5 bg-white rounded-lg border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-indigo-500/20"
-                                        />
-                                    </div>
-                                )}
-
-                                <div className="border-t border-slate-100 pt-4">
-                                    <p className="text-xs font-semibold text-slate-400 mb-3 uppercase tracking-wider">O introduce los datos manualmente</p>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                        <div>
-                                            <label className="block text-xs font-semibold text-slate-500 mb-1.5">Código</label>
-                                            <input type="text" value={newEquipo.codigo} onChange={(e) => setNewEquipo(prev => ({ ...prev, codigo: e.target.value }))} className="w-full px-3 py-2.5 bg-white rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-semibold text-slate-500 mb-1.5">Nombre</label>
-                                            <input type="text" value={newEquipo.nombre} onChange={(e) => setNewEquipo(prev => ({ ...prev, nombre: e.target.value }))} className="w-full px-3 py-2.5 bg-white rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" placeholder="Ej: Extintor CO2 5kg" />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-semibold text-slate-500 mb-1.5">Ubicación</label>
-                                            <input type="text" value={newEquipo.ubicacion} onChange={(e) => setNewEquipo(prev => ({ ...prev, ubicacion: e.target.value }))} className="w-full px-3 py-2.5 bg-white rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" placeholder="Ej: Planta baja, entrada" />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-semibold text-slate-500 mb-1.5">Placa</label>
-                                            <input type="text" value={newEquipo.placa} onChange={(e) => setNewEquipo(prev => ({ ...prev, placa: e.target.value }))} className="w-full px-3 py-2.5 bg-white rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" placeholder="Ej: PL-12345" />
-                                        </div>
-                                    </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-500 mb-1.5">Placa</label>
+                                    <input
+                                        type="text"
+                                        value={newEquipo.placa}
+                                        onChange={e => setNewEquipo(prev => ({ ...prev, placa: e.target.value }))}
+                                        className="w-full px-3 py-2.5 bg-white rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
+                                        placeholder="Ej: PL-12345"
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-500 mb-1.5">Nombre</label>
+                                <input
+                                    type="text"
+                                    value={newEquipo.nombre}
+                                    onChange={e => setNewEquipo(prev => ({ ...prev, nombre: e.target.value }))}
+                                    className="w-full px-3 py-2.5 bg-white rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
+                                    placeholder="Ej: Extintor CO2 5kg"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-500 mb-1.5">Ubicación</label>
+                                <input
+                                    type="text"
+                                    value={newEquipo.ubicacion}
+                                    onChange={e => setNewEquipo(prev => ({ ...prev, ubicacion: e.target.value }))}
+                                    className="w-full px-3 py-2.5 bg-white rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
+                                    placeholder="Ej: Planta baja, entrada"
+                                />
+                            </div>
+                            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-500 mb-1.5">F. Fabricación</label>
+                                    <input
+                                        type="month"
+                                        value={newEquipo.fechaFabricacion ? newEquipo.fechaFabricacion.substring(0, 7) : ''}
+                                        onChange={e => setNewEquipo(prev => ({ ...prev, fechaFabricacion: e.target.value ? e.target.value + '-01' : '' }))}
+                                        className="w-full px-3 py-2 bg-white rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-500 mb-1.5">F. Retimbre</label>
+                                    <input
+                                        type="month"
+                                        value={newEquipo.ultimoRetimbre ? newEquipo.ultimoRetimbre.substring(0, 7) : ''}
+                                        onChange={e => setNewEquipo(prev => ({ ...prev, ultimoRetimbre: e.target.value ? e.target.value + '-01' : '' }))}
+                                        className="w-full px-3 py-2 bg-white rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
+                                    />
                                 </div>
                             </div>
                         </div>
-
-                        <div className="px-6 py-4 border-t border-slate-100 flex gap-3 shrink-0">
-                            <button type="button" onClick={closeAddModal} className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100 transition-colors">
+                        <div className="px-6 py-4 border-t border-slate-100 flex gap-3">
+                            <button
+                                type="button"
+                                onClick={closeAddModal}
+                                className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100 transition-colors"
+                            >
                                 Cancelar
                             </button>
                             <button
                                 type="button"
-                                onClick={() => {
-                                    if (!addSistemaId) return;
-                                    if (selectedCatalogItem) {
-                                        handleAddFromCatalog(addSistemaId);
-                                    } else if (newEquipo.codigo.trim() && newEquipo.nombre.trim()) {
-                                        handleAddEquipo(addSistemaId);
-                                    } else {
-                                        alert('Selecciona un equipo del catálogo o introduce código y nombre manualmente.');
-                                    }
-                                }}
+                                onClick={() => addSistemaId && handleAddEquipo(addSistemaId)}
                                 className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 shadow-sm transition-all"
                             >
-                                Guardar
+                                Guardar equipo
                             </button>
                         </div>
                     </div>

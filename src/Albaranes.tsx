@@ -1,8 +1,13 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { ArrowLeft, FileDigit, Download, Search, CheckCircle2, Circle, Clock, Trash2, Plus, Building2, MapPin, Save, Trash, Edit, Eye } from 'lucide-react';
+import { ArrowLeft, FileDigit, Download, Search, CheckCircle2, Circle, Clock, Trash2, Plus, Building2, MapPin, Save, Trash, Edit, Eye, Copy } from 'lucide-react';
 import { addAlbaran, updateAlbaran, deleteAlbaran, subscribeAlbaranes, subscribeEmpresas, subscribeTecnicos, subscribeCentros, subscribeClientes, type Albaran, type Cliente, type Centro, type Equipo, type Tecnico, type Empresa } from './firebase';
-import { generarAlbaranPDF } from './pdfGenerator';
+import { generarAlbaranPDF, generarAlbaranPDFView } from './pdfGenerator';
 import ConfirmationModal from './ConfirmationModal';
+
+const formatMoneda = (valor: number) => 
+  new Intl.NumberFormat('es-ES', { 
+    style: 'currency', currency: 'EUR' 
+  }).format(valor || 0);
 
 export default function Albaranes() {
   // Obtener rol del usuario logueado
@@ -41,6 +46,44 @@ export default function Albaranes() {
 
   const canvasClienteRef = useRef<HTMLCanvasElement>(null);
   const canvasTecnicoRef = useRef<HTMLCanvasElement>(null);
+
+  // Column resizing state
+  const [colWidths, setColWidths] = useState({
+    albaran: 120,
+    fecha: 100,
+    pedido: 90,
+    cliente: 240,
+    centro: 140,
+    estado: 100,
+    acciones: 200,
+  });
+  const resizingRef = useRef<{ key: string; startX: number; startWidth: number } | null>(null);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!resizingRef.current) return;
+      const { key, startX, startWidth } = resizingRef.current;
+      const delta = e.clientX - startX;
+      setColWidths(prev => ({ ...prev, [key]: Math.max(40, startWidth + delta) }));
+    };
+
+    const handleMouseUp = () => {
+      resizingRef.current = null;
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, []);
+
+  const handleMouseDownResize = (key: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    resizingRef.current = { key, startX: e.clientX, startWidth: colWidths[key] };
+  };
 
   // State for confirmation modal
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
@@ -108,6 +151,36 @@ export default function Albaranes() {
     setIsConfirmModalOpen(false);
     await deleteAlbaran(albaranIdToDelete);
     setAlbaranIdToDelete(null);
+  };
+
+  const handleViewPDF = async (alb: Albaran) => {
+    const cliente = clientes.find(c => c.id === alb.clienteId);
+    const centro = centros.find(c => c.id === alb.centroId);
+    const eqsDelCentro = equipos.filter(e => e.centroId === alb.centroId);
+    const empresa = empresas.find(e => e._docId === alb.empresaId);
+    const tecnico = tecnicos.find(t => t.id === alb.tecnicoId);
+    const tecnicoNombre = tecnico ? `${tecnico.nombre} ${tecnico.apellidos}` : '';
+    const pdfBlobUrl = await generarAlbaranPDFView(cliente as any, centro as any, eqsDelCentro as any[], alb.numeroMantenimiento || alb.id, tecnicoNombre, alb.firmaCliente, alb.firmaTecnico, alb.nombreFirmante, alb.items, empresa as any);
+    window.open(pdfBlobUrl, '_blank');
+  };
+
+  const handleDuplicateAlbaran = (alb: Albaran) => {
+    // Usar el generador de IDs existente para mantener formato ALB-YY-XXX
+    const newId = generateNextAlbaranId();
+
+    // Copiar albarán con nuevo ID y limpiar firmas
+    const duplicatedAlbaran: Albaran = {
+      ...alb,
+      id: newId,
+      firmaCliente: undefined,
+      firmaTecnico: undefined,
+      nombreFirmante: '',
+      fechaCreacion: new Date().toISOString(),
+    };
+
+    setForm(duplicatedAlbaran);
+    setEditingId(null);
+    setView('form');
   };
 
   const filtered = albaranes.filter(alb => {
@@ -329,14 +402,34 @@ export default function Albaranes() {
           </div>
         ) : (
           <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden">
-            <div className="hidden md:flex items-center bg-[#f9f7f4] border-b-2 border-zinc-200 px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-zinc-500">
-              <div className="w-28">Nº Albarán</div>
-              <div className="w-20">Nº Pedido</div>
-              <div className="flex-1">Cliente</div>
-              <div className="w-32">Centro</div>
-              <div className="w-28">Fecha</div>
-              <div className="w-28 text-center">Estado</div>
-              <div className="w-32 text-right">Acciones</div>
+              <div className="hidden md:flex items-center bg-[#f9f7f4] border-b-2 border-zinc-200 px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-zinc-500">
+              <div className="relative pr-3 select-none" style={{ width: colWidths.albaran }}>
+                <div>Nº Albarán</div>
+                <div className="absolute top-0 right-0 h-full w-4 -mr-2 cursor-col-resize border-l-2 border-dashed border-zinc-600" onMouseDown={(e) => handleMouseDownResize('albaran', e)} />
+              </div>
+              <div className="relative pr-3 select-none" style={{ width: colWidths.fecha }}>
+                <div>Fecha</div>
+                <div className="absolute top-0 right-0 h-full w-4 -mr-2 cursor-col-resize border-l-2 border-dashed border-zinc-600" onMouseDown={(e) => handleMouseDownResize('fecha', e)} />
+              </div>
+              <div className="relative pr-3 select-none" style={{ width: colWidths.pedido }}>
+                <div>Nº Pedido</div>
+                <div className="absolute top-0 right-0 h-full w-4 -mr-2 cursor-col-resize border-l-2 border-dashed border-zinc-600" onMouseDown={(e) => handleMouseDownResize('pedido', e)} />
+              </div>
+              <div className="relative pr-3 select-none" style={{ width: colWidths.cliente }}>
+                <div>Cliente</div>
+                <div className="absolute top-0 right-0 h-full w-4 -mr-2 cursor-col-resize border-l-2 border-dashed border-zinc-600" onMouseDown={(e) => handleMouseDownResize('cliente', e)} />
+              </div>
+              <div className="relative pr-3 select-none" style={{ width: colWidths.centro }}>
+                <div>Centro</div>
+                <div className="absolute top-0 right-0 h-full w-4 -mr-2 cursor-col-resize border-l-2 border-dashed border-zinc-600" onMouseDown={(e) => handleMouseDownResize('centro', e)} />
+              </div>
+              <div className="relative text-center pr-3 select-none" style={{ width: colWidths.estado }}>
+                <div>Estado</div>
+                <div className="absolute top-0 right-0 h-full w-4 -mr-2 cursor-col-resize border-l-2 border-dashed border-zinc-600" onMouseDown={(e) => handleMouseDownResize('estado', e)} />
+              </div>
+              <div className="relative text-center select-none" style={{ width: colWidths.acciones }}>
+                <div>Acciones</div>
+              </div>
             </div>
             <div className="divide-y divide-zinc-100">
               {filtered.map((alb) => {
@@ -354,13 +447,13 @@ export default function Albaranes() {
                         <p className="text-xs text-zinc-500">{new Date(alb.fechaCreacion).toLocaleDateString()}</p>
                       </div>
                     </div>
-                    <div className="hidden md:flex items-center w-full">
-                      <div className="w-28"><span className="text-[11px] font-mono font-bold text-zinc-500 bg-zinc-100 px-1.5 py-0.5 rounded">{alb.id}</span></div>
-                      <div className="w-20 text-sm text-zinc-600 truncate pr-2">{alb.numeroPedido || '-'}</div>
-                      <div className="flex-1 min-w-0 pr-2"><p className="text-sm font-bold text-zinc-900 truncate">{cliente?.nombre || 'Desconocido'}</p></div>
-                      <div className="w-32 text-sm text-zinc-600 truncate pr-2 flex items-center gap-1"><MapPin className="w-3 h-3 text-zinc-400 shrink-0" />{centro?.nombre || '-'}</div>
-                      <div className="w-28 text-sm text-zinc-600 pr-2">{new Date(alb.fechaCreacion).toLocaleDateString()}</div>
-                      <div className="w-28 flex justify-center pr-2">
+                      <div className="hidden md:flex items-center w-full">
+                      <div className="pr-3" style={{ width: colWidths.albaran }}><span className="text-[11px] font-mono font-bold text-zinc-500 bg-zinc-100 px-1.5 py-0.5 rounded">{alb.id}</span></div>
+                      <div className="pr-3 text-sm text-zinc-600" style={{ width: colWidths.fecha }}>{new Date(alb.fechaCreacion).toLocaleDateString()}</div>
+                      <div className="pr-3 text-sm text-zinc-600 truncate" style={{ width: colWidths.pedido }}>{alb.numeroPedido || '-'}</div>
+                      <div className="pr-3 min-w-0" style={{ width: colWidths.cliente }}><p className="text-sm font-bold text-zinc-900 truncate">{cliente?.nombre || 'Desconocido'}</p></div>
+                      <div className="pr-3 text-sm text-zinc-600 truncate flex items-center gap-1" style={{ width: colWidths.centro }}><MapPin className="w-3 h-3 text-zinc-400 shrink-0" />{centro?.nombre || '-'}</div>
+                      <div className="flex justify-center pr-2" style={{ width: colWidths.estado }}>
                         <button onClick={() => toggleFacturado(alb.id)} className={`text-[10px] font-bold px-2 py-1 rounded-lg border flex items-center gap-1 ${
                           alb.facturado ? 'bg-blue-600 border-blue-700 text-white' : 'bg-zinc-100 border-zinc-200 text-zinc-500'
                         }`}>
@@ -368,15 +461,18 @@ export default function Albaranes() {
                           {alb.facturado ? 'Facturado' : 'Pendiente'}
                         </button>
                       </div>
-                      <div className="w-32 flex items-center justify-end gap-1">
-                        <button onClick={() => handleEditAlbaran(alb)} className="p-1.5 text-zinc-400 hover:text-blue-900 hover:bg-blue-50 rounded-lg transition-colors" title="Ver albarán"><Eye className="w-4 h-4" /></button>
+                      <div className="flex items-center justify-center gap-1" style={{ width: colWidths.acciones }}>
+                        <button onClick={() => handleViewPDF(alb)} className="p-1.5 text-zinc-400 hover:text-blue-900 hover:bg-blue-50 rounded-lg transition-colors" title="Ver PDF"><Eye className="w-4 h-4" /></button>
                         <button onClick={async () => {
                           const eqsDelCentro = equipos.filter(e => e.centroId === alb.centroId);
                           if (!cliente || !centro) { alert('No se puede generar el PDF: datos incompletos'); return; }
                           const empresa = empresas.find(e => e._docId === alb.empresaId);
-                          await generarAlbaranPDF(cliente as any, centro as any, eqsDelCentro as any[], alb.numeroMantenimiento || alb.id, '', alb.firmaCliente, alb.firmaTecnico, alb.nombreFirmante, alb.items, empresa as any);
+                          const tecnico = tecnicos.find(t => t.id === alb.tecnicoId);
+                          const tecnicoNombre = tecnico ? `${tecnico.nombre} ${tecnico.apellidos}` : '';
+                          await generarAlbaranPDF(cliente as any, centro as any, eqsDelCentro as any[], alb.numeroMantenimiento || alb.id, tecnicoNombre, alb.firmaCliente, alb.firmaTecnico, alb.nombreFirmante, alb.items, empresa as any);
                         }} className="p-1.5 text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100 rounded-lg transition-colors" title="Descargar PDF"><Download className="w-4 h-4" /></button>
                         {!isVisualizador && <button onClick={() => handleEditAlbaran(alb)} className="p-1.5 text-zinc-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors" title="Editar"><Edit className="w-4 h-4" /></button>}
+                        {!isVisualizador && <button onClick={() => handleDuplicateAlbaran(alb)} className="p-1.5 text-zinc-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-colors" title="Duplicar"><Copy className="w-4 h-4" /></button>}
                         {!isVisualizador && <button onClick={() => handleDeleteAlbaran(alb.id)} className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Eliminar"><Trash2 className="w-4 h-4" /></button>}
                       </div>
                     </div>
@@ -545,7 +641,7 @@ export default function Albaranes() {
                           </td>
                           <td className="p-2"><input type="text" value={item.descripcion} onChange={e => updateItem(index, 'descripcion', e.target.value)} className="w-full bg-transparent border-b border-transparent group-hover:border-zinc-200 outline-none p-1" placeholder="Detalle del trabajo..." /></td>
                           <td className="p-2"><input type="number" step="0.01" value={item.precioUnidad} onChange={e => updateItem(index, 'precioUnidad', parseFloat(e.target.value))} className="w-full text-right bg-transparent border-b border-transparent group-hover:border-zinc-200 outline-none p-1" /></td>
-                          <td className="px-4 py-2 text-right font-bold text-zinc-900">{item.subtotal.toFixed(2)}€</td>
+                          <td className="px-4 py-2 text-right font-bold text-zinc-900">{formatMoneda(item.subtotal)}</td>
                           <td className="p-2"><button type="button" onClick={() => removeItem(index)} className="p-1 text-zinc-300 hover:text-red-500 transition-colors"><Trash className="w-4 h-4" /></button></td>
                         </tr>
                       ))}

@@ -1,0 +1,15 @@
+src/Centros.tsx(150,20): error TS6133: 'setClientes' is declared but its value is never read.
+src/Centros.tsx(162,29): error TS6133: 'setCategoriasSistema' is declared but its value is never read.
+src/Centros.tsx(188,27): error TS6133: 'setEquiposCatalogo' is declared but its value is never read.
+src/Partes.tsx(14,40): error TS2304: Cannot find name 'Parte'.
+src/Partes.tsx(16,42): error TS2304: Cannot find name 'Centro'.
+src/Partes.tsx(17,44): error TS2304: Cannot find name 'Cliente'.
+src/Partes.tsx(21,36): error TS2304: Cannot find name 'Parte'.
+src/Partes.tsx(36,58): error TS2304: Cannot find name 'Parte'.
+src/Partes.tsx(89,21): error TS2304: Cannot find name 'Parte'.
+src/Partes.tsx(211,36): error TS2304: Cannot find name 'Parte'.
+src/Partes.tsx(257,43): error TS2304: Cannot find name 'Parte'.
+src/Partes.tsx(296,47): error TS2304: Cannot find name 'Parte'.
+src/Partes.tsx(337,41): error TS2304: Cannot find name 'Parte'.
+src/pdfGenerator.ts(726,3): error TS6133: 'firmaTecnico' is declared but its value is never read.
+src/RevisionChecklist.tsx(206,54): error TS6133: 'sistType' is declared but its value is never read.

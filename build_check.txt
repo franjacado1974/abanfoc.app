@@ -1,0 +1,5 @@
+
+> app@0.0.0 build
+> tsc -b && vite build
+
+src/Centros.tsx(1415,2): error TS1005: ')' expected.

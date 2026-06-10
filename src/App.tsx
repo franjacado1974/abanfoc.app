@@ -11,6 +11,7 @@ import DashboardTecnico from './DashboardTecnico';
 import Clientes from './Clientes';
 import Centros from './Centros';
 import ClientesCentros from './ClientesCentros';
+import Presupuestos from './Presupuestos';
 import Catalogo from './Catalogo';
 import Articulos from './Articulos';
 import Servicios from './Servicios';
@@ -24,6 +25,7 @@ import Revisiones from './Revisiones';
 import Ajustes from './Ajustes';
 import Sidebar from './components/Sidebar';
 import { verifyUser } from './firebase';
+import { APP_VERSION } from './constants';
 
 interface Usuario {
   id: string;
@@ -85,7 +87,7 @@ function Login({ usuarios: _usuarios, onLogin }: { usuarios: Usuario[], onLogin:
           />
           <button type="submit" className="w-full bg-black hover:bg-zinc-800 text-white py-3.5 sm:py-4 rounded-xl sm:rounded-2xl font-bold shadow-lg transition-all active:scale-95">Entrar</button>
         </form>
-        <p className="text-center text-zinc-400 text-xs mt-4">V08.06.26.0850.03</p>
+        <p className="text-center text-zinc-400 text-xs mt-4">{APP_VERSION}</p>
       </div>
     </div>
   );
@@ -435,7 +437,7 @@ export default function App() {
         } />
         <Route path="/presupuestos" element={
           <ProtectedRoute allowedRoles={['super-administrador', 'administrador']} user={loggedUser}>
-            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><PlaceholderPage title="Gestion de Presupuestos" bgColor="bg-zinc-50" /></PageLayout>
+            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Presupuestos /></PageLayout>
           </ProtectedRoute>
         } />
         <Route path="/albaranes" element={

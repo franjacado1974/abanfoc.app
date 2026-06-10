@@ -12,6 +12,13 @@ export interface Servicio {
   precioVenta: number;
 }
 
+const formatMoneda = (valor: number) => 
+  new Intl.NumberFormat('es-ES', { 
+    style: 'currency', currency: 'EUR',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number(valor) || 0);
+
 export default function Servicios() {
   const [servicios, setServicios] = useState<Servicio[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -308,55 +315,58 @@ export default function Servicios() {
         </div>
 
         {/* Lista de Servicios */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {filteredServicios.length === 0 ? (
-            <div className="col-span-full text-center py-12 bg-white rounded-3xl border border-fuchsia-100 border-dashed">
-              <Wrench className="w-12 h-12 text-fuchsia-200 mx-auto mb-3" />
-              <p className="text-fuchsia-900/50 font-medium">No hay servicios registrados</p>
-            </div>
-          ) : (
-            filteredServicios.map(s => {
-              const pVentaConIva = s.precioVenta * 1.21;
-              return (
-                <div key={s.id} className="bg-white p-5 rounded-3xl border border-fuchsia-100 shadow-sm hover:shadow-md hover:border-fuchsia-200 transition-all">
-                  <div className="flex justify-between items-start mb-3">
-                    <div className="flex flex-col gap-1 min-w-0 pr-4">
-                      <div className="flex items-center gap-2">
-                        <span className="px-2 py-0.5 bg-fuchsia-50 text-fuchsia-700 text-xs font-mono font-bold rounded-lg border border-fuchsia-100">
-                          {s.codigo}
-                        </span>
-                        <span className="text-xs font-medium text-fuchsia-900/50 uppercase tracking-wider">{s.familia}</span>
-                      </div>
-                      <h3 className="text-lg font-bold text-fuchsia-950 truncate" title={s.nombre}>{s.nombre}</h3>
+        <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden overflow-x-auto">
+          <div className="hidden md:flex items-center bg-[#f9f7f4] border-b-2 border-zinc-200 px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-zinc-500">
+            <div className="w-24 shrink-0">Código</div>
+            <div className="flex-1 min-w-0">Servicio</div>
+            <div className="w-36 shrink-0">Familia</div>
+            <div className="w-28 shrink-0 text-right">Coste Int.</div>
+            <div className="w-28 shrink-0 text-right">P. Venta</div>
+            <div className="w-28 shrink-0 text-right">Acciones</div>
+          </div>
+
+          <div className="divide-y divide-zinc-200">
+            {filteredServicios.length === 0 ? (
+              <div className="p-12 text-center">
+                <Wrench className="w-12 h-12 text-fuchsia-200 mx-auto mb-3" />
+                <p className="text-fuchsia-900/50 font-medium">No hay servicios registrados</p>
+              </div>
+            ) : (
+              filteredServicios.map(s => (
+                <div key={s.id} className="flex flex-col md:flex-row md:items-center px-4 py-3 hover:bg-zinc-50/80 transition-colors group">
+                  <div className="flex md:hidden items-center justify-between mb-1">
+                    <span className="text-[10px] font-mono font-bold text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded">{s.codigo}</span>
+                  </div>
+                  <div className="flex md:hidden mb-1">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-zinc-900 truncate">{s.nombre}</p>
+                      <p className="text-xs text-zinc-500">{s.familia}</p>
                     </div>
-                    <div className="flex items-center gap-1 shrink-0">
-<button onClick={() => handleOpenModal(s)} className="p-1.5 text-black hover:text-fuchsia-700 hover:bg-fuchsia-50 rounded-lg transition-colors">
-  <Edit className="w-4 h-4" />
-</button>
+                  </div>
+
+                  <div className="hidden md:flex items-center w-full">
+                    <div className="w-24 shrink-0">
+                      <span className="text-[11px] font-mono font-bold text-zinc-500 bg-zinc-100 px-1.5 py-0.5 rounded">{s.codigo}</span>
+                    </div>
+                    <div className="flex-1 min-w-0 pr-2">
+                      <p className="text-sm font-bold text-zinc-900 truncate group-hover:text-fuchsia-900 transition-colors">{s.nombre}</p>
+                    </div>
+                    <div className="w-36 shrink-0 text-sm text-zinc-600 truncate pr-2">{s.familia || '-'}</div>
+                    <div className="w-28 shrink-0 text-sm text-zinc-600 text-right pr-2">{formatMoneda(s.precioCompra)}</div>
+                    <div className="w-28 shrink-0 text-sm text-zinc-600 text-right pr-2">{formatMoneda(s.precioVenta)}</div>
+                    <div className="w-28 shrink-0 flex items-center justify-end gap-1">
+                      <button onClick={() => handleOpenModal(s)} className="p-1.5 text-zinc-400 hover:text-fuchsia-700 hover:bg-fuchsia-50 rounded-lg transition-colors">
+                        <Edit className="w-4 h-4" />
+                      </button>
                       <button onClick={() => handleDelete(s.id)} className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors">
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
                   </div>
-
-                  <div className="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-fuchsia-50">
-                    <div>
-                      <p className="text-[10px] uppercase font-semibold text-fuchsia-900/40 mb-0.5">Precio Coste</p>
-                      <p className="font-medium text-fuchsia-950">{s.precioCompra.toFixed(2)} €</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] uppercase font-semibold text-fuchsia-900/40 mb-0.5">Precio Venta <span className="lowercase normal-case font-normal">(Base)</span></p>
-                      <p className="font-medium text-fuchsia-950">{s.precioVenta.toFixed(2)} €</p>
-                    </div>
-                    <div className="col-span-2 bg-fuchsia-50/50 p-2.5 rounded-xl border border-fuchsia-100/50 flex justify-between items-center mt-1">
-                      <p className="text-xs font-semibold text-fuchsia-800">P.V.P (IVA 21% inc.)</p>
-                      <p className="font-bold text-fuchsia-700 text-lg">{pVentaConIva.toFixed(2)} €</p>
-                    </div>
-                  </div>
                 </div>
-              );
-            })
-          )}
+              ))
+            )}
+            </div>
         </div>
       </div>
 
@@ -501,7 +511,7 @@ export default function Servicios() {
               <div className="mt-2 p-3 bg-fuchsia-50 rounded-xl border border-fuchsia-200/50 flex justify-between items-center">
                 <span className="text-xs font-medium text-fuchsia-700">Precio Final (IVA 21%)</span>
                 <span className="text-lg font-bold text-fuchsia-900">
-                  {formData.precioVenta ? (parseFloat(formData.precioVenta) * 1.21).toFixed(2) : '0.00'} €
+                  {formData.precioVenta ? formatMoneda(parseFloat(formData.precioVenta) * 1.21) : formatMoneda(0)}
                 </span>
               </div>
 

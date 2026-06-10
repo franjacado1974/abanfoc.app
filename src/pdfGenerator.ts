@@ -8,6 +8,27 @@ const MESES = [
   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
 ];
 
+// Helper para formatear moneda en español (punto para miles, coma para decimales)
+const formatM = (valor: number) => new Intl.NumberFormat('es-ES', { 
+  style: 'currency', currency: 'EUR' 
+}).format(valor || 0);
+
+// ============ DATOS DE EMPRESA MANTENEDORA (guardados en localStorage) ============
+export function cargaDatosEmpresa(): Record<string, any> | null {
+  try {
+    const saved = localStorage.getItem('firecheck_db_empresa');
+    if (saved) return JSON.parse(saved) as Record<string, any>;
+  } catch (e) { console.error("Error loading company data from localStorage:", e); }
+  return null;
+}
+
+export const guardarDatosEmpresa = (data: any) => {
+  localStorage.setItem('firecheck_db_empresa', JSON.stringify(data));
+};
+
+export const obtenerDatosEmpresa = () => cargaDatosEmpresa();
+
+// ============ ACTA DE REVISIÓN ============
 export const generarActaExtintoresPDF = (
   cliente: Record<string, any>,
   centro: Record<string, any>,
@@ -60,7 +81,7 @@ export const generarActaExtintoresPDF = (
       if (logoBase64) {
         doc.addImage(logoBase64, 'PNG', pageWidth - 65, 6, 55, 13);
       }
-    } catch (_e) { }
+    } catch (e) { console.error("Error loading logo for Acta PDF:", e); }
 
     doc.setDrawColor(0, 0, 0);
     doc.setLineWidth(0.5);
@@ -622,23 +643,27 @@ export const generarActaExtintoresPDF = (
   doc.save(`Acta_Revision_${centro?.nombre || 'Centro'}_${new Date().toISOString().split('T')[0]}.pdf`);
 };
 
-// ============ DATOS DE EMPRESA MANTENEDORA (guardados en localStorage) ============
-export function cargaDatosEmpresa(): Record<string, any> | null {
-  try {
-    const saved = localStorage.getItem('firecheck_db_empresa');
-    if (saved) return JSON.parse(saved) as Record<string, any>;
-  } catch (_e) { }
-  return null;
-}
-
-// Exportamos para que otros módulos puedan usarlo
-export const guardarDatosEmpresa = (data: any) => {
-  localStorage.setItem('firecheck_db_empresa', JSON.stringify(data));
+/** 
+ * Versión para visualizar el PDF del Acta en el navegador sin descargar
+ */
+export const generarActaExtintoresPDFView = async (
+  cliente: Record<string, any>,
+  centro: Record<string, any>,
+  sistemas: Record<string, any>[],
+  equiposTodos: Record<string, any>[],
+  numeroMantenimiento?: string,
+  tecnicoNombre?: string,
+  anomalyTextColor: [number, number, number] = [200, 0, 0],
+  firmaCliente?: string,
+  firmaTecnico?: string,
+  nombreFirmante?: string
+): Promise<string> => {
+  const doc = new jsPDF('landscape');
+  generarActaExtintoresPDF(cliente, centro, sistemas, equiposTodos, numeroMantenimiento, tecnicoNombre, anomalyTextColor, firmaCliente, firmaTecnico, nombreFirmante);
+  return doc.output('bloburl').toString();
 };
 
-export const obtenerDatosEmpresa = () => cargaDatosEmpresa();
-
-// ============ ALBARÁN Y CERTIFICADO ============
+// ============ ALBARÁN ============
 export const generarAlbaranPDF = async (
   cliente: Record<string, any>,
   centro: Record<string, any>,
@@ -649,7 +674,8 @@ export const generarAlbaranPDF = async (
   firmaTecnico?: string,
   nombreFirmante?: string,
   items?: { cantidad: number; concepto: string; descripcion: string; precioUnidad: number; subtotal: number }[],
-  empresa?: Record<string, any>
+  empresa?: Record<string, any>,
+  noSave?: boolean
 ) => {
   const doc = new jsPDF('p', 'mm', 'a4');
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -726,15 +752,14 @@ export const generarAlbaranPDF = async (
   // Si hay items del albarán, usarlos; si no, agrupar equipos por modelo
   let tableData: string[][];
   let subtotalTotal = 0;
-  let useItems = items && items.length > 0;
 
-  if (useItems && items) {
+  if (items && items.length > 0) {
     tableData = items.map(item => [
       String(item.cantidad),
       item.concepto || '',
       (item.descripcion ? item.descripcion.charAt(0).toUpperCase() + item.descripcion.slice(1) : ''),
-      item.precioUnidad.toFixed(2) + ' \u20ac',
-      item.subtotal.toFixed(2) + ' \u20ac'
+      formatM(item.precioUnidad),
+      formatM(item.subtotal)
     ]);
     subtotalTotal = items.reduce((acc, item) => acc + (item.subtotal || 0), 0);
   } else {
@@ -756,9 +781,9 @@ export const generarAlbaranPDF = async (
 
   const tableDataConTotales = [
     ...tableData,
-    ['', '', '', 'Total:', subtotalTotal.toFixed(2) + ' \u20ac'],
-    ['', '', '', `IVA (${ivaPorc}%):`, ivaImporte.toFixed(2) + ' \u20ac'],
-    ['', '', '', 'Total + IVA:', totalConIva.toFixed(2) + ' \u20ac'],
+    ['', '', '', 'Total:', formatM(subtotalTotal)],
+    ['', '', '', `IVA (${ivaPorc}%):`, formatM(ivaImporte)],
+    ['', '', '', 'Total + IVA:', formatM(totalConIva)],
   ];
 
   autoTable(doc, {
@@ -838,10 +863,31 @@ export const generarAlbaranPDF = async (
     doc.text(`${dirParts}${telPart}`, pageWidth / 2, pageHeight - 8, { align: 'center' });
   }
 
-  doc.save(`Albaran_${centro?.nombre || 'Centro'}_${numeroMantenimiento}.pdf`);
+  if (!noSave) doc.save(`Albaran_${centro?.nombre || 'Centro'}_${numeroMantenimiento}.pdf`);
 };
 
-export const generarCertificadoPDF = (
+/**
+ * Versión para visualizar el PDF del Albarán en el navegador sin descargar
+ */
+export const generarAlbaranPDFView = async (
+  cliente: Record<string, any>,
+  centro: Record<string, any>,
+  equiposTodos: Record<string, any>[],
+  numeroMantenimiento?: string,
+  tecnicoNombre?: string,
+  firmaCliente?: string,
+  firmaTecnico?: string,
+  nombreFirmante?: string,
+  items?: { cantidad: number; concepto: string; descripcion: string; precioUnidad: number; subtotal: number }[],
+  empresa?: Record<string, any>
+): Promise<string> => {
+  const tempDoc = new jsPDF('p', 'mm', 'a4');
+  await generarAlbaranPDF(cliente, centro, equiposTodos, numeroMantenimiento, tecnicoNombre, firmaCliente, firmaTecnico, nombreFirmante, items, empresa, true);
+  return tempDoc.output('bloburl').toString();
+};
+
+// ============ CERTIFICADO ============
+export const generarCertificadoPDF = async (
   cliente: Record<string, any>,
   centro: Record<string, any>,
   parte: Record<string, any>,
@@ -851,7 +897,8 @@ export const generarCertificadoPDF = (
   equiposTodos?: Record<string, any>[],
   _firmaCliente?: string,
   _firmaTecnico?: string,
-  _nombreFirmante?: string
+  _nombreFirmante?: string,
+  noSave?: boolean
 ) => {
   const doc = new jsPDF('p', 'mm', 'a4');
   const pageWidth = doc.internal.pageSize.getWidth(); // 210 mm
@@ -914,7 +961,7 @@ export const generarCertificadoPDF = (
     if (logoBase64) {
       doc.addImage(logoBase64, 'PNG', pageWidth - margen - 58, y + 7, 52, 10);
     }
-  } catch (e) { }
+  } catch (e) { console.error("Error loading logo for Certificado PDF:", e); }
 
   y += cardEmpH + 8;
 
@@ -1089,5 +1136,188 @@ export const generarCertificadoPDF = (
     doc.text(text, (pageWidth - textWidth) / 2, 287);
   }
 
-  doc.save(`Certificado_${centro?.nombre || 'Centro'}_${parte?.numeroMantenimiento || parte?.id || 'N-A'}.pdf`);
+  if (!noSave) doc.save(`Certificado_${centro?.nombre || 'Centro'}_${parte?.numeroMantenimiento || parte?.id || 'N-A'}.pdf`);
+};
+
+/**
+ * Versión para visualizar el PDF del Certificado en el navegador sin descargar
+ */
+export const generarCertificadoPDFView = async (...args: any[]): Promise<string> => {
+  const tempDoc = new jsPDF('p', 'mm', 'a4');
+  // @ts-ignore
+  await generarCertificadoPDF(...args, true);
+  return tempDoc.output('bloburl').toString();
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRESUPUESTO PDF
+// ─────────────────────────────────────────────────────────────────────────────
+export const generarPresupuestoPDF = (
+  presupuesto: {
+    titulo: string;
+    numeroPresupuesto?: string;
+    nombreCliente: string;
+    fechaCreacion: string;
+    fechaValidez?: string;
+    estado: string;
+    lineas: { concepto: string; codigo?: string; cantidad: number; precioUnidad: number; subtotal: number }[];
+    subtotal: number;
+    iva: number;
+    total: number;
+    notas?: string;
+  }
+) => {
+  const doc = new jsPDF('p', 'mm', 'a4');
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const margen = 20;
+  const empData = cargaDatosEmpresa();
+
+  doc.setDrawColor(200, 200, 200);
+  doc.setLineWidth(0.3);
+  doc.roundedRect(8, 8, pageWidth - 16, 281, 4, 4, 'D');
+
+  let y = 18;
+
+  try {
+    const logoBase64 = localStorage.getItem('firecheck_db_logo');
+    if (logoBase64) doc.addImage(logoBase64, 'PNG', margen, y, 50, 12);
+  } catch (e) {}
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(18);
+  doc.setTextColor(40, 40, 40);
+  doc.text('PRESUPUESTO', pageWidth - margen, y + 8, { align: 'right' });
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(120, 120, 120);
+  if (presupuesto.numeroPresupuesto) doc.text(`Nº ${presupuesto.numeroPresupuesto}`, pageWidth - margen, y + 14, { align: 'right' });
+  y += 20;
+
+  doc.setDrawColor(40, 40, 40);
+  doc.setLineWidth(0.6);
+  doc.line(margen, y, pageWidth - margen, y);
+  y += 8;
+
+  const empNombre = empData?.nombre || 'ABANFOC S.L.';
+  const empCif = empData?.cif || 'B16794679';
+  const empDir = empData?.direccion || 'C/ America 16B Ático';
+  const empLoc = `${empData?.poblacion || 'Sta. Coloma de Gramanet'}, ${empData?.provincia || 'Barcelona'} ${empData?.cp || '08921'}`;
+  const empTel = empData?.telefono || '651 019 229';
+
+  doc.setDrawColor(220, 220, 220);
+  doc.setFillColor(248, 250, 252);
+  doc.roundedRect(margen, y, pageWidth - margen * 2, 22, 3, 3, 'FD');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(60, 60, 60);
+  doc.text('EMPRESA', margen + 4, y + 6);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.setTextColor(80, 80, 80);
+  doc.text(`${empNombre}  |  CIF: ${empCif}`, margen + 4, y + 12);
+  doc.text(`${empDir}  |  ${empLoc}`, margen + 4, y + 17);
+  doc.text(`Tel: ${empTel}`, margen + 4, y + 22);
+  y += 28;
+
+  doc.setDrawColor(220, 220, 220);
+  doc.setFillColor(248, 250, 252);
+  const infoH = 28;
+  doc.roundedRect(margen, y, pageWidth - margen * 2, infoH, 3, 3, 'FD');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(60, 60, 60);
+  doc.text('DATOS DEL PRESUPUESTO', margen + 4, y + 6);
+
+  const col1x = margen + 4;
+  const col2x = margen + 35;
+  const col3x = pageWidth / 2 + 5;
+  const col4x = pageWidth / 2 + 35;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.setTextColor(100, 100, 100);
+  doc.text('Cliente:', col1x, y + 13);
+  doc.text('Referencia:', col3x, y + 13);
+  doc.text('Fecha:', col1x, y + 19);
+  doc.text('Validez:', col3x, y + 19);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(50, 50, 50);
+  doc.text(presupuesto.nombreCliente || 'Cliente', col2x, y + 13);
+  doc.text(presupuesto.numeroPresupuesto || '—', col4x, y + 13);
+  doc.text(new Date(presupuesto.fechaCreacion).toLocaleDateString('es-ES'), col2x, y + 19);
+  doc.text(presupuesto.fechaValidez ? new Date(presupuesto.fechaValidez).toLocaleDateString('es-ES') : '—', col4x, y + 19);
+  y += infoH + 8;
+
+  const tableBody = (presupuesto.lineas || []).map(l => [
+    l.concepto + (l.codigo ? ` (${l.codigo})` : ''),
+    String(l.cantidad),
+    formatM(l.precioUnidad || 0),
+    formatM(l.subtotal || 0)
+  ]);
+
+  autoTable(doc, {
+    startY: y,
+    head: [['Concepto', 'Cant.', 'Precio Ud.', 'Subtotal']],
+    body: tableBody,
+    theme: 'grid',
+    headStyles: { fillColor: [60, 60, 60], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
+    bodyStyles: { fontSize: 7.5, textColor: [50, 50, 50] },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    margin: { left: margen, right: margen },
+    tableLineColor: [200, 200, 200],
+    tableLineWidth: 0.15,
+    columnStyles: { 0: { cellWidth: 'auto' }, 1: { cellWidth: 20, halign: 'center' }, 2: { cellWidth: 25, halign: 'right' }, 3: { cellWidth: 25, halign: 'right' } },
+  });
+
+  const finalY = (doc as any).lastAutoTable?.finalY || y + 10;
+  const totalX = pageWidth - margen;
+  const totalY = finalY + 10;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(80, 80, 80);
+  doc.text('Subtotal:', totalX - 50, totalY, { align: 'right' });
+  doc.text(formatM(presupuesto.subtotal), totalX, totalY, { align: 'right' });
+  doc.text(`IVA (${presupuesto.iva}%):`, totalX - 50, totalY + 6, { align: 'right' });
+  doc.text(formatM(presupuesto.subtotal * presupuesto.iva / 100), totalX, totalY + 6, { align: 'right' });
+
+  doc.setDrawColor(40, 40, 40);
+  doc.setLineWidth(0.5);
+  doc.line(totalX - 55, totalY + 10, totalX, totalY + 10);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.setTextColor(40, 40, 40);
+  doc.text('TOTAL:', totalX - 50, totalY + 17, { align: 'right' });
+  doc.text(formatM(presupuesto.total), totalX, totalY + 17, { align: 'right' });
+
+  if (presupuesto.notas) {
+    const notasY = totalY + 25;
+    doc.setDrawColor(220, 220, 220);
+    doc.setFillColor(250, 251, 252);
+    const notasSplit = doc.splitTextToSize(presupuesto.notas, pageWidth - margen * 2 - 8);
+    const notasH = 14 + notasSplit.length * 4.5;
+    doc.roundedRect(margen, notasY, pageWidth - margen * 2, notasH, 3, 3, 'FD');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(60, 60, 60);
+    doc.text('NOTAS', margen + 4, notasY + 6);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.setTextColor(80, 80, 80);
+    let nty = notasY + 12;
+    notasSplit.forEach((line: string) => { doc.text(line, margen + 4, nty); nty += 4.5; });
+  }
+
+  const totalPages = (doc.internal as any).getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6.5);
+    doc.setTextColor(170, 170, 170);
+    const text = `Presupuesto ${presupuesto.numeroPresupuesto || ''} — ${new Date().toLocaleDateString()} — Página ${i} de ${totalPages}`;
+    const textWidth = doc.getTextWidth(text);
+    doc.text(text, (pageWidth - textWidth) / 2, 287);
+  }
+
+  doc.save(`Presupuesto_${presupuesto.numeroPresupuesto || 'N-A'}.pdf`);
 };

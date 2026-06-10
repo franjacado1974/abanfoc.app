@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Save, FileText, DownloadCloud, RefreshCw, Calendar, User as UserIcon, Building2, MapPin, Trash2, CheckCircle2, X, Search, ArrowLeft, ChevronRight, Layers, Edit, AlertTriangle } from 'lucide-react';
-import { addAlbaran, addParte, updateParte, deleteParte, subscribePartes, type Albaran, type Tecnico } from './firebase';
+import { Save, FileText, RefreshCw, Calendar, User as UserIcon, Building2, MapPin, Trash2, X, Search, ArrowLeft, ChevronRight, Layers, Edit, AlertTriangle, Lock, LockOpen, Eye } from 'lucide-react';
+import { addParte, updateParte, deleteParte, subscribePartes, type Albaran, type Tecnico } from './firebase';
 import type { Parte, Centro, Cliente, CentroSistema, EquipoInstalado } from './Centros';
-import { generarActaExtintoresPDF, generarAlbaranPDF, generarCertificadoPDF } from './pdfGenerator';
+import { generarActaExtintoresPDF, generarAlbaranPDF, generarAlbaranPDFView, generarCertificadoPDF, generarCertificadoPDFView } from './pdfGenerator';
 
 const generateId = () => {
   return crypto.randomUUID();
@@ -26,27 +26,48 @@ function VistaTecnicoMovil({ partes, centros, clientes, tecnicos }: {
 }) {
   const navigate = useNavigate();
   const [parteSeleccionado, setParteSeleccionado] = useState<Parte | null>(null);
-  const [equiposInstalados] = useState<EquipoInstalado[]>(() => {
-    try { return JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]'); } catch { return []; }
-  });
-  const [centroSistemas] = useState<CentroSistema[]>(() => {
-    try { return JSON.parse(localStorage.getItem('firecheck_db_centro_sistemas') || '[]'); } catch { return []; }
-  });
+  const [equiposInstalados, setEquiposInstalados] = useState<EquipoInstalado[]>([]);
+  const [centroSistemas, setCentroSistemas] = useState<CentroSistema[]>([]);
 
   // Obtener técnico del usuario logueado
   const loggedUser = (() => {
     try { return JSON.parse(sessionStorage.getItem('firecheck_logged_user') || 'null'); } catch { return null; }
   })();
 
+  // Suscripción a equipos instalados
+  useEffect(() => {
+    const storedEquipos = localStorage.getItem('firecheck_db_equipos_instalados');
+    if (storedEquipos) {
+      try {
+        setEquiposInstalados(JSON.parse(storedEquipos));
+      } catch (e) {
+        console.error("Error parsing equipos from localStorage:", e);
+      }
+    }
+  }, []);
+
+  // Suscripción a sistemas del centro
+  useEffect(() => {
+    const storedSistemas = localStorage.getItem('firecheck_db_centro_sistemas');
+    if (storedSistemas) {
+      try {
+        setCentroSistemas(JSON.parse(storedSistemas));
+      } catch (e) {
+        console.error("Error parsing sistemas from localStorage:", e);
+      }
+    }
+  }, []);
+
   // Buscar el técnico que corresponde al usuario logueado (por nombre)
   const tecnicoLogueado = tecnicos.find(t =>
     t.nombre?.toLowerCase() === loggedUser?.nombre?.toLowerCase()
   );
 
-  // Filtrar partes activos (Planificado o Abierto) asignados a este técnico
-  // Los partes borrados del calendario desaparecen automáticamente gracias a la suscripción en tiempo real
+  // Filtrar partes activos (Planificado, Abierto, Pre-Cerrado) asignados a este técnico.
+  // Excluir Finalizado y Cerrado para que no aparezcan en la tablet.
   const partesAsignados = partes.filter(p =>
-    (p.estado === 'Planificado' || p.estado === 'Abierto') &&
+    p.estado !== 'Cerrado' &&
+    p.estado !== 'Finalizado' &&
     (tecnicoLogueado ? (p.tecnicoId === tecnicoLogueado.id || p.tecnicoId === tecnicoLogueado._docId) : true)
   ).sort((a, b) => {
     const fa = a.fechaProgramada || a.fechaCreacion || '';
@@ -229,7 +250,7 @@ function VistaTecnicoMovil({ partes, centros, clientes, tecnicos }: {
 }
 
 // ============================================================
-// COMPONENTE PRINCIPAL
+// COMPONENTE PRINCIPAL (Vista Escritorio)
 // ============================================================
 export default function Partes() {
   const navigate = useNavigate();
@@ -249,7 +270,6 @@ export default function Partes() {
   const [empresas] = useState<EmpresaData[]>(() => { try { return JSON.parse(localStorage.getItem('firecheck_db_empresas') || '[]'); } catch { return []; } });
 
   // Suscripción en tiempo real a Firestore (colección "partes")
-  // También migra partes sin nombreCentro añadiéndolo automáticamente
   useEffect(() => {
     const unsub = subscribePartes((items) => {
       const mapped = items.map((d: any) => ({ ...d })) as Parte[];
@@ -273,8 +293,8 @@ export default function Partes() {
     return () => unsub();
   }, []);
 
-  const [view, setView] = useState<'list' | 'form'>('list'); // Default to list view
-  
+  const [view, setView] = useState<'list' | 'form'>('list');
+
   const [form, setForm] = useState<Parte>({
     id: '',
     centroId: centroId || '',
@@ -289,8 +309,18 @@ export default function Partes() {
   });
 
   const [isSignatureModalOpen, setIsSignatureModalOpen] = useState(false);
-  const [parteIdToClose, setParteIdToClose] = useState<string | null>(null);
-  const [nombreFirmante, setNombreFirmante] = useState('');
+  const [isViewSignaturesModalOpen, setIsViewSignaturesModalOpen] = useState(false);
+  const [parteIdToFinalize, setParteIdToFinalize] = useState<string | null>(null);
+  const [parteVerFirmas, setParteVerFirmas] = useState<Parte | null>(null);
+  const [albaranAsociado, setAlbaranAsociado] = useState<Albaran | null>(null);
+  const [nombreFirmanteEdit, setNombreFirmanteEdit] = useState('');
+  const [firmaClienteRedrawOk, setFirmaClienteRedrawOk] = useState(false);
+  const [firmaTecnicoRedrawOk, setFirmaTecnicoRedrawOk] = useState(false);
+  const [drawingCliente, setDrawingCliente] = useState(false);
+  const [drawingTecnico, setDrawingTecnico] = useState(false);
+  const canvasFirmaClienteRef = useRef<HTMLCanvasElement>(null);
+  const canvasFirmaTecnicoRef = useRef<HTMLCanvasElement>(null);
+
   const [isDocumentsModalOpen, setIsDocumentsModalOpen] = useState(false);
   const [parteDocumentos, setParteDocumentos] = useState<Parte | null>(null);
   const [documentosSeleccionados, setDocumentosSeleccionados] = useState({
@@ -302,23 +332,22 @@ export default function Partes() {
   const canvasClienteRef = useRef<HTMLCanvasElement>(null);
   const canvasTecnicoRef = useRef<HTMLCanvasElement>(null);
 
-  useEffect(() => { 
+  useEffect(() => {
     if (location.state?.editParteId && partes.length > 0) {
       const target = partes.find(p => p.id === location.state.editParteId);
       if (target) {
         setForm(target);
         setView('form');
-        // Limpiamos el estado de navegación para evitar re-aperturas accidentales
         navigate(location.pathname, { replace: true, state: { ...location.state, editParteId: undefined } });
       }
     }
   }, [location.state?.editParteId, partes, navigate, location.pathname, location.state]);
-  
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.centroId || !form.tecnicoId) return alert('Por favor, selecciona un centro y un técnico.');
     const c = centros.find(ce => ce.id === form.centroId);
-    
+
     const newParte: Parte = {
       ...form,
       id: form.id || `PARTE-${generateId().slice(0, 8).toUpperCase()}`,
@@ -341,13 +370,6 @@ export default function Partes() {
     }
     setView('list');
   };
-  const handleDescargarOffline = async (id: string) => {
-    const parte = partes.find(p => p.id === id);
-    if (!parte) return;
-    const docId = (parte as any)._docId || id;
-    try { await updateParte(docId, { estado: 'Descargado (Offline)' }); } catch (e) { console.error(e); }
-    alert('Parte de trabajo descargado en el dispositivo. Ahora puedes trabajar sin conexión.');
-  };
 
   const handleSincronizar = async (id: string) => {
     const currentParte = partes.find(p => p.id === id);
@@ -361,144 +383,263 @@ export default function Partes() {
     alert(`Trabajo sincronizado correctamente. Se ha asignado el Número de Mantenimiento: ${numMant}`);
   };
 
-  const handleCerrarParte = (id: string) => {
-      const currentParte = partes.find(p => p.id === id);
-      if (!currentParte) return;
-      setParteIdToClose(id);
-      setIsSignatureModalOpen(true);
+  const getPosFirma = (canvas: HTMLCanvasElement, e: React.MouseEvent | React.TouchEvent) => {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    if ('touches' in e) {
+      return {
+        x: (e.touches[0].clientX - rect.left) * scaleX,
+        y: (e.touches[0].clientY - rect.top) * scaleY,
+      };
+    }
+    return {
+      x: ((e as React.MouseEvent).clientX - rect.left) * scaleX,
+      y: ((e as React.MouseEvent).clientY - rect.top) * scaleY,
+    };
   };
 
-  const handleReabrirParte = async (id: string) => {
-      if (!confirm('¿Re-abrir este parte? Volverá al estado "Finalizado" y podrás revisarlo de nuevo.')) return;
-      const parte = partes.find(p => p.id === id);
-      const docId = (parte as any)?._docId || id;
-      try { await updateParte(docId, { estado: 'Finalizado' }); } catch (e) { console.error(e); }
+  const startFirmaDraw = (canvasRef: React.RefObject<HTMLCanvasElement | null>, setDrawing: (v: boolean) => void, e: React.MouseEvent | React.TouchEvent) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    setDrawing(true);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const pos = getPosFirma(canvas, e);
+    ctx.beginPath();
+    ctx.moveTo(pos.x, pos.y);
   };
 
-  const executeCerrarParte = async (id: string) => {
-      const parteACerrar = partes.find(p => p.id === id);
-      if (!parteACerrar) return;
-
-      // 1. Actualizar el Parte a Cerrado en Firestore
-      const docId = (parteACerrar as any)._docId || id;
-      try { await updateParte(docId, { estado: 'Cerrado' }); } catch (e) { console.error(e); }
-
-      // 2. Generar Certificado (Evaluar si es positivo o negativo)
-      try {
-        const storedEquipos: EquipoInstalado[] = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
-        const eqDelCentro = storedEquipos.filter((e) => e.centroId === parteACerrar.centroId);
-        
-        // Comprobar si hay alguna anomalía (algún check = false)
-        const hasAnomalies = eqDelCentro.some((eq) => 
-          Object.keys(eq).some(k => k.startsWith('check') && (eq as Record<string, any>)[k] === false)
-        );
-
-        const nuevoCertificado = {
-          id: `CERT-${generateId().slice(0,8).toUpperCase()}`,
-          centroId: parteACerrar.centroId,
-          clienteId: parteACerrar.clienteId,
-          parteId: parteACerrar.id,
-          fechaCreacion: new Date().toISOString(),
-          estado: hasAnomalies ? 'NO favorable' : 'Favorable',
-          numeroMantenimiento: parteACerrar.numeroMantenimiento || 'Sin Número',
-          tecnicoId: parteACerrar.tecnicoId
-        };
-
-        const certificadosExistentes = JSON.parse(localStorage.getItem('firecheck_db_certificados') || '[]');
-        localStorage.setItem('firecheck_db_certificados', JSON.stringify([...certificadosExistentes, nuevoCertificado]));
-
-      } catch (e) { console.error("Error generando certificado automático", e); }
+  const drawFirma = (canvasRef: React.RefObject<HTMLCanvasElement | null>, drawing: boolean, e: React.MouseEvent | React.TouchEvent) => {
+    if (!drawing) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const pos = getPosFirma(canvas, e);
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#1e293b';
+    ctx.lineTo(pos.x, pos.y);
+    ctx.stroke();
   };
 
-  const confirmCerrarConFirma = async () => {
-    if (!nombreFirmante.trim()) {
-      alert('Por favor, introduce el nombre del firmante.');
+  const stopFirmaDraw = (setDrawing: (v: boolean) => void, setFirmaOk: (v: boolean) => void, canvasRef: React.RefObject<HTMLCanvasElement | null>) => {
+    setDrawing(false);
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    const hasContent = Array.from(data).some((v, i) => i % 4 === 3 && v > 0);
+    setFirmaOk(hasContent);
+  };
+
+  const clearFirmaCanvas = (canvasRef: React.RefObject<HTMLCanvasElement | null>, setFirmaOk: (v: boolean) => void) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+    setFirmaOk(false);
+  };
+
+  // ─── Ver firmas (solo visualización, desde el parte) ─────────────
+  const handleVerFirmas = (id: string) => {
+    const currentParte = partes.find(p => p.id === id);
+    if (!currentParte) return;
+
+    if (!currentParte.firmaCliente && !currentParte.firmaTecnico) {
+      // Fallback: buscar en el albarán
+      const albaranes: Albaran[] = JSON.parse(localStorage.getItem('firecheck_db_albaranes') || '[]');
+      const alb = albaranes.find(a => a.parteId === id);
+      if (!alb || (!alb.firmaCliente && !alb.firmaTecnico)) {
+        alert('No hay firmas disponibles para este parte. El técnico debe finalizar la revisión y capturar las firmas.');
+        return;
+      }
+      setParteVerFirmas({ ...currentParte, firmaCliente: alb.firmaCliente, firmaTecnico: alb.firmaTecnico, nombreFirmante: alb.nombreFirmante } as Parte);
+    } else {
+      setParteVerFirmas(currentParte);
+    }
+    setIsViewSignaturesModalOpen(true);
+  };
+
+  // ─── Abrir modal de finalización (con firmas editables) ──────────
+  const handleFinalizarParte = (id: string) => {
+    const currentParte = partes.find(p => p.id === id);
+    if (!currentParte) return;
+
+    if (currentParte.estado !== 'Pre-Cerrado') {
+      alert('Este parte aún no ha sido firmado en el dispositivo móvil. El técnico debe finalizar la revisión y capturar las firmas antes de poder finalizarlo desde el escritorio.');
       return;
     }
-    if (parteIdToClose) {
-      // Extraer las firmas de los canvas como base64
-      const firmaCliente = canvasClienteRef.current?.toDataURL('image/png') || '';
-      const firmaTecnico = canvasTecnicoRef.current?.toDataURL('image/png') || '';
 
-      const parte = partes.find(p => p.id === parteIdToClose);
-      
-      // Generar ID correlativo automático buscando en el historial
-      const albaranesExistentes: Albaran[] = JSON.parse(localStorage.getItem('firecheck_db_albaranes') || '[]');
-      const year = new Date().getFullYear().toString().slice(-2);
-      const prefix = `ALB-${year}-`;
-      const patterned = albaranesExistentes.filter((alb) => alb.id?.startsWith(prefix));
-      let nextNum = 1;
-      if (patterned.length > 0) {
-        const nums = patterned.map((alb) => {
-          const parts = alb.id.split('-');
-          return parseInt(parts[parts.length - 1]);
-        }).filter((n) => !isNaN(n));
-        if (nums.length > 0) nextNum = Math.max(...nums) + 1;
+    // Obtener firmas del parte o del albarán
+    let firmaCliente = currentParte.firmaCliente || '';
+    let firmaTecnico = currentParte.firmaTecnico || '';
+    let nombreFirmante = currentParte.nombreFirmante || '';
+
+    if (!firmaCliente || !firmaTecnico) {
+      const albaranes: Albaran[] = JSON.parse(localStorage.getItem('firecheck_db_albaranes') || '[]');
+      const alb = albaranes.find(a => a.parteId === id);
+      if (alb) {
+        firmaCliente = alb.firmaCliente || '';
+        firmaTecnico = alb.firmaTecnico || '';
+        nombreFirmante = alb.nombreFirmante || '';
       }
-      const nextId = `${prefix}${nextNum.toString().padStart(3, '0')}`;
-
-      // Crear registro de albarán con firmas
-      const nuevoAlbaran: Albaran = {
-        id: nextId,
-        centroId: parte?.centroId || '',
-        clienteId: parte?.clienteId || '',
-        empresaId: parte?.empresaId || '',
-        parteId: parteIdToClose,
-        tecnicoId: parte?.tecnicoId || '',
-        numeroMantenimiento: parte?.numeroMantenimiento || '',
-        fechaCreacion: new Date().toISOString(),
-        facturado: false,
-        items: [], // Se hereda del trabajo realizado en equipos
-        firmaCliente,
-        firmaTecnico,
-        nombreFirmante
-      };
-
-      await addAlbaran(nuevoAlbaran); // Add albaran to Firebase
-
-      executeCerrarParte(parteIdToClose);
-      setIsSignatureModalOpen(false);
-      setParteIdToClose(null);
-      setNombreFirmante('');
     }
+
+    if (!firmaCliente && !firmaTecnico) {
+      alert('No se encontraron los datos de firma para este parte. Asegúrese de que el técnico haya finalizado correctamente.');
+      return;
+    }
+
+    setAlbaranAsociado({ parteId: id, firmaCliente, firmaTecnico, nombreFirmante } as Albaran);
+    setNombreFirmanteEdit(nombreFirmante);
+    setParteIdToFinalize(id);
+    setIsSignatureModalOpen(true);
   };
 
+  // ─── Reabrir un parte finalizado ─────────────────────────────────
+  const handleReabrirParte = async (id: string) => {
+    if (!confirm('¿Re-abrir este parte? Volverá al estado "Abierto" y el técnico podrá volver a verlo en su dispositivo.')) return;
+    const parte = partes.find(p => p.id === id);
+    const docId = (parte as any)?._docId || id;
+    try { await updateParte(docId, { estado: 'Abierto' }); } catch (e) { console.error(e); }
+  };
+
+  // ─── Ejecutar finalización del parte ─────────────────────────────
+  const executeFinalizarParte = async (id: string) => {
+    const parteAFinalizar = partes.find(p => p.id === id);
+    if (!parteAFinalizar) return;
+
+    // Obtener firmas redibujadas (si las hay)
+    const getFirmaFromCanvas = (canvasRef: React.RefObject<HTMLCanvasElement | null>, originalFirma: string): string => {
+      const canvas = canvasRef.current;
+      if (!canvas) return originalFirma;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return originalFirma;
+      const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      const hasContent = Array.from(data).some((v, i) => i % 4 === 3 && v > 0);
+      if (!hasContent) return originalFirma;
+      return canvas.toDataURL('image/png');
+    };
+
+    const firmaCliente = getFirmaFromCanvas(canvasFirmaClienteRef, albaranAsociado?.firmaCliente || '');
+    const firmaTecnico = getFirmaFromCanvas(canvasFirmaTecnicoRef, albaranAsociado?.firmaTecnico || '');
+
+    // 1. Actualizar el Parte a Finalizado en Firestore guardando también las firmas
+    const docId = (parteAFinalizar as any)._docId || id;
+    try {
+      await updateParte(docId, {
+        estado: 'Finalizado',
+        firmaCliente,
+        firmaTecnico,
+        nombreFirmante: nombreFirmanteEdit || albaranAsociado?.nombreFirmante || ''
+      } as any);
+    } catch (e) { console.error(e); }
+
+    // 2. Generar Certificado (Evaluar si es positivo o negativo)
+    try {
+      const storedEquipos: EquipoInstalado[] = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
+      const eqDelCentro = storedEquipos.filter((e) => e.centroId === parteAFinalizar.centroId);
+
+      const hasAnomalies = eqDelCentro.some((eq) =>
+        Object.keys(eq).some(k => k.startsWith('check') && (eq as Record<string, any>)[k] === false)
+      );
+
+      const nuevoCertificado = {
+        id: `CERT-${generateId().slice(0, 8).toUpperCase()}`,
+        centroId: parteAFinalizar.centroId,
+        clienteId: parteAFinalizar.clienteId,
+        parteId: parteAFinalizar.id,
+        fechaCreacion: new Date().toISOString(),
+        estado: hasAnomalies ? 'NO favorable' : 'Favorable',
+        numeroMantenimiento: parteAFinalizar.numeroMantenimiento || 'Sin Número',
+        tecnicoId: parteAFinalizar.tecnicoId
+      };
+
+      const certificadosExistentes = JSON.parse(localStorage.getItem('firecheck_db_certificados') || '[]');
+      localStorage.setItem('firecheck_db_certificados', JSON.stringify([...certificadosExistentes, nuevoCertificado]));
+
+    } catch (e) { console.error("Error generando certificado automático", e); }
+  };
+
+  // ─── Confirmar finalización definitiva ───────────────────────────
+  const confirmFinalizarDefinitivo = async () => {
+    if (!parteIdToFinalize || !albaranAsociado) return;
+
+    // Obtener firmas redibujadas
+    const getFirmaFromCanvas = (canvasRef: React.RefObject<HTMLCanvasElement | null>, originalFirma: string): string => {
+      const canvas = canvasRef.current;
+      if (!canvas) return originalFirma;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return originalFirma;
+      const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      const hasContent = Array.from(data).some((v, i) => i % 4 === 3 && v > 0);
+      if (!hasContent) return originalFirma;
+      return canvas.toDataURL('image/png');
+    };
+
+    const firmaCliente = getFirmaFromCanvas(canvasFirmaClienteRef, albaranAsociado.firmaCliente || '');
+    const firmaTecnico = getFirmaFromCanvas(canvasFirmaTecnicoRef, albaranAsociado.firmaTecnico || '');
+
+    // Actualizar el albarán con las firmas (redibujadas si procede) y el nombre editado
+    try {
+      const { addAlbaran } = await import('./firebase');
+      await addAlbaran({
+        ...albaranAsociado,
+        firmaCliente,
+        firmaTecnico,
+        nombreFirmante: nombreFirmanteEdit || albaranAsociado.nombreFirmante
+      });
+    } catch (e) {
+      console.error('Error actualizando firmas:', e);
+    }
+
+    await executeFinalizarParte(parteIdToFinalize);
+    setIsSignatureModalOpen(false);
+    setParteIdToFinalize(null);
+    setAlbaranAsociado(null);
+  };
+
+  // ─── GENERAR PDFs ────────────────────────────────────────────────
   const handleGenerarPDF = async (parte: Parte) => {
     try {
       const storedSistemas: CentroSistema[] = JSON.parse(localStorage.getItem('firecheck_db_centro_sistemas') || '[]');
       const storedEquipos: EquipoInstalado[] = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
-      
+
       const centro = centros.find(c => c.id === parte.centroId);
       const cliente = clientes.find(cl => cl.id === parte.clienteId);
       const tecnico = tecnicos.find(t => t.id === parte.tecnicoId);
-      
+
       if (!centro || !cliente) {
         alert("No se encontró el centro o cliente asociado al parte.");
         return;
       }
-      
-      // Filtramos los sistemas y equipos específicos de este centro
+
       const sistemasDelCentro = storedSistemas.filter((s) => s.centroId === centro.id);
-      const equiposDelCentro = storedEquipos.filter((e) => e.centroId === centro.id);
-      
+      const equiposDelCentro = storedEquipos
+        .filter((e) => e.centroId === centro.id)
+        .sort((a, b) => (a.codigo || '').localeCompare(b.codigo || '', undefined, { numeric: true, sensitivity: 'base' }));
+
       if (sistemasDelCentro.length === 0 || equiposDelCentro.length === 0) {
         alert("No hay sistemas o equipos revisados en este centro para generar el PDF.");
         return;
       }
-      
+
       const nombreTecnico = tecnico ? `${tecnico.nombre} ${tecnico.apellidos}` : 'No asignado';
 
       const albaranes: Albaran[] = JSON.parse(localStorage.getItem('firecheck_db_albaranes') || '[]');
       const albaranData = albaranes.find((a) => a.parteId === parte.id);
 
       await generarActaExtintoresPDF(
-        cliente as Record<string, any>, 
-        centro as Record<string, any>, 
-        sistemasDelCentro as Record<string, any>[], 
-        equiposDelCentro as Record<string, any>[], 
-        parte.numeroMantenimiento || parte.id, 
+        cliente as Record<string, any>,
+        centro as Record<string, any>,
+        sistemasDelCentro as Record<string, any>[],
+        equiposDelCentro as Record<string, any>[],
+        parte.numeroMantenimiento || parte.id,
         nombreTecnico,
-        undefined, // anomalyTextColor: use default red
+        undefined,
         albaranData?.firmaCliente,
         albaranData?.firmaTecnico,
         albaranData?.nombreFirmante
@@ -509,34 +650,108 @@ export default function Partes() {
     }
   };
 
-  const handleGenerarAlbaranPDF = async (parte: Parte) => {
+  const handleViewAlbaranPDF = async (parte: Parte) => {
     try {
       const storedEquipos: EquipoInstalado[] = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
-      
       const centro = centros.find(c => c.id === parte.centroId);
       const cliente = clientes.find(cl => cl.id === parte.clienteId);
       const tecnico = tecnicos.find(t => t.id === parte.tecnicoId);
-      
+
+      if (!centro || !cliente) return;
+
+      const equiposDelCentro = storedEquipos
+        .filter((e) => e.centroId === centro.id)
+        .sort((a, b) => (a.codigo || '').localeCompare(b.codigo || '', undefined, { numeric: true, sensitivity: 'base' }));
+
+      const albaranes: Albaran[] = JSON.parse(localStorage.getItem('firecheck_db_albaranes') || '[]');
+      const albaranData = albaranes.find((a) => a.parteId === parte.id);
+      const nombreTecnico = tecnico ? `${tecnico.nombre} ${tecnico.apellidos}` : 'No asignado';
+
+      const pdfBlobUrl = await generarAlbaranPDFView(
+        cliente as Record<string, any>,
+        centro as Record<string, any>,
+        equiposDelCentro as Record<string, any>[],
+        parte.numeroMantenimiento || parte.id,
+        nombreTecnico,
+        parte.firmaCliente || albaranData?.firmaCliente,
+        parte.firmaTecnico || albaranData?.firmaTecnico,
+        parte.nombreFirmante || albaranData?.nombreFirmante,
+        albaranData?.items
+      );
+      window.open(pdfBlobUrl, '_blank');
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleViewCertificadoPDF = async (parte: Parte) => {
+    try {
+      const centro = centros.find(c => c.id === parte.centroId);
+      const cliente = clientes.find(cl => cl.id === parte.clienteId);
+      const tecnico = tecnicos.find(t => t.id === parte.tecnicoId);
+
+      if (!centro || !cliente) return;
+
+      const storedSistemas: CentroSistema[] = JSON.parse(localStorage.getItem('firecheck_db_centro_sistemas') || '[]');
+      const storedEquipos: EquipoInstalado[] = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
+      const sistemasDelCentro = storedSistemas.filter((s) => s.centroId === centro.id);
+      const equiposDelCentro = storedEquipos.filter((e) => e.centroId === centro.id);
+
+      const certificados: any[] = JSON.parse(localStorage.getItem('firecheck_db_certificados') || '[]');
+      const certificado = certificados.filter((c) => c.parteId === parte.id).sort((a, b) => new Date(b.fechaCreacion).getTime() - new Date(a.fechaCreacion).getTime())[0];
+
+      const albaranes: Albaran[] = JSON.parse(localStorage.getItem('firecheck_db_albaranes') || '[]');
+      const albaranData = albaranes.find((a) => a.parteId === parte.id);
+      const nombreTecnico = tecnico ? `${tecnico.nombre} ${tecnico.apellidos}` : 'No asignado';
+
+      const pdfBlobUrl = await generarCertificadoPDFView(
+        cliente as Record<string, any>,
+        centro as Record<string, any>,
+        parte as Record<string, any>,
+        nombreTecnico,
+        certificado?.estado || 'Favorable',
+        sistemasDelCentro as Record<string, any>[],
+        equiposDelCentro as Record<string, any>[],
+        parte.firmaCliente || albaranData?.firmaCliente,
+        parte.firmaTecnico || albaranData?.firmaTecnico,
+        parte.nombreFirmante || albaranData?.nombreFirmante
+      );
+      window.open(pdfBlobUrl, '_blank');
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleGenerarAlbaranPDF = async (parte: Parte) => {
+    try {
+      const storedEquipos: EquipoInstalado[] = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
+
+      const centro = centros.find(c => c.id === parte.centroId);
+      const cliente = clientes.find(cl => cl.id === parte.clienteId);
+      const tecnico = tecnicos.find(t => t.id === parte.tecnicoId);
+
       if (!centro || !cliente) {
         alert("No se encontró el centro o cliente asociado al parte.");
         return;
       }
-      
-      const equiposDelCentro = storedEquipos.filter((e) => e.centroId === centro.id);
+
+      const equiposDelCentro = storedEquipos
+        .filter((e) => e.centroId === centro.id)
+        .sort((a, b) => (a.codigo || '').localeCompare(b.codigo || '', undefined, { numeric: true, sensitivity: 'base' }));
       if (equiposDelCentro.length === 0) {
         alert("No hay equipos registrados en este centro.");
         return;
       }
-      
+
       const albaranes: Albaran[] = JSON.parse(localStorage.getItem('firecheck_db_albaranes') || '[]');
       const albaranData = albaranes.find((a) => a.parteId === parte.id);
 
       const nombreTecnico = tecnico ? `${tecnico.nombre} ${tecnico.apellidos}` : 'No asignado';
       await generarAlbaranPDF(
-        cliente as Record<string, any>, 
-        centro as Record<string, any>, 
-        equiposDelCentro as Record<string, any>[], 
-        parte.numeroMantenimiento || parte.id, 
+        cliente as Record<string, any>,
+        centro as Record<string, any>,
+        equiposDelCentro as Record<string, any>[],
+        parte.numeroMantenimiento || parte.id,
         nombreTecnico,
         albaranData?.firmaCliente,
         albaranData?.firmaTecnico,
@@ -562,7 +777,9 @@ export default function Partes() {
       const storedSistemas: CentroSistema[] = JSON.parse(localStorage.getItem('firecheck_db_centro_sistemas') || '[]');
       const storedEquipos: EquipoInstalado[] = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
       const sistemasDelCentro = storedSistemas.filter((s) => s.centroId === parte.centroId);
-      const equiposDelCentro = storedEquipos.filter((e) => e.centroId === parte.centroId);
+      const equiposDelCentro = storedEquipos
+        .filter((e) => e.centroId === parte.centroId)
+        .sort((a, b) => (a.codigo || '').localeCompare(b.codigo || '', undefined, { numeric: true, sensitivity: 'base' }));
 
       if (sistemasDelCentro.length === 0 || equiposDelCentro.length === 0) {
         alert("No hay sistemas o equipos revisados en este centro para generar el Certificado.");
@@ -579,12 +796,12 @@ export default function Partes() {
 
       const nombreTecnico = tecnico ? `${tecnico.nombre} ${tecnico.apellidos}` : 'No asignado';
       await generarCertificadoPDF(
-        cliente as Record<string, any>, 
-        centro as Record<string, any>, 
-        parte as Record<string, any>, 
-        nombreTecnico, 
-        certificado?.estado || 'Favorable', 
-        sistemasDelCentro as Record<string, any>[], 
+        cliente as Record<string, any>,
+        centro as Record<string, any>,
+        parte as Record<string, any>,
+        nombreTecnico,
+        certificado?.estado || 'Favorable',
+        sistemasDelCentro as Record<string, any>[],
         equiposDelCentro as Record<string, any>[],
         albaranData?.firmaCliente, albaranData?.firmaTecnico, albaranData?.nombreFirmante
       );
@@ -685,8 +902,7 @@ export default function Partes() {
         {/* HEADER */}
         <div className="mb-8 space-y-4">
           <div className="text-center">
-            <h1 className="text-2xl md:text-3xl font-bold text-sky-950 flex items-center justify-center gap-3">
-              <Calendar className="w-8 h-8 text-sky-500" />
+            <h1 className="text-2xl md:text-3xl font-bold text-sky-950">
               Gestión de partes
             </h1>
           </div>
@@ -720,7 +936,7 @@ export default function Partes() {
               <FileText className="w-5 h-5" />
               {form.id ? 'Editar Parte' : 'Nuevo Parte'}
             </h2>
-            
+
             <form onSubmit={handleSave} className="space-y-8">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
@@ -747,7 +963,7 @@ export default function Partes() {
                     })}
                   </select>
                 </div>
-                
+
                 <div className="space-y-2">
                   <label className="text-sm font-semibold text-sky-900 flex items-center gap-2"><UserIcon className="w-4 h-4"/> Técnico Asignado *</label>
                   <select
@@ -761,20 +977,20 @@ export default function Partes() {
                   </select>
                 </div>
 
-                  <div className="space-y-2">
-                    <label className="text-sm font-semibold text-sky-900 flex items-center gap-2"><FileText className="w-4 h-4"/> Tipo de Trabajo *</label>
-                    <select
-                      required
-                      value={form.tipoTrabajo || 'Mantenimiento'}
-                      onChange={e => setForm({...form, tipoTrabajo: e.target.value})}
-                      className="w-full px-4 py-3 bg-sky-50/30 border border-sky-100 rounded-xl focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 outline-none"
-                    >
-                      <option value="Mantenimiento">Mantenimiento</option>
-                      <option value="Reparación">Reparación</option>
-                      <option value="Instalación">Instalación</option>
-                      <option value="Entrega de material">Entrega de material</option>
-                    </select>
-                  </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-sky-900 flex items-center gap-2"><FileText className="w-4 h-4"/> Tipo de Trabajo *</label>
+                  <select
+                    required
+                    value={form.tipoTrabajo || 'Mantenimiento'}
+                    onChange={e => setForm({...form, tipoTrabajo: e.target.value})}
+                    className="w-full px-4 py-3 bg-sky-50/30 border border-sky-100 rounded-xl focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 outline-none"
+                  >
+                    <option value="Mantenimiento">Mantenimiento</option>
+                    <option value="Reparación">Reparación</option>
+                    <option value="Instalación">Instalación</option>
+                    <option value="Entrega de material">Entrega de material</option>
+                  </select>
+                </div>
               </div>
 
               <div className="flex justify-end gap-3 pt-6 border-t border-amber-50 mt-8">
@@ -800,16 +1016,16 @@ export default function Partes() {
                 </p>
               </div>
             ) : (
-              <div className="bg-white rounded-2xl border border-zinc-200 overflow-hidden shadow-sm">
+              <div className="bg-white rounded-2xl overflow-hidden shadow-sm">
                 {/* Cabecera de la tabla */}
-                <div className="grid grid-cols-[2fr_2fr_1.5fr_1.5fr_1fr_1fr_auto] gap-0 bg-zinc-50 border-b border-zinc-200 px-4 py-3 text-xs font-bold text-zinc-500 uppercase tracking-wider">
-                  <div>Cliente / Centro</div>
-                  <div>Técnico / Empresa</div>
-                  <div>Fecha Prog.</div>
-                  <div>Tipo / Periodicidad</div>
-                  <div>Ref. Trabajo</div>
-                  <div>Estado</div>
-                  <div className="text-right">Acciones</div>
+                <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,2fr)_minmax(0,1.5fr)_minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)_120px] gap-0 bg-zinc-50 px-4 text-xs font-bold text-zinc-500 uppercase tracking-wider border-l-4 border-l-transparent items-center">
+                  <div className="pr-3 py-3 h-full flex items-center">Cliente / Centro</div>
+                  <div className="px-3 py-3 h-full flex items-center">Técnico / Empresa</div>
+                  <div className="px-3 py-3 h-full flex items-center">Fecha Prog.</div>
+                  <div className="px-3 py-3 h-full flex items-center">Tipo / Periodicidad</div>
+                  <div className="px-3 py-3 h-full flex items-center">Ref. Trabajo</div>
+                  <div className="px-3 py-3 h-full flex items-center">Estado</div>
+                  <div className="pl-3 py-3">Acciones</div>
                 </div>
                 {/* Filas */}
                 {filteredPartes.map((parte, idx) => {
@@ -824,12 +1040,13 @@ export default function Partes() {
                   const isPlanificado = parte.estado === 'Planificado';
                   const isAbierto = parte.estado === 'Abierto';
 
-                  const rowBg = isCerrado
+                  // Finalizado es ahora el estado definitivo (antes era Cerrado)
+                  const rowBg = isFinalizado
                     ? 'bg-blue-950/5 border-l-4 border-l-blue-900'
                     : isPreCerrado
                     ? 'bg-blue-50/40 border-l-4 border-l-blue-700'
-                    : isFinalizado
-                    ? 'bg-emerald-50/40 border-l-4 border-l-emerald-500'
+                    : isCerrado
+                    ? 'bg-zinc-100/40 border-l-4 border-l-zinc-500'
                     : isAbierto
                     ? 'bg-amber-50/30 border-l-4 border-l-amber-400'
                     : isPlanificado
@@ -838,12 +1055,12 @@ export default function Partes() {
                     ? 'bg-sky-50/30 border-l-4 border-l-sky-400'
                     : 'bg-white border-l-4 border-l-zinc-200';
 
-                  const badgeClass = isCerrado
+                  const badgeClass = isFinalizado
                     ? 'bg-blue-900 text-white'
                     : isPreCerrado
                     ? 'bg-blue-700 text-white'
-                    : isFinalizado
-                    ? 'bg-emerald-100 text-emerald-700'
+                    : isCerrado
+                    ? 'bg-zinc-500 text-white'
                     : isAbierto
                     ? 'bg-amber-100 text-amber-700'
                     : isOffline
@@ -853,19 +1070,19 @@ export default function Partes() {
                   return (
                     <div
                       key={parte.id}
-                      className={`grid grid-cols-[2fr_2fr_1.5fr_1.5fr_1fr_1fr_auto] gap-0 px-4 py-3 items-center transition-colors hover:bg-zinc-50/80 ${rowBg} ${idx !== filteredPartes.length - 1 ? 'border-b border-zinc-100' : ''}`}
+                      className={`grid grid-cols-[minmax(0,2fr)_minmax(0,2fr)_minmax(0,1.5fr)_minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)_120px] gap-0 px-4 items-center transition-colors hover:bg-zinc-50/80 ${idx % 2 === 0 ? 'bg-white' : 'bg-zinc-50/30'} ${rowBg}`}
                     >
                       {/* Cliente / Centro */}
-                      <div className="min-w-0 pr-3">
+                      <div className="min-w-0 pr-3 py-3 self-stretch flex flex-col justify-center">
                         <p className="text-sm font-bold text-zinc-900 truncate">{cliente?.nombre || '—'}</p>
                         <p className="text-xs text-zinc-500 truncate flex items-center gap-1 mt-0.5">
                           <MapPin className="w-3 h-3 shrink-0" />{centro?.nombre || 'Centro desconocido'}
                         </p>
-                        <p className="text-[10px] font-mono text-zinc-400 mt-0.5">{parte.id}</p>
+                        <p className="text-[10px] font-mono text-zinc-400 mt-0.5 truncate">{parte.id}</p>
                       </div>
 
                       {/* Técnico / Empresa */}
-                      <div className="min-w-0 pr-3">
+                      <div className="min-w-0 px-3 py-3 self-stretch flex flex-col justify-center">
                         <p className="text-sm text-zinc-800 truncate flex items-center gap-1">
                           <UserIcon className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
                           {tecnico ? `${tecnico.nombre} ${tecnico.apellidos}` : 'No asignado'}
@@ -876,69 +1093,75 @@ export default function Partes() {
                       </div>
 
                       {/* Fecha Programada */}
-                      <div className="pr-3">
-                        <p className="text-sm font-bold text-sky-600">
+                      <div className="min-w-0 px-3 py-3 self-stretch flex flex-col justify-center">
+                        <p className="text-sm font-bold text-sky-600 truncate">
                           {parte.fechaProgramada ? parte.fechaProgramada.replace(/-/g, '/') : '—'}
                         </p>
-                        <p className="text-xs text-zinc-400 mt-0.5">{parte.mesesRevision || ''}</p>
+                        <p className="text-xs text-zinc-400 mt-0.5 truncate">{parte.mesesRevision || ''}</p>
                       </div>
 
                       {/* Tipo / Periodicidad */}
-                      <div className="pr-3">
-                        <p className="text-sm text-zinc-800">{parte.tipoTrabajo || 'Mantenimiento'}</p>
-                        <p className="text-xs text-zinc-500 mt-0.5">{parte.periodicidad || '—'}</p>
+                      <div className="min-w-0 px-3 py-3 self-stretch flex flex-col justify-center">
+                        <p className="text-sm text-zinc-800 truncate">{parte.tipoTrabajo || 'Mantenimiento'}</p>
+                        <p className="text-xs text-zinc-500 mt-0.5 truncate">{parte.periodicidad || '—'}</p>
                       </div>
 
                       {/* Ref. Trabajo */}
-                      <div className="pr-3">
+                      <div className="min-w-0 px-3 py-3 self-stretch flex flex-col justify-center">
                         {parte.numeroMantenimiento ? (
-                          <span className="text-xs font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
+                          <span className="text-xs font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded truncate">
                             {parte.numeroMantenimiento}
                           </span>
                         ) : (
-                          <span className="text-xs text-zinc-400">—</span>
+                          <span className="text-xs text-zinc-400 truncate">—</span>
                         )}
                       </div>
 
                       {/* Estado */}
-                      <div>
-                        <span className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wider whitespace-nowrap ${badgeClass}`}>
+                      <div className="min-w-0 px-3 py-3 self-stretch flex items-center">
+                        <span className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wider whitespace-nowrap ${badgeClass} truncate`}>
                           {parte.estado}
                         </span>
                       </div>
 
                       {/* Acciones */}
-                      <div className="flex items-center gap-1 justify-end pl-2">
-                        {!isFinalizado && !isOffline && !isCerrado && (
-                          <button onClick={() => handleDescargarOffline(parte.id)} className="p-1.5 bg-zinc-800 hover:bg-black text-white rounded-lg transition-all" title="Descargar offline">
-                            <DownloadCloud className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                        {!isCerrado && (
-                          <button onClick={() => navigate('/revision-checklist', { state: { centroId: parte.centroId, parteId: parte.id } })} className="p-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-all" title="Ir a la revisión">
+                      <div className="min-w-0 flex items-center gap-1 justify-start pl-3 py-3 self-stretch">
+                        {!isFinalizado && !isCerrado && (
+                          <button onClick={() => navigate('/revision-checklist', { state: { centroId: parte.centroId, parteId: parte.id } })} className="p-1.5 text-zinc-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all" title="Ir a la revisión">
                             <Edit className="w-3.5 h-3.5" />
                           </button>
                         )}
                         {!isFinalizado && isOffline && !isCerrado && (
-                          <button onClick={() => handleSincronizar(parte.id)} className="p-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-lg transition-all" title="Sincronizar">
+                          <button onClick={() => handleSincronizar(parte.id)} className="p-1.5 text-zinc-400 hover:text-sky-600 hover:bg-sky-50 rounded-lg transition-all" title="Sincronizar">
                             <RefreshCw className="w-3.5 h-3.5" />
                           </button>
                         )}
-                        {isFinalizado && !isCerrado && (
-                          <button onClick={() => handleCerrarParte(parte.id)} className="p-1.5 bg-black hover:bg-zinc-800 text-white rounded-lg transition-all" title="Cerrar parte">
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                        {isCerrado && (
+
+                        {/* Botón Ver Firmas + Finalizar (estado Pre-Cerrado) / Documentos (Finalizado) / Reabrir */}
+                        {isPreCerrado && (
                           <>
-                            <button onClick={() => handleReabrirParte(parte.id)} className="p-1.5 bg-amber-400 hover:bg-amber-500 text-amber-900 rounded-lg transition-all" title="Re-abrir parte">
-                              <RefreshCw className="w-3.5 h-3.5" />
+                            <button onClick={() => handleVerFirmas(parte.id)} className="p-1.5 text-zinc-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-all" title="Ver firmas">
+                              <Eye className="w-3.5 h-3.5" />
                             </button>
-                            <button onClick={() => handleAbrirDocumentos(parte)} className="p-1.5 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded-lg transition-all" title="Documentos">
+                            <button onClick={() => handleFinalizarParte(parte.id)} className="p-1.5 text-zinc-400 hover:text-sky-600 hover:bg-sky-50 rounded-lg transition-all" title="Finalizar parte (ver firmas y cerrar definitivamente)">
+                              <Lock className="w-3.5 h-3.5" />
+                            </button>
+
+                          </>
+                        )}
+
+                        {isFinalizado && (
+                          <>
+                            <button onClick={() => handleReabrirParte(parte.id)} className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all" title="Reabrir parte">
+                              <LockOpen className="w-3.5 h-3.5" />
+                            </button>
+                            <button onClick={() => handleAbrirDocumentos(parte)} className="p-1.5 text-zinc-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all" title="Descargar documentos">
                               <FileText className="w-3.5 h-3.5" />
                             </button>
                           </>
                         )}
+
+
                         <button onClick={async () => {
                           if (
                             window.confirm('¿Estás seguro de que quieres eliminar este parte?') &&
@@ -947,7 +1170,7 @@ export default function Partes() {
                             const docId = (parte as any)._docId || parte.id;
                             try { await deleteParte(docId); } catch (e) { console.error(e); }
                           }
-                        }} className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors border border-zinc-200 hover:border-red-200" title="Eliminar">
+                        }} className="p-1.5 text-zinc-400 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors" title="Eliminar">
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
@@ -979,35 +1202,47 @@ export default function Partes() {
             <div className="p-6 space-y-4">
               <p className="text-sm text-zinc-500">Selecciona los documentos que quieres descargar:</p>
 
-              <label className="flex items-center gap-3 p-4 rounded-2xl border border-zinc-200 hover:bg-zinc-50 cursor-pointer transition-colors">
-                <input
-                  type="checkbox"
-                  checked={documentosSeleccionados.actas}
-                  onChange={(e) => setDocumentosSeleccionados(prev => ({ ...prev, actas: e.target.checked }))}
-                  className="w-5 h-5 accent-indigo-600"
-                />
-                <span className="font-bold text-zinc-800">Actas</span>
-              </label>
+              <div className="flex items-center justify-between p-4 rounded-2xl border border-zinc-200 hover:bg-zinc-50 transition-colors">
+                <label className="flex items-center gap-3 cursor-pointer flex-1">
+                  <input
+                    type="checkbox"
+                    checked={documentosSeleccionados.actas}
+                    onChange={(e) => setDocumentosSeleccionados(prev => ({ ...prev, actas: e.target.checked }))}
+                    className="w-5 h-5 accent-indigo-600"
+                  />
+                  <span className="font-bold text-zinc-800">Actas</span>
+                </label>
+              </div>
 
-              <label className="flex items-center gap-3 p-4 rounded-2xl border border-zinc-200 hover:bg-zinc-50 cursor-pointer transition-colors">
-                <input
-                  type="checkbox"
-                  checked={documentosSeleccionados.certificado}
-                  onChange={(e) => setDocumentosSeleccionados(prev => ({ ...prev, certificado: e.target.checked }))}
-                  className="w-5 h-5 accent-indigo-600"
-                />
-                <span className="font-bold text-zinc-800">Certificado</span>
-              </label>
+              <div className="flex items-center justify-between p-4 rounded-2xl border border-zinc-200 hover:bg-zinc-50 transition-colors">
+                <label className="flex items-center gap-3 cursor-pointer flex-1">
+                  <input
+                    type="checkbox"
+                    checked={documentosSeleccionados.certificado}
+                    onChange={(e) => setDocumentosSeleccionados(prev => ({ ...prev, certificado: e.target.checked }))}
+                    className="w-5 h-5 accent-indigo-600"
+                  />
+                  <span className="font-bold text-zinc-800">Certificado</span>
+                </label>
+                <button onClick={() => handleViewCertificadoPDF(parteDocumentos!)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors" title="Ver Certificado">
+                  <Eye className="w-5 h-5" />
+                </button>
+              </div>
 
-              <label className="flex items-center gap-3 p-4 rounded-2xl border border-zinc-200 hover:bg-zinc-50 cursor-pointer transition-colors">
-                <input
-                  type="checkbox"
-                  checked={documentosSeleccionados.albaran}
-                  onChange={(e) => setDocumentosSeleccionados(prev => ({ ...prev, albaran: e.target.checked }))}
-                  className="w-5 h-5 accent-indigo-600"
-                />
-                <span className="font-bold text-zinc-800">Albarán</span>
-              </label>
+              <div className="flex items-center justify-between p-4 rounded-2xl border border-zinc-200 hover:bg-zinc-50 transition-colors">
+                <label className="flex items-center gap-3 cursor-pointer flex-1">
+                  <input
+                    type="checkbox"
+                    checked={documentosSeleccionados.albaran}
+                    onChange={(e) => setDocumentosSeleccionados(prev => ({ ...prev, albaran: e.target.checked }))}
+                    className="w-5 h-5 accent-indigo-600"
+                  />
+                  <span className="font-bold text-zinc-800">Albarán</span>
+                </label>
+                <button onClick={() => handleViewAlbaranPDF(parteDocumentos!)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors" title="Ver Albarán">
+                  <Eye className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
             <div className="px-6 py-4 bg-zinc-50/50 border-t border-zinc-100 flex gap-3">
@@ -1028,43 +1263,168 @@ export default function Partes() {
         </div>
       )}
 
+      {/* Modal de visualización de firmas (solo lectura) */}
+      {isViewSignaturesModalOpen && parteVerFirmas && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[95vh]">
+            <div className="px-6 py-4 border-b border-zinc-100 flex items-center justify-between bg-zinc-50/50 shrink-0">
+              <h2 className="text-lg font-bold text-zinc-900">Firmas del Parte</h2>
+              <button onClick={() => { setIsViewSignaturesModalOpen(false); setParteVerFirmas(null); }} className="p-2 text-zinc-400 hover:text-black hover:bg-white rounded-xl transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-6 overflow-y-auto">
+              {/* Nombre del firmante */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-zinc-400 uppercase">Firmante del Cliente</label>
+                <p className="text-sm font-bold text-zinc-800">{parteVerFirmas.nombreFirmante || 'No especificado'}</p>
+              </div>
+
+              {/* Firma Cliente */}
+              <div>
+                <label className="text-xs font-bold text-zinc-400 uppercase block mb-2">Firma del Cliente</label>
+                <div className="border border-zinc-200 rounded-2xl bg-zinc-50 p-2 h-32 flex items-center justify-center">
+                  {parteVerFirmas.firmaCliente ? (
+                    <img src={parteVerFirmas.firmaCliente} alt="Firma Cliente" className="max-h-full object-contain" />
+                  ) : (
+                    <p className="text-sm text-zinc-400 italic">No disponible</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Firma Técnico */}
+              <div>
+                <label className="text-xs font-bold text-zinc-400 uppercase block mb-2">Firma del Técnico</label>
+                <div className="border border-zinc-200 rounded-2xl bg-zinc-50 p-2 h-32 flex items-center justify-center">
+                  {parteVerFirmas.firmaTecnico ? (
+                    <img src={parteVerFirmas.firmaTecnico} alt="Firma Técnico" className="max-h-full object-contain" />
+                  ) : (
+                    <p className="text-sm text-zinc-400 italic">No disponible</p>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="px-6 py-4 bg-zinc-50/50 border-t border-zinc-100 flex justify-end shrink-0">
+              <button
+                onClick={() => { setIsViewSignaturesModalOpen(false); setParteVerFirmas(null); }}
+                className="px-6 py-3 rounded-xl font-bold text-zinc-500 hover:bg-zinc-100 transition-colors"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {isSignatureModalOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col">
-            <div className="px-6 py-4 border-b border-zinc-100 flex items-center justify-between bg-zinc-50/50">
-              <h2 className="text-lg font-bold text-zinc-900">Cierre de Parte y Firmas</h2>
+          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[95vh]">
+            <div className="px-6 py-4 border-b border-zinc-100 flex items-center justify-between bg-zinc-50/50 shrink-0">
+              <h2 className="text-lg font-bold text-zinc-900">Revisión de Firmas y Finalización</h2>
               <button onClick={() => setIsSignatureModalOpen(false)} className="p-2 text-zinc-400 hover:text-black hover:bg-white rounded-xl transition-colors">
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="p-6 space-y-6 overflow-y-auto max-h-[70vh]">
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-zinc-700">Nombre del Cliente / Receptor *</label>
-                    <input 
-                      type="text" 
-                      value={nombreFirmante} 
-                      onChange={(e) => setNombreFirmante(e.target.value)}
-                      placeholder="Nombre y Apellidos"
-                      className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 outline-none transition-all"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-zinc-400 uppercase">Firma del Cliente</label>
-                <canvas ref={canvasClienteRef} width={450} height={150} className="w-full h-32 border border-zinc-200 rounded-2xl bg-zinc-50 touch-none" />
-                <button onClick={() => canvasClienteRef.current?.getContext('2d')?.clearRect(0,0,1000,1000)} className="text-[10px] text-zinc-400 underline">Limpiar firma cliente</button>
-              </div>
-              <div className="space-y-2 pt-4 border-t border-zinc-100">
-                <label className="text-xs font-bold text-zinc-400 uppercase">Firma del Técnico</label>
-                <canvas ref={canvasTecnicoRef} width={450} height={150} className="w-full h-32 border border-zinc-200 rounded-2xl bg-zinc-50 touch-none" />
-                <button onClick={() => canvasTecnicoRef.current?.getContext('2d')?.clearRect(0,0,1000,1000)} className="text-[10px] text-zinc-400 underline">Limpiar firma técnico</button>
-              </div>
+            <div className="p-6 space-y-6 overflow-y-auto">
+              {albaranAsociado ? (
+                <>
+                  {/* Nombre del firmante - editable */}
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-zinc-400 uppercase">Firmante del Cliente</label>
+                    <input
+                      type="text"
+                      value={nombreFirmanteEdit}
+                      onChange={e => setNombreFirmanteEdit(e.target.value)}
+                      className="w-full px-4 py-2.5 bg-white border border-zinc-200 rounded-xl text-sm font-bold text-zinc-800 focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 outline-none transition-all"
+                    />
+                  </div>
+
+                  {/* Firma Cliente - original + redibujado */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-bold text-zinc-400 uppercase flex items-center gap-2">
+                        Firma del Cliente
+                        {firmaClienteRedrawOk && <span className="w-2 h-2 bg-green-500 rounded-full" />}
+                      </label>
+                      <button
+                        onClick={() => clearFirmaCanvas(canvasFirmaClienteRef, setFirmaClienteRedrawOk)}
+                        className="flex items-center gap-1 text-xs text-zinc-500 hover:text-red-600 transition-colors px-2 py-1 rounded-lg hover:bg-red-50"
+                      >
+                        Borrar dibujo
+                      </button>
+                    </div>
+                    {/* Firma original */}
+                    <div className="mb-2 border border-zinc-200 rounded-2xl bg-zinc-50 p-2 h-24 flex items-center justify-center">
+                      <img src={albaranAsociado.firmaCliente || ''} alt="Firma Cliente original" className="max-h-full object-contain opacity-70" />
+                    </div>
+                    {/* Canvas para redibujar */}
+                    <div className={`rounded-xl border-2 overflow-hidden transition-colors ${firmaClienteRedrawOk ? 'border-green-400' : 'border-zinc-200'}`}>
+                      <canvas
+                        ref={canvasFirmaClienteRef}
+                        width={600}
+                        height={180}
+                        className="w-full touch-none bg-slate-50 cursor-crosshair"
+                        style={{ display: 'block' }}
+                        onMouseDown={e => startFirmaDraw(canvasFirmaClienteRef, setDrawingCliente, e)}
+                        onMouseMove={e => drawFirma(canvasFirmaClienteRef, drawingCliente, e)}
+                        onMouseUp={() => stopFirmaDraw(setDrawingCliente, setFirmaClienteRedrawOk, canvasFirmaClienteRef)}
+                        onMouseLeave={() => stopFirmaDraw(setDrawingCliente, setFirmaClienteRedrawOk, canvasFirmaClienteRef)}
+                        onTouchStart={e => { e.preventDefault(); startFirmaDraw(canvasFirmaClienteRef, setDrawingCliente, e); }}
+                        onTouchMove={e => { e.preventDefault(); drawFirma(canvasFirmaClienteRef, drawingCliente, e); }}
+                        onTouchEnd={() => stopFirmaDraw(setDrawingCliente, setFirmaClienteRedrawOk, canvasFirmaClienteRef)}
+                      />
+                    </div>
+                    <p className="text-xs text-zinc-400 mt-1 text-center">Dibuje encima si desea modificar la firma</p>
+                  </div>
+
+                  {/* Firma Técnico - original + redibujado */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-bold text-zinc-400 uppercase flex items-center gap-2">
+                        Firma del Técnico
+                        {firmaTecnicoRedrawOk && <span className="w-2 h-2 bg-green-500 rounded-full" />}
+                      </label>
+                      <button
+                        onClick={() => clearFirmaCanvas(canvasFirmaTecnicoRef, setFirmaTecnicoRedrawOk)}
+                        className="flex items-center gap-1 text-xs text-zinc-500 hover:text-red-600 transition-colors px-2 py-1 rounded-lg hover:bg-red-50"
+                      >
+                        Borrar dibujo
+                      </button>
+                    </div>
+                    {/* Firma original */}
+                    <div className="mb-2 border border-zinc-200 rounded-2xl bg-zinc-50 p-2 h-24 flex items-center justify-center">
+                      <img src={albaranAsociado.firmaTecnico || ''} alt="Firma Técnico original" className="max-h-full object-contain opacity-70" />
+                    </div>
+                    {/* Canvas para redibujar */}
+                    <div className={`rounded-xl border-2 overflow-hidden transition-colors ${firmaTecnicoRedrawOk ? 'border-green-400' : 'border-zinc-200'}`}>
+                      <canvas
+                        ref={canvasFirmaTecnicoRef}
+                        width={600}
+                        height={180}
+                        className="w-full touch-none bg-slate-50 cursor-crosshair"
+                        style={{ display: 'block' }}
+                        onMouseDown={e => startFirmaDraw(canvasFirmaTecnicoRef, setDrawingTecnico, e)}
+                        onMouseMove={e => drawFirma(canvasFirmaTecnicoRef, drawingTecnico, e)}
+                        onMouseUp={() => stopFirmaDraw(setDrawingTecnico, setFirmaTecnicoRedrawOk, canvasFirmaTecnicoRef)}
+                        onMouseLeave={() => stopFirmaDraw(setDrawingTecnico, setFirmaTecnicoRedrawOk, canvasFirmaTecnicoRef)}
+                        onTouchStart={e => { e.preventDefault(); startFirmaDraw(canvasFirmaTecnicoRef, setDrawingTecnico, e); }}
+                        onTouchMove={e => { e.preventDefault(); drawFirma(canvasFirmaTecnicoRef, drawingTecnico, e); }}
+                        onTouchEnd={() => stopFirmaDraw(setDrawingTecnico, setFirmaTecnicoRedrawOk, canvasFirmaTecnicoRef)}
+                      />
+                    </div>
+                    <p className="text-xs text-zinc-400 mt-1 text-center">Dibuje encima si desea modificar la firma</p>
+                  </div>
+                </>
+              ) : (
+                <p className="text-center text-sm text-zinc-500">Cargando datos de firma...</p>
+              )}
             </div>
-            <div className="px-6 py-4 bg-zinc-50/50 border-t border-zinc-100 flex gap-3">
+            <div className="px-6 py-4 bg-zinc-50/50 border-t border-zinc-100 flex gap-3 shrink-0">
               <button onClick={() => setIsSignatureModalOpen(false)} className="flex-1 px-4 py-3 rounded-xl font-bold text-zinc-500 hover:bg-zinc-100 transition-colors">
                 Cancelar
               </button>
-              <button onClick={confirmCerrarConFirma} className="flex-1 bg-sky-600 hover:bg-sky-700 text-white px-4 py-3 rounded-xl font-bold shadow-lg shadow-sky-200 transition-all">
-                Finalizar y Cerrar
+              <button onClick={confirmFinalizarDefinitivo} className="flex-1 bg-sky-600 hover:bg-sky-700 text-white px-4 py-3 rounded-xl font-bold shadow-lg shadow-sky-200 transition-all">
+                Finalizar
               </button>
             </div>
           </div>

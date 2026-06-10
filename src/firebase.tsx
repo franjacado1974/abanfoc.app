@@ -1,13 +1,8 @@
-// Import the functions you need from the SDKs you need
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
 import { getFirestore, collection, getDocs, query, where, addDoc, doc, updateDoc, setDoc, deleteDoc, onSnapshot, enableIndexedDbPersistence } from "firebase/firestore";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
 
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
   apiKey: "AIzaSyAqxTDdTXikySejIXDDIjm1ZYzlmZXS0zs",
   authDomain: "app-abanfoc-v1.firebaseapp.com",
@@ -18,13 +13,10 @@ const firebaseConfig = {
   measurementId: "G-JW0T2BFDY8"
 };
 
-// Initialize Firebase
-// Interfaces para Sistemas y Equipos
 export interface SistemaCategoria {
   id: string;
   nombre: string;
 }
-// Interface for Equipos
 export interface SistemaEquipo {
   id: string;
   idCategoria: string;
@@ -34,7 +26,6 @@ export interface SistemaEquipo {
   revisable: boolean;
 }
 
-// Interface for Articulos
 export interface Articulo {
   id: string;
   codigo: string;
@@ -96,13 +87,11 @@ export interface Centro {
   poblacion?: string;
   provincia?: string;
   telefono?: string;
-  // Añadir otras propiedades de Centro si se usan en Albaranes.tsx
 }
 
 export interface Equipo {
   id: string;
   centroId: string;
-  // Añadir otras propiedades de Equipo si se usan en Albaranes.tsx
 }
 
 export interface Empresa {
@@ -112,6 +101,37 @@ export interface Empresa {
   localidad?: string;
   cif?: string;
   logoUrl?: string;
+}
+
+// ─── PRESUPUESTO Interfaces ──────────────────────────────────────────────
+
+export interface PresupuestoLinea {
+  id: string;
+  tipo: 'articulo' | 'servicio' | 'manual';
+  codigo?: string;
+  concepto: string;
+  descripcion?: string;
+  cantidad: number;
+  precioUnidad: number;
+  subtotal: number;
+}
+
+export interface Presupuesto {
+  id: string;
+  titulo: string;
+  numeroPresupuesto?: string;
+  clienteId: string;
+  nombreCliente?: string;
+  fechaCreacion: string;
+  fechaValidez?: string;
+  estado: 'Borrador' | 'Enviado' | 'En espera' | 'Aprobado' | 'Rechazado';
+  lineas: PresupuestoLinea[];
+  subtotal: number;
+  iva: number;
+  total: number;
+  notas?: string;
+  usuarioRealizado?: string;
+  _docId?: string;
 }
 
 const app = initializeApp(firebaseConfig);
@@ -124,7 +144,6 @@ try {
 const storage = getStorage(app);
 const db = getFirestore(app);
 
-// Habilitar persistencia offline para evitar bloqueos por falta de conexión
 enableIndexedDbPersistence(db).catch((err) => {
   if (err.code === 'failed-precondition') {
     console.warn('La persistencia falló: Múltiples pestañas abiertas.');
@@ -133,10 +152,6 @@ enableIndexedDbPersistence(db).catch((err) => {
   }
 });
 
-/**
- * Guarda un nuevo usuario en Firestore (colección "usuarios").
- * Campos que guarda: nombre, apellidos, rol, contraseña
- */
 export async function addUserToFirestore(user: { nombre: string; apellidos: string; rol: string; password: string }) {
   try {
     const col = collection(db, 'usuarios');
@@ -154,9 +169,6 @@ export async function addUserToFirestore(user: { nombre: string; apellidos: stri
   }
 }
 
-/**
- * TÉCNICOS - operaciones con Firestore (colección "tecnicos").
- */
 export function subscribeTecnicos(callback: (tecnicos: Tecnico[]) => void) {
   try {
     const col = collection(db, 'tecnicos');
@@ -172,7 +184,7 @@ export function subscribeTecnicos(callback: (tecnicos: Tecnico[]) => void) {
       }) as Tecnico[];
       callback(items);
     }, (err) => {
-      console.error('subscribeTecnicos error:', err); // Changed _e to err
+      console.error('subscribeTecnicos error:', err);
       callback([]);
     });
     return unsub;
@@ -203,7 +215,7 @@ export async function saveTecnico(tecnico: Tecnico) {
     console.info('saveTecnico: updated', ref.id, cleanTecnico.nombre);
     return { _docId: ref.id, ...cleanTecnico };
   } catch (e) {
-    console.error('saveTecnico error:', e); // Changed _e to e
+    console.error('saveTecnico error:', e);
     throw e;
   }
 }
@@ -213,28 +225,21 @@ export async function deleteTecnico(id: string) {
     const ref = doc(db, 'tecnicos', id);
     await deleteDoc(ref);
     return true;
-  } catch (e) { // Changed _e to e
+  } catch (e) {
     console.error('deleteTecnico error:', e);
     throw e;
   }
 }
 
-/**
- * Verifica credenciales en Firestore.
- * Busca en la colección "usuarios" un documento con campo `nombre` o `usuario` igual a username
- * y compara la contraseña. Devuelve el objeto usuario (sin contraseña) o null.
- */
 export async function verifyUser(username: string, password: string) {
   try {
     const col = collection(db, 'usuarios');
     console.info('verifyUser: buscando usuario', username);
 
-    // Buscar por 'usuario' primero (usuarios legacy: superusuario, administrador, tecnico)
     let q = query(col, where('usuario', '==', username));
     let snap = await getDocs(q);
     console.info('verifyUser: resultado busqueda por usuario, docs=', snap.size);
 
-    // Si no encuentra, buscar por 'nombre' (usuarios creados desde Gestión de Usuarios)
     if (snap.empty) {
       q = query(col, where('nombre', '==', username));
       snap = await getDocs(q);
@@ -255,7 +260,6 @@ export async function verifyUser(username: string, password: string) {
 
     console.info('verifyUser: datos del documento:', JSON.stringify(data));
 
-    // Soportar varios nombres de campo para contraseña
     const storedPassword = data['contraseña'] ?? data['password'] ?? data['clave'] ?? '';
     console.info('verifyUser: contraseña almacenada:', storedPassword, '| introducida:', password);
 
@@ -275,14 +279,11 @@ export async function verifyUser(username: string, password: string) {
     console.warn('verifyUser: contraseña incorrecta');
     return null;
   } catch (e) {
-    console.error('verifyUser error:', e); // Changed _e to e
+    console.error('verifyUser error:', e);
     return null;
   }
 }
 
-/**
- * Suscribe a los cambios del perfil del ingeniero en Firestore.
- */
 export const subscribeIngeniero = (onUpdate: (data: any) => void) => {
   const q = query(collection(db, 'ingeniero'));
   return onSnapshot(q, (snapshot) => {
@@ -294,9 +295,6 @@ export const subscribeIngeniero = (onUpdate: (data: any) => void) => {
   });
 };
 
-/**
- * Guarda o actualiza los datos del ingeniero en Firestore.
- */
 export const saveIngeniero = async (id: string | null, data: any) => {
   if (id) {
     const docRef = doc(db, 'ingeniero', id);
@@ -305,10 +303,7 @@ export const saveIngeniero = async (id: string | null, data: any) => {
     await addDoc(collection(db, 'ingeniero'), data);
   }
 };
-// Subscribe Empresa
-/**
- * Suscribe a los cambios de los datos de la empresa en Firestore.
- */
+
 export const subscribeEmpresa = (onUpdate: (data: any) => void) => {
   const q = query(collection(db, 'empresa'));
   return onSnapshot(q, (snapshot) => {
@@ -319,10 +314,7 @@ export const subscribeEmpresa = (onUpdate: (data: any) => void) => {
     onUpdate(data[0] || null);
   });
 };
-// Subscribe Empresas
-/**
- * Suscribe a TODAS las empresas (para la lista).
- */
+
 export const subscribeEmpresas = (onUpdate: (data: Empresa[]) => void) => {
   const q = query(collection(db, 'empresa'));
   return onSnapshot(q, (snapshot) => {
@@ -333,10 +325,7 @@ export const subscribeEmpresas = (onUpdate: (data: Empresa[]) => void) => {
     onUpdate(data);
   });
 };
-// Save Empresa
-/**
- * Guarda o actualiza los datos de la empresa en Firestore.
- */
+
 export const saveEmpresa = async (id: string | null, data: Empresa) => {
   if (id) {
     const docRef = doc(db, 'empresa', id);
@@ -345,20 +334,12 @@ export const saveEmpresa = async (id: string | null, data: Empresa) => {
     await addDoc(collection(db, 'empresa'), data);
   }
 };
-// Delete Empresa
-/**
- * Elimina una empresa de Firestore.
- */
+
 export const deleteEmpresa = async (id: string) => {
   const docRef = doc(db, 'empresa', id);
   await deleteDoc(docRef);
 };
-// Upload File
-/**
- * Sube un archivo a Firebase Storage y devuelve la URL de descarga.
- * @param file El archivo seleccionado del input.
- * @param path La ruta de destino en el bucket de storage.
- */
+
 export const uploadFile = async (file: File, path: string) => {
   try {
     const storageRef = ref(storage, path);
@@ -369,10 +350,7 @@ export const uploadFile = async (file: File, path: string) => {
     throw error;
   }
 };
-// Subscribe Clientes
-/**
- * Clientes - suscripción en tiempo real.
- */
+
 export function subscribeClientes(callback: (clientes: Cliente[]) => void) {
   try {
     const col = collection(db, 'clientes');
@@ -380,25 +358,15 @@ export function subscribeClientes(callback: (clientes: Cliente[]) => void) {
       const items = snap.docs.map(d => ({ id: d.id, ...d.data() })) as Cliente[];
       callback(items);
     });
-  } catch (e) { // Changed _e to e
+  } catch (e) {
     console.error('subscribeClientes error:', e);
     return () => {};
   }
 }
 
-/**
- * Centros - operaciones con Firestore
- * addCentro: añade un centro (devuelve el documento creado)
- * updateCentro: actualiza un centro por id (merge)
- * deleteCentro: borra un centro por id
- * getCentros: obtiene todos los centros una sola vez
- * subscribeCentros: escucha cambios en tiempo real y llama al callback con la lista actualizada
- */
-
 export async function addCentro(centro: Centro) {
   try {
     const col = collection(db, 'centros');
-    // Si el objeto centro incluye un campo `id` lo usamos como documentId en Firestore
     if (centro && centro.id) {
       const ref = doc(db, 'centros', centro.id);
       console.info('addCentro: writing document with id', centro.id, 'data:', centro);
@@ -411,7 +379,7 @@ export async function addCentro(centro: Centro) {
       const centroId = centro.id ?? ref.id;
       return { _docId: ref.id, ...centro, id: centroId };
     }
-  } catch (e) { // Changed _e to e
+  } catch (e) {
     console.error('addCentro error:', e);
     throw e;
   }
@@ -434,7 +402,7 @@ export async function deleteCentro(id: string) {
     const ref = doc(db, 'centros', id);
     await deleteDoc(ref);
     return true;
-  } catch (e) { // Changed _e to e
+  } catch (e) {
     console.error('deleteCentro error:', e);
     throw e;
   }
@@ -443,34 +411,30 @@ export async function deleteCentro(id: string) {
 export async function getCentros(): Promise<Centro[]> {
   try {
     const col = collection(db, 'centros');
-    const snap = await getDocs(col); // Removed _e
+    const snap = await getDocs(col);
     return snap.docs.map(d => {
       const data = d.data() as any;
       return { _docId: d.id, id: data?.id ?? d.id, ...data };
     });
-  } catch (e) { // Changed _e to e
+  } catch (e) {
     console.error('getCentros error:', e);
     throw e;
   }
 }
 
-/**
- * subscribeCentros(callback): devuelve una función para cancelar la suscripción.
- * callback recibe la lista actualizada de centros.
- */
 export function subscribeCentros(callback: (centros: Centro[]) => void) {
   try {
     const col = collection(db, 'centros');
     const unsub = onSnapshot(col, (snap) => {
       console.info('subscribeCentros: snapshot received, size=', snap.size);
-      const items = snap.docs.map(d => { // Removed _e
+      const items = snap.docs.map(d => {
         const data = d.data() as any;
         return { _docId: d.id, id: data?.id ?? d.id, ...data };
       });
       console.info('subscribeCentros: items=', items);
       callback(items);
     }, (err) => {
-      console.error('subscribeCentros error:', err); // Changed _e to err
+      console.error('subscribeCentros error:', err);
       callback([]);
     });
     return unsub;
@@ -480,10 +444,6 @@ export function subscribeCentros(callback: (centros: Centro[]) => void) {
   }
 }
 
-/**
- * Helper para normalizar el nombre del sistema y usarlo como ID de documento (2ª columna).
- * "SISTEMA EXTINTORES" -> "extintores"
- */
 export function getCollectionName(catNombre: string) {
   return catNombre
     .replace(/^sistema\s+/i, '')
@@ -493,9 +453,6 @@ export function getCollectionName(catNombre: string) {
     .replace(/\s+/g, '_');
 }
 
-/**
- * SISTEMAS (CATEGORÍAS) - operaciones con Firestore
- */
 export async function addSistemaCategoria(categoria: SistemaCategoria) {
   try {
     const systemId = getCollectionName(categoria.nombre);
@@ -507,7 +464,7 @@ export async function addSistemaCategoria(categoria: SistemaCategoria) {
     });
     return { id: systemId, nombre: categoria.nombre };
   } catch (e) {
-    console.error('addSistemaCategoria error:', e); // Changed _e to e
+    console.error('addSistemaCategoria error:', e);
     throw e;
   }
 }
@@ -518,7 +475,7 @@ export async function updateSistemaCategoria(id: string, categoria: Partial<Sist
     await setDoc(ref, { ...categoria, updatedAt: new Date().toISOString() }, { merge: true });
     return { _docId: id, ...categoria };
   } catch (e) {
-    console.error('updateSistemaCategoria error:', e); // Changed _e to e
+    console.error('updateSistemaCategoria error:', e);
     throw e;
   }
 }
@@ -529,7 +486,7 @@ export async function deleteSistemaCategoria(id: string) {
     await deleteDoc(ref);
     return true;
   } catch (e) {
-    console.error('deleteSistemaCategoria error:', e); // Changed _e to e
+    console.error('deleteSistemaCategoria error:', e);
     throw e;
   }
 }
@@ -539,7 +496,7 @@ export async function getSistemasCategorias() {
     const col = collection(db, 'sistemas');
     const snap = await getDocs(col);
     return snap.docs.map(d => ({ id: d.id, ...d.data() })) as SistemaCategoria[];
-  } catch (e) { // Changed _e to e
+  } catch (e) {
     console.error('getSistemasCategorias error:', e);
     throw e;
   }
@@ -552,7 +509,7 @@ export function subscribeSistemasCategorias(callback: (categorias: SistemaCatego
       const items = snap.docs.map(d => ({ id: d.id, ...d.data() })) as SistemaCategoria[];
       callback(items);
     }, (err) => {
-      console.error('subscribeSistemasCategorias error:', err); // Changed _e to err
+      console.error('subscribeSistemasCategorias error:', err);
       callback([]);
     });
     return unsub;
@@ -562,14 +519,9 @@ export function subscribeSistemasCategorias(callback: (categorias: SistemaCatego
   }
 }
 
-/**
- * Suscribe a los equipos de un sistema específico (colección dinámica).
- * Por ejemplo, si catNombre es "SISTEMA EXTINTORES", escuchará la colección "extintores".
- */
 export function subscribeEquiposBySystem(catNombre: string, callback: (equipos: SistemaEquipo[]) => void) {
   try {
     const systemId = getCollectionName(catNombre);
-    // Nueva ruta anidada: sistemas -> [ID Sistema] -> equipos
     const col = collection(db, 'sistemas', systemId, 'equipos');
     const unsub = onSnapshot(col, (snap) => {
       const items = snap.docs.map(d => {
@@ -579,16 +531,13 @@ export function subscribeEquiposBySystem(catNombre: string, callback: (equipos: 
       callback(items);
     }, (err) => {
       console.error(`Error en suscripción a equipos de ${systemId}:`, err);
-    }); // Changed _e to err
+    });
     return unsub;
   } catch (e) {
     return () => {};
   }
 }
 
-/**
- * Guarda o actualiza un equipo individual en su colección de sistema correspondiente.
- */
 export async function saveEquipoToSystemCollection(catNombre: string, equipo: SistemaEquipo) {
   try {
     const systemId = getCollectionName(catNombre);
@@ -604,25 +553,18 @@ export async function saveEquipoToSystemCollection(catNombre: string, equipo: Si
   }
 }
 
-/**
- * Elimina un equipo de su colección de sistema.
- */
 export async function deleteEquipoFromSystemCollection(catNombre: string, equipoId: string) {
   try {
     const systemId = getCollectionName(catNombre);
     const ref = doc(db, 'sistemas', systemId, 'equipos', equipoId);
     await deleteDoc(ref);
     return true;
-  } catch (e) { // Changed _e to e
+  } catch (e) {
     console.error('Error al eliminar equipo de Firestore:', e);
     throw e;
   }
 }
 
-/**
- * Sincroniza cada sistema en su propia colección de Firestore.
- * Por ejemplo: "SISTEMA EXTINTORES" -> Colección "extintores"
- */
 export async function syncSistemas(categorias: SistemaCategoria[], equipos: SistemaEquipo[]) {
   try {
     for (const cat of categorias) {
@@ -640,20 +582,12 @@ export async function syncSistemas(categorias: SistemaCategoria[], equipos: Sist
         });
       }
     }
-    return true; // Changed _e to e
+    return true;
   } catch (e: any) {
     console.error('Error en syncSistemas:', e);
     throw e;
   }
 }
-
-/**
- * ARTICULOS - operaciones con Firestore
- * getArticulos: obtiene todos los articulos una sola vez
- * subscribeArticulos: escucha cambios en tiempo real y llama al callback con la lista actualizada
- * saveArticulo: guarda o actualiza un articulo
- * deleteArticulo: elimina un articulo
- */
 
 export async function getArticulos() {
   try {
@@ -663,7 +597,7 @@ export async function getArticulos() {
       const data = d.data() as any;
       return { id: d.id, ...data };
     }) as Articulo[];
-  } catch (e) { // Changed _e to e
+  } catch (e) {
     console.error('getArticulos error:', e);
     throw e;
   }
@@ -679,7 +613,7 @@ export function subscribeArticulos(callback: (articulos: Articulo[]) => void) {
       }) as Articulo[];
       callback(items);
     }, (err) => {
-      console.error('subscribeArticulos error:', err); // Changed _e to err
+      console.error('subscribeArticulos error:', err);
       callback([]);
     });
     return unsub;
@@ -695,7 +629,6 @@ export async function saveArticulo(articulo: Articulo) {
     const cleanArticulo = Object.fromEntries(
       Object.entries(articulo).filter(([, value]) => value !== undefined)
     ) as Articulo;
-    // Si el objeto articulo incluye un campo `id` lo usamos como documentId en Firestore
     if (cleanArticulo && cleanArticulo.id) {
       const ref = doc(db, 'articulos', cleanArticulo.id);
       await setDoc(ref, { 
@@ -710,7 +643,7 @@ export async function saveArticulo(articulo: Articulo) {
       });
       return { ...cleanArticulo, id: ref.id };
     }
-  } catch (e) { // Changed _e to e
+  } catch (e) {
     console.error('saveArticulo error:', e);
     throw e;
   }
@@ -721,15 +654,12 @@ export async function deleteArticulo(id: string) {
     const ref = doc(db, 'articulos', id);
     await deleteDoc(ref);
     return true;
-  } catch (e) { // Changed _e to e
+  } catch (e) {
     console.error('deleteArticulo error:', e);
     throw e;
   }
 }
 
-/**
- * FAMILIAS - opciones para el desplegable de familia en artículos.
- */
 const mapFamiliaDoc = (docId: string, data: any): Familia | null => {
   const nombre = String(data?.nombre ?? data?.familia ?? data?.name ?? docId).trim();
   if (!nombre) return null;
@@ -744,7 +674,7 @@ export async function getFamilias() {
       .map(d => mapFamiliaDoc(d.id, d.data()))
       .filter((familia): familia is Familia => familia !== null)
       .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' }));
-  } catch (e) { // Changed _e to e
+  } catch (e) {
     console.error('getFamilias error:', e);
     throw e;
   }
@@ -759,7 +689,7 @@ export function subscribeFamilias(callback: (familias: Familia[]) => void) {
         .filter((familia): familia is Familia => familia !== null)
         .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' }));
       callback(items);
-    }, (err) => { // Changed _e to err
+    }, (err) => {
       console.error('subscribeFamilias error:', err);
       callback([]);
     });
@@ -770,10 +700,6 @@ export function subscribeFamilias(callback: (familias: Familia[]) => void) {
   }
 }
 
-/**
- * ALBARANES - operaciones con Firestore (colección "albaranes").
- */
-
 export async function addAlbaran(albaran: Albaran) {
   try {
     const col = collection(db, 'albaranes');
@@ -783,16 +709,12 @@ export async function addAlbaran(albaran: Albaran) {
       updatedAt: new Date().toISOString()
     };
 
-    // If albaran.id is provided, use it as the document ID.
-    // This is useful for manually created albaranes where the ID is set by the user.
-    // For albaranes generated from Partes, the 'id' field is already unique.
     if (albaran.id) {
       const docRef = doc(db, 'albaranes', albaran.id);
       await setDoc(docRef, albaranToSave);
       console.info('addAlbaran: created with custom ID', albaran.id);
       return { ...albaranToSave, _docId: albaran.id };
     } else {
-      // If no ID is provided, let Firestore generate one. // Removed duplicate id: newDocRef.id
       const newDocRef = await addDoc(col, albaranToSave);
       console.info('addAlbaran: created with generated ID', newDocRef.id);
       const { id: _, ...rest } = albaranToSave;
@@ -800,7 +722,7 @@ export async function addAlbaran(albaran: Albaran) {
     }
   } catch (e) {
     console.error('addAlbaran error:', e);
-    throw e; // Changed _e to e
+    throw e;
   }
 }
 
@@ -817,7 +739,7 @@ export async function updateAlbaran(albaran: Albaran) {
     await setDoc(docRef, albaranToUpdate, { merge: true });
     console.info('updateAlbaran: updated', albaran.id);
     return { _docId: albaran.id, ...albaranToUpdate };
-  } catch (e) { // Changed _e to e
+  } catch (e) {
     console.error('updateAlbaran error:', e);
     throw e;
   }
@@ -829,7 +751,7 @@ export async function deleteAlbaran(id: string) {
     await deleteDoc(docRef);
     console.info('deleteAlbaran: deleted', id);
     return true;
-  } catch (e) { // Changed _e to e
+  } catch (e) {
     console.error('deleteAlbaran error:', e);
     throw e;
   }
@@ -842,7 +764,7 @@ export function subscribeAlbaranes(callback: (albaranes: Albaran[]) => void) {
       const items = snap.docs.map(d => ({ id: d.id, ...d.data() })) as Albaran[];
       callback(items);
     }, (err) => {
-      console.error('subscribeAlbaranes error:', err); // Changed _e to err
+      console.error('subscribeAlbaranes error:', err);
       callback([]);
     });
     return unsub;
@@ -851,10 +773,6 @@ export function subscribeAlbaranes(callback: (albaranes: Albaran[]) => void) {
     return () => {};
   }
 }
-
-/**
- * PARTES - operaciones con Firestore (colección "partes").
- */
 
 export interface ParteFirestore {
   id: string;
@@ -934,18 +852,123 @@ export function subscribePartes(callback: (partes: ParteFirestore[]) => void) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CENTROS → SISTEMAS → EQUIPOS
-//
-// Estructura en Firestore (todo dentro de centros, sin colecciones raíz):
-//   centros/{centroId}/{sistemaSlug}/_info        ← metadatos del sistema
-//   centros/{centroId}/{sistemaSlug}/{equipoId}   ← equipos (IDs autogenerados)
-//
-// El sistemaSlug se genera a partir del nombre del sistema:
-//   "SISTEMA EXTINTORES" → "sistema_extintores"
-//   "SISTEMA BIES"       → "sistema_bies"
+// PRESUPUESTOS - Firestore CRUD
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Convierte el nombre de un sistema en un slug válido para usar como nombre de subcolección */
+/** Genera un número de presupuesto correlativo con formato año.contador (ej: 26.3300)
+ *  El contador se almacena en Firestore en un documento de la colección "contadores" */
+async function getNextPresupuestoNumero(): Promise<string> {
+  const ano = new Date().getFullYear().toString().slice(-2); // "26" para 2026
+  const counterDocRef = doc(db, 'contadores', 'presupuestos');
+  
+  try {
+    const { runTransaction } = await import('firebase/firestore');
+    const result = await runTransaction(db, async (transaction) => {
+      const docSnap = await transaction.get(counterDocRef);
+      let nextNum: number;
+      if (!docSnap.exists()) {
+        nextNum = 3300;
+        transaction.set(counterDocRef, { año: Number(ano), ultimoNumero: nextNum });
+      } else {
+        const data = docSnap.data();
+        const añoGuardado = data?.año || 0;
+        if (añoGuardado < Number(ano)) {
+          nextNum = 0;
+          transaction.update(counterDocRef, { año: Number(ano), ultimoNumero: nextNum });
+        } else {
+          nextNum = (data?.ultimoNumero || 0) + 1;
+          transaction.update(counterDocRef, { ultimoNumero: nextNum });
+        }
+      }
+      return nextNum;
+    });
+    return `${ano}.${String(result).padStart(4, '0')}`;
+  } catch (e) {
+    console.error('Error generando número de presupuesto:', e);
+    return `${ano}.${String(Date.now()).slice(-4)}`;
+  }
+}
+
+export async function addPresupuesto(presupuesto: Presupuesto) {
+  try {
+    const nuevoNumero = await getNextPresupuestoNumero();
+    const presupuestoToSave = {
+      ...presupuesto,
+      numeroPresupuesto: nuevoNumero,
+      id: presupuesto.id || `PRE-${Date.now()}`,
+      updatedAt: new Date().toISOString()
+    };
+
+    const col = collection(db, 'presupuestos');
+    const ref = await addDoc(col, presupuestoToSave);
+    return { ...presupuestoToSave, _docId: ref.id, id: ref.id };
+  } catch (e) {
+    console.error('addPresupuesto error:', e);
+    throw e;
+  }
+}
+
+export async function updatePresupuesto(id: string, presupuesto: Partial<Presupuesto>) {
+  try {
+    const ref = doc(db, 'presupuestos', id);
+    await setDoc(ref, { ...presupuesto, updatedAt: new Date().toISOString() }, { merge: true });
+    return { _docId: id, ...presupuesto };
+  } catch (e) {
+    console.error('updatePresupuesto error:', e);
+    throw e;
+  }
+}
+
+export async function deletePresupuesto(id: string) {
+  try {
+    const ref = doc(db, 'presupuestos', id);
+    await deleteDoc(ref);
+    return true;
+  } catch (e) {
+    console.error('deletePresupuesto error:', e);
+    throw e;
+  }
+}
+
+export function subscribePresupuestos(callback: (presupuestos: Presupuesto[]) => void) {
+  try {
+    const col = collection(db, 'presupuestos');
+    const unsub = onSnapshot(col, (snap) => {
+      const items = snap.docs.map(d => {
+        const data = d.data() as any;
+      return {
+        _docId: d.id,
+        id: data?.id ?? d.id,
+        titulo: data?.titulo || '',
+        numeroPresupuesto: data?.numeroPresupuesto || data?.id || '',
+        clienteId: data?.clienteId || '',
+        nombreCliente: data?.nombreCliente || '',
+        fechaCreacion: data?.fechaCreacion || new Date().toISOString(),
+        fechaValidez: data?.fechaValidez || '',
+        estado: data?.estado || 'Borrador',
+        lineas: Array.isArray(data?.lineas) ? data.lineas : [],
+        subtotal: typeof data?.subtotal === 'number' ? data.subtotal : 0,
+        iva: typeof data?.iva === 'number' ? data.iva : 21,
+        total: typeof data?.total === 'number' ? data.total : 0,
+        notas: data?.notas || '',
+      } as Presupuesto;
+      });
+      callback(items);
+    }, (err) => {
+      console.error('subscribePresupuestos error:', err);
+      callback([]);
+    });
+    return unsub;
+  } catch (e) {
+    console.error('subscribePresupuestos error:', e);
+    return () => {};
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CENTROS → SISTEMAS → EQUIPOS
+// ─────────────────────────────────────────────────────────────────────────────
+
 export function sistemaToSlug(nombre: string): string {
   return nombre
     .toLowerCase()
@@ -956,18 +979,14 @@ export function sistemaToSlug(nombre: string): string {
 }
 
 export interface CentroSistemaFirestore {
-  id: string;        // slug del sistema, ej: "sistema_extintores"
-  centroId: string;  // ID del documento centro en Firestore
+  id: string;
+  centroId: string;
   tipo: string;
   familia: string;
   descripcion: string;
   _docId?: string;
 }
 
-// ── Sistemas (subcolección directa dentro del centro) ─────────────────────────
-
-/** Crea un sistema en la colección inventario del centro.
- *  Guarda en centros/{centroId}/inventario/{sistemaSlug} */
 export async function addCentroSistema(sistema: CentroSistemaFirestore) {
   try {
     const slug = sistemaToSlug(sistema.tipo || sistema.familia || sistema.id);
@@ -987,7 +1006,6 @@ export async function addCentroSistema(sistema: CentroSistemaFirestore) {
   }
 }
 
-/** Actualiza metadatos de un sistema existente en inventario */
 export async function updateCentroSistema(centroId: string, sistemaId: string, sistema: Partial<CentroSistemaFirestore>) {
   try {
     const ref = doc(db, 'centros', centroId, 'inventario', sistemaId);
@@ -999,7 +1017,6 @@ export async function updateCentroSistema(centroId: string, sistemaId: string, s
   }
 }
 
-/** Elimina un sistema de la colección inventario */
 export async function deleteCentroSistema(centroId: string, sistemaId: string) {
   try {
     const ref = doc(db, 'centros', centroId, 'inventario', sistemaId);
@@ -1011,11 +1028,8 @@ export async function deleteCentroSistema(centroId: string, sistemaId: string) {
   }
 }
 
-/** Suscripción en tiempo real a los sistemas de un centro.
- *  Escucha la colección "inventario" del centro que contiene los sistemas. */
 export function subscribeCentroSistemas(centroId: string, callback: (sistemas: CentroSistemaFirestore[]) => void) {
   try {
-    // Escuchar la colección "inventario" que contiene los sistemas del centro
     const colInventario = collection(db, 'centros', centroId, 'inventario');
     const unsub = onSnapshot(colInventario, (snap) => {
       const sistemas = snap.docs.map(d => {
@@ -1042,12 +1056,10 @@ export function subscribeCentroSistemas(centroId: string, callback: (sistemas: C
   }
 }
 
-// ── Equipos (documentos dentro de cada sistema, con ID autogenerado) ──────────
-
 export interface EquipoInstaladoFirestore {
   id: string;
   centroId: string;
-  sistemaId: string;  // slug del sistema, ej: "sistema_extintores"
+  sistemaId: string;
   codigo: string;
   nombre: string;
   ubicacion: string;
@@ -1062,25 +1074,23 @@ export interface EquipoInstaladoFirestore {
   anomalias?: string;
   longitud?: string;
   pruebaHidraulica?: string;
-  checkAcceso?: boolean;
-  checkAltura?: boolean;
-  checkSoporte?: boolean;
-  checkSenalizacion?: boolean;
-  checkManguera?: boolean;
-  checkPeso?: boolean;
-  checkManometro?: boolean;
-  checkMarcado?: boolean;
-  checkEtiquetas?: boolean;
-  checkRetimbre?: boolean;
-  checkRiesgo?: boolean;
-  checkDistancia?: boolean;
-  checkPasador?: boolean;
-  checkMovilidad?: boolean;
+  checkAcceso?: boolean | null;
+  checkAltura?: boolean | null;
+  checkSoporte?: boolean | null;
+  checkSenalizacion?: boolean | null;
+  checkManguera?: boolean | null;
+  checkPeso?: boolean | null;
+  checkManometro?: boolean | null;
+  checkMarcado?: boolean | null;
+  checkEtiquetas?: boolean | null;
+  checkRetimbre?: boolean | null;
+  checkRiesgo?: boolean | null;
+  checkDistancia?: boolean | null;
+  checkPasador?: boolean | null;
+  checkMovilidad?: boolean | null;
   _docId?: string;
 }
 
-/** Añade un equipo en centros/{centroId}/inventario/{sistemaSlug}/equipos/{equipoId}
- *  Si el equipo tiene id, lo usa; si no, Firestore genera uno automáticamente */
 export async function addEquipoInstalado(equipo: EquipoInstaladoFirestore) {
   try {
     console.log('addEquipoInstalado: centroId=', equipo.centroId, 'sistemaId=', equipo.sistemaId, 'equipoId=', equipo.id);
@@ -1118,7 +1128,6 @@ export async function addEquipoInstalado(equipo: EquipoInstaladoFirestore) {
       updatedAt: new Date().toISOString()
     };
 
-    // Ruta: centros/{centroId}/inventario/{sistemaSlug}/equipos/{equipoId}
     if (equipo.id) {
       const ref = doc(db, 'centros', equipo.centroId, 'inventario', equipo.sistemaId, 'equipos', equipo.id);
       await setDoc(ref, { ...equipoData, id: equipo.id });
@@ -1134,7 +1143,6 @@ export async function addEquipoInstalado(equipo: EquipoInstaladoFirestore) {
   }
 }
 
-/** Actualiza un equipo existente */
 export async function updateEquipoInstalado(id: string, equipo: Partial<EquipoInstaladoFirestore>) {
   try {
     if (!equipo.centroId || !equipo.sistemaId) {
@@ -1150,7 +1158,6 @@ export async function updateEquipoInstalado(id: string, equipo: Partial<EquipoIn
   }
 }
 
-/** Elimina un equipo de centros/{centroId}/inventario/{sistemaSlug}/equipos/{equipoId} */
 export async function deleteEquipoInstalado(centroId: string, sistemaId: string, equipoId: string) {
   try {
     const ref = doc(db, 'centros', centroId, 'inventario', sistemaId, 'equipos', equipoId);
@@ -1162,8 +1169,6 @@ export async function deleteEquipoInstalado(centroId: string, sistemaId: string,
   }
 }
 
-/** Suscripción en tiempo real a los equipos de un sistema concreto.
- *  Escucha centros/{centroId}/inventario/{sistemaSlug}/equipos */
 export function subscribeEquiposInstalados(centroId: string, sistemaId: string, callback: (equipos: EquipoInstaladoFirestore[]) => void) {
   try {
     const col = collection(db, 'centros', centroId, 'inventario', sistemaId, 'equipos');

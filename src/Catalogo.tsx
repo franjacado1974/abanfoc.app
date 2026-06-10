@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Package, Wrench, Search, Plus, Upload, Download, Edit, Trash2, X, Save } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { subscribeArticulos } from './firebase';
 
 interface Articulo {
   id: string;
@@ -21,6 +22,13 @@ interface Servicio {
   precioCompra: number;
   precioVenta: number;
 }
+
+const formatMoneda = (valor: number) => 
+  new Intl.NumberFormat('es-ES', { 
+    style: 'currency', currency: 'EUR',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number(valor) || 0);
 
 export default function Catalogo() {
   const navigate = useNavigate();
@@ -43,6 +51,12 @@ export default function Catalogo() {
     if (savedArticulos) { try { setArticulos(JSON.parse(savedArticulos)); } catch { setArticulos([]); } }
     const savedServicios = localStorage.getItem('firecheck_db_servicios');
     if (savedServicios) { try { setServicios(JSON.parse(savedServicios)); } catch { setServicios([]); } }
+  }, []);
+
+  // Suscripción en tiempo real para asegurar que los datos carguen desde el inicio
+  useEffect(() => {
+    const unsub = subscribeArticulos((items) => { setArticulos(items); });
+    return () => unsub();
   }, []);
 
   const filteredArticulos = useMemo(() => {
@@ -278,8 +292,8 @@ export default function Catalogo() {
                       <div className="w-20"><span className="text-[11px] font-mono font-bold text-zinc-500 bg-zinc-100 px-1.5 py-0.5 rounded">{a.codigo}</span></div>
                       <div className="flex-1 min-w-0 pr-2"><p className="text-sm font-bold text-zinc-900 truncate">{a.nombre}</p></div>
                       <div className="w-36 text-sm text-zinc-600 truncate pr-2">{a.familia || '-'}</div>
-                      <div className="w-28 text-sm text-zinc-600 text-right pr-2">{a.precioCompra ? `${a.precioCompra.toFixed(2)} €` : '-'}</div>
-                      <div className="w-28 text-sm text-zinc-600 text-right pr-2">{a.precioVenta ? `${a.precioVenta.toFixed(2)} €` : '-'}</div>
+                      <div className="w-28 text-sm text-zinc-600 text-right pr-2">{a.precioCompra ? formatMoneda(a.precioCompra) : '-'}</div>
+                      <div className="w-28 text-sm text-zinc-600 text-right pr-2">{a.precioVenta ? formatMoneda(a.precioVenta) : '-'}</div>
                       <div className="w-24 text-center">
                         <span className={`text-[11px] px-1.5 py-0.5 rounded font-bold ${a.revisable ? 'bg-emerald-100 text-emerald-700' : 'bg-zinc-100 text-zinc-400'}`}>
                           {a.revisable ? 'Sí' : 'No'}
@@ -348,8 +362,8 @@ export default function Catalogo() {
                       <div className="w-20"><span className="text-[11px] font-mono font-bold text-zinc-500 bg-zinc-100 px-1.5 py-0.5 rounded">{s.codigo}</span></div>
                       <div className="flex-1 min-w-0 pr-2"><p className="text-sm font-bold text-zinc-900 truncate">{s.nombre}</p></div>
                       <div className="w-36 text-sm text-zinc-600 truncate pr-2">{s.familia || '-'}</div>
-                      <div className="w-28 text-sm text-zinc-600 text-right pr-2">{s.precioCompra ? `${s.precioCompra.toFixed(2)} €` : '-'}</div>
-                      <div className="w-28 text-sm text-zinc-600 text-right pr-2">{s.precioVenta ? `${s.precioVenta.toFixed(2)} €` : '-'}</div>
+                      <div className="w-28 text-sm text-zinc-600 text-right pr-2">{s.precioCompra ? formatMoneda(s.precioCompra) : '-'}</div>
+                      <div className="w-28 text-sm text-zinc-600 text-right pr-2">{s.precioVenta ? formatMoneda(s.precioVenta) : '-'}</div>
                       <div className="w-20 flex items-center justify-end gap-1">
                         <button onClick={() => handleEditServicio(s)} className="p-1.5 text-zinc-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors" title="Editar"><Edit className="w-4 h-4" /></button>
                         <button onClick={() => handleDeleteServicio(s.id)} className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Eliminar"><Trash2 className="w-4 h-4" /></button>

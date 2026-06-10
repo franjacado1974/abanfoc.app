@@ -6,6 +6,7 @@ import {
   Settings, Power, ChevronLeft, ChevronRight, LayoutDashboard,
   Menu, X
 } from 'lucide-react';
+import { APP_VERSION } from '../constants';
 
 interface SidebarProps {
   user: { nombre: string; apellidos: string; rol: string } | null;
@@ -23,7 +24,7 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { id: 'dashboard', path: '/', title: 'Dashboard', Icon: LayoutDashboard, allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador'], section: 'gestion' },
+  { id: 'dashboard', path: '/', title: 'Panel de control', Icon: LayoutDashboard, allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador'], section: 'gestion' },
   { id: 'clientes-centros', path: '/clientes-centros', title: 'Clientes', Icon: Users, allowedRoles: ['super-administrador', 'administrador', 'editor'], section: 'gestion' },
   { id: 'catalogo', path: '/catalogo', title: 'Catálogo', Icon: Package, allowedRoles: ['super-administrador', 'administrador', 'editor'], section: 'gestion' },
   { id: 'partes_trabajo', path: '/partes_trabajo', title: 'Planificación', Icon: CalendarDays, allowedRoles: ['super-administrador', 'administrador'], section: 'operaciones' },
@@ -133,7 +134,11 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
       </div>
 
       {/* User Info & Logout */}
-      <div className={`border-t border-blue-800/30 px-3 py-3 ${collapsed ? 'flex flex-col items-center gap-2' : ''}`}>
+      <div className={`border-t border-blue-800/30 px-3 py-3 shrink-0 ${collapsed ? 'flex flex-col items-center gap-2' : ''}`}>
+        <div className="md:hidden mb-3 px-1">
+          <p className="text-blue-300/80 text-[9px] font-bold uppercase tracking-widest">Sesión Activa</p>
+          <p className="text-blue-300/80 text-[9px]">{APP_VERSION}</p>
+        </div>
         {!collapsed && user && (
           <div className="flex items-center gap-3 mb-3">
             <div className="w-8 h-8 bg-orange-500/20 rounded-full flex items-center justify-center text-xs font-bold text-orange-400 border border-orange-500/30">
@@ -160,6 +165,10 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
           <Power className="w-4 h-4" />
           {!collapsed && <span>Cerrar Sesión</span>}
         </button>
+        {/* Versión en escritorio - debajo de cerrar sesión */}
+        {!collapsed && (
+          <p className="text-center text-blue-400/60 text-[9px] mt-2 hidden md:block">{APP_VERSION}</p>
+        )}
       </div>
 
       {/* Collapse button (desktop) */}

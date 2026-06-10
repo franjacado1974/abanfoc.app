@@ -83,11 +83,11 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
     t.nombre?.toLowerCase() === loggedUser?.nombre?.toLowerCase()
   );
 
-  // Filtrar partes asignados a este técnico (todos los estados)
+  // Filtrar partes asignados a este técnico (excluir Cerrado y Finalizado)
   const partesDelTecnico = partes.filter(p =>
-    tecnicoLogueado
-      ? (p.tecnicoId === tecnicoLogueado.id || p.tecnicoId === tecnicoLogueado._docId)
-      : true
+    p.estado !== 'Cerrado' &&
+    p.estado !== 'Finalizado' &&
+    (tecnicoLogueado ? (p.tecnicoId === tecnicoLogueado.id || p.tecnicoId === tecnicoLogueado._docId) : true)
   ).sort((a, b) => {
     const fa = a.fechaProgramada || a.fechaCreacion || '';
     const fb = b.fechaProgramada || b.fechaCreacion || '';

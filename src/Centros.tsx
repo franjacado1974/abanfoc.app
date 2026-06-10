@@ -62,6 +62,9 @@ export interface Parte {
   numeroMantenimiento?: string;
   fechaProgramada?: string;
   empresaId?: string;
+  firmaCliente?: string;
+  firmaTecnico?: string;
+  nombreFirmante?: string;
 }
 
 const generateId = () => {
@@ -98,20 +101,20 @@ export interface EquipoInstalado {
   anomalias?: string;
   longitud?: string;
   pruebaHidraulica?: string;
-  checkAcceso?: boolean;
-  checkAltura?: boolean;
-  checkSoporte?: boolean;
-  checkSenalizacion?: boolean;
-  checkManguera?: boolean;
-  checkPeso?: boolean;
-  checkManometro?: boolean;
-  checkMarcado?: boolean;
-  checkEtiquetas?: boolean;
-  checkRetimbre?: boolean;
-  checkRiesgo?: boolean;
-  checkDistancia?: boolean;
-  checkPasador?: boolean;
-  checkMovilidad?: boolean;
+  checkAcceso?: boolean | null;
+  checkAltura?: boolean | null;
+  checkSoporte?: boolean | null;
+  checkSenalizacion?: boolean | null;
+  checkManguera?: boolean | null;
+  checkPeso?: boolean | null;
+  checkManometro?: boolean | null;
+  checkMarcado?: boolean | null;
+  checkEtiquetas?: boolean | null;
+  checkRetimbre?: boolean | null;
+  checkRiesgo?: boolean | null;
+  checkDistancia?: boolean | null;
+  checkPasador?: boolean | null;
+  checkMovilidad?: boolean | null;
 }
 
 const emptyCentro: Centro = {
@@ -497,20 +500,20 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
       sistemaId: sistemaSeleccionado.id,
       revisable: formEquipo.revisable ?? true,
       revisado: false,
-      checkAcceso: true,
-      checkAltura: true,
-      checkSoporte: true,
-      checkSenalizacion: true,
-      checkManguera: true,
-      checkPeso: true,
-      checkManometro: true,
-      checkMarcado: true,
-      checkEtiquetas: true,
-      checkRetimbre: true,
-      checkRiesgo: true,
-      checkDistancia: true,
-      checkPasador: true,
-      checkMovilidad: true
+      checkAcceso: null,
+      checkAltura: null,
+      checkSoporte: null,
+      checkSenalizacion: null,
+      checkManguera: null,
+      checkPeso: null,
+      checkManometro: null,
+      checkMarcado: null,
+      checkEtiquetas: null,
+      checkRetimbre: null,
+      checkRiesgo: null,
+      checkDistancia: null,
+      checkPasador: null,
+      checkMovilidad: null
     };
     // Guardar localmente primero
     const updatedEquipos = [...equiposInstalados, nuevoEquipo];
@@ -534,7 +537,7 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
       let startNum = 1;
       if (eqDelSist.length > 0) { const nums = eqDelSist.map(eq => parseInt(eq.codigo)).filter(n => !isNaN(n)); startNum = nums.length > 0 ? Math.max(...nums) + 1 : eqDelSist.length + 1; }
       const codigoNum = startNum + i;
-      const nuevoEquipo: EquipoInstalado = { id: generateId(), centroId: centroSeleccionado.id, sistemaId: sistemaSeleccionado.id, codigo: codigoNum.toString().padStart(2, '0'), nombre: equipoBase.nombre, ubicacion: '', revisable: equipoBase.revisable ?? true, revisado: false, checkAcceso: true, checkAltura: true, checkSoporte: true, checkSenalizacion: true, checkManguera: true, checkPeso: true, checkManometro: true, checkMarcado: true, checkEtiquetas: true, checkRetimbre: true, checkRiesgo: true, checkDistancia: true, checkPasador: true, checkMovilidad: true };
+      const nuevoEquipo: EquipoInstalado = { id: generateId(), centroId: centroSeleccionado.id, sistemaId: sistemaSeleccionado.id, codigo: codigoNum.toString().padStart(2, '0'), nombre: equipoBase.nombre, ubicacion: '', revisable: equipoBase.revisable ?? true, revisado: false, checkAcceso: null, checkAltura: null, checkSoporte: null, checkSenalizacion: null, checkManguera: null, checkPeso: null, checkManometro: null, checkMarcado: null, checkEtiquetas: null, checkRetimbre: null, checkRiesgo: null, checkDistancia: null, checkPasador: null, checkMovilidad: null };
       nuevosEquipos.push(nuevoEquipo);
     }
     
@@ -893,7 +896,9 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
               </div>
               <div className="divide-y divide-zinc-100">
                 {sistDelCentro.map(sist => {
-                  const equiposDelSistema = equiposInstalados.filter(e => e.sistemaId === sist.id);
+                  const equiposDelSistema = equiposInstalados
+                    .filter(e => e.sistemaId === sist.id)
+                    .sort((a, b) => (a.codigo || '').localeCompare(b.codigo || '', undefined, { numeric: true, sensitivity: 'base' }));
                   const equiposCount = equiposDelSistema.length;
                   const isExpanded = expandedSistemaId === sist.id;
                   const IconoCat = getIconForSistema(sist.tipo || sist.familia || '');
