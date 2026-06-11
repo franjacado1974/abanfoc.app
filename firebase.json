@@ -1,6 +1,6 @@
 {
   "hosting": {
-    "site": "app-abanfoc",
+    "site": "abanfoc",
     "public": "dist",
     "ignore": [
       "firebase.json",
@@ -17,7 +17,7 @@
   "firestore": {
     "database": "(default)",
     "location": "europe-southwest1",
-    "rules": " ",
+    "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
   "storage": {

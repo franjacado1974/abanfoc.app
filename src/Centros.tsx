@@ -906,7 +906,7 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
                     <div key={sist.id}>
                       {/* FILA DEL SISTEMA */}
                       <div
-                        className="flex items-center px-4 py-3.5 bg-zinc-100 hover:bg-zinc-200/70 transition-colors cursor-pointer group min-w-[600px]"
+                        className="flex items-center px-4 py-3.5 bg-white hover:bg-zinc-50/70 transition-colors cursor-pointer group min-w-[600px]"
                         onClick={() => setExpandedSistemaId(isExpanded ? null : sist.id)}
                       >
                         <div className="w-8 shrink-0 flex items-center justify-center">
@@ -914,8 +914,14 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
                             <ChevronRight className="w-4 h-4 text-zinc-400" />
                           </div>
                         </div>
-                        <div className="w-10 h-10 bg-zinc-100 rounded-xl flex items-center justify-center text-zinc-600 overflow-hidden shrink-0">
-                          {IconoCat && (typeof IconoCat === 'string' ? <img src={IconoCat} alt="Icon" className="w-6 h-6 object-contain opacity-80" /> : <IconoCat className="w-5 h-5" />)}
+                        <div className="w-10 h-10 flex items-center justify-center shrink-0">
+                          {IconoCat && (typeof IconoCat === 'string' ? (
+                            <img src={IconoCat} alt="Icon" className="w-8 h-8 object-contain" />
+                          ) : (
+                            <div className="w-10 h-10 bg-zinc-100 rounded-xl flex items-center justify-center text-zinc-600">
+                              <IconoCat className="w-5 h-5" />
+                            </div>
+                          ))}
                         </div>
                         <div className="flex-1 min-w-0 pl-3">
                           <p className="text-sm font-bold text-zinc-900 truncate group-hover:text-blue-900 transition-colors">{sist.familia || sist.tipo}</p>
@@ -932,7 +938,7 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
                       </div>
                       {/* CONTENIDO DEL ACORDEÓN (EQUIPOS) */}
                       {isExpanded && (
-                        <div className="bg-zinc-50/60 border-t border-zinc-100 px-4 md:px-14 py-4">
+                        <div className="bg-zinc-100/80 border-t border-zinc-200 px-4 md:px-14 py-4">
                           <div className="flex items-center justify-between mb-3">
                             <h5 className="text-xs font-bold text-zinc-600 uppercase tracking-wider">Equipos del sistema</h5>
                             <div className="flex gap-2">

@@ -49,6 +49,22 @@ export interface Tecnico {
   _docId?: string;
 }
 
+export interface Pedido {
+  id: string;
+  empresaId: string;
+  clienteId: string;
+  centroId: string;
+  titulo: string;
+  fechaCreacion: string;
+  fechaPrevista?: string;
+  items: { cantidad: number; concepto: string; descripcion: string; precioUnidad: number; subtotal: number; }[];
+  estado: 'Pendiente' | 'En Proceso' | 'Completado';
+  presupuestoId?: string;
+  numeroPedido?: string;
+  notas?: string;
+  _docId?: string;
+}
+
 export interface Albaran {
   id: string;
   empresaId: string;
@@ -64,6 +80,7 @@ export interface Albaran {
   numeroMantenimiento?: string;
   parteId?: string;
   numeroPedido?: string;
+  titulo?: string;
 }
 
 export interface Cliente {
@@ -754,6 +771,84 @@ export async function deleteAlbaran(id: string) {
   } catch (e) {
     console.error('deleteAlbaran error:', e);
     throw e;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PEDIDOS - Firestore CRUD
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function addPedido(pedido: Pedido) {
+  try {
+    const pedidoToSave = { ...pedido, updatedAt: new Date().toISOString() };
+    const col = collection(db, 'pedidos');
+    if (pedido.id) {
+      const docRef = doc(db, 'pedidos', pedido.id);
+      await setDoc(docRef, pedidoToSave);
+      return { ...pedidoToSave, _docId: pedido.id };
+    } else {
+      const ref = await addDoc(col, pedidoToSave);
+      return { ...pedidoToSave, _docId: ref.id, id: ref.id };
+    }
+  } catch (e) {
+    console.error('addPedido error:', e);
+    throw e;
+  }
+}
+
+export async function updatePedido(id: string, pedido: Partial<Pedido>) {
+  try {
+    const ref = doc(db, 'pedidos', id);
+    await setDoc(ref, { ...pedido, updatedAt: new Date().toISOString() }, { merge: true });
+    return { _docId: id, ...pedido };
+  } catch (e) {
+    console.error('updatePedido error:', e);
+    throw e;
+  }
+}
+
+export async function deletePedido(id: string) {
+  try {
+    const ref = doc(db, 'pedidos', id);
+    await deleteDoc(ref);
+    return true;
+  } catch (e) {
+    console.error('deletePedido error:', e);
+    throw e;
+  }
+}
+
+export function subscribePedidos(callback: (pedidos: Pedido[]) => void) {
+  try {
+    const col = collection(db, 'pedidos');
+    const unsub = onSnapshot(col, (snap) => {
+      const items = snap.docs.map(d => {
+        const data = d.data() as any;
+        return {
+          _docId: d.id,
+          id: data?.id ?? d.id,
+          empresaId: data?.empresaId || '',
+          clienteId: data?.clienteId || '',
+          centroId: data?.centroId || '',
+          titulo: data?.titulo || '',
+          fechaCreacion: data?.fechaCreacion || new Date().toISOString(),
+          fechaPrevista: data?.fechaPrevista || '',
+          items: Array.isArray(data?.items) ? data.items : [],
+          estado: data?.estado || 'Pendiente',
+          presupuestoId: data?.presupuestoId || '',
+          numeroPedido: data?.numeroPedido || data?.id || '',
+          notas: data?.notas || '',
+        } as Pedido;
+      });
+      callback(items);
+    }, (err) => {
+      console.error('subscribePedidos error:', err);
+      callback([]);
+    });
+    return unsub;
+  } catch (e) {
+    console.error('subscribePedidos error:', e);
+    return () => {};
   }
 }
 

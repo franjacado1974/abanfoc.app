@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Building2, Users, ShieldCheck, Plus, Trash2, ArrowLeft
+  Building2, Users, ShieldCheck, Layers, FireExtinguisher, Plus, Trash2, ArrowLeft, Image as ImageIcon, X, Cloud, Loader
 } from 'lucide-react';
-import { addUserToFirestore } from './firebase';
+import { addUserToFirestore, subscribeSistemasCategorias, addSistemaCategoria, deleteSistemaCategoria, uploadFile } from './firebase';
 import ConfirmationModal from './ConfirmationModal';
 
 const generateId = () => {
@@ -22,9 +22,15 @@ interface Usuario {
   password?: string;
 }
 
+interface SistemaItem {
+  id: string;
+  nombre: string;
+  imagenUrl?: string;
+}
+
 export default function Ajustes() {
   const navigate = useNavigate();
-  const [view, setView] = useState<'menu' | 'tecnicos' | 'usuarios'>('menu');
+  const [view, setView] = useState<'menu' | 'tecnicos' | 'usuarios' | 'sistemas'>('menu');
 
   const [tecnicos, setTecnicos] = useState<{ id: string; nombre: string; apellidos: string }[]>(() => {
     try {
@@ -56,8 +62,156 @@ export default function Ajustes() {
 
   const [nuevoUsuario, setNuevoUsuario] = useState({ nombre: '', apellidos: '', rol: 'visualizador', password: '' });
 
+  // ─── GESTION DE SISTEMAS ──────────────────────────────────────────────
+  const [sistemas, setSistemas] = useState<SistemaItem[]>(() => {
+    try {
+      const stored = localStorage.getItem('firecheck_db_sistemas_categorias');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        // Add imagenUrl from stored images if present
+        const savedImages = localStorage.getItem('firecheck_db_sistemas_imagenes');
+        const imagenesMap: Record<string, string> = savedImages ? JSON.parse(savedImages) : {};
+        return parsed.map((s: any) => ({
+          id: s.id,
+          nombre: s.nombre,
+          imagenUrl: imagenesMap[s.id] || undefined
+        }));
+      }
+      return [];
+    } catch { return []; }
+  });
+
+  const [isSistemaModalOpen, setIsSistemaModalOpen] = useState(false);
+  const [editSistemaId, setEditSistemaId] = useState<string | null>(null);
+  const [sistemaNombre, setSistemaNombre] = useState('');
+  const [sistemaImagen, setSistemaImagen] = useState<File | null>(null);
+  const [sistemaImagenPreview, setSistemaImagenPreview] = useState<string | null>(null);
+  const [isSyncingSistemas, setIsSyncingSistemas] = useState(false);
+  const [syncSistemasStatus, setSyncSistemasStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
+
+  // Cargar sistemas desde Firestore en tiempo real
+  useEffect(() => {
+    const unsub = subscribeSistemasCategorias((cats) => {
+      if (cats.length > 0) {
+        const savedImages = localStorage.getItem('firecheck_db_sistemas_imagenes');
+        const imagenesMap: Record<string, string> = savedImages ? JSON.parse(savedImages) : {};
+        const sistConImagen = cats.map(s => ({
+          ...s,
+          imagenUrl: imagenesMap[s.id] || undefined
+        }));
+        setSistemas(sistConImagen);
+        localStorage.setItem('firecheck_db_sistemas_categorias', JSON.stringify(cats));
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  const handleAddSistema = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!sistemaNombre.trim()) return;
+
+    const newCat = {
+      id: editSistemaId || crypto.randomUUID(),
+      nombre: sistemaNombre.toUpperCase()
+    };
+
+    try {
+      await addSistemaCategoria(newCat);
+      
+      // Subir imagen si se ha seleccionado
+      let imagenUrl: string | undefined = undefined;
+      if (sistemaImagen) {
+        try {
+          const path = `sistemas_imagenes/${newCat.id}_${Date.now()}`;
+          imagenUrl = await uploadFile(sistemaImagen, path);
+        } catch (err) {
+          console.warn('Error al subir imagen:', err);
+        }
+      }
+
+      // Guardar imagen en localStorage
+      if (imagenUrl) {
+        const savedImages = localStorage.getItem('firecheck_db_sistemas_imagenes');
+        const imagenesMap: Record<string, string> = savedImages ? JSON.parse(savedImages) : {};
+        imagenesMap[newCat.id] = imagenUrl;
+        localStorage.setItem('firecheck_db_sistemas_imagenes', JSON.stringify(imagenesMap));
+      }
+
+      setIsSistemaModalOpen(false);
+      setSistemaNombre('');
+      setSistemaImagen(null);
+      setSistemaImagenPreview(null);
+      setEditSistemaId(null);
+    } catch (error) {
+      alert('Error al guardar el sistema en Firebase.');
+    }
+  };
+
+  const handleEditSistema = (sist: SistemaItem) => {
+    setEditSistemaId(sist.id);
+    setSistemaNombre(sist.nombre);
+    setSistemaImagenPreview(sist.imagenUrl || null);
+    setSistemaImagen(null);
+    setIsSistemaModalOpen(true);
+  };
+
+  const handleDeleteSistema = (id: string) => {
+    setItemToDelete({ type: 'sistema', id });
+    setIsConfirmModalOpen(true);
+  };
+
+  const confirmDeleteSistema = async () => {
+    if (!itemToDelete || itemToDelete.type !== 'sistema') return;
+    setIsConfirmModalOpen(false);
+    try {
+      await deleteSistemaCategoria(itemToDelete.id);
+      const updated = sistemas.filter(s => s.id !== itemToDelete.id);
+      setSistemas(updated);
+      localStorage.setItem('firecheck_db_sistemas_categorias', JSON.stringify(updated));
+      // Eliminar imagen del mapa
+      const savedImages = localStorage.getItem('firecheck_db_sistemas_imagenes');
+      if (savedImages) {
+        const imagenesMap: Record<string, string> = JSON.parse(savedImages);
+        delete imagenesMap[itemToDelete.id];
+        localStorage.setItem('firecheck_db_sistemas_imagenes', JSON.stringify(imagenesMap));
+      }
+    } catch (error) {
+      alert('Error al eliminar el sistema de Firebase.');
+    }
+    setItemToDelete(null);
+  };
+
+  const handleSistemaImagenChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setSistemaImagen(file);
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setSistemaImagenPreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSyncSistemasToFirestore = async () => {
+    setIsSyncingSistemas(true);
+    setSyncSistemasStatus('syncing');
+    try {
+      for (const sist of sistemas) {
+        await addSistemaCategoria({ id: sist.id, nombre: sist.nombre });
+      }
+      setSyncSistemasStatus('success');
+      setTimeout(() => setSyncSistemasStatus('idle'), 3000);
+    } catch (e) {
+      console.error('Error sincronizando sistemas:', e);
+      setSyncSistemasStatus('error');
+      setTimeout(() => setSyncSistemasStatus('idle'), 3000);
+    } finally {
+      setIsSyncingSistemas(false);
+    }
+  };
+
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
-  const [itemToDelete, setItemToDelete] = useState<{ type: 'tecnico' | 'usuario'; id: string } | null>(null);
+  const [itemToDelete, setItemToDelete] = useState<{ type: 'tecnico' | 'usuario' | 'sistema'; id: string } | null>(null);
 
   const handleAddTecnico = (e: React.FormEvent) => {
     e.preventDefault();
@@ -177,7 +331,7 @@ export default function Ajustes() {
             </button>
           )}
           <h1 className="text-lg font-bold text-zinc-900 flex-1 text-center">
-            {view === 'menu' ? 'Panel de Configuracion' : view === 'tecnicos' ? 'Gestion de Tecnicos' : 'Gestion de Usuarios'}
+            {view === 'menu' ? 'Panel de Configuracion' : view === 'tecnicos' ? 'Gestion de Tecnicos' : view === 'usuarios' ? 'Gestion de Usuarios' : 'Gestion de Sistemas'}
           </h1>
           <div className="w-16" />
         </div>
@@ -222,6 +376,19 @@ export default function Ajustes() {
               <div>
                 <p className="font-bold text-zinc-800">Gestion de usuarios</p>
                 <p className="text-xs text-zinc-500">Asignar roles y permisos del sistema.</p>
+              </div>
+            </button>
+
+            <button
+              onClick={() => setView('sistemas')}
+              className="w-full flex items-center gap-4 p-4 rounded-2xl border border-zinc-200 bg-white hover:border-fuchsia-200 hover:bg-fuchsia-50/50 transition-all text-left group"
+            >
+              <div className="w-12 h-12 bg-fuchsia-100 text-fuchsia-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                <FireExtinguisher className="w-6 h-6" />
+              </div>
+              <div>
+                <p className="font-bold text-zinc-800">Gestion de sistemas</p>
+                <p className="text-xs text-zinc-500">Gestion de sistemas contra incendios.</p>
               </div>
             </button>
           </div>
@@ -353,18 +520,157 @@ export default function Ajustes() {
             </div>
           </section>
         )}
+
+        {view === 'sistemas' && (
+          <section className="space-y-6">
+            {/* Header con acciones */}
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
+                Sistemas registrados ({sistemas.length})
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleSyncSistemasToFirestore}
+                  disabled={isSyncingSistemas}
+                  className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                    syncSistemasStatus === 'success'
+                      ? 'bg-emerald-500 text-white'
+                      : syncSistemasStatus === 'error'
+                      ? 'bg-red-500 text-white'
+                      : 'bg-fuchsia-100 text-fuchsia-700 hover:bg-fuchsia-200'
+                  }`}
+                >
+                  {isSyncingSistemas ? (
+                    <Loader className="w-3.5 h-3.5 animate-spin" />
+                  ) : syncSistemasStatus === 'success' ? (
+                    <Cloud className="w-3.5 h-3.5" />
+                  ) : (
+                    <Cloud className="w-3.5 h-3.5" />
+                  )}
+                  {isSyncingSistemas ? '' : syncSistemasStatus === 'success' ? 'OK' : 'Firebase'}
+                </button>
+                <button
+                  onClick={() => { setEditSistemaId(null); setSistemaNombre(''); setSistemaImagen(null); setSistemaImagenPreview(null); setIsSistemaModalOpen(true); }}
+                  className="flex items-center justify-center gap-1.5 bg-fuchsia-600 hover:bg-fuchsia-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition-all"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Añadir
+                </button>
+              </div>
+            </div>
+
+            {/* Lista de sistemas */}
+            <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden">
+              {sistemas.length === 0 ? (
+                <div className="p-8 text-center text-zinc-400 text-sm">No hay sistemas registrados.</div>
+              ) : (
+                <ul className="divide-y divide-zinc-100">
+                  {sistemas.map(sist => (
+                    <li key={sist.id} className="p-4 flex items-center justify-between hover:bg-zinc-50 transition-colors">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        {/* Imagen del sistema */}
+                        <div className="w-12 h-12 flex items-center justify-center shrink-0">
+                          {sist.imagenUrl ? (
+                            <img src={sist.imagenUrl} alt={sist.nombre} className="w-10 h-10 object-contain" />
+                          ) : (
+                            <div className="w-12 h-12 rounded-xl bg-fuchsia-50 flex items-center justify-center border border-fuchsia-100">
+                              <ImageIcon className="w-5 h-5 text-fuchsia-400" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-bold text-zinc-900 text-sm truncate">{sist.nombre}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0 ml-2">
+                        <button
+                          onClick={() => handleEditSistema(sist)}
+                          className="p-1.5 text-zinc-500 hover:text-zinc-800 hover:bg-zinc-100 rounded-lg transition-colors"
+                          title="Editar"
+                        >
+                          <ImageIcon className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteSistema(sist.id)}
+                          className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Eliminar"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </section>
+        )}
       </div>
 
       {isConfirmModalOpen && itemToDelete && (
         <ConfirmationModal
           isOpen={isConfirmModalOpen}
           onClose={() => setIsConfirmModalOpen(false)}
-          onConfirm={itemToDelete.type === 'tecnico' ? confirmDeleteTecnico : confirmDeleteUsuario}
+          onConfirm={itemToDelete.type === 'tecnico' ? confirmDeleteTecnico : itemToDelete.type === 'sistema' ? confirmDeleteSistema : confirmDeleteUsuario}
           title="Confirmar Eliminacion"
           message="ATENCION SE PROCEDE A BORRAR EL ELEMENTO Y SUS REGISTROS CONFIRMA SU PETICION?"
           confirmText="Si, eliminar"
           cancelText="No, cancelar"
         />
+      )}
+
+      {/* MODAL SISTEMA */}
+      {isSistemaModalOpen && (
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="px-6 py-4 border-b border-zinc-100 flex items-center justify-between bg-zinc-50/30">
+              <h2 className="text-lg font-bold text-zinc-900">
+                {editSistemaId ? 'Editar Sistema' : 'Nuevo Sistema'}
+              </h2>
+              <button onClick={() => setIsSistemaModalOpen(false)} className="p-2 text-zinc-400 hover:text-zinc-700 hover:bg-white rounded-xl transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleAddSistema} className="p-6">
+              <div className="space-y-4 mb-6">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-semibold text-zinc-900">Nombre del Sistema</label>
+                  <input
+                    required autoFocus type="text" value={sistemaNombre} onChange={e => setSistemaNombre(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-zinc-50/50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-fuchsia-500/20 focus:border-fuchsia-500 transition-all text-zinc-900 uppercase"
+                    placeholder="Ej: SISTEMA ROCIADORES"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-semibold text-zinc-900">Imagen del Sistema</label>
+                  <div className="flex items-center gap-4">
+                    <label className="flex items-center gap-2 px-4 py-2.5 bg-fuchsia-50 border border-fuchsia-200 rounded-xl cursor-pointer hover:bg-fuchsia-100 transition-colors text-sm font-medium text-fuchsia-700">
+                      <ImageIcon className="w-4 h-4" />
+                      {sistemaImagenPreview ? 'Cambiar imagen' : 'Seleccionar imagen'}
+                      <input type="file" accept="image/*" onChange={handleSistemaImagenChange} className="hidden" />
+                    </label>
+                    {sistemaImagenPreview && (
+                      <div className="relative w-16 h-16 rounded-xl overflow-hidden border border-zinc-200">
+                        <img src={sistemaImagenPreview} alt="Preview" className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => { setSistemaImagen(null); setSistemaImagenPreview(null); }}
+                          className="absolute top-0.5 right-0.5 p-0.5 bg-red-500 text-white rounded-full"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <button type="button" onClick={() => setIsSistemaModalOpen(false)} className="flex-1 px-4 py-2.5 text-zinc-700 bg-zinc-50 hover:bg-zinc-100 rounded-xl font-medium transition-colors">Cancelar</button>
+                <button type="submit" className="flex-1 px-4 py-2.5 text-white bg-fuchsia-600 hover:bg-fuchsia-700 rounded-xl font-medium transition-colors shadow-sm">Guardar</button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

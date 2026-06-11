@@ -80,6 +80,13 @@ export const generarActaExtintoresPDF = (
       const logoBase64 = localStorage.getItem('firecheck_db_logo');
       if (logoBase64) {
         doc.addImage(logoBase64, 'PNG', pageWidth - 65, 6, 55, 13);
+        const logoProps = doc.getImageProperties(logoBase64);
+        const maxLogoWidth = 70;
+        const maxLogoHeight = 18;
+        const logoRatio = logoProps.width / logoProps.height;
+        const logoWidth = Math.min(maxLogoWidth, maxLogoHeight * logoRatio);
+        const logoHeight = logoWidth / logoRatio;
+        doc.addImage(logoBase64, 'PNG', pageWidth - 10 - logoWidth, 6, logoWidth, logoHeight);
       }
     } catch (e) { console.error("Error loading logo for Acta PDF:", e); }
 
@@ -675,7 +682,8 @@ export const generarAlbaranPDF = async (
   nombreFirmante?: string,
   items?: { cantidad: number; concepto: string; descripcion: string; precioUnidad: number; subtotal: number }[],
   empresa?: Record<string, any>,
-  noSave?: boolean
+  noSave?: boolean,
+  titulo?: string
 ) => {
   const doc = new jsPDF('p', 'mm', 'a4');
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -702,8 +710,8 @@ export const generarAlbaranPDF = async (
         });
       }
       const logoProps = doc.getImageProperties(logoData);
-      const maxLogoWidth = 55;
-      const maxLogoHeight = 18;
+      const maxLogoWidth = 70;
+      const maxLogoHeight = 25;
       const logoRatio = logoProps.width / logoProps.height;
       const logoWidth = Math.min(maxLogoWidth, maxLogoHeight * logoRatio);
       const logoHeight = logoWidth / logoRatio;
@@ -716,6 +724,14 @@ export const generarAlbaranPDF = async (
   doc.setFont("helvetica", "bold");
   doc.setTextColor(40, 40, 40);
   doc.text('ALBARÁN DE TRABAJO', pageWidth - 14, headerY + 35.5, { align: 'right' });
+
+  // Mostrar el título del albarán si existe
+  if (titulo) {
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(100, 100, 100);
+    doc.text(`${titulo}`, pageWidth - 14, headerY + 42, { align: 'right' });
+  }
 
   doc.setFontSize(10);
   doc.setTextColor(0, 0, 0);
@@ -745,9 +761,10 @@ export const generarAlbaranPDF = async (
   doc.setTextColor(0, 0, 0);
   doc.text('DATOS DE LA INSTALACIÓN:', 14, headerY + 34);
   doc.setFont("helvetica", "normal");
-  doc.text(`${cliente?.nombre || 'Cliente'} - ${centro?.nombre || 'Centro'}`, 14, headerY + 40);
-  doc.text(`${centro?.direccion || ''}`, 14, headerY + 46);
-  doc.text(`${[centro?.poblacion, centro?.provincia].filter(Boolean).join(', ')}`, 14, headerY + 52);
+  doc.text(`${cliente?.nombre || 'Cliente'}`, 14, headerY + 40);
+  doc.text(`${centro?.nombre || 'Centro'}`, 14, headerY + 46);
+  doc.text(`${centro?.direccion || ''}`, 14, headerY + 52);
+  doc.text(`${[centro?.poblacion, centro?.provincia].filter(Boolean).join(', ')}`, 14, headerY + 58);
 
   // Si hay items del albarán, usarlos; si no, agrupar equipos por modelo
   let tableData: string[][];
@@ -787,7 +804,7 @@ export const generarAlbaranPDF = async (
   ];
 
   autoTable(doc, {
-    startY: headerY + 55,
+    startY: headerY + 61,
     head: [['Cant.', 'Concepto', 'Descripción', 'Precio ud.', 'Subtotal']],
     body: tableDataConTotales,
     theme: 'grid',
@@ -818,20 +835,20 @@ export const generarAlbaranPDF = async (
   const finalY = (doc as any).lastAutoTable.finalY + 20;
   doc.setFont("helvetica", "bold");
   doc.text('Firma del Técnico:', 14, finalY);
-  doc.setDrawColor(200, 200, 200);
+  doc.setDrawColor(230, 230, 230);
   doc.setLineWidth(0.2);
-  doc.rect(14, finalY + 3, 70, 35);
+  doc.roundedRect(14, finalY + 3, 60, 35, 3, 3);
   if (firmaTecnico) {
-    doc.addImage(firmaTecnico, 'PNG', 15, finalY + 4, 68, 33);
+    doc.addImage(firmaTecnico, 'PNG', 15, finalY + 4, 58, 33);
   }
   doc.text(`Nombre: ${tecnicoNombre || 'N/A'}`, 14, finalY + 42);
 
-  doc.text('Conformidad del Cliente:', 110, finalY);
-  doc.rect(110, finalY + 3, 70, 35);
+  doc.text('Conformidad del Cliente:', 100, finalY);
+  doc.roundedRect(100, finalY + 3, 60, 35, 3, 3);
   if (firmaCliente) {
-    doc.addImage(firmaCliente, 'PNG', 111, finalY + 4, 68, 33);
+    doc.addImage(firmaCliente, 'PNG', 101, finalY + 4, 58, 33);
   }
-  doc.text(`Nombre: ${nombreFirmante || 'N/A'}`, 110, finalY + 42);
+  doc.text(`Nombre: ${nombreFirmante || 'N/A'}`, 100, finalY + 42);
 
   // ── PIE DE PÁGINA: Datos de la empresa (todas las páginas) ──
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -879,10 +896,11 @@ export const generarAlbaranPDFView = async (
   firmaTecnico?: string,
   nombreFirmante?: string,
   items?: { cantidad: number; concepto: string; descripcion: string; precioUnidad: number; subtotal: number }[],
-  empresa?: Record<string, any>
+  empresa?: Record<string, any>,
+  titulo?: string
 ): Promise<string> => {
   const tempDoc = new jsPDF('p', 'mm', 'a4');
-  await generarAlbaranPDF(cliente, centro, equiposTodos, numeroMantenimiento, tecnicoNombre, firmaCliente, firmaTecnico, nombreFirmante, items, empresa, true);
+  await generarAlbaranPDF(cliente, centro, equiposTodos, numeroMantenimiento, tecnicoNombre, firmaCliente, firmaTecnico, nombreFirmante, items, empresa, true, titulo);
   return tempDoc.output('bloburl').toString();
 };
 
@@ -960,6 +978,13 @@ export const generarCertificadoPDF = async (
     const logoBase64 = localStorage.getItem('firecheck_db_logo');
     if (logoBase64) {
       doc.addImage(logoBase64, 'PNG', pageWidth - margen - 58, y + 7, 52, 10);
+      const logoProps = doc.getImageProperties(logoBase64);
+      const maxLogoWidth = 70;
+      const maxLogoHeight = 15;
+      const logoRatio = logoProps.width / logoProps.height;
+      const logoWidth = Math.min(maxLogoWidth, maxLogoHeight * logoRatio);
+      const logoHeight = logoWidth / logoRatio;
+      doc.addImage(logoBase64, 'PNG', pageWidth - margen - 4 - logoWidth, y + 6, logoWidth, logoHeight);
     }
   } catch (e) { console.error("Error loading logo for Certificado PDF:", e); }
 
@@ -1181,6 +1206,15 @@ export const generarPresupuestoPDF = (
   try {
     const logoBase64 = localStorage.getItem('firecheck_db_logo');
     if (logoBase64) doc.addImage(logoBase64, 'PNG', margen, y, 50, 12);
+    if (logoBase64) {
+      const logoProps = doc.getImageProperties(logoBase64);
+      const maxLogoWidth = 70;
+      const maxLogoHeight = 18;
+      const logoRatio = logoProps.width / logoProps.height;
+      const logoWidth = Math.min(maxLogoWidth, maxLogoHeight * logoRatio);
+      const logoHeight = logoWidth / logoRatio;
+      doc.addImage(logoBase64, 'PNG', margen, y, logoWidth, logoHeight);
+    }
   } catch (e) {}
 
   doc.setFont('helvetica', 'bold');

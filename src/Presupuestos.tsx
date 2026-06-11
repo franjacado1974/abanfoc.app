@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Search, X, Eye, Download, Edit, Send, Trash2, Save, Package, Wrench, Type, Calculator, CheckCircle, Clock, Ban, ChevronDown, FileText, Hash, Building2, Calendar, Percent } from 'lucide-react';
+import { Search, X, Eye, Download, Edit, Send, Trash2, Save, Package, Wrench, Type, Calculator, CheckCircle, Clock, Ban, ChevronDown, FileText, Hash, Building2, Calendar, Percent } from 'lucide-react';
 import { subscribePresupuestos, addPresupuesto, updatePresupuesto, deletePresupuesto, subscribeClientes, subscribeArticulos } from './firebase';
 import { generarPresupuestoPDF } from './pdfGenerator';
 import type { Presupuesto, PresupuestoLinea, Cliente, Articulo } from './firebase';
@@ -25,14 +25,7 @@ function formatMoneda(valor: number): string {
   }).format(Number(valor) || 0);
 }
 
-function formatDecimal(valor: number | string): string {
-  const num = Number(String(valor).replace(/\./g, '').replace(',', '.')) || 0;
-  return new Intl.NumberFormat('es-ES', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-    useGrouping: true,
-  }).format(num);
-}
+// La función formatDecimal no se usa actualmente y se ha eliminado para evitar errores de compilación.
 
 function formatDecimalInput(valor: number): string {
   if (valor === 0) return '0';
@@ -62,6 +55,7 @@ export default function Presupuestos() {
   const [editingPresupuesto, setEditingPresupuesto] = useState<Presupuesto | null>(null);
   const [showDetail, setShowDetail] = useState<Presupuesto | null>(null);
   const [showCatalogo, setShowCatalogo] = useState<'articulo' | 'servicio' | null>(null);
+  const [openStatusMenuId, setOpenStatusMenuId] = useState<string | null>(null);
   const [catalogoSearch, setCatalogoSearch] = useState('');
 
   // Form state
@@ -72,7 +66,12 @@ export default function Presupuestos() {
   const [formFechaValidez, setFormFechaValidez] = useState('');
   const [formNotas, setFormNotas] = useState('');
   const [formIva, setFormIva] = useState(21);
-  const [formLineas, setFormLineas] = useState<PresupuestoLinea[]>([]);
+  
+  // Definimos una interfaz extendida para las líneas del formulario
+  interface EditablePresupuestoLinea extends PresupuestoLinea {
+    precioUnidadInput?: string; // Para manejar el input de texto mientras se edita
+  }
+  const [formLineas, setFormLineas] = useState<EditablePresupuestoLinea[]>([]);
   const [formNewLinea, setFormNewLinea] = useState({ concepto: '', descripcion: '', cantidad: 1, precioUnidad: 0 });
   const [usuarioActual, setUsuarioActual] = useState<{ nombre: string; apellidos?: string } | null>(null);
 
@@ -166,7 +165,7 @@ export default function Presupuestos() {
     setFormFechaValidez('');
     setFormNotas('');
     setFormIva(21);
-    setFormLineas([]);
+    setFormLineas([]); // Reiniciar las líneas
     setFormNewLinea({ concepto: '', descripcion: '', cantidad: 1, precioUnidad: 0 });
     setShowForm(true);
   };
@@ -179,21 +178,22 @@ export default function Presupuestos() {
     setFormFechaValidez(p.fechaValidez || '');
     setFormNotas(p.notas || '');
     setFormIva(p.iva);
-    setFormLineas([...p.lineas]);
+    setFormLineas([...p.lineas.map(line => ({ ...line, precioUnidadInput: formatDecimalInput(line.precioUnidad) }))]); // Inicializar el input string
     setFormNewLinea({ concepto: '', descripcion: '', cantidad: 1, precioUnidad: 0 });
     setShowForm(true);
   };
 
   // Añadir artículo/servicio desde catálogo
   const handleAddFromCatalogo = (item: Articulo, tipo: 'articulo' | 'servicio') => {
-    const nuevaLinea: PresupuestoLinea = {
+    const nuevaLinea: EditablePresupuestoLinea = {
       id: `L-${generateId()}`,
       tipo,
       codigo: item.codigo,
       concepto: item.nombre,
       cantidad: 1,
       precioUnidad: item.precioVenta,
-      subtotal: item.precioVenta,
+      subtotal: item.precioVenta, // Se recalculará al cambiar cantidad/precio
+      precioUnidadInput: formatDecimalInput(item.precioVenta), // Inicializar el input string
     };
     setFormLineas(prev => [...prev, nuevaLinea]);
     setShowCatalogo(null);
@@ -202,14 +202,15 @@ export default function Presupuestos() {
   // Añadir línea manual
   const handleAddManual = () => {
     if (!formNewLinea.concepto.trim()) return;
-    const nuevaLinea: PresupuestoLinea = {
+    const nuevaLinea: EditablePresupuestoLinea = {
       id: `L-${generateId()}`,
       tipo: 'manual',
       concepto: formNewLinea.concepto,
       descripcion: formNewLinea.descripcion,
       cantidad: formNewLinea.cantidad,
       precioUnidad: formNewLinea.precioUnidad,
-      subtotal: formNewLinea.cantidad * formNewLinea.precioUnidad,
+      subtotal: formNewLinea.cantidad * formNewLinea.precioUnidad, // Se recalculará al cambiar cantidad/precio
+      precioUnidadInput: formatDecimalInput(formNewLinea.precioUnidad), // Inicializar el input string
     };
     setFormLineas(prev => [...prev, nuevaLinea]);
     setFormNewLinea({ concepto: '', descripcion: '', cantidad: 1, precioUnidad: 0 });
@@ -313,35 +314,35 @@ export default function Presupuestos() {
     <div className="min-h-screen bg-zinc-50 p-4 md:p-6">
       <div className="w-full">
         {/* HEADER */}
-        <div className="mb-8 space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl md:text-3xl font-bold text-zinc-900">Presupuestos</h1>
-              <p className="text-sm text-zinc-500 mt-1">{filteredPresupuestos.length} presupuesto{filteredPresupuestos.length !== 1 ? 's' : ''}</p>
+        <div className="mb-10 flex flex-col items-center text-center space-y-6">
+          <div>
+            <h1 className="text-2xl md:text-4xl font-bold text-zinc-900 tracking-tight">Presupuestos</h1>
+            <p className="text-sm text-zinc-500 mt-1">{filteredPresupuestos.length} presupuesto{filteredPresupuestos.length !== 1 ? 's' : ''}</p>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-center gap-4 w-full justify-center">
+            {/* Buscador */}
+            <div className="relative w-full max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Buscar por título, cliente, fecha..."
+                className="w-full pl-10 pr-4 py-2.5 bg-white border border-zinc-200 rounded-xl text-sm text-zinc-700 placeholder-zinc-400 focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all shadow-sm"
+              />
+              {searchTerm && (
+                <button onClick={() => setSearchTerm('')} className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 text-zinc-400 hover:text-zinc-600 rounded">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
             <button
               onClick={handleNuevo}
-              className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-bold shadow-lg shadow-orange-200 transition-all active:scale-95"
+              className="flex items-center gap-2 px-6 py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-bold shadow-lg shadow-orange-200 transition-all active:scale-95 shrink-0"
             >
               +Nuevo
             </button>
-          </div>
-
-          {/* Buscador */}
-          <div className="relative w-full max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Buscar por título, cliente, fecha..."
-              className="w-full pl-10 pr-4 py-2.5 bg-white border border-zinc-200 rounded-xl text-sm text-zinc-700 placeholder-zinc-400 focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all shadow-sm"
-            />
-            {searchTerm && (
-              <button onClick={() => setSearchTerm('')} className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 text-zinc-400 hover:text-zinc-600 rounded">
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
           </div>
         </div>
 
@@ -410,24 +411,40 @@ export default function Presupuestos() {
                         </button>
                         {/* Menú de estado (si no es borrador ni rechazado) */}
                         {p.estado !== 'Borrador' && p.estado !== 'Rechazado' && (
-                          <div className="relative group">
-                            <button className="p-2 text-zinc-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-all" title="Cambiar estado">
+                          <div className="relative">
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setOpenStatusMenuId(openStatusMenuId === p.id ? null : p.id);
+                              }}
+                              className="p-2 text-zinc-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-all" 
+                              title="Cambiar estado"
+                            >
                               <ChevronDown className="w-4 h-4" />
                             </button>
-                            <div className="absolute right-0 top-full mt-1 bg-white rounded-xl shadow-xl border border-zinc-200 py-1 min-w-[140px] z-50 hidden group-hover:block">
-                              {ESTADOS.filter(e => e.valor !== p.estado && e.valor !== 'Borrador').map(e => {
-                                const Icono = e.icono;
-                                return (
-                                  <button
-                                    key={e.valor}
-                                    onClick={() => handleCambiarEstado(p, e.valor)}
-                                    className={`w-full flex items-center gap-2 px-3 py-2 text-xs font-medium hover:bg-zinc-50 ${e.color}`}
-                                  >
-                                    <Icono className="w-3.5 h-3.5" /> {e.etiqueta}
-                                  </button>
-                                );
-                              })}
-                            </div>
+                            {openStatusMenuId === p.id && (
+                              <>
+                                {/* Overlay transparente para cerrar al hacer clic fuera */}
+                                <div className="fixed inset-0 z-40" onClick={() => setOpenStatusMenuId(null)} />
+                                <div className="absolute right-0 top-full mt-1 bg-white rounded-xl shadow-xl border border-zinc-200 py-1 min-w-[140px] z-50 animate-in fade-in zoom-in-95 duration-100">
+                                  {ESTADOS.filter(e => e.valor !== p.estado && e.valor !== 'Borrador').map(e => {
+                                    const Icono = e.icono;
+                                    return (
+                                      <button
+                                        key={e.valor}
+                                        onClick={() => {
+                                          handleCambiarEstado(p, e.valor);
+                                          setOpenStatusMenuId(null);
+                                        }}
+                                        className={`w-full flex items-center gap-2 px-3 py-2 text-xs font-medium hover:bg-zinc-50 ${e.color}`}
+                                      >
+                                        <Icono className="w-3.5 h-3.5" /> {e.etiqueta}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </>
+                            )}
                           </div>
                         )}
                       </div>
@@ -675,10 +692,15 @@ export default function Presupuestos() {
                               <input
                                 type="text"
                                 inputMode="decimal"
-                                value={formatDecimalInput(l.precioUnidad)}
+                                value={l.precioUnidadInput !== undefined ? l.precioUnidadInput : formatDecimalInput(l.precioUnidad)}
                                 onChange={(e) => {
-                                  const nuevoPrecio = Math.max(0, parseDecimal(e.target.value));
-                                  setFormLineas(prev => prev.map(li => li.id === l.id ? { ...li, precioUnidad: nuevoPrecio, subtotal: li.cantidad * nuevoPrecio } : li));
+                                  const inputValue = e.target.value;
+                                  setFormLineas(prev => prev.map(li => li.id === l.id ? { ...li, precioUnidadInput: inputValue, precioUnidad: parseDecimal(inputValue), subtotal: li.cantidad * parseDecimal(inputValue) } : li));
+                                }}
+                                onBlur={(e) => {
+                                  const inputValue = e.target.value;
+                                  const nuevoPrecio = Math.max(0, parseDecimal(inputValue));
+                                  setFormLineas(prev => prev.map(li => li.id === l.id ? { ...li, precioUnidad: nuevoPrecio, precioUnidadInput: undefined, subtotal: li.cantidad * nuevoPrecio } : li));
                                 }}
                                 min={0}
                                 className="w-24 px-2 py-1 text-right text-zinc-800 bg-zinc-50 border border-zinc-200 rounded-lg text-xs focus:ring-1 focus:ring-orange-500/20 focus:border-orange-500 outline-none"

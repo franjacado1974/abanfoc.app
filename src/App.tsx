@@ -19,6 +19,7 @@ import Partes from './Partes';
 import Albaranes from './Albaranes';
 import Certificados from './Certificados';
 import ConfiguracionEmpresa from './ConfiguracionEmpresa';
+import Pedidos from './Pedidos';
 import Planificacion from './Planificacion';
 import RevisionChecklist from './RevisionChecklist';
 import Revisiones from './Revisiones';
@@ -152,6 +153,7 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
     let partes = 0;
     let pendientes = 0;
     let certificados = 0;
+    let pedidos = 0;
     try {
       const savedClientes = localStorage.getItem('firecheck_db_clientes');
       if (savedClientes) {
@@ -194,8 +196,14 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
         const parsed = JSON.parse(savedCertificados);
         certificados = Array.isArray(parsed) ? parsed.length : 0;
       }
+
+      const savedPedidos = localStorage.getItem('firecheck_db_pedidos');
+      if (savedPedidos) {
+        const parsed = JSON.parse(savedPedidos);
+        pedidos = Array.isArray(parsed) ? parsed.length : 0;
+      }
     } catch { /* ignore */ }
-    return { clientes, centros, catalogo, albaranes, partes, pendientes, certificados };
+    return { clientes, centros, catalogo, albaranes, partes, pendientes, certificados, pedidos };
   };
 
   const stats = useMemo(() => getStats(), []);
@@ -217,88 +225,94 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
 
         <div className="p-6">
           {/* Metric Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 mb-8">
-            <div className="metric-card" onClick={() => navigate('/clientes')} style={{ cursor: 'pointer' }}>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-zinc-500">Clientes</span>
-                <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
-                  <Users className="w-5 h-5" />
-                </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
+            <div className="bg-white rounded-xl border border-zinc-200 p-3 flex items-center gap-3 hover:shadow-sm transition-all cursor-pointer" onClick={() => navigate('/clientes')}>
+              <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600 shrink-0">
+                <Users className="w-4 h-4" />
               </div>
-              <p className="text-3xl font-black text-blue-900 tracking-tight">{stats.clientes}</p>
-              <p className="text-xs text-zinc-400 mt-1">Registros activos</p>
+              <div>
+                <p className="text-lg font-bold text-blue-900 leading-none">{stats.clientes}</p>
+                <p className="text-[10px] text-zinc-500 mt-0.5">Clientes</p>
+              </div>
             </div>
 
-            <div className="metric-card" onClick={() => navigate('/centros')} style={{ cursor: 'pointer' }}>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-zinc-500">Centros</span>
-                <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
-                  <Building2 className="w-5 h-5" />
-                </div>
+            <div className="bg-white rounded-xl border border-zinc-200 p-3 flex items-center gap-3 hover:shadow-sm transition-all cursor-pointer" onClick={() => navigate('/centros')}>
+              <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0">
+                <Building2 className="w-4 h-4" />
               </div>
-              <p className="text-3xl font-black text-emerald-900 tracking-tight">{stats.centros}</p>
-              <p className="text-xs text-zinc-400 mt-1">Instalaciones</p>
+              <div>
+                <p className="text-lg font-bold text-emerald-900 leading-none">{stats.centros}</p>
+                <p className="text-[10px] text-zinc-500 mt-0.5">Centros</p>
+              </div>
             </div>
 
-            <div className="metric-card" onClick={() => navigate('/partes_trabajo')} style={{ cursor: 'pointer' }}>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-zinc-500">Pendientes</span>
-                <div className="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600">
-                  <Clock className="w-5 h-5" />
-                </div>
+            <div className="bg-white rounded-xl border border-zinc-200 p-3 flex items-center gap-3 hover:shadow-sm transition-all cursor-pointer" onClick={() => navigate('/pedidos')}>
+              <div className="w-8 h-8 rounded-lg bg-sky-50 flex items-center justify-center text-sky-600 shrink-0">
+                <FileText className="w-4 h-4" />
               </div>
-              <p className="text-3xl font-black text-amber-900 tracking-tight">{stats.pendientes}</p>
-              <p className="text-xs text-zinc-400 mt-1">Partes planificados</p>
+              <div>
+                <p className="text-lg font-bold text-sky-900 leading-none">{stats.pedidos}</p>
+                <p className="text-[10px] text-zinc-500 mt-0.5">Pedidos</p>
+              </div>
             </div>
 
-            <div className="metric-card" onClick={() => navigate('/partes')} style={{ cursor: 'pointer' }}>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-zinc-500">Partes</span>
-                <div className="w-9 h-9 rounded-xl bg-violet-50 flex items-center justify-center text-violet-600">
-                  <FileText className="w-5 h-5" />
-                </div>
+            <div className="bg-white rounded-xl border border-zinc-200 p-3 flex items-center gap-3 hover:shadow-sm transition-all cursor-pointer" onClick={() => navigate('/partes_trabajo')}>
+              <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center text-amber-600 shrink-0">
+                <Clock className="w-4 h-4" />
               </div>
-              <p className="text-3xl font-black text-violet-900 tracking-tight">{stats.partes}</p>
-              <p className="text-xs text-zinc-400 mt-1">Totales registrados</p>
+              <div>
+                <p className="text-lg font-bold text-amber-900 leading-none">{stats.pendientes}</p>
+                <p className="text-[10px] text-zinc-500 mt-0.5">Pendientes</p>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl border border-zinc-200 p-3 flex items-center gap-3 hover:shadow-sm transition-all cursor-pointer" onClick={() => navigate('/partes')}>
+              <div className="w-8 h-8 rounded-lg bg-violet-50 flex items-center justify-center text-violet-600 shrink-0">
+                <FileText className="w-4 h-4" />
+              </div>
+              <div>
+                <p className="text-lg font-bold text-violet-900 leading-none">{stats.partes}</p>
+                <p className="text-[10px] text-zinc-500 mt-0.5">Partes</p>
+              </div>
             </div>
           </div>
 
           {/* Secondary metrics row */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
-            <div className="bg-white rounded-xl border border-zinc-200 p-4 flex items-center gap-3 hover:border-orange-200 transition-colors cursor-pointer" onClick={() => navigate('/catalogo')}>
-              <div className="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center text-orange-600 shrink-0">
-                <Package className="w-5 h-5" />
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+            <div className="bg-white rounded-xl border border-zinc-200 p-3 flex items-center gap-3 hover:border-orange-200 transition-all cursor-pointer" onClick={() => navigate('/catalogo')}>
+              <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center text-orange-600 shrink-0">
+                <Package className="w-4 h-4" />
               </div>
-              <div>
-                <p className="text-lg font-bold text-zinc-900">{stats.catalogo}</p>
-                <p className="text-xs text-zinc-500">Catalogo</p>
-              </div>
-            </div>
-            <div className="bg-white rounded-xl border border-zinc-200 p-4 flex items-center gap-3 hover:border-cyan-200 transition-colors cursor-pointer" onClick={() => navigate('/certificados')}>
-              <div className="w-10 h-10 rounded-xl bg-cyan-50 flex items-center justify-center text-cyan-600 shrink-0">
-                <FileCheck className="w-5 h-5" />
-              </div>
-              <div>
-                <p className="text-lg font-bold text-zinc-900">{stats.certificados}</p>
-                <p className="text-xs text-zinc-500">Certificados</p>
+              <div className="min-w-0">
+                <p className="text-base font-bold text-zinc-900 leading-none">{stats.catalogo}</p>
+                <p className="text-[10px] text-zinc-500 mt-0.5">Catálogo</p>
               </div>
             </div>
-            <div className="bg-white rounded-xl border border-zinc-200 p-4 flex items-center gap-3 hover:border-violet-200 transition-colors cursor-pointer" onClick={() => navigate('/albaranes')}>
-              <div className="w-10 h-10 rounded-xl bg-violet-50 flex items-center justify-center text-violet-600 shrink-0">
-                <FileDigit className="w-5 h-5" />
+            <div className="bg-white rounded-xl border border-zinc-200 p-3 flex items-center gap-3 hover:border-cyan-200 transition-all cursor-pointer" onClick={() => navigate('/certificados')}>
+              <div className="w-8 h-8 rounded-lg bg-cyan-50 flex items-center justify-center text-cyan-600 shrink-0">
+                <FileCheck className="w-4 h-4" />
               </div>
-              <div>
-                <p className="text-lg font-bold text-zinc-900">{stats.albaranes}</p>
-                <p className="text-xs text-zinc-500">Albaranes</p>
+              <div className="min-w-0">
+                <p className="text-base font-bold text-zinc-900 leading-none">{stats.certificados}</p>
+                <p className="text-[10px] text-zinc-500 mt-0.5">Certificados</p>
               </div>
             </div>
-            <div className="bg-white rounded-xl border border-zinc-200 p-4 flex items-center gap-3 hover:border-rose-200 transition-colors cursor-pointer" onClick={() => navigate('/facturas')}>
-              <div className="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center text-rose-600 shrink-0">
-                <Receipt className="w-5 h-5" />
+            <div className="bg-white rounded-xl border border-zinc-200 p-3 flex items-center gap-3 hover:border-violet-200 transition-all cursor-pointer" onClick={() => navigate('/albaranes')}>
+              <div className="w-8 h-8 rounded-lg bg-violet-50 flex items-center justify-center text-violet-600 shrink-0">
+                <FileDigit className="w-4 h-4" />
               </div>
-              <div>
-                <p className="text-lg font-bold text-zinc-900">{stats.albaranes - Math.floor(stats.albaranes * 0.4)}</p>
-                <p className="text-xs text-zinc-500">Pendientes Factura</p>
+              <div className="min-w-0">
+                <p className="text-base font-bold text-zinc-900 leading-none">{stats.albaranes}</p>
+                <p className="text-[10px] text-zinc-500 mt-0.5">Albaranes</p>
+              </div>
+            </div>
+            <div className="bg-white rounded-xl border border-zinc-200 p-3 flex items-center gap-3 hover:border-rose-200 transition-all cursor-pointer" onClick={() => navigate('/facturas')}>
+              <div className="w-8 h-8 rounded-lg bg-rose-50 flex items-center justify-center text-rose-600 shrink-0">
+                <Receipt className="w-4 h-4" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-base font-bold text-zinc-900 leading-none">{stats.albaranes - Math.floor(stats.albaranes * 0.4)}</p>
+                <p className="text-[10px] text-zinc-500 mt-0.5">Pend. Factura</p>
               </div>
             </div>
           </div>
@@ -438,6 +452,11 @@ export default function App() {
         <Route path="/presupuestos" element={
           <ProtectedRoute allowedRoles={['super-administrador', 'administrador']} user={loggedUser}>
             <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Presupuestos /></PageLayout>
+          </ProtectedRoute>
+        } />
+        <Route path="/pedidos" element={
+          <ProtectedRoute allowedRoles={['super-administrador', 'administrador']} user={loggedUser}>
+            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Pedidos /></PageLayout>
           </ProtectedRoute>
         } />
         <Route path="/albaranes" element={

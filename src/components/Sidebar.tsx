@@ -32,12 +32,12 @@ const navItems: NavItem[] = [
   { id: 'revisiones', path: '/revisiones', title: 'Revisiones', Icon: SearchCheck, allowedRoles: ['super-administrador', 'administrador'], section: 'operaciones' },
   { id: 'reparaciones', path: '/reparaciones', title: 'Reparaciones', Icon: Wrench, allowedRoles: ['super-administrador', 'administrador'], section: 'operaciones' },
   { id: 'instalaciones', path: '/instalaciones', title: 'Instalaciones', Icon: HardHat, allowedRoles: ['super-administrador', 'administrador'], section: 'operaciones' },
-  { id: 'presupuestos', path: '/presupuestos', title: 'Presupuestos', Icon: Calculator, allowedRoles: ['super-administrador', 'administrador'], section: 'operaciones' },
   { id: 'certificados', path: '/certificados', title: 'Certificados', Icon: FileCheck, allowedRoles: ['super-administrador', 'administrador'], section: 'documentacion' },
+  { id: 'presupuestos', path: '/presupuestos', title: 'Presupuestos', Icon: Calculator, allowedRoles: ['super-administrador', 'administrador'], section: 'documentacion' },
+  { id: 'pedidos', path: '/pedidos', title: 'Pedidos', Icon: FileText, allowedRoles: ['super-administrador', 'administrador'], section: 'documentacion' },
   { id: 'albaranes', path: '/albaranes', title: 'Albaranes', Icon: FileDigit, allowedRoles: ['super-administrador', 'administrador', 'visualizador'], section: 'documentacion' },
   { id: 'facturas', path: '/facturas', title: 'Facturas', Icon: Receipt, allowedRoles: ['super-administrador', 'administrador'], section: 'documentacion' },
-  { id: 'configuracion', path: '/configuracion-datos', title: 'Configuracion', Icon: Settings, allowedRoles: ['super-administrador', 'administrador'], section: 'configuracion' },
-  { id: 'ajustes', path: '/ajustes', title: 'Ajustes del Sistema', Icon: Settings, allowedRoles: ['super-administrador', 'administrador'], section: 'configuracion' },
+  { id: 'ajustes', path: '/ajustes', title: 'Configuraciones', Icon: Settings, allowedRoles: ['super-administrador', 'administrador'], section: 'configuracion' },
 ];
 
 export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
@@ -67,7 +67,7 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
   };
 
   const sidebarContent = (
-    <div className={`flex flex-col h-full ${collapsed ? 'w-16' : 'w-64'} transition-all duration-300 ease-in-out`}>
+    <div className={`flex flex-col h-full ${collapsed ? 'w-14' : 'w-52'} transition-all duration-300 ease-in-out`}>
       {/* Logo & Header */}
       <div className={`flex items-center ${collapsed ? 'justify-center' : 'justify-between'} px-4 py-5 border-b border-blue-800/30`}>
         {!collapsed && (
@@ -75,7 +75,7 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
             <img src={appLogo} alt="Logo" className="h-9 w-9 object-contain rounded-lg ring-2 ring-orange-400/30" onError={(e) => { (e.target as HTMLImageElement).src = '/favicon.png'; }} />
             <div>
               <p className="text-sm font-bold text-orange-400 leading-tight">ABANFOKING</p>
-              <p className="text-[9px] text-blue-300 font-medium uppercase tracking-wider">Sistema de Gestión</p>
+              <p className="text-[9px] text-blue-200/90 font-medium">{APP_VERSION}</p>
             </div>
           </div>
         )}
@@ -165,10 +165,6 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
           <Power className="w-4 h-4" />
           {!collapsed && <span>Cerrar Sesión</span>}
         </button>
-        {/* Versión en escritorio - debajo de cerrar sesión */}
-        {!collapsed && (
-          <p className="text-center text-blue-400/60 text-[9px] mt-2 hidden md:block">{APP_VERSION}</p>
-        )}
       </div>
 
       {/* Collapse button (desktop) */}

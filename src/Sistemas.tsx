@@ -28,6 +28,25 @@ export const CATEGORIAS_POR_DEFECTO: SistemaCategoria[] = [
 ];
 
 export const getIconForSistema = (nombre: string) => {
+  // Primero buscar si hay una imagen personalizada subida desde Gestión de Sistemas
+  try {
+    const savedImages = localStorage.getItem('firecheck_db_sistemas_imagenes');
+    if (savedImages) {
+      const imagenesMap: Record<string, string> = JSON.parse(savedImages);
+      // Buscar por nombre del sistema en localStorage de categorías
+      const savedCats = localStorage.getItem('firecheck_db_sistemas_categorias');
+      if (savedCats) {
+        const categorias = JSON.parse(savedCats);
+        const cat = categorias.find((c: any) => 
+          c.nombre.toLowerCase() === nombre.toLowerCase()
+        );
+        if (cat && imagenesMap[cat.id]) {
+          return imagenesMap[cat.id];
+        }
+      }
+    }
+  } catch {}
+  
   const n = nombre.toLowerCase();
   if (n.includes('extintor')) return '/extintor-icon.png';
   if (n.includes('bie')) return '/bie-icon.png';
@@ -610,13 +629,15 @@ const handleSaveEquipo = async (e: React.FormEvent) => {
                     <div className="flex justify-between items-start mb-3">
                       <div
                         onClick={() => setSelectedCategoria(cat)}
-                        className="w-10 h-10 bg-fuchsia-50 rounded-2xl flex items-center justify-center text-fuchsia-500 hover:scale-110 hover:bg-fuchsia-100 hover:text-fuchsia-600 transition-all overflow-hidden cursor-pointer relative z-10"
+                        className="w-10 h-10 flex items-center justify-center cursor-pointer relative z-10"
                         title="Ver detalles del sistema"
                       >
                         {typeof IconoCategoria === 'string' ? (
-                          <img src={IconoCategoria} alt="Icon" className="w-8 h-8 object-contain opacity-80" />
+                          <img src={IconoCategoria} alt="Icon" className="w-10 h-10 object-contain" />
                         ) : (
-                          <IconoCategoria className="w-6 h-6" />
+                          <div className="w-10 h-10 bg-fuchsia-50 rounded-2xl flex items-center justify-center text-fuchsia-500 hover:scale-110 hover:bg-fuchsia-100 hover:text-fuchsia-600 transition-all">
+                            <IconoCategoria className="w-6 h-6" />
+                          </div>
                         )}
                       </div>
                       <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>

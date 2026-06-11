@@ -48,7 +48,7 @@ export default function Albaranes() {
   const canvasTecnicoRef = useRef<HTMLCanvasElement>(null);
 
   // Column resizing state
-  const [colWidths, setColWidths] = useState({
+  const [colWidths, setColWidths] = useState<Record<string, number>>({
     albaran: 120,
     fecha: 100,
     pedido: 90,
@@ -160,7 +160,7 @@ export default function Albaranes() {
     const empresa = empresas.find(e => e._docId === alb.empresaId);
     const tecnico = tecnicos.find(t => t.id === alb.tecnicoId);
     const tecnicoNombre = tecnico ? `${tecnico.nombre} ${tecnico.apellidos}` : '';
-    const pdfBlobUrl = await generarAlbaranPDFView(cliente as any, centro as any, eqsDelCentro as any[], alb.numeroMantenimiento || alb.id, tecnicoNombre, alb.firmaCliente, alb.firmaTecnico, alb.nombreFirmante, alb.items, empresa as any);
+    const pdfBlobUrl = await generarAlbaranPDFView(cliente as any, centro as any, eqsDelCentro as any[], alb.numeroMantenimiento || alb.id, tecnicoNombre, alb.firmaCliente, alb.firmaTecnico, alb.nombreFirmante, alb.items, empresa as any, alb.titulo);
     window.open(pdfBlobUrl, '_blank');
   };
 
@@ -469,7 +469,7 @@ export default function Albaranes() {
                           const empresa = empresas.find(e => e._docId === alb.empresaId);
                           const tecnico = tecnicos.find(t => t.id === alb.tecnicoId);
                           const tecnicoNombre = tecnico ? `${tecnico.nombre} ${tecnico.apellidos}` : '';
-                          await generarAlbaranPDF(cliente as any, centro as any, eqsDelCentro as any[], alb.numeroMantenimiento || alb.id, tecnicoNombre, alb.firmaCliente, alb.firmaTecnico, alb.nombreFirmante, alb.items, empresa as any);
+                          await generarAlbaranPDF(cliente as any, centro as any, eqsDelCentro as any[], alb.numeroMantenimiento || alb.id, tecnicoNombre, alb.firmaCliente, alb.firmaTecnico, alb.nombreFirmante, alb.items, empresa as any, false, alb.titulo);
                         }} className="p-1.5 text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100 rounded-lg transition-colors" title="Descargar PDF"><Download className="w-4 h-4" /></button>
                         {!isVisualizador && <button onClick={() => handleEditAlbaran(alb)} className="p-1.5 text-zinc-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors" title="Editar"><Edit className="w-4 h-4" /></button>}
                         {!isVisualizador && <button onClick={() => handleDuplicateAlbaran(alb)} className="p-1.5 text-zinc-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-colors" title="Duplicar"><Copy className="w-4 h-4" /></button>}
@@ -585,7 +585,7 @@ export default function Albaranes() {
                 </div>
               </div>
 
-              {/* Numero Documento */}
+              {/* Número Documento y Título */}
               <div className="flex flex-col md:flex-row gap-6">
                 <div className="flex-1 max-w-xs space-y-2">
                   <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Número de Albarán *</label>
@@ -605,6 +605,17 @@ export default function Albaranes() {
                     value={form.numeroPedido || ''}
                     onChange={e => setForm({...form, numeroPedido: e.target.value.toUpperCase()})}
                     placeholder="OPCIONAL"
+                    className="w-full px-5 py-3.5 bg-zinc-50 border border-zinc-200 rounded-2xl outline-none focus:ring-2 focus:ring-violet-500/20 transition-all font-bold text-sm"
+                  />
+                </div>
+
+                <div className="flex-1 max-w-xs space-y-2">
+                  <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Título</label>
+                  <input 
+                    type="text"
+                    value={form.titulo || ''}
+                    onChange={e => setForm({...form, titulo: e.target.value})}
+                    placeholder="Ej: Revisión anual centro comercial"
                     className="w-full px-5 py-3.5 bg-zinc-50 border border-zinc-200 rounded-2xl outline-none focus:ring-2 focus:ring-violet-500/20 transition-all font-bold text-sm"
                   />
                 </div>
