@@ -1306,13 +1306,20 @@ export const generarPresupuestoPDF = (
   const totalX = pageWidth - margen;
   const totalY = finalY + 10;
 
+  const ivaExento = presupuesto.iva === 0;
+
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(80, 80, 80);
   doc.text('Subtotal:', totalX - 50, totalY, { align: 'right' });
   doc.text(formatM(presupuesto.subtotal), totalX, totalY, { align: 'right' });
-  doc.text(`IVA (${presupuesto.iva}%):`, totalX - 50, totalY + 6, { align: 'right' });
-  doc.text(formatM(presupuesto.subtotal * presupuesto.iva / 100), totalX, totalY + 6, { align: 'right' });
+  if (ivaExento) {
+    doc.text('IVA:', totalX - 50, totalY + 6, { align: 'right' });
+    doc.text('Exento (0%)', totalX, totalY + 6, { align: 'right' });
+  } else {
+    doc.text(`IVA (${presupuesto.iva}%):`, totalX - 50, totalY + 6, { align: 'right' });
+    doc.text(formatM(presupuesto.subtotal * presupuesto.iva / 100), totalX, totalY + 6, { align: 'right' });
+  }
 
   doc.setDrawColor(40, 40, 40);
   doc.setLineWidth(0.5);
@@ -1323,6 +1330,22 @@ export const generarPresupuestoPDF = (
   doc.setTextColor(40, 40, 40);
   doc.text('TOTAL:', totalX - 50, totalY + 17, { align: 'right' });
   doc.text(formatM(presupuesto.total), totalX, totalY + 17, { align: 'right' });
+
+  // Texto de exención de IVA si aplica
+  if (ivaExento) {
+    const exencionY = totalY + 25;
+    doc.setDrawColor(220, 220, 220);
+    doc.setFillColor(255, 248, 240);
+    const textoExencion = 'Factura exenta de IVA por inversión del sujeto pasivo de acuerdo con el artículo 84 letra f-Uno. 2º - Ley 37/1992 - art. 5 Ley 7/2012';
+    const exencionSplit = doc.splitTextToSize(textoExencion, pageWidth - margen * 2 - 8);
+    const exencionH = 10 + exencionSplit.length * 4.5;
+    doc.roundedRect(margen, exencionY, pageWidth - margen * 2, exencionH, 3, 3, 'FD');
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(7);
+    doc.setTextColor(180, 120, 40);
+    let exy = exencionY + 6;
+    exencionSplit.forEach((line: string) => { doc.text(line, margen + 4, exy); exy += 4.5; });
+  }
 
   if (presupuesto.notas) {
     const notasY = totalY + 25;

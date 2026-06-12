@@ -7,6 +7,14 @@ const MESES = [
   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
 ];
 
+const generateId = () => {
+  try {
+    return crypto.randomUUID();
+  } catch (e) {
+    return 'id-' + Math.random().toString(36).substr(2, 9);
+  }
+};
+
 interface Parte {
   id: string;
   centroId: string;
@@ -160,7 +168,7 @@ export default function Planificacion() {
       const centro = centros.find(c => c.id === centroId);
       if (!centro) return;
       const newParte = {
-        id: `PARTE-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
+        id: `PARTE-${generateId().slice(0, 8).toUpperCase()}`,
         centroId: centro.id,
         nombreCentro: centro.nombre || '',
         clienteId: centro.clienteId || '',

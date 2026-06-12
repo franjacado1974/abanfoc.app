@@ -217,7 +217,7 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
         <div className="sticky top-0 z-40 bg-[#f8f6f3]/80 backdrop-blur-md border-b border-zinc-200/60">
           <div className="flex items-center justify-center px-6 py-4">
             <div className="text-center">
-              <h1 className="text-xl font-bold text-zinc-900">Panel de Control</h1>
+              <h1 className="text-xl font-bold text-zinc-900">Inicio</h1>
               <p className="text-xs text-zinc-500 mt-0.5">Bienvenido, {loggedUser.nombre}</p>
             </div>
           </div>

@@ -16,6 +16,7 @@ const firebaseConfig = {
 export interface SistemaCategoria {
   id: string;
   nombre: string;
+  imagenUrl?: string;
 }
 export interface SistemaEquipo {
   id: string;
@@ -122,6 +123,13 @@ export interface Empresa {
 
 // ─── PRESUPUESTO Interfaces ──────────────────────────────────────────────
 
+export interface ImpuestoConfig {
+  id: string;
+  iva: number;
+  exento: boolean;
+  _docId?: string;
+}
+
 export interface PresupuestoLinea {
   id: string;
   tipo: 'articulo' | 'servicio' | 'manual';
@@ -139,6 +147,7 @@ export interface Presupuesto {
   numeroPresupuesto?: string;
   clienteId: string;
   nombreCliente?: string;
+  centroId?: string;
   fechaCreacion: string;
   fechaValidez?: string;
   estado: 'Borrador' | 'Enviado' | 'En espera' | 'Aprobado' | 'Rechazado';
@@ -474,12 +483,16 @@ export async function addSistemaCategoria(categoria: SistemaCategoria) {
   try {
     const systemId = getCollectionName(categoria.nombre);
     const ref = doc(db, 'sistemas', systemId);
-    await setDoc(ref, { 
+    const data: any = { 
       id: systemId, 
       nombre: categoria.nombre.toUpperCase(), 
       updatedAt: new Date().toISOString() 
-    });
-    return { id: systemId, nombre: categoria.nombre };
+    };
+    if (categoria.imagenUrl) {
+      data.imagenUrl = categoria.imagenUrl;
+    }
+    await setDoc(ref, data);
+    return { id: systemId, nombre: categoria.nombre, imagenUrl: categoria.imagenUrl };
   } catch (e) {
     console.error('addSistemaCategoria error:', e);
     throw e;
@@ -489,7 +502,12 @@ export async function addSistemaCategoria(categoria: SistemaCategoria) {
 export async function updateSistemaCategoria(id: string, categoria: Partial<SistemaCategoria>) {
   try {
     const ref = doc(db, 'sistemas', id);
-    await setDoc(ref, { ...categoria, updatedAt: new Date().toISOString() }, { merge: true });
+    const data: any = { ...categoria, updatedAt: new Date().toISOString() };
+    // Permitir borrar imagenUrl explícitamente con null
+    if (categoria.imagenUrl === null) {
+      data.imagenUrl = null;
+    }
+    await setDoc(ref, data, { merge: true });
     return { _docId: id, ...categoria };
   } catch (e) {
     console.error('updateSistemaCategoria error:', e);
@@ -1038,6 +1056,7 @@ export function subscribePresupuestos(callback: (presupuestos: Presupuesto[]) =>
         numeroPresupuesto: data?.numeroPresupuesto || data?.id || '',
         clienteId: data?.clienteId || '',
         nombreCliente: data?.nombreCliente || '',
+        centroId: data?.centroId || '',
         fechaCreacion: data?.fechaCreacion || new Date().toISOString(),
         fechaValidez: data?.fechaValidez || '',
         estado: data?.estado || 'Borrador',
@@ -1281,6 +1300,60 @@ export function subscribeEquiposInstalados(centroId: string, sistemaId: string, 
   } catch (e) {
     console.error('subscribeEquiposInstalados error:', e);
     return () => {};
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// IMPUESTOS - Firestore CRUD
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function subscribeImpuestos(callback: (config: ImpuestoConfig | null) => void) {
+  try {
+    const col = collection(db, 'impuestos');
+    const unsub = onSnapshot(col, (snap) => {
+      if (snap.empty) {
+        callback(null);
+        return;
+      }
+      const doc = snap.docs[0];
+      const data = doc.data() as any;
+      callback({
+        _docId: doc.id,
+        id: data?.id || doc.id,
+        iva: typeof data?.iva === 'number' ? data.iva : 21,
+        exento: data?.exento === true,
+      });
+    }, (err) => {
+      console.error('subscribeImpuestos error:', err);
+      callback(null);
+    });
+    return unsub;
+  } catch (e) {
+    console.error('subscribeImpuestos error:', e);
+    return () => {};
+  }
+}
+
+export async function saveImpuestoConfig(config: { iva: number; exento: boolean }) {
+  try {
+    const col = collection(db, 'impuestos');
+    const snap = await getDocs(col);
+    const data = {
+      iva: config.iva,
+      exento: config.exento,
+      updatedAt: new Date().toISOString()
+    };
+    if (snap.empty) {
+      const ref = await addDoc(col, data);
+      return { _docId: ref.id, ...data };
+    } else {
+      const ref = doc(db, 'impuestos', snap.docs[0].id);
+      await setDoc(ref, data, { merge: true });
+      return { _docId: snap.docs[0].id, ...data };
+    }
+  } catch (e) {
+    console.error('saveImpuestoConfig error:', e);
+    throw e;
   }
 }
 

@@ -37,18 +37,18 @@ fs.writeFileSync(counterFile, JSON.stringify(counter, null, 2));
 const version = `V${dd}.${mm}.${yy}.${HH}${min}.${String(counter.count).padStart(2, '0')}`;
 console.log(`📦 Versión generada: ${version}`);
 
-// ── Actualizar App.tsx ─────────────────────────────────────────────────────
-const appFile = path.join(__dirname, '..', 'src', 'App.tsx');
-let content = fs.readFileSync(appFile, 'utf8');
+// ── Actualizar constants.ts ────────────────────────────────────────────────
+const constantsFile = path.join(__dirname, '..', 'src', 'constants.ts');
+let content = fs.readFileSync(constantsFile, 'utf8');
 
 const updated = content.replace(
-  /V\d{2}\.\d{2}\.\d{2}\.\d{4}\.\d{2}|V\d{2}\.\d{2}\.\d{2}\.\d{2}/g,
+  /V\.\d{2}\.\d{2}\.\d{2}\.\w+/g,
   version
 );
 
 if (updated === content) {
-  console.warn('⚠️  No se encontró el patrón de versión en App.tsx. Revisa el formato.');
+  console.warn('⚠️  No se encontró el patrón de versión en constants.ts. Revisa el formato.');
 } else {
-  fs.writeFileSync(appFile, updated, 'utf8');
-  console.log(`✅ App.tsx actualizado con versión: ${version}`);
+  fs.writeFileSync(constantsFile, updated, 'utf8');
+  console.log(`✅ constants.ts actualizado con versión: ${version}`);
 }

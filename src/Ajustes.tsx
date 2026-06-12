@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Building2, Users, ShieldCheck, Layers, FireExtinguisher, Plus, Trash2, ArrowLeft, Image as ImageIcon, X, Cloud, Loader
+  Building2, Users, ShieldCheck, FireExtinguisher, Plus, Trash2, ArrowLeft, Image as ImageIcon, X, Cloud, Loader, Edit, Percent
 } from 'lucide-react';
-import { addUserToFirestore, subscribeSistemasCategorias, addSistemaCategoria, deleteSistemaCategoria, uploadFile } from './firebase';
+import { addUserToFirestore, subscribeSistemasCategorias, addSistemaCategoria, deleteSistemaCategoria, uploadFile, subscribeImpuestos, saveImpuestoConfig } from './firebase';
 import ConfirmationModal from './ConfirmationModal';
 
 const generateId = () => {
@@ -30,7 +30,7 @@ interface SistemaItem {
 
 export default function Ajustes() {
   const navigate = useNavigate();
-  const [view, setView] = useState<'menu' | 'tecnicos' | 'usuarios' | 'sistemas'>('menu');
+  const [view, setView] = useState<'menu' | 'tecnicos' | 'usuarios' | 'sistemas' | 'impuestos'>('menu');
 
   const [tecnicos, setTecnicos] = useState<{ id: string; nombre: string; apellidos: string }[]>(() => {
     try {
@@ -66,15 +66,10 @@ export default function Ajustes() {
   const [sistemas, setSistemas] = useState<SistemaItem[]>(() => {
     try {
       const stored = localStorage.getItem('firecheck_db_sistemas_categorias');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        // Add imagenUrl from stored images if present
-        const savedImages = localStorage.getItem('firecheck_db_sistemas_imagenes');
-        const imagenesMap: Record<string, string> = savedImages ? JSON.parse(savedImages) : {};
-        return parsed.map((s: any) => ({
-          id: s.id,
-          nombre: s.nombre,
-          imagenUrl: imagenesMap[s.id] || undefined
+      if (stored) { // Assuming 'cats' from Firestore now includes imagenUrl
+        return JSON.parse(stored).map((s: any) => ({
+          ...s, // The s object from localStorage should already contain imagenUrl if saved from Firestore
+          imagenUrl: s.imagenUrl || undefined
         }));
       }
       return [];
@@ -86,20 +81,54 @@ export default function Ajustes() {
   const [sistemaNombre, setSistemaNombre] = useState('');
   const [sistemaImagen, setSistemaImagen] = useState<File | null>(null);
   const [sistemaImagenPreview, setSistemaImagenPreview] = useState<string | null>(null);
-  const [isSyncingSistemas, setIsSyncingSistemas] = useState(false);
-  const [syncSistemasStatus, setSyncSistemasStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
+
+  // ─── GESTION DE IMPUESTOS ──────────────────────────────────────────────
+  const [impuestosConfig, setImpuestosConfig] = useState({ iva: 21, exento: false });
+  const [impuestosStatus, setImpuestosStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
+
+  // Cargar configuración de impuestos desde Firestore
+  useEffect(() => {
+    const unsub = subscribeImpuestos((config) => {
+      if (config) {
+        setImpuestosConfig({ iva: config.iva, exento: config.exento });
+        localStorage.setItem('firecheck_impuestos_config', JSON.stringify({ iva: config.iva, exento: config.exento }));
+      } else {
+        // Si no hay datos en Firestore, usar valores por defecto
+        const local = localStorage.getItem('firecheck_impuestos_config');
+        if (local) {
+          try {
+            const parsed = JSON.parse(local);
+            setImpuestosConfig({ iva: parsed.iva || 21, exento: parsed.exento || false });
+          } catch { /* usar defaults */ }
+        }
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  const handleIvaChange = async (val: number) => {
+    const iva = Math.max(0, Math.min(100, val || 0));
+    const newConfig = { iva, exento: false };
+    setImpuestosConfig(newConfig);
+    setImpuestosStatus('saving');
+    try {
+      await saveImpuestoConfig(newConfig);
+      localStorage.setItem('firecheck_impuestos_config', JSON.stringify(newConfig));
+      setImpuestosStatus('success');
+      setTimeout(() => setImpuestosStatus('idle'), 2000);
+    } catch (e) {
+      console.error('Error guardando configuración de IVA:', e);
+      setImpuestosStatus('error');
+      setTimeout(() => setImpuestosStatus('idle'), 3000);
+    }
+  };
 
   // Cargar sistemas desde Firestore en tiempo real
   useEffect(() => {
     const unsub = subscribeSistemasCategorias((cats) => {
-      if (cats.length > 0) {
-        const savedImages = localStorage.getItem('firecheck_db_sistemas_imagenes');
-        const imagenesMap: Record<string, string> = savedImages ? JSON.parse(savedImages) : {};
-        const sistConImagen = cats.map(s => ({
-          ...s,
-          imagenUrl: imagenesMap[s.id] || undefined
-        }));
-        setSistemas(sistConImagen);
+      if (cats.length > 0) { // Assuming 'cats' from Firestore now includes imagenUrl
+        // No need to merge with a separate imagenesMap, as imagenUrl should be directly in cats
+        setSistemas(cats); 
         localStorage.setItem('firecheck_db_sistemas_categorias', JSON.stringify(cats));
       }
     });
@@ -110,32 +139,27 @@ export default function Ajustes() {
     e.preventDefault();
     if (!sistemaNombre.trim()) return;
 
-    const newCat = {
-      id: editSistemaId || crypto.randomUUID(),
-      nombre: sistemaNombre.toUpperCase()
-    };
+    const newCatId = editSistemaId || crypto.randomUUID();
+    const newCatNombre = sistemaNombre.toUpperCase();
 
     try {
-      await addSistemaCategoria(newCat);
-      
-      // Subir imagen si se ha seleccionado
+      // Subir imagen si se ha seleccionado (primero, para obtener la URL)
       let imagenUrl: string | undefined = undefined;
       if (sistemaImagen) {
         try {
-          const path = `sistemas_imagenes/${newCat.id}_${Date.now()}`;
+          const path = `sistemas_imagenes/${newCatId}_${Date.now()}`;
           imagenUrl = await uploadFile(sistemaImagen, path);
         } catch (err) {
           console.warn('Error al subir imagen:', err);
         }
       }
 
-      // Guardar imagen en localStorage
-      if (imagenUrl) {
-        const savedImages = localStorage.getItem('firecheck_db_sistemas_imagenes');
-        const imagenesMap: Record<string, string> = savedImages ? JSON.parse(savedImages) : {};
-        imagenesMap[newCat.id] = imagenUrl;
-        localStorage.setItem('firecheck_db_sistemas_imagenes', JSON.stringify(imagenesMap));
-      }
+      // Guardar en Firestore con la imagenUrl (se sincronizará en tiempo real)
+      await addSistemaCategoria({ 
+        id: newCatId, 
+        nombre: newCatNombre,
+        imagenUrl: imagenUrl
+      });
 
       setIsSistemaModalOpen(false);
       setSistemaNombre('');
@@ -167,14 +191,9 @@ export default function Ajustes() {
       await deleteSistemaCategoria(itemToDelete.id);
       const updated = sistemas.filter(s => s.id !== itemToDelete.id);
       setSistemas(updated);
-      localStorage.setItem('firecheck_db_sistemas_categorias', JSON.stringify(updated));
-      // Eliminar imagen del mapa
-      const savedImages = localStorage.getItem('firecheck_db_sistemas_imagenes');
-      if (savedImages) {
-        const imagenesMap: Record<string, string> = JSON.parse(savedImages);
-        delete imagenesMap[itemToDelete.id];
-        localStorage.setItem('firecheck_db_sistemas_imagenes', JSON.stringify(imagenesMap));
-      }
+      // The updated 'sistemas' (which are SistemaItem) contain imagenUrl.
+      // When saving to localStorage, we save the 'cats' from Firestore, which should also contain imagenUrl.
+      localStorage.setItem('firecheck_db_sistemas_categorias', JSON.stringify(updated)); 
     } catch (error) {
       alert('Error al eliminar el sistema de Firebase.');
     }
@@ -190,24 +209,6 @@ export default function Ajustes() {
       setSistemaImagenPreview(reader.result as string);
     };
     reader.readAsDataURL(file);
-  };
-
-  const handleSyncSistemasToFirestore = async () => {
-    setIsSyncingSistemas(true);
-    setSyncSistemasStatus('syncing');
-    try {
-      for (const sist of sistemas) {
-        await addSistemaCategoria({ id: sist.id, nombre: sist.nombre });
-      }
-      setSyncSistemasStatus('success');
-      setTimeout(() => setSyncSistemasStatus('idle'), 3000);
-    } catch (e) {
-      console.error('Error sincronizando sistemas:', e);
-      setSyncSistemasStatus('error');
-      setTimeout(() => setSyncSistemasStatus('idle'), 3000);
-    } finally {
-      setIsSyncingSistemas(false);
-    }
   };
 
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
@@ -331,7 +332,7 @@ export default function Ajustes() {
             </button>
           )}
           <h1 className="text-lg font-bold text-zinc-900 flex-1 text-center">
-            {view === 'menu' ? 'Panel de Configuracion' : view === 'tecnicos' ? 'Gestion de Tecnicos' : view === 'usuarios' ? 'Gestion de Usuarios' : 'Gestion de Sistemas'}
+            {view === 'menu' ? 'Panel de Configuracion' : view === 'tecnicos' ? 'Gestion de Tecnicos' : view === 'usuarios' ? 'Gestion de Usuarios' : view === 'sistemas' ? 'Gestion de Sistemas' : 'Impuestos'}
           </h1>
           <div className="w-16" />
         </div>
@@ -389,6 +390,19 @@ export default function Ajustes() {
               <div>
                 <p className="font-bold text-zinc-800">Gestion de sistemas</p>
                 <p className="text-xs text-zinc-500">Gestion de sistemas contra incendios.</p>
+              </div>
+            </button>
+
+            <button
+              onClick={() => setView('impuestos')}
+              className="w-full flex items-center gap-4 p-4 rounded-2xl border border-zinc-200 bg-white hover:border-amber-200 hover:bg-amber-50/50 transition-all text-left group"
+            >
+              <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                <Percent className="w-6 h-6" />
+              </div>
+              <div>
+                <p className="font-bold text-zinc-800">Impuestos</p>
+                <p className="text-xs text-zinc-500">Configuración del IVA y tipos impositivos.</p>
               </div>
             </button>
           </div>
@@ -530,26 +544,6 @@ export default function Ajustes() {
               </p>
               <div className="flex gap-2">
                 <button
-                  onClick={handleSyncSistemasToFirestore}
-                  disabled={isSyncingSistemas}
-                  className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                    syncSistemasStatus === 'success'
-                      ? 'bg-emerald-500 text-white'
-                      : syncSistemasStatus === 'error'
-                      ? 'bg-red-500 text-white'
-                      : 'bg-fuchsia-100 text-fuchsia-700 hover:bg-fuchsia-200'
-                  }`}
-                >
-                  {isSyncingSistemas ? (
-                    <Loader className="w-3.5 h-3.5 animate-spin" />
-                  ) : syncSistemasStatus === 'success' ? (
-                    <Cloud className="w-3.5 h-3.5" />
-                  ) : (
-                    <Cloud className="w-3.5 h-3.5" />
-                  )}
-                  {isSyncingSistemas ? '' : syncSistemasStatus === 'success' ? 'OK' : 'Firebase'}
-                </button>
-                <button
                   onClick={() => { setEditSistemaId(null); setSistemaNombre(''); setSistemaImagen(null); setSistemaImagenPreview(null); setIsSistemaModalOpen(true); }}
                   className="flex items-center justify-center gap-1.5 bg-fuchsia-600 hover:bg-fuchsia-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition-all"
                 >
@@ -588,7 +582,7 @@ export default function Ajustes() {
                           className="p-1.5 text-zinc-500 hover:text-zinc-800 hover:bg-zinc-100 rounded-lg transition-colors"
                           title="Editar"
                         >
-                          <ImageIcon className="w-4 h-4" />
+                          <Edit className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => handleDeleteSistema(sist.id)}
@@ -602,6 +596,56 @@ export default function Ajustes() {
                   ))}
                 </ul>
               )}
+            </div>
+          </section>
+        )}
+
+        {view === 'impuestos' && (
+          <section className="space-y-6">
+            <div className="bg-white rounded-2xl border border-zinc-200 p-6">
+              <h2 className="text-lg font-bold text-zinc-900 mb-4">Configuración del IVA</h2>
+              <p className="text-sm text-zinc-500 mb-6">Define el porcentaje de IVA que se aplicará por defecto en presupuestos, albaranes y facturas.</p>
+              
+              <div className="space-y-6">
+                {/* IVA General */}
+                <div className="bg-amber-50/50 rounded-xl p-5 border border-amber-100">
+                  <label className="text-sm font-bold text-zinc-800 block mb-3">IVA General</label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      value={impuestosConfig.iva}
+                      onChange={(e) => {
+                        const val = Math.max(0, Math.min(100, parseFloat(e.target.value) || 0));
+                        handleIvaChange(val);
+                      }}
+                      className="w-24 px-4 py-2.5 bg-white border border-amber-200 rounded-xl text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-center"
+                    />
+                    <span className="text-sm font-bold text-zinc-600">%</span>
+                    {impuestosStatus === 'saving' && <Loader className="w-4 h-4 text-amber-500 animate-spin" />}
+                    {impuestosStatus === 'success' && <span className="text-xs text-emerald-600 font-bold">✓ Guardado</span>}
+                    {impuestosStatus === 'error' && <span className="text-xs text-red-600 font-bold">Error</span>}
+                  </div>
+                  <p className="text-xs text-zinc-500 mt-2">Este porcentaje se usará como valor por defecto al crear nuevos presupuestos, albaranes y facturas.</p>
+                </div>
+
+                {/* Exento de IVA */}
+                <div className="bg-zinc-50 rounded-xl p-5 border border-zinc-200">
+                  <div className="flex items-start gap-3">
+                    <div className="flex-1">
+                      <label className="text-sm font-bold text-zinc-800 block mb-1">Exento de IVA (0%)</label>
+                      <p className="text-xs text-zinc-500">Cuando se seleccione esta opción en un presupuesto, albarán o factura, se mostrará el texto de exención de IVA por inversión del sujeto pasivo.</p>
+                    </div>
+                  </div>
+                  <div className="mt-3 p-3 bg-zinc-100 rounded-lg border border-zinc-200">
+                    <p className="text-xs text-zinc-600 italic">
+                      "Factura exenta de IVA por inversión del sujeto pasivo de acuerdo con el artículo 84 letra f-Uno. 2º - Ley 37/1992 - art. 5 Ley 7/2012"
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
           </section>
         )}

@@ -8,10 +8,9 @@ import {
   saveArticulo, 
   deleteArticulo, 
   getArticulos,
-  getFamilias,
-  subscribeFamilias,
-} from './firebase';
-import type { Familia } from './firebase';
+  subscribeSistemasCategorias, // Changed from subscribeFamilias
+} from './firebase'; // Assuming firebase.ts also uses SistemaCategoria internally or exports it
+import { type SistemaCategoria } from './Sistemas'; // Import SistemaCategoria from Sistemas.tsx
 
 export interface Articulo {
   id: string;
@@ -36,7 +35,7 @@ export default function Articulos() {
   const [articulos, setArticulos] = useState<Articulo[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
 
-  const [familias, setFamilias] = useState<Familia[]>([]);
+  const [familias, setFamilias] = useState<SistemaCategoria[]>([]); // This will now hold SistemaCategoria
   const [isFamiliasLoading, setIsFamiliasLoading] = useState(true);
   
   // Modal state
@@ -98,30 +97,14 @@ export default function Articulos() {
   }, []);
 
   // Cargar familias desde Firestore para el desplegable de artículos.
-  useEffect(() => {
+  useEffect(() => { // Changed to subscribeSistemasCategorias
     let isMounted = true;
 
-    const loadFamilias = async () => {
-      try {
-        const familias = await getFamilias();
-        if (isMounted) {
-          setFamilias(familias);
-          setIsFamiliasLoading(false);
-        }
-      } catch (error) {
-        console.error('Error loading familias from Firebase:', error);
-        if (isMounted) {
-          setFamilias([]);
-          setIsFamiliasLoading(false);
-        }
+    const unsubscribe = subscribeSistemasCategorias((familias) => { // Subscribing to SistemaCategorias
+      if (isMounted) {
+        setFamilias(familias);
+        setIsFamiliasLoading(false);
       }
-    };
-
-    loadFamilias();
-
-    const unsubscribe = subscribeFamilias((familias) => {
-      setFamilias(familias);
-      setIsFamiliasLoading(false);
     });
 
     return () => {
@@ -161,7 +144,7 @@ export default function Articulos() {
       setEditingArticulo(articulo);
       setFormData({
         codigo: articulo.codigo,
-        nombre: articulo.nombre,
+        nombre: articulo.nombre, 
         familiaId: articulo.familiaId || familias.find(familia => familia.nombre === articulo.familia)?.id || '',
         familia: articulo.familia,
         precioCompra: articulo.precioCompra.toString(),

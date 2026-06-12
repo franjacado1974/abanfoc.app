@@ -241,13 +241,13 @@ export default function Pedidos() {
                           <button 
                             onClick={(e) => {
                               e.stopPropagation();
-                              setOpenStatusMenuId(openStatusMenuId === (ped.id || ped._docId) ? null : (ped.id || ped._docId));
+                              setOpenStatusMenuId(openStatusMenuId === (ped.id || ped._docId || '') ? null : (ped.id || ped._docId || ''));
                             }}
                             className="p-1.5 text-zinc-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg"
                           >
                             <ChevronDown className="w-4 h-4" />
                           </button>
-                          {openStatusMenuId === (ped.id || ped._docId) && (
+                          {openStatusMenuId === (ped.id || ped._docId || '') && (
                             <>
                               <div className="fixed inset-0 z-40" onClick={() => setOpenStatusMenuId(null)} />
                               <div className="absolute right-0 top-full mt-1 bg-white rounded-lg shadow-xl border border-zinc-200 py-1 min-w-[130px] z-50 animate-in fade-in zoom-in-95 duration-100">

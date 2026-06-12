@@ -5,9 +5,11 @@ import * as XLSX from 'xlsx';
 import { syncSistemas, subscribeSistemasCategorias, saveEquipoToSystemCollection, deleteEquipoFromSystemCollection, subscribeEquiposBySystem, addSistemaCategoria, deleteSistemaCategoria, getCollectionName } from './firebase';
 import ConfirmationModal from './ConfirmationModal'; // Ruta corregida
 
+// Updated interface to include imagenUrl
 export interface SistemaCategoria {
   id: string;
   nombre: string;
+  imagenUrl?: string;
 }
 
 export interface SistemaEquipo {
@@ -27,26 +29,18 @@ export const CATEGORIAS_POR_DEFECTO: SistemaCategoria[] = [
   { id: 'cat-5', nombre: 'SISTEMA HIDRANTES' }
 ];
 
-export const getIconForSistema = (nombre: string) => {
-  // Primero buscar si hay una imagen personalizada subida desde Gestión de Sistemas
+export const getIconForSistema = (nombre: string): string | React.ElementType => {
+  // Buscar si hay una imagen personalizada guardada en localStorage con la categoría
   try {
-    const savedImages = localStorage.getItem('firecheck_db_sistemas_imagenes');
-    if (savedImages) {
-      const imagenesMap: Record<string, string> = JSON.parse(savedImages);
-      // Buscar por nombre del sistema en localStorage de categorías
-      const savedCats = localStorage.getItem('firecheck_db_sistemas_categorias');
-      if (savedCats) {
-        const categorias = JSON.parse(savedCats);
-        const cat = categorias.find((c: any) => 
-          c.nombre.toLowerCase() === nombre.toLowerCase()
-        );
-        if (cat && imagenesMap[cat.id]) {
-          return imagenesMap[cat.id];
-        }
+    const savedCats = localStorage.getItem('firecheck_db_sistemas_categorias');
+    if (savedCats) {
+      const categorias: SistemaCategoria[] = JSON.parse(savedCats);
+      const cat = categorias.find(c => c.nombre.toLowerCase() === nombre.toLowerCase());
+      if (cat?.imagenUrl) {
+        return cat.imagenUrl;
       }
     }
   } catch {}
-  
   const n = nombre.toLowerCase();
   if (n.includes('extintor')) return '/extintor-icon.png';
   if (n.includes('bie')) return '/bie-icon.png';

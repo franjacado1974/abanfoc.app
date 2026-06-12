@@ -607,7 +607,14 @@ export default function RevisionChecklist() {
                         </div>
                     ) : (
                         sistemasDelCentro.map(sist => {
-                            const IconoCat = getIconForSistema(sist.tipo || sist.familia || '');
+                            // Buscar la imagen del sistema en categoriasSistema (cargado desde Firestore)
+                            const sistemaCat = categoriasSistema.find(c => {
+                                const nombreSist = (sist.tipo || sist.familia || '').toLowerCase().trim();
+                                const nombreCat = (c.nombre || '').toLowerCase().trim();
+                                return nombreCat.includes(nombreSist) || nombreSist.includes(nombreCat);
+                            });
+                            const imagenUrl = sistemaCat?.imagenUrl;
+                            const IconoCat = imagenUrl || getIconForSistema(sist.tipo || sist.familia || '');
                             return (
                                 <div key={sist.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm transition-shadow hover:shadow-md">
                                 {/* Accordion Header - sticky respecto al viewport */}

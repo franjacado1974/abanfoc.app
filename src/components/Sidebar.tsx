@@ -87,32 +87,15 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
       {/* Navigation */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden py-2 scrollbar-thin scrollbar-thumb-blue-700 scrollbar-track-transparent">
         {Object.entries(groupedItems).map(([section, items]) => {
-          const sectionColors: Record<string, string> = {
-            gestion: 'text-orange-400',
-            operaciones: 'text-orange-400',
-            documentacion: 'text-orange-400',
-            configuracion: 'text-orange-400',
-          };
-          const sectionLabels: Record<string, string> = {
-            gestion: 'Gestión',
-            operaciones: 'Operaciones',
-            documentacion: 'Documentación',
-            configuracion: 'Sistema',
-          };
           return (
-            <div key={section} className="mb-3">
-               {!collapsed && (
-                 <p className={`px-4 py-1.5 text-[9px] font-bold uppercase tracking-widest ${sectionColors[section] || 'text-orange-500'} opacity-100`}>
-                   {sectionLabels[section] || section}
-                 </p>
-               )}
+            <div key={section}>
               {items.map((item) => {
                 const active = isActive(item.path);
                 return (
                   <button
                     key={item.id}
                     onClick={() => handleNavigate(item.path)}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 mx-2 rounded-xl text-sm font-medium transition-all duration-200 ${
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 mx-2 mb-1 rounded-xl text-sm font-medium transition-all duration-200 ${
                       collapsed ? 'justify-center mx-0 px-0 w-16' : ''
                     } ${
                        active
@@ -151,7 +134,7 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
           </div>
         )}
         {collapsed && user && (
-          <div className="w-8 h-8 bg-orange-500/20 rounded-full flex items-center justify-center text-xs font-bold text-orange-400 border border-orange-500/30 mb-2">
+          <div className="w-8 h-8 bg-orange-500/20 rounded-full flex items-center justify-center text-xs font-bold text-orange-400 border border-orange-500/30 mb-2 -mt-2">
             {user.nombre.charAt(0)}{user.apellidos.charAt(0)}
           </div>
         )}
@@ -163,7 +146,7 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
           title="Cerrar Sesión"
         >
           <Power className="w-4 h-4" />
-          {!collapsed && <span>Cerrar Sesión</span>}
+          {!collapsed && <span className="text-[10px]">Cerrar Sesión</span>}
         </button>
       </div>
 
