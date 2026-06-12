@@ -1,6 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
-import { getFirestore, collection, getDocs, query, where, orderBy, addDoc, doc, updateDoc, setDoc, deleteDoc, onSnapshot, enableIndexedDbPersistence } from "firebase/firestore";
+import { getFirestore, collection, getDocs, getDoc, query, where, orderBy, addDoc, doc, updateDoc, setDoc, deleteDoc, onSnapshot, enableIndexedDbPersistence } from "firebase/firestore";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 const firebaseConfig = {
@@ -1373,12 +1373,11 @@ export interface ChecklistItem {
   tipoRespuesta: TipoRespuestaChecklist;  // Tipo de respuesta: 'check' | 'texto' | 'numero'
 }
 
-// ─── CHECKLIST POR COLECCIÓN DINÁMICA (checklist_{sistemaNombre}) ────────
+// ─── CHECKLIST POR SISTEMA (documento único en colección 'checklist') ────
 
-function getChecklistCollectionName(sistemaNombre: string): string {
+function getChecklistDocId(sistemaNombre: string): string {
   // Normalizar: minúsculas, sin espacios, sin caracteres especiales
-  const nombre = sistemaNombre.toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
-  return `checklist_${nombre}`;
+  return sistemaNombre.toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
 }
 
 export function subscribeChecklists(sistemaId: string, callback: (items: ChecklistItem[]) => void) {
@@ -1457,30 +1456,31 @@ export async function saveChecklistBatch(items: Omit<ChecklistItem, 'id'>[]) {
   }
 }
 
-// ─── CHECKLIST POR COLECCIÓN DINÁMICA (checklist_{sistemaNombre}) ────────
+// ─── CHECKLIST POR SISTEMA (documento único en colección 'checklist') ────
 
 export function subscribeChecklistsPorSistema(sistemaNombre: string, callback: (items: ChecklistItem[]) => void) {
   try {
-    const colName = getChecklistCollectionName(sistemaNombre);
-    const col = collection(db, colName);
-    const q = query(col, orderBy('orden', 'asc'));
-    const unsub = onSnapshot(q, (snap) => {
-      const items: ChecklistItem[] = [];
-      snap.forEach((doc) => {
-        const data = doc.data() as any;
-        items.push({
-          id: doc.id,
-          sistemaId: data.sistemaId || '',
-          sistemaNombre: data.sistemaNombre || sistemaNombre,
-          label: data.label || '',
-          key: data.key || '',
-          orden: data.orden || 0,
-          tipoRespuesta: data.tipoRespuesta || 'check',
-        });
-      });
-      callback(items);
+    const docId = getChecklistDocId(sistemaNombre);
+    const docRef = doc(db, 'checklist', docId);
+    const unsub = onSnapshot(docRef, (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        const rawItems = data.items || [];
+        const items: ChecklistItem[] = rawItems.map((item: any, index: number) => ({
+          id: item.id || `${docId}_${index}`,
+          sistemaId: item.sistemaId || '',
+          sistemaNombre: item.sistemaNombre || sistemaNombre,
+          label: item.label || '',
+          key: item.key || '',
+          orden: item.orden || index + 1,
+          tipoRespuesta: item.tipoRespuesta || 'check',
+        }));
+        callback(items);
+      } else {
+        callback([]);
+      }
     }, (err) => {
-      console.error(`subscribeChecklistsPorSistema(${colName}) error:`, err);
+      console.error(`subscribeChecklistsPorSistema(${docId}) error:`, err);
       callback([]);
     });
     return unsub;
@@ -1492,14 +1492,15 @@ export function subscribeChecklistsPorSistema(sistemaNombre: string, callback: (
 
 export async function saveChecklistBatchPorSistema(sistemaNombre: string, items: Omit<ChecklistItem, 'id'>[]) {
   try {
-    const colName = getChecklistCollectionName(sistemaNombre);
-    const col = collection(db, colName);
-    const results = [];
-    for (const item of items) {
-      const docRef = await addDoc(col, item);
-      results.push({ id: docRef.id, ...item });
-    }
-    return results;
+    const docId = getChecklistDocId(sistemaNombre);
+    const docRef = doc(db, 'checklist', docId);
+    // Asignar IDs a los items
+    const itemsWithIds = items.map((item, index) => ({
+      ...item,
+      id: `${docId}_${index}`,
+    }));
+    await setDoc(docRef, { items: itemsWithIds }, { merge: true });
+    return itemsWithIds;
   } catch (e) {
     console.error(`saveChecklistBatchPorSistema(${sistemaNombre}) error:`, e);
     throw e;
@@ -1508,9 +1509,14 @@ export async function saveChecklistBatchPorSistema(sistemaNombre: string, items:
 
 export async function deleteChecklistItemPorSistema(sistemaNombre: string, id: string) {
   try {
-    const colName = getChecklistCollectionName(sistemaNombre);
-    const docRef = doc(db, colName, id);
-    await deleteDoc(docRef);
+    const docId = getChecklistDocId(sistemaNombre);
+    const docRef = doc(db, 'checklist', docId);
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      const data = snap.data();
+      const items = (data.items || []).filter((item: any) => item.id !== id);
+      await setDoc(docRef, { items }, { merge: true });
+    }
   } catch (e) {
     console.error(`deleteChecklistItemPorSistema(${sistemaNombre}) error:`, e);
     throw e;
@@ -1519,9 +1525,19 @@ export async function deleteChecklistItemPorSistema(sistemaNombre: string, id: s
 
 export async function updateChecklistItemPorSistema(sistemaNombre: string, id: string, data: Partial<ChecklistItem>) {
   try {
-    const colName = getChecklistCollectionName(sistemaNombre);
-    const docRef = doc(db, colName, id);
-    await updateDoc(docRef, data);
+    const docId = getChecklistDocId(sistemaNombre);
+    const docRef = doc(db, 'checklist', docId);
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      const existingData = snap.data();
+      const items = (existingData.items || []).map((item: any) => {
+        if (item.id === id) {
+          return { ...item, ...data };
+        }
+        return item;
+      });
+      await setDoc(docRef, { items }, { merge: true });
+    }
   } catch (e) {
     console.error(`updateChecklistItemPorSistema(${sistemaNombre}) error:`, e);
     throw e;
