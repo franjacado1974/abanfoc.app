@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Building2, Users, ShieldCheck, FireExtinguisher, Plus, Trash2, ArrowLeft, Image as ImageIcon, X, Loader, Edit, Percent, CheckSquare, Save, GripVertical
 } from 'lucide-react';
-import { addUserToFirestore, subscribeSistemasCategorias, addSistemaCategoria, deleteSistemaCategoria, uploadFile, subscribeImpuestos, saveImpuestoConfig, subscribeChecklists, addChecklistItem, updateChecklistItem, deleteChecklistItem, saveChecklistBatch, type ChecklistItem } from './firebase';
+import { addUserToFirestore, subscribeSistemasCategorias, addSistemaCategoria, deleteSistemaCategoria, uploadFile, subscribeImpuestos, saveImpuestoConfig, subscribeChecklists, addChecklistItem, updateChecklistItem, deleteChecklistItem, saveChecklistBatch, subscribeChecklistsPorSistema, saveChecklistBatchPorSistema, deleteChecklistItemPorSistema, updateChecklistItemPorSistema, type ChecklistItem } from './firebase';
 import ConfirmationModal from './ConfirmationModal';
 
 const generateId = () => {
@@ -221,6 +221,7 @@ export default function Ajustes() {
   const [editingChecklistTipo, setEditingChecklistTipo] = useState<'check' | 'texto' | 'numero'>('check');
   const [cargandoPlantilla, setCargandoPlantilla] = useState(false);
   const [editandoPlantilla, setEditandoPlantilla] = useState(false);
+  const [plantillaTitulo, setPlantillaTitulo] = useState('Plantilla de Extintores');
   const [plantillaEditada, setPlantillaEditada] = useState<{ key: string; label: string; tipoRespuesta: 'check' | 'texto' | 'numero' }[]>([]);
 
   // Plantilla predefinida de extintores (la misma que en RevisionChecklist.tsx)
@@ -264,7 +265,8 @@ export default function Ajustes() {
         orden: index + 1,
         tipoRespuesta: item.tipoRespuesta,
       }));
-      await saveChecklistBatch(itemsToSave);
+      // Guardar en colección dinámica: checklist_{sistemaNombre}
+      await saveChecklistBatchPorSistema(plantillaTitulo, itemsToSave);
       setEditandoPlantilla(false);
     } catch (err) {
       console.error('Error cargando plantilla:', err);
@@ -828,23 +830,32 @@ export default function Ajustes() {
                   </div>
                 </div>
 
-                {/* Tarjeta de plantilla de extintores (siempre visible) */}
-                <div className="bg-white rounded-2xl border-2 border-dashed border-teal-300 overflow-hidden">
-                  <div className="px-4 py-3 bg-teal-50 border-b border-teal-100 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <FireExtinguisher className="w-4 h-4 text-teal-600" />
-                      <p className="text-xs font-bold text-teal-700 uppercase tracking-wider">
-                        Plantilla de Extintores
-                      </p>
+                {/* Tarjeta de plantilla de extintores (siempre visible, ancho completo) */}
+                <div className="bg-white rounded-2xl border-2 border-dashed border-teal-300 overflow-hidden w-full">
+                  {/* Cabecera con título editable */}
+                  <div className="px-5 py-4 bg-teal-50 border-b border-teal-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 w-full sm:w-auto">
+                      <FireExtinguisher className="w-5 h-5 text-teal-600 shrink-0" />
+                      {editandoPlantilla ? (
+                        <input
+                          type="text"
+                          value={plantillaTitulo}
+                          onChange={e => setPlantillaTitulo(e.target.value)}
+                          className="px-3 py-1.5 bg-white border-2 border-teal-400 rounded-lg text-sm font-bold text-teal-800 outline-none focus:border-teal-600 w-full sm:w-64"
+                          placeholder="Nombre de la plantilla"
+                        />
+                      ) : (
+                        <p className="text-sm font-bold text-teal-800 uppercase tracking-wider">
+                          {plantillaTitulo}
+                        </p>
+                      )}
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
                       {editandoPlantilla ? (
                         <>
                           <button
-                            onClick={() => {
-                              setEditandoPlantilla(false);
-                            }}
-                            className="flex items-center gap-1.5 bg-zinc-400 hover:bg-zinc-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
+                            onClick={() => { setEditandoPlantilla(false); }}
+                            className="flex items-center gap-1.5 bg-zinc-400 hover:bg-zinc-500 text-white px-3 py-2 rounded-lg text-xs font-bold transition-all"
                           >
                             <X className="w-3.5 h-3.5" />
                             Cancelar
@@ -852,7 +863,7 @@ export default function Ajustes() {
                           <button
                             onClick={() => handleCargarPlantillaExtintoresConItems(plantillaEditada)}
                             disabled={cargandoPlantilla}
-                            className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
+                            className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-3 py-2 rounded-lg text-xs font-bold transition-all"
                           >
                             {cargandoPlantilla ? (
                               <Loader className="w-3.5 h-3.5 animate-spin" />
@@ -869,7 +880,7 @@ export default function Ajustes() {
                               setEditandoPlantilla(true);
                               setPlantillaEditada(PLANTILLA_EXTINTORES.map(p => ({ ...p })));
                             }}
-                            className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
+                            className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white px-3 py-2 rounded-lg text-xs font-bold transition-all"
                           >
                             <Edit className="w-3.5 h-3.5" />
                             Editar plantilla
@@ -877,7 +888,7 @@ export default function Ajustes() {
                           <button
                             onClick={() => handleCargarPlantillaExtintoresConItems(PLANTILLA_EXTINTORES)}
                             disabled={cargandoPlantilla}
-                            className="flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
+                            className="flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white px-3 py-2 rounded-lg text-xs font-bold transition-all"
                           >
                             {cargandoPlantilla ? (
                               <Loader className="w-3.5 h-3.5 animate-spin" />
@@ -890,30 +901,34 @@ export default function Ajustes() {
                       )}
                     </div>
                   </div>
-                  <div className="p-4">
-                    <p className="text-xs text-zinc-500 mb-3">
-                      Esta plantilla contiene los 14 checks predefinidos para revisión de extintores.
+
+                  {/* Cuerpo de la plantilla */}
+                  <div className="p-5">
+                    <p className="text-xs text-zinc-500 mb-4">
                       {editandoPlantilla 
-                        ? ' Puedes modificar las preguntas y tipos antes de guardarlas en Firestore.'
-                        : ' Haz clic en "Editar plantilla" para personalizar las preguntas antes de guardarlas.'}
+                        ? 'Modifica las preguntas y tipos de respuesta. Al guardar se almacenarán en la colección correspondiente de Firestore.'
+                        : 'Usa esta plantilla predefinida para extintores o haz clic en "Editar plantilla" para personalizarla.'}
                     </p>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+
+                    {/* Lista de items - ancho completo */}
+                    <div className="space-y-2">
                       {(editandoPlantilla ? plantillaEditada : PLANTILLA_EXTINTORES).map((item, idx) => (
                         editandoPlantilla ? (
-                          <div key={item.key} className="flex flex-col gap-1 px-3 py-2 bg-amber-50/50 border border-amber-200 rounded-lg">
-                            <div className="flex items-center gap-1">
-                              <span className="text-[10px] font-bold text-amber-600 shrink-0">{idx + 1}.</span>
-                              <input
-                                type="text"
-                                value={item.label}
-                                onChange={e => {
-                                  const newPlantilla = [...plantillaEditada];
-                                  newPlantilla[idx] = { ...newPlantilla[idx], label: e.target.value };
-                                  setPlantillaEditada(newPlantilla);
-                                }}
-                                className="flex-1 px-1.5 py-0.5 bg-white border border-amber-300 rounded text-[11px] outline-none focus:border-amber-500"
-                              />
-                            </div>
+                          <div key={item.key} className="flex items-center gap-3 px-4 py-3 bg-amber-50/50 border border-amber-200 rounded-xl">
+                            <span className="w-7 h-7 bg-amber-200 text-amber-800 rounded-lg flex items-center justify-center text-xs font-bold shrink-0">
+                              {idx + 1}
+                            </span>
+                            <input
+                              type="text"
+                              value={item.label}
+                              onChange={e => {
+                                const newPlantilla = [...plantillaEditada];
+                                newPlantilla[idx] = { ...newPlantilla[idx], label: e.target.value };
+                                setPlantillaEditada(newPlantilla);
+                              }}
+                              className="flex-1 px-3 py-2 bg-white border border-amber-300 rounded-lg text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 transition-all"
+                              placeholder="Nombre de la pregunta"
+                            />
                             <select
                               value={item.tipoRespuesta}
                               onChange={e => {
@@ -921,22 +936,25 @@ export default function Ajustes() {
                                 newPlantilla[idx] = { ...newPlantilla[idx], tipoRespuesta: e.target.value as 'check' | 'texto' | 'numero' };
                                 setPlantillaEditada(newPlantilla);
                               }}
-                              className="text-[10px] px-1 py-0.5 bg-white border border-amber-200 rounded outline-none"
+                              className="px-3 py-2 bg-white border border-amber-300 rounded-lg text-xs outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 transition-all min-w-[100px]"
                             >
-                              <option value="check">Check</option>
-                              <option value="texto">Texto</option>
-                              <option value="numero">Número</option>
+                              <option value="check">✓/✗ Check</option>
+                              <option value="texto">Abc Texto</option>
+                              <option value="numero">#0 Número</option>
                             </select>
                           </div>
                         ) : (
                           <div
                             key={item.key}
-                            className="flex items-center gap-2 px-3 py-2 bg-teal-50/50 border border-teal-100 rounded-lg text-xs"
+                            className="flex items-center gap-3 px-4 py-3 bg-teal-50/30 border border-teal-100 rounded-xl hover:bg-teal-50/50 transition-colors"
                           >
-                            <CheckSquare className="w-3.5 h-3.5 text-teal-500 shrink-0" />
-                            <span className="font-medium text-zinc-700">{item.label}</span>
-                            <span className={`ml-auto text-[9px] font-mono font-bold ${
-                              item.tipoRespuesta === 'check' ? 'text-teal-600' : item.tipoRespuesta === 'numero' ? 'text-blue-600' : 'text-amber-600'
+                            <span className="w-7 h-7 bg-teal-100 text-teal-700 rounded-lg flex items-center justify-center text-xs font-bold shrink-0">
+                              {idx + 1}
+                            </span>
+                            <CheckSquare className="w-4 h-4 text-teal-500 shrink-0" />
+                            <span className="flex-1 text-sm font-medium text-zinc-800">{item.label}</span>
+                            <span className={`text-[10px] font-mono font-bold px-2 py-1 rounded ${
+                              item.tipoRespuesta === 'check' ? 'bg-teal-100 text-teal-700' : item.tipoRespuesta === 'numero' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'
                             }`}>
                               {item.tipoRespuesta === 'check' ? '✓/✗' : item.tipoRespuesta === 'numero' ? '#0' : 'Abc'}
                             </span>

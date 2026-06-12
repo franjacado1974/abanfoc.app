@@ -1373,6 +1373,14 @@ export interface ChecklistItem {
   tipoRespuesta: TipoRespuestaChecklist;  // Tipo de respuesta: 'check' | 'texto' | 'numero'
 }
 
+// ─── CHECKLIST POR COLECCIÓN DINÁMICA (checklist_{sistemaNombre}) ────────
+
+function getChecklistCollectionName(sistemaNombre: string): string {
+  // Normalizar: minúsculas, sin espacios, sin caracteres especiales
+  const nombre = sistemaNombre.toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+  return `checklist_${nombre}`;
+}
+
 export function subscribeChecklists(sistemaId: string, callback: (items: ChecklistItem[]) => void) {
   try {
     const col = collection(db, 'checklist');
@@ -1445,6 +1453,77 @@ export async function saveChecklistBatch(items: Omit<ChecklistItem, 'id'>[]) {
     return results;
   } catch (e) {
     console.error('saveChecklistBatch error:', e);
+    throw e;
+  }
+}
+
+// ─── CHECKLIST POR COLECCIÓN DINÁMICA (checklist_{sistemaNombre}) ────────
+
+export function subscribeChecklistsPorSistema(sistemaNombre: string, callback: (items: ChecklistItem[]) => void) {
+  try {
+    const colName = getChecklistCollectionName(sistemaNombre);
+    const col = collection(db, colName);
+    const q = query(col, orderBy('orden', 'asc'));
+    const unsub = onSnapshot(q, (snap) => {
+      const items: ChecklistItem[] = [];
+      snap.forEach((doc) => {
+        const data = doc.data() as any;
+        items.push({
+          id: doc.id,
+          sistemaId: data.sistemaId || '',
+          sistemaNombre: data.sistemaNombre || sistemaNombre,
+          label: data.label || '',
+          key: data.key || '',
+          orden: data.orden || 0,
+          tipoRespuesta: data.tipoRespuesta || 'check',
+        });
+      });
+      callback(items);
+    }, (err) => {
+      console.error(`subscribeChecklistsPorSistema(${colName}) error:`, err);
+      callback([]);
+    });
+    return unsub;
+  } catch (e) {
+    console.error('subscribeChecklistsPorSistema error:', e);
+    return () => {};
+  }
+}
+
+export async function saveChecklistBatchPorSistema(sistemaNombre: string, items: Omit<ChecklistItem, 'id'>[]) {
+  try {
+    const colName = getChecklistCollectionName(sistemaNombre);
+    const col = collection(db, colName);
+    const results = [];
+    for (const item of items) {
+      const docRef = await addDoc(col, item);
+      results.push({ id: docRef.id, ...item });
+    }
+    return results;
+  } catch (e) {
+    console.error(`saveChecklistBatchPorSistema(${sistemaNombre}) error:`, e);
+    throw e;
+  }
+}
+
+export async function deleteChecklistItemPorSistema(sistemaNombre: string, id: string) {
+  try {
+    const colName = getChecklistCollectionName(sistemaNombre);
+    const docRef = doc(db, colName, id);
+    await deleteDoc(docRef);
+  } catch (e) {
+    console.error(`deleteChecklistItemPorSistema(${sistemaNombre}) error:`, e);
+    throw e;
+  }
+}
+
+export async function updateChecklistItemPorSistema(sistemaNombre: string, id: string, data: Partial<ChecklistItem>) {
+  try {
+    const colName = getChecklistCollectionName(sistemaNombre);
+    const docRef = doc(db, colName, id);
+    await updateDoc(docRef, data);
+  } catch (e) {
+    console.error(`updateChecklistItemPorSistema(${sistemaNombre}) error:`, e);
     throw e;
   }
 }
