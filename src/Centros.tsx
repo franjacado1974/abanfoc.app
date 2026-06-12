@@ -172,7 +172,13 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
   const [selectedCentro, setSelectedCentro] = useState<Centro | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [expandedSistemaId, setExpandedSistemaId] = useState<string | null>(null);
+  const [clienteSearchTerm, setClienteSearchTerm] = useState('');
+  const [showClienteDropdown, setShowClienteDropdown] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const clientesFiltrados = clientes.filter(c =>
+    c.nombre.toLowerCase().includes(clienteSearchTerm.toLowerCase()) ||
+    c.cif?.toLowerCase().includes(clienteSearchTerm.toLowerCase())
+  );
 
   const handleExportExcel = () => {
     const dataToExport = centros.map(c => {
@@ -743,11 +749,12 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
                     <p className="text-sm text-zinc-700 bg-zinc-50 rounded-xl p-3.5">{selectedCentro.periodicidad.join(', ')}{selectedCentro.mesesRevision?.length ? ` — Revisión en ${selectedCentro.mesesRevision[0]}` : ''}</p>
                   </div>
                 )}
-                <div className="grid grid-cols-2 gap-3 pt-4 border-t border-zinc-200">
-                  <button onClick={() => { setIsDetailOpen(false); setCentroForPeriodicidad(selectedCentro); setFormPeriodicidad({ periodicidad: selectedCentro.periodicidad || [], mesesRevision: selectedCentro.mesesRevision || [] }); setIsPeriodicidadModalOpen(true); }} className="flex items-center justify-center gap-1.5 bg-blue-400 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-blue-500 transition-colors border-2 border-blue-600"><Layers className="w-4 h-4" /> Periodicidad</button>
-                  <button onClick={() => { setIsDetailOpen(false); setCentroForTecnico(selectedCentro); setSelectedTecnicoId(selectedCentro.tecnicoId || ''); setIsTecnicoModalOpen(true); }} className="flex items-center justify-center gap-1.5 bg-green-400 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-green-500 transition-colors border-2 border-green-600"><UserCheck className="w-4 h-4" /> Asignar Técnico</button>
-                  <button onClick={() => { setIsDetailOpen(false); handleEdit(selectedCentro); }} className="flex items-center justify-center gap-1.5 bg-zinc-400 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-zinc-500 transition-colors border-2 border-zinc-600"><Edit className="w-4 h-4" /> Editar Centro</button>
-                  <button onClick={() => { setIsDetailOpen(false); openSistemas(selectedCentro); }} className="flex items-center justify-center gap-1.5 bg-orange-200 text-orange-800 px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-orange-300 transition-colors border-2 border-orange-400"><Layers className="w-4 h-4" /> Ver Sistemas</button>
+                <div className="flex flex-wrap justify-center gap-2 pt-4 border-t border-zinc-200">
+                  <button onClick={() => { setIsDetailOpen(false); setCentroForPeriodicidad(selectedCentro); setFormPeriodicidad({ periodicidad: selectedCentro.periodicidad || [], mesesRevision: selectedCentro.mesesRevision || [] }); setIsPeriodicidadModalOpen(true); }} className="flex items-center justify-center gap-1 bg-blue-400 text-white px-2.5 py-1.5 rounded-lg text-xs font-medium hover:bg-blue-500 transition-colors border border-blue-600"><Layers className="w-3.5 h-3.5" /> Periodicidad</button>
+                  <button onClick={() => { setIsDetailOpen(false); setCentroForTecnico(selectedCentro); setSelectedTecnicoId(selectedCentro.tecnicoId || ''); setIsTecnicoModalOpen(true); }} className="flex items-center justify-center gap-1 bg-green-400 text-white px-2.5 py-1.5 rounded-lg text-xs font-medium hover:bg-green-500 transition-colors border border-green-600"><UserCheck className="w-3.5 h-3.5" /> Asignar Técnico</button>
+                  <button onClick={() => { setIsDetailOpen(false); setCentroForEmpresa(selectedCentro); setSelectedEmpresaId(selectedCentro.empresaId || ''); setIsEmpresaModalOpen(true); }} className="flex items-center justify-center gap-1 bg-rose-400 text-white px-2.5 py-1.5 rounded-lg text-xs font-medium hover:bg-rose-500 transition-colors border border-rose-600"><Building2 className="w-3.5 h-3.5" /> Empresa Mantenedora</button>
+                  <button onClick={() => { setIsDetailOpen(false); handleEdit(selectedCentro); }} className="flex items-center justify-center gap-1 bg-zinc-400 text-white px-2.5 py-1.5 rounded-lg text-xs font-medium hover:bg-zinc-500 transition-colors border border-zinc-600"><Edit className="w-3.5 h-3.5" /> Editar Centro</button>
+                  <button onClick={() => { setIsDetailOpen(false); openSistemas(selectedCentro); }} className="flex items-center justify-center gap-1 bg-orange-200 text-orange-800 px-2.5 py-1.5 rounded-lg text-xs font-medium hover:bg-orange-300 transition-colors border border-orange-400"><Layers className="w-3.5 h-3.5" /> Ver Sistemas</button>
                 </div>
               </div>
             );
@@ -1155,10 +1162,41 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
                 <div>
                   <label className="block text-xs font-semibold text-zinc-900 mb-1.5">SELECCIONAR CLIENTE *</label>
-                  <select required disabled={!!form.id} value={form.clienteId} onChange={(e) => setForm({...form, clienteId: e.target.value})} className="w-full px-3 py-2.5 text-sm bg-white rounded-lg border border-zinc-200 focus:border-black focus:ring-1 focus:ring-black outline-none transition-all text-zinc-900 disabled:opacity-50">
-                    <option value="">-- Elige un cliente --</option>
-                    {clientes.map(c => (<option key={c.id} value={c.id}>{c.nombre}</option>))}
-                  </select>
+                  {form.id ? (
+                    <select required disabled value={form.clienteId} className="w-full px-3 py-2.5 text-sm bg-white rounded-lg border border-zinc-200 text-zinc-900 disabled:opacity-50">
+                      <option value={form.clienteId}>{clientes.find(c => c.id === form.clienteId)?.nombre || form.clienteId}</option>
+                    </select>
+                  ) : (
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><Search className="w-4 h-4 text-zinc-400" /></div>
+                      <input
+                        type="text"
+                        value={clienteSearchTerm}
+                        onChange={e => setClienteSearchTerm(e.target.value)}
+                        onFocus={() => setShowClienteDropdown(true)}
+                        placeholder="Buscar cliente..."
+                        className="w-full pl-10 pr-4 py-2.5 text-sm bg-white rounded-lg border border-zinc-200 focus:border-black focus:ring-1 focus:ring-black outline-none transition-all text-zinc-900 placeholder-zinc-400"
+                      />
+                      {showClienteDropdown && (
+                        <div className="absolute z-20 mt-1 w-full bg-white border border-zinc-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                          {clientesFiltrados.length === 0 ? (
+                            <div className="px-3 py-2 text-sm text-zinc-400">No se encontraron clientes</div>
+                          ) : (
+                            clientesFiltrados.map(c => (
+                              <button
+                                key={c.id}
+                                type="button"
+                                onClick={() => { setForm({...form, clienteId: c.id}); setClienteSearchTerm(c.nombre); setShowClienteDropdown(false); }}
+                                className={`w-full text-left px-3 py-2 text-sm hover:bg-zinc-100 transition-colors ${form.clienteId === c.id ? 'bg-zinc-100 font-semibold' : ''}`}
+                              >
+                                {c.nombre}
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
                 {selectedCliente && (
                   <div className="flex items-center bg-white border border-zinc-200 rounded-lg px-3 py-2.5">
@@ -1193,27 +1231,6 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
               </div>
             </div>
             <div className="pt-4 flex items-center justify-end gap-3">
-              {form.id && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    const centroActual = centros.find(c => c.id === form.id);
-                    if (centroActual) {
-                      setCentroForEmpresa(centroActual);
-                      setSelectedEmpresaId(centroActual.empresaId || '');
-                      setIsEmpresaModalOpen(true);
-                    }
-                  }}
-                  className="flex items-center gap-2 bg-rose-50 hover:bg-rose-100 text-rose-900 border border-rose-200 px-5 py-2.5 rounded-xl text-sm font-medium transition-colors shadow-sm active:scale-95"
-                >
-                  <Building2 className="w-4 h-4" />
-                  {(() => {
-                    const centroActual = centros.find(c => c.id === form.id);
-                    const emp = centroActual?.empresaId ? empresas.find(e => e._docId === centroActual.empresaId) : null;
-                    return emp ? emp.nombre : 'Empresa Mantenedora';
-                  })()}
-                </button>
-              )}
               <button type="submit" disabled={!form.clienteId} className="bg-black text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-zinc-800 disabled:opacity-50 transition-colors flex items-center gap-2 shadow-md active:scale-95"><Save className="w-4 h-4" /> {form.id ? 'Guardar Cambios' : 'Registrar Centro'}</button>
             </div>
           </form>

@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Building2, Users, ShieldCheck, FireExtinguisher, Plus, Trash2, ArrowLeft, Image as ImageIcon, X, Loader, Edit, Percent
+  Building2, Users, ShieldCheck, FireExtinguisher, Plus, Trash2, ArrowLeft, Image as ImageIcon, X, Loader, Edit, Percent, CheckSquare, Save, GripVertical
 } from 'lucide-react';
-import { addUserToFirestore, subscribeSistemasCategorias, addSistemaCategoria, deleteSistemaCategoria, uploadFile, subscribeImpuestos, saveImpuestoConfig } from './firebase';
+import { addUserToFirestore, subscribeSistemasCategorias, addSistemaCategoria, deleteSistemaCategoria, uploadFile, subscribeImpuestos, saveImpuestoConfig, subscribeChecklists, addChecklistItem, updateChecklistItem, deleteChecklistItem, type ChecklistItem } from './firebase';
 import ConfirmationModal from './ConfirmationModal';
 
 const generateId = () => {
@@ -30,7 +30,7 @@ interface SistemaItem {
 
 export default function Ajustes() {
   const navigate = useNavigate();
-  const [view, setView] = useState<'menu' | 'tecnicos' | 'usuarios' | 'sistemas' | 'impuestos'>('menu');
+  const [view, setView] = useState<'menu' | 'tecnicos' | 'usuarios' | 'sistemas' | 'impuestos' | 'checklist'>('menu');
 
   const [tecnicos, setTecnicos] = useState<{ id: string; nombre: string; apellidos: string }[]>(() => {
     try {
@@ -211,6 +211,63 @@ export default function Ajustes() {
     reader.readAsDataURL(file);
   };
 
+  // ─── GESTION DE CHECKLIST ──────────────────────────────────────────────
+  const [checklistSistemaId, setChecklistSistemaId] = useState<string>('');
+  const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>([]);
+  const [newChecklistLabel, setNewChecklistLabel] = useState('');
+  const [editingChecklistId, setEditingChecklistId] = useState<string | null>(null);
+  const [editingChecklistLabel, setEditingChecklistLabel] = useState('');
+
+  // Suscribirse a los items del checklist cuando se selecciona un sistema
+  useEffect(() => {
+    if (!checklistSistemaId) return;
+    const unsub = subscribeChecklists(checklistSistemaId, (items) => {
+      setChecklistItems(items);
+    });
+    return () => unsub();
+  }, [checklistSistemaId]);
+
+  const handleAddChecklistItem = async () => {
+    if (!checklistSistemaId || !newChecklistLabel.trim()) return;
+    const sistema = sistemas.find(s => s.id === checklistSistemaId);
+    const key = 'check' + newChecklistLabel.trim().replace(/\s+/g, '');
+    const maxOrden = checklistItems.reduce((max, item) => Math.max(max, item.orden), 0);
+    try {
+      await addChecklistItem({
+        sistemaId: checklistSistemaId,
+        sistemaNombre: sistema?.nombre || '',
+        label: newChecklistLabel.trim(),
+        key,
+        orden: maxOrden + 1,
+      });
+      setNewChecklistLabel('');
+    } catch (err) {
+      console.error('Error añadiendo item de checklist:', err);
+      alert('Error al guardar en Firestore');
+    }
+  };
+
+  const handleUpdateChecklistItem = async (id: string) => {
+    if (!editingChecklistLabel.trim()) return;
+    try {
+      await updateChecklistItem(id, { label: editingChecklistLabel.trim() });
+      setEditingChecklistId(null);
+      setEditingChecklistLabel('');
+    } catch (err) {
+      console.error('Error actualizando item de checklist:', err);
+      alert('Error al guardar en Firestore');
+    }
+  };
+
+  const handleDeleteChecklistItem = async (id: string) => {
+    try {
+      await deleteChecklistItem(id);
+    } catch (err) {
+      console.error('Error eliminando item de checklist:', err);
+      alert('Error al eliminar de Firestore');
+    }
+  };
+
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<{ type: 'tecnico' | 'usuario' | 'sistema'; id: string } | null>(null);
 
@@ -332,7 +389,7 @@ export default function Ajustes() {
             </button>
           )}
           <h1 className="text-lg font-bold text-zinc-900 flex-1 text-center">
-            {view === 'menu' ? 'Panel de Configuracion' : view === 'tecnicos' ? 'Gestion de Tecnicos' : view === 'usuarios' ? 'Gestion de Usuarios' : view === 'sistemas' ? 'Gestion de Sistemas' : 'Impuestos'}
+            {view === 'menu' ? 'Panel de Configuracion' : view === 'tecnicos' ? 'Gestion de Tecnicos' : view === 'usuarios' ? 'Gestion de Usuarios' : view === 'sistemas' ? 'Gestion de Sistemas' : view === 'impuestos' ? 'Impuestos' : 'Checklist'}
           </h1>
           <div className="w-16" />
         </div>
@@ -403,6 +460,19 @@ export default function Ajustes() {
               <div>
                 <p className="font-bold text-zinc-800">Impuestos</p>
                 <p className="text-xs text-zinc-500">Configuración del IVA y tipos impositivos.</p>
+              </div>
+            </button>
+
+            <button
+              onClick={() => setView('checklist')}
+              className="w-full flex items-center gap-4 p-4 rounded-2xl border border-zinc-200 bg-white hover:border-teal-200 hover:bg-teal-50/50 transition-all text-left group"
+            >
+              <div className="w-12 h-12 bg-teal-100 text-teal-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                <CheckSquare className="w-6 h-6" />
+              </div>
+              <div>
+                <p className="font-bold text-zinc-800">Checklist</p>
+                <p className="text-xs text-zinc-500">Gestion de preguntas de revision por sistema.</p>
               </div>
             </button>
           </div>
@@ -647,6 +717,126 @@ export default function Ajustes() {
                 </div>
               </div>
             </div>
+          </section>
+        )}
+
+        {view === 'checklist' && (
+          <section className="space-y-6">
+            {/* Selector de sistema */}
+            <div className="bg-white rounded-2xl border border-zinc-200 p-4">
+              <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider block mb-2">Seleccionar Sistema</label>
+              <select
+                value={checklistSistemaId}
+                onChange={e => setChecklistSistemaId(e.target.value)}
+                className="w-full px-4 py-2.5 bg-white border border-zinc-200 rounded-xl text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-all"
+              >
+                <option value="">-- Elige un sistema --</option>
+                {sistemas.map(sist => (
+                  <option key={sist.id} value={sist.id}>{sist.nombre}</option>
+                ))}
+              </select>
+              {sistemas.length === 0 && (
+                <p className="text-xs text-amber-600 mt-2">No hay sistemas creados. Crea un sistema primero en "Gestión de sistemas".</p>
+              )}
+            </div>
+
+            {checklistSistemaId && (
+              <>
+                {/* Añadir nueva pregunta */}
+                <div className="bg-white rounded-2xl border border-zinc-200 p-4">
+                  <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3">Añadir Pregunta al Checklist</p>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newChecklistLabel}
+                      onChange={e => setNewChecklistLabel(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddChecklistItem(); } }}
+                      placeholder="Ej: Acceso, Altura, Señalización..."
+                      className="flex-1 px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-all"
+                    />
+                    <button
+                      onClick={handleAddChecklistItem}
+                      disabled={!newChecklistLabel.trim()}
+                      className="flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white px-4 py-2.5 rounded-xl text-sm font-medium transition-all"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Añadir
+                    </button>
+                  </div>
+                </div>
+
+                {/* Lista de preguntas */}
+                <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden">
+                  <p className="px-4 py-3 text-xs font-bold text-zinc-400 uppercase tracking-wider border-b border-zinc-100">
+                    Preguntas del Checklist ({checklistItems.length})
+                  </p>
+                  {checklistItems.length === 0 ? (
+                    <div className="p-8 text-center text-zinc-400 text-sm">
+                      No hay preguntas para este sistema. Añade la primera pregunta arriba.
+                    </div>
+                  ) : (
+                    <ul className="divide-y divide-zinc-100">
+                      {checklistItems.map((item, index) => (
+                        <li key={item.id} className="p-4 flex items-center gap-3 hover:bg-zinc-50 transition-colors">
+                          <span className="w-6 h-6 bg-teal-100 text-teal-700 rounded-lg flex items-center justify-center text-xs font-bold shrink-0">
+                            {index + 1}
+                          </span>
+                          {editingChecklistId === item.id ? (
+                            <div className="flex-1 flex gap-2">
+                              <input
+                                type="text"
+                                value={editingChecklistLabel}
+                                onChange={e => setEditingChecklistLabel(e.target.value)}
+                                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleUpdateChecklistItem(item.id); } }}
+                                className="flex-1 px-3 py-1.5 bg-white border border-teal-300 rounded-lg text-sm outline-none focus:border-teal-500"
+                                autoFocus
+                              />
+                              <button
+                                onClick={() => handleUpdateChecklistItem(item.id)}
+                                className="p-1.5 text-teal-600 hover:bg-teal-50 rounded-lg transition-colors"
+                                title="Guardar"
+                              >
+                                <Save className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => { setEditingChecklistId(null); setEditingChecklistLabel(''); }}
+                                className="p-1.5 text-zinc-400 hover:bg-zinc-100 rounded-lg transition-colors"
+                                title="Cancelar"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          ) : (
+                            <>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-zinc-900">{item.label}</p>
+                                <p className="text-[10px] text-zinc-400 font-mono mt-0.5">key: {item.key} · orden: {item.orden}</p>
+                              </div>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <button
+                                  onClick={() => { setEditingChecklistId(item.id); setEditingChecklistLabel(item.label); }}
+                                  className="p-1.5 text-zinc-500 hover:text-zinc-800 hover:bg-zinc-100 rounded-lg transition-colors"
+                                  title="Editar"
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteChecklistItem(item.id)}
+                                  className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors"
+                                  title="Eliminar"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </>
+            )}
           </section>
         )}
       </div>

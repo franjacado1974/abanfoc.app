@@ -1,6 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
-import { getFirestore, collection, getDocs, query, where, addDoc, doc, updateDoc, setDoc, deleteDoc, onSnapshot, enableIndexedDbPersistence } from "firebase/firestore";
+import { getFirestore, collection, getDocs, query, where, orderBy, addDoc, doc, updateDoc, setDoc, deleteDoc, onSnapshot, enableIndexedDbPersistence } from "firebase/firestore";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 const firebaseConfig = {
@@ -1353,6 +1353,94 @@ export async function saveImpuestoConfig(config: { iva: number; exento: boolean 
     }
   } catch (e) {
     console.error('saveImpuestoConfig error:', e);
+    throw e;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CHECKLIST - Firestore CRUD
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface ChecklistItem {
+  id: string;
+  sistemaId: string;       // ID del sistema al que pertenece (ej: id de SistemaCategoria)
+  sistemaNombre: string;   // Nombre del sistema para referencia
+  label: string;           // Texto de la pregunta/check
+  key: string;             // Clave única para el check (ej: checkAcceso, checkAltura)
+  orden: number;           // Orden de aparición
+}
+
+export function subscribeChecklists(sistemaId: string, callback: (items: ChecklistItem[]) => void) {
+  try {
+    const col = collection(db, 'checklist');
+    const q = query(col, where('sistemaId', '==', sistemaId), orderBy('orden', 'asc'));
+    const unsub = onSnapshot(q, (snap) => {
+      const items: ChecklistItem[] = [];
+      snap.forEach((doc) => {
+        const data = doc.data() as any;
+        items.push({
+          id: doc.id,
+          sistemaId: data.sistemaId || '',
+          sistemaNombre: data.sistemaNombre || '',
+          label: data.label || '',
+          key: data.key || '',
+          orden: data.orden || 0,
+        });
+      });
+      callback(items);
+    }, (err) => {
+      console.error('subscribeChecklists error:', err);
+      callback([]);
+    });
+    return unsub;
+  } catch (e) {
+    console.error('subscribeChecklists error:', e);
+    return () => {};
+  }
+}
+
+export async function addChecklistItem(item: Omit<ChecklistItem, 'id'>) {
+  try {
+    const col = collection(db, 'checklist');
+    const docRef = await addDoc(col, item);
+    return { id: docRef.id, ...item };
+  } catch (e) {
+    console.error('addChecklistItem error:', e);
+    throw e;
+  }
+}
+
+export async function updateChecklistItem(id: string, data: Partial<ChecklistItem>) {
+  try {
+    const docRef = doc(db, 'checklist', id);
+    await updateDoc(docRef, data);
+  } catch (e) {
+    console.error('updateChecklistItem error:', e);
+    throw e;
+  }
+}
+
+export async function deleteChecklistItem(id: string) {
+  try {
+    const docRef = doc(db, 'checklist', id);
+    await deleteDoc(docRef);
+  } catch (e) {
+    console.error('deleteChecklistItem error:', e);
+    throw e;
+  }
+}
+
+export async function saveChecklistBatch(items: Omit<ChecklistItem, 'id'>[]) {
+  try {
+    const col = collection(db, 'checklist');
+    const results = [];
+    for (const item of items) {
+      const docRef = await addDoc(col, item);
+      results.push({ id: docRef.id, ...item });
+    }
+    return results;
+  } catch (e) {
+    console.error('saveChecklistBatch error:', e);
     throw e;
   }
 }
