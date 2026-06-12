@@ -215,8 +215,10 @@ export default function Ajustes() {
   const [checklistSistemaId, setChecklistSistemaId] = useState<string>('');
   const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>([]);
   const [newChecklistLabel, setNewChecklistLabel] = useState('');
+  const [newChecklistTipo, setNewChecklistTipo] = useState<'check' | 'texto' | 'numero'>('check');
   const [editingChecklistId, setEditingChecklistId] = useState<string | null>(null);
   const [editingChecklistLabel, setEditingChecklistLabel] = useState('');
+  const [editingChecklistTipo, setEditingChecklistTipo] = useState<'check' | 'texto' | 'numero'>('check');
 
   // Suscribirse a los items del checklist cuando se selecciona un sistema
   useEffect(() => {
@@ -239,8 +241,10 @@ export default function Ajustes() {
         label: newChecklistLabel.trim(),
         key,
         orden: maxOrden + 1,
+        tipoRespuesta: newChecklistTipo,
       });
       setNewChecklistLabel('');
+      setNewChecklistTipo('check');
     } catch (err) {
       console.error('Error añadiendo item de checklist:', err);
       alert('Error al guardar en Firestore');
@@ -250,9 +254,10 @@ export default function Ajustes() {
   const handleUpdateChecklistItem = async (id: string) => {
     if (!editingChecklistLabel.trim()) return;
     try {
-      await updateChecklistItem(id, { label: editingChecklistLabel.trim() });
+      await updateChecklistItem(id, { label: editingChecklistLabel.trim(), tipoRespuesta: editingChecklistTipo });
       setEditingChecklistId(null);
       setEditingChecklistLabel('');
+      setEditingChecklistTipo('check');
     } catch (err) {
       console.error('Error actualizando item de checklist:', err);
       alert('Error al guardar en Firestore');
@@ -745,23 +750,36 @@ export default function Ajustes() {
                 {/* Añadir nueva pregunta */}
                 <div className="bg-white rounded-2xl border border-zinc-200 p-4">
                   <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3">Añadir Pregunta al Checklist</p>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={newChecklistLabel}
-                      onChange={e => setNewChecklistLabel(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddChecklistItem(); } }}
-                      placeholder="Ej: Acceso, Altura, Señalización..."
-                      className="flex-1 px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-all"
-                    />
-                    <button
-                      onClick={handleAddChecklistItem}
-                      disabled={!newChecklistLabel.trim()}
-                      className="flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white px-4 py-2.5 rounded-xl text-sm font-medium transition-all"
-                    >
-                      <Plus className="w-4 h-4" />
-                      Añadir
-                    </button>
+                  <div className="flex flex-col gap-2">
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newChecklistLabel}
+                        onChange={e => setNewChecklistLabel(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddChecklistItem(); } }}
+                        placeholder="Ej: Número de placa, Ubicación, Estado presión..."
+                        className="flex-1 px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-all"
+                      />
+                    </div>
+                    <div className="flex gap-2 items-center">
+                      <select
+                        value={newChecklistTipo}
+                        onChange={e => setNewChecklistTipo(e.target.value as 'check' | 'texto' | 'numero')}
+                        className="px-3 py-2.5 bg-white border border-zinc-200 rounded-xl text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-all"
+                      >
+                        <option value="check">Check (✓/✗)</option>
+                        <option value="texto">Texto alfanumérico</option>
+                        <option value="numero">Número</option>
+                      </select>
+                      <button
+                        onClick={handleAddChecklistItem}
+                        disabled={!newChecklistLabel.trim()}
+                        className="flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white px-4 py-2.5 rounded-xl text-sm font-medium transition-all"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Añadir
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -782,39 +800,54 @@ export default function Ajustes() {
                             {index + 1}
                           </span>
                           {editingChecklistId === item.id ? (
-                            <div className="flex-1 flex gap-2">
-                              <input
-                                type="text"
-                                value={editingChecklistLabel}
-                                onChange={e => setEditingChecklistLabel(e.target.value)}
-                                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleUpdateChecklistItem(item.id); } }}
-                                className="flex-1 px-3 py-1.5 bg-white border border-teal-300 rounded-lg text-sm outline-none focus:border-teal-500"
-                                autoFocus
-                              />
-                              <button
-                                onClick={() => handleUpdateChecklistItem(item.id)}
-                                className="p-1.5 text-teal-600 hover:bg-teal-50 rounded-lg transition-colors"
-                                title="Guardar"
-                              >
-                                <Save className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => { setEditingChecklistId(null); setEditingChecklistLabel(''); }}
-                                className="p-1.5 text-zinc-400 hover:bg-zinc-100 rounded-lg transition-colors"
-                                title="Cancelar"
-                              >
-                                <X className="w-4 h-4" />
-                              </button>
+                            <div className="flex-1 flex flex-col gap-2">
+                              <div className="flex gap-2">
+                                <input
+                                  type="text"
+                                  value={editingChecklistLabel}
+                                  onChange={e => setEditingChecklistLabel(e.target.value)}
+                                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleUpdateChecklistItem(item.id); } }}
+                                  className="flex-1 px-3 py-1.5 bg-white border border-teal-300 rounded-lg text-sm outline-none focus:border-teal-500"
+                                  autoFocus
+                                />
+                                <select
+                                  value={editingChecklistTipo}
+                                  onChange={e => setEditingChecklistTipo(e.target.value as 'check' | 'texto' | 'numero')}
+                                  className="px-2 py-1.5 bg-white border border-teal-300 rounded-lg text-xs outline-none focus:border-teal-500"
+                                >
+                                  <option value="check">Check</option>
+                                  <option value="texto">Texto</option>
+                                  <option value="numero">Número</option>
+                                </select>
+                                <button
+                                  onClick={() => handleUpdateChecklistItem(item.id)}
+                                  className="p-1.5 text-teal-600 hover:bg-teal-50 rounded-lg transition-colors"
+                                  title="Guardar"
+                                >
+                                  <Save className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => { setEditingChecklistId(null); setEditingChecklistLabel(''); }}
+                                  className="p-1.5 text-zinc-400 hover:bg-zinc-100 rounded-lg transition-colors"
+                                  title="Cancelar"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </div>
                             </div>
                           ) : (
                             <>
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm font-medium text-zinc-900">{item.label}</p>
-                                <p className="text-[10px] text-zinc-400 font-mono mt-0.5">key: {item.key} · orden: {item.orden}</p>
+                                <p className="text-[10px] text-zinc-400 font-mono mt-0.5">
+                                  key: {item.key} · orden: {item.orden} · tipo: <span className={`font-bold ${
+                                    item.tipoRespuesta === 'check' ? 'text-teal-600' : item.tipoRespuesta === 'numero' ? 'text-blue-600' : 'text-amber-600'
+                                  }`}>{item.tipoRespuesta === 'check' ? 'Check (✓/✗)' : item.tipoRespuesta === 'numero' ? 'Número' : 'Texto'}</span>
+                                </p>
                               </div>
                               <div className="flex items-center gap-1 shrink-0">
                                 <button
-                                  onClick={() => { setEditingChecklistId(item.id); setEditingChecklistLabel(item.label); }}
+                                  onClick={() => { setEditingChecklistId(item.id); setEditingChecklistLabel(item.label); setEditingChecklistTipo(item.tipoRespuesta); }}
                                   className="p-1.5 text-zinc-500 hover:text-zinc-800 hover:bg-zinc-100 rounded-lg transition-colors"
                                   title="Editar"
                                 >

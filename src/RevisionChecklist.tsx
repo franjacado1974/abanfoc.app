@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Save, Building2, Layers, MapPin, FileText, ChevronDown, ChevronUp, Plus, X, CheckCircle2, XCircle, Trash2, AlertTriangle, Pencil, PenLine, RotateCcw, CheckCheck, Eye } from 'lucide-react';
-import { addAlbaran, updateEquipoInstalado, updateParte as updateParteFirestore, subscribePartes, subscribeCentros, subscribeClientes, subscribeCentroSistemas, subscribeEquiposInstalados, subscribeArticulos, subscribeSistemasCategorias, type Albaran, type Tecnico } from './firebase';
+import { addAlbaran, updateEquipoInstalado, updateParte as updateParteFirestore, subscribePartes, subscribeCentros, subscribeClientes, subscribeCentroSistemas, subscribeEquiposInstalados, subscribeArticulos, subscribeSistemasCategorias, subscribeChecklists, type Albaran, type Tecnico, type ChecklistItem } from './firebase';
 import type { Centro, Parte, Cliente, CentroSistema, EquipoInstalado } from './Centros';
 import ConfirmationModal from './ConfirmationModal';
 import { getIconForSistema } from './Sistemas';
@@ -45,6 +45,19 @@ export default function RevisionChecklist() {
             return stored ? JSON.parse(stored) : [];
         } catch { return []; }
     });
+    // Checklist dinámico desde Firestore
+    const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>([]);
+    const [checklistSistemaId, setChecklistSistemaId] = useState<string>('');
+
+    // Cargar checklist del sistema seleccionado
+    useEffect(() => {
+        if (!checklistSistemaId) return;
+        const unsub = subscribeChecklists(checklistSistemaId, (items) => {
+            setChecklistItems(items);
+        });
+        return () => unsub();
+    }, [checklistSistemaId]);
+
     const [selectedCatalogItem, setSelectedCatalogItem] = useState<string>('');
     const [newEquipo, setNewEquipo] = useState<{ codigo: string; nombre: string; ubicacion: string; placa: string; fechaFabricacion: string; ultimoRetimbre: string }>({ codigo: '', nombre: '', ubicacion: '', placa: '', fechaFabricacion: '', ultimoRetimbre: '' });
     const [addSistemaId, setAddSistemaId] = useState<string | null>(null);
@@ -145,12 +158,13 @@ export default function RevisionChecklist() {
         const unsubs = sistemasDelCentro.map(sist =>
             subscribeEquiposInstalados(centroId, sist.id, (items: EquipoInstalado[]) => {
                 // Normalizar equipos según el estado del parte
+                const itemsToUse = getItemsToUse();
                 const normalizedItems = items.map(eq => {
                     // Si el parte está en "Planificado", es una nueva revisión
                     // Resetear todos los checks a null para que el técnico revise de nuevo
                     if (parte?.estado === 'Planificado') {
                         const normalized = { ...eq, revisado: false };
-                        CHECKLIST_ITEMS.forEach(item => {
+                        itemsToUse.forEach(item => {
                             (normalized as any)[item.key] = null;
                         });
                         // Mantener las anomalías anteriores como referencia pero limpiar para nueva revisión
@@ -194,7 +208,7 @@ export default function RevisionChecklist() {
         if (updatedParte) setParte(updatedParte);
     };
 
-    const handleCheckChange = (equipoId: string, checkKey: keyof EquipoInstalado, value: boolean) => {
+    const handleCheckChange = (equipoId: string, checkKey: string, value: boolean | string | number) => {
         setEquiposInstalados(prevEquipos =>
             prevEquipos.map(eq =>
                 eq.id === equipoId ? { ...eq, [checkKey]: value, revisado: true } : eq
@@ -241,8 +255,9 @@ export default function RevisionChecklist() {
             return;
         }
 
+        const itemsToUse = getItemsToUse();
         const equiposInvalidos = equiposInstalados.filter((eq) => {
-            const algunCheckRojo = CHECKLIST_ITEMS.some((item) => eq[item.key as keyof EquipoInstalado] === false);
+            const algunCheckRojo = itemsToUse.some((item) => eq[item.key as keyof EquipoInstalado] === false);
             const anomaliaVacia = !eq.anomalias || eq.anomalias.trim() === '';
             return algunCheckRojo && anomaliaVacia;
         });
@@ -456,7 +471,14 @@ export default function RevisionChecklist() {
     };
 
     const toggleSistema = (sistemaId: string) => {
-        setOpenSistemas(prev => ({ ...prev, [sistemaId]: !prev[sistemaId] }));
+        setOpenSistemas(prev => {
+            const newState = !prev[sistemaId];
+            // Si se abre un sistema, cargar su checklist
+            if (newState) {
+                setChecklistSistemaId(sistemaId);
+            }
+            return { ...prev, [sistemaId]: newState };
+        });
     };
 
     const openAddModal = (sistemaId: string) => {
@@ -486,6 +508,13 @@ export default function RevisionChecklist() {
             return;
         }
 
+        // Inicializar campos dinámicos del checklist
+        const dynamicChecks: Record<string, null> = {};
+        const itemsToUse = checklistItems.length > 0 ? checklistItems : CHECKLIST_ITEMS;
+        itemsToUse.forEach(item => {
+            dynamicChecks[item.key] = null;
+        });
+
         const nuevoEquipo: EquipoInstalado = {
             id: `EQ-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
             centroId: centroId,
@@ -497,9 +526,7 @@ export default function RevisionChecklist() {
             fechaFabricacion: newEquipo.fechaFabricacion,
             ultimoRetimbre: newEquipo.ultimoRetimbre,
             revisado: false,
-            checkAcceso: null, checkAltura: null, checkSoporte: null, checkSenalizacion: null, checkManguera: null,
-            checkPeso: null, checkManometro: null, checkMarcado: null, checkEtiquetas: null, checkRetimbre: null,
-            checkRiesgo: null, checkDistancia: null, checkPasador: null, checkMovilidad: null
+            ...dynamicChecks
         };
 
         const updatedEquipos = [...equiposInstalados, nuevoEquipo];
@@ -537,10 +564,13 @@ export default function RevisionChecklist() {
         });
     };
 
+    const getItemsToUse = () => checklistItems.length > 0 ? checklistItems : CHECKLIST_ITEMS;
+
     const sistemaTieneAnomalias = (sistemaId: string) => {
         const equiposSistema = equiposInstalados.filter((eq) => eq.sistemaId === sistemaId);
+        const items = getItemsToUse();
         return equiposSistema.some((eq) => {
-            const checkRojo = CHECKLIST_ITEMS.some((item) => eq[item.key as keyof EquipoInstalado] === false);
+            const checkRojo = items.some((item) => eq[item.key as keyof EquipoInstalado] === false);
             const textoAnomalia = !!eq.anomalias && eq.anomalias.trim() !== '';
             return checkRojo || textoAnomalia;
         });
@@ -550,7 +580,8 @@ export default function RevisionChecklist() {
         let ok = 0;
         let fail = 0;
         let pending = 0;
-        CHECKLIST_ITEMS.forEach(item => {
+        const items = getItemsToUse();
+        items.forEach(item => {
             const val = eq[item.key as keyof EquipoInstalado];
             if (val === true) ok++;
             else if (val === false) fail++;
@@ -739,14 +770,17 @@ export default function RevisionChecklist() {
                                                 onClick={async (e) => {
                                                     e.stopPropagation();
                                                     // Revisar todos los equipos del sistema
+                                                    const itemsToUse = getItemsToUse();
                                                     const updatedEquipos = equiposInstalados.map(eq => {
                                                         if (eq.sistemaId === sist.id) {
+                                                            const allChecked: Record<string, any> = {};
+                                                            itemsToUse.forEach(item => {
+                                                                allChecked[item.key] = true;
+                                                            });
                                                             return {
                                                                 ...eq,
                                                                 revisado: true,
-                                                                checkAcceso: true, checkAltura: true, checkSoporte: true, checkSenalizacion: true, checkManguera: true,
-                                                                checkPeso: true, checkManometro: true, checkMarcado: true, checkEtiquetas: true, checkRetimbre: true,
-                                                                checkRiesgo: true, checkDistancia: true, checkPasador: true, checkMovilidad: true
+                                                                ...allChecked
                                                             };
                                                         }
                                                         return eq;
@@ -780,7 +814,8 @@ export default function RevisionChecklist() {
                                                     </div>
                                                 ) : (
                                                     filteredEqs.map((eq, i) => {
-                                                        const algunCheckRojo = CHECKLIST_ITEMS.some((item) => eq[item.key as keyof EquipoInstalado] === false);
+                                                        const itemsToUse = getItemsToUse();
+                                                        const algunCheckRojo = itemsToUse.some((item) => eq[item.key as keyof EquipoInstalado] === false);
                                                         const anomaliaObligatoriaVacia = algunCheckRojo && (!eq.anomalias || eq.anomalias.trim() === '');
                                                         const stats = getCheckStats(eq);
 
@@ -813,38 +848,69 @@ export default function RevisionChecklist() {
 
                                                                 <div className="px-4 pb-3">
                                                                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-3 gap-y-1.5">
-                                                                        {CHECKLIST_ITEMS.map(item => {
+                                                                        {(checklistItems.length > 0 ? checklistItems : CHECKLIST_ITEMS).map(item => {
                                                                             const val = eq[item.key as keyof EquipoInstalado];
-                                                                            const isChecked = val === true;
-                                                                            const isUnchecked = val === false;
-                                                                            return (
-                                                                                <label
-                                                                                    key={item.key}
-                                                                                    className={`flex items-center gap-2 cursor-pointer text-xs px-2 py-1.5 rounded-lg transition-all select-none ${
-                                                                                        isUnchecked
-                                                                                            ? 'text-red-600 font-semibold bg-red-50 hover:bg-red-100'
-                                                                                            : isChecked
-                                                                                            ? 'text-green-700 font-medium bg-green-50 hover:bg-green-100'
-                                                                                            : 'text-slate-600 font-medium bg-white hover:bg-slate-50 border border-slate-200'
-                                                                                    }`}
-                                                                                >
-                                                                                    <input
-                                                                                        type="checkbox"
-                                                                                        checked={isChecked}
-                                                                                        onChange={(e) => handleCheckChange(eq.id, item.key as keyof EquipoInstalado, e.target.checked)}
-                                                                                        className={`w-3.5 h-3.5 rounded cursor-pointer ${
+                                                                            const tipo = (item as ChecklistItem).tipoRespuesta || 'check';
+                                                                            
+                                                                            if (tipo === 'check') {
+                                                                                const isChecked = val === true;
+                                                                                const isUnchecked = val === false;
+                                                                                return (
+                                                                                    <label
+                                                                                        key={item.key}
+                                                                                        className={`flex items-center gap-2 cursor-pointer text-xs px-2 py-1.5 rounded-lg transition-all select-none ${
                                                                                             isUnchecked
-                                                                                                ? 'text-red-500 border-red-300 focus:ring-red-400'
+                                                                                                ? 'text-red-600 font-semibold bg-red-50 hover:bg-red-100'
                                                                                                 : isChecked
-                                                                                                ? 'text-green-500 border-green-300 focus:ring-green-400'
-                                                                                                : 'text-slate-400 border-slate-300 focus:ring-slate-400'
+                                                                                                ? 'text-green-700 font-medium bg-green-50 hover:bg-green-100'
+                                                                                                : 'text-slate-600 font-medium bg-white hover:bg-slate-50 border border-slate-200'
                                                                                         }`}
-                                                                                    />
-                                                                                    {item.label}
-                                                                                    {isChecked && <CheckCircle2 className="w-3 h-3 text-green-500 ml-auto" />}
-                                                                                    {isUnchecked && <XCircle className="w-3 h-3 text-red-400 ml-auto" />}
-                                                                                </label>
-                                                                            );
+                                                                                    >
+                                                                                        <input
+                                                                                            type="checkbox"
+                                                                                            checked={isChecked}
+                                                                                            onChange={(e) => handleCheckChange(eq.id, item.key, e.target.checked)}
+                                                                                            className={`w-3.5 h-3.5 rounded cursor-pointer ${
+                                                                                                isUnchecked
+                                                                                                    ? 'text-red-500 border-red-300 focus:ring-red-400'
+                                                                                                    : isChecked
+                                                                                                    ? 'text-green-500 border-green-300 focus:ring-green-400'
+                                                                                                    : 'text-slate-400 border-slate-300 focus:ring-slate-400'
+                                                                                            }`}
+                                                                                        />
+                                                                                        {item.label}
+                                                                                        {isChecked && <CheckCircle2 className="w-3 h-3 text-green-500 ml-auto" />}
+                                                                                        {isUnchecked && <XCircle className="w-3 h-3 text-red-400 ml-auto" />}
+                                                                                    </label>
+                                                                                );
+                                                                            } else if (tipo === 'numero') {
+                                                                                return (
+                                                                                    <div key={item.key} className="flex flex-col gap-0.5">
+                                                                                        <label className="text-[10px] font-semibold text-slate-500">{item.label}</label>
+                                                                                        <input
+                                                                                            type="number"
+                                                                                            value={(typeof val === 'number' ? val : '') as any}
+                                                                                            onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value ? Number(e.target.value) : '')}
+                                                                                            className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                                                                                            placeholder="0"
+                                                                                        />
+                                                                                    </div>
+                                                                                );
+                                                                            } else {
+                                                                                // tipo === 'texto'
+                                                                                return (
+                                                                                    <div key={item.key} className="flex flex-col gap-0.5">
+                                                                                        <label className="text-[10px] font-semibold text-slate-500">{item.label}</label>
+                                                                                        <input
+                                                                                            type="text"
+                                                                                            value={val as string || ''}
+                                                                                            onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value)}
+                                                                                            className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                                                                                            placeholder="..."
+                                                                                        />
+                                                                                    </div>
+                                                                                );
+                                                                            }
                                                                         })}
                                                                     </div>
                                                                 </div>
@@ -904,14 +970,17 @@ export default function RevisionChecklist() {
                                                                         <button
                                                                             type="button"
                                                                             onClick={async () => {
+                                                                                const itemsToUse = getItemsToUse();
                                                                                 const updatedEquipos = equiposInstalados.map(currEq => {
                                                                                     if (currEq.id === eq.id) {
+                                                                                        const allChecked: Record<string, any> = {};
+                                                                                        itemsToUse.forEach(item => {
+                                                                                            allChecked[item.key] = true;
+                                                                                        });
                                                                                         return {
                                                                                             ...currEq,
                                                                                             revisado: true,
-                                                                                            checkAcceso: true, checkAltura: true, checkSoporte: true, checkSenalizacion: true, checkManguera: true,
-                                                                                            checkPeso: true, checkManometro: true, checkMarcado: true, checkEtiquetas: true, checkRetimbre: true,
-                                                                                            checkRiesgo: true, checkDistancia: true, checkPasador: true, checkMovilidad: true
+                                                                                            ...allChecked
                                                                                         };
                                                                                     }
                                                                                     return currEq;
@@ -934,14 +1003,17 @@ export default function RevisionChecklist() {
                                                                         <button
                                                                             type="button"
                                                                             onClick={async () => {
+                                                                                const itemsToUse = getItemsToUse();
                                                                                 const updatedEquipos = equiposInstalados.map(currEq => {
                                                                                     if (currEq.id === eq.id) {
+                                                                                        const allFalse: Record<string, any> = {};
+                                                                                        itemsToUse.forEach(item => {
+                                                                                            allFalse[item.key] = false;
+                                                                                        });
                                                                                         return {
                                                                                             ...currEq,
                                                                                             revisado: true,
-                                                                                    checkAcceso: false, checkAltura: false, checkSoporte: false, checkSenalizacion: false, checkManguera: false,
-                                                                                    checkPeso: false, checkManometro: false, checkMarcado: false, checkEtiquetas: false, checkRetimbre: false,
-                                                                                    checkRiesgo: false, checkDistancia: false, checkPasador: false, checkMovilidad: false,
+                                                                                            ...allFalse,
                                                                                             anomalias: 'Equipo no revisado por no localizarse en su lugar.'
                                                                                         };
                                                                                     }
@@ -965,10 +1037,11 @@ export default function RevisionChecklist() {
                                                                         <button
                                                                             type="button"
                                                                             onClick={async () => {
+                                                                                const itemsToUse = getItemsToUse();
                                                                                 const updatedEquipos = equiposInstalados.map(currEq => {
                                                                                     if (currEq.id === eq.id) {
                                                                                         const cleanedEq = { ...currEq, revisado: false, anomalias: '' };
-                                                                                        CHECKLIST_ITEMS.forEach(item => {
+                                                                                        itemsToUse.forEach(item => {
                                                                                             (cleanedEq as any)[item.key] = null;
                                                                                         });
                                                                                         return cleanedEq;
