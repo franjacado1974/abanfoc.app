@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, Save, Building2, Layers, MapPin, FileText, ChevronDown, ChevronRight, Plus, X, CheckCircle2, XCircle, Trash2, AlertTriangle, Pencil, PenLine, RotateCcw, CheckCheck, Eye } from 'lucide-react';
+import { ArrowLeft, Save, Building2, Layers, MapPin, FileText, ChevronDown, ChevronUp, Plus, X, CheckCircle2, XCircle, Trash2, AlertTriangle, Pencil, PenLine, RotateCcw, CheckCheck, Eye } from 'lucide-react';
 import { addAlbaran, updateEquipoInstalado, updateParte as updateParteFirestore, subscribePartes, subscribeCentros, subscribeClientes, subscribeCentroSistemas, subscribeEquiposInstalados, subscribeArticulos, subscribeSistemasCategorias, type Albaran, type Tecnico } from './firebase';
 import type { Centro, Parte, Cliente, CentroSistema, EquipoInstalado } from './Centros';
 import ConfirmationModal from './ConfirmationModal';
@@ -38,6 +38,13 @@ export default function RevisionChecklist() {
     const [loading, setLoading] = useState(true);
     const [clientes, setClientes] = useState<Cliente[]>(() => JSON.parse(localStorage.getItem('firecheck_db_clientes') || '[]'));
     const [openSistemas, setOpenSistemas] = useState<Record<string, boolean>>({});
+    // Orden personalizado de sistemas (guardado en localStorage)
+    const [sistemaOrden, setSistemaOrden] = useState<string[]>(() => {
+        try {
+            const stored = localStorage.getItem('firecheck_revision_sistema_orden');
+            return stored ? JSON.parse(stored) : [];
+        } catch { return []; }
+    });
     const [selectedCatalogItem, setSelectedCatalogItem] = useState<string>('');
     const [newEquipo, setNewEquipo] = useState<{ codigo: string; nombre: string; ubicacion: string; placa: string; fechaFabricacion: string; ultimoRetimbre: string }>({ codigo: '', nombre: '', ubicacion: '', placa: '', fechaFabricacion: '', ultimoRetimbre: '' });
     const [addSistemaId, setAddSistemaId] = useState<string | null>(null);
@@ -427,6 +434,27 @@ export default function RevisionChecklist() {
         localStorage.setItem('firecheck_db_equipos_instalados', JSON.stringify(updatedAll));
     };
 
+    const moveSistema = (sistemaId: string, direction: 'up' | 'down') => {
+        const sistemasOrdenados = [...sistemasDelCentro].sort((a, b) => {
+            const idxA = sistemaOrden.indexOf(a.id);
+            const idxB = sistemaOrden.indexOf(b.id);
+            if (idxA === -1 && idxB === -1) return 0;
+            if (idxA === -1) return 1;
+            if (idxB === -1) return -1;
+            return idxA - idxB;
+        });
+        const currentIndex = sistemasOrdenados.findIndex(s => s.id === sistemaId);
+        if (currentIndex === -1) return;
+        const newIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+        if (newIndex < 0 || newIndex >= sistemasOrdenados.length) return;
+
+        const newOrden = sistemasOrdenados.map(s => s.id);
+        const [moved] = newOrden.splice(currentIndex, 1);
+        newOrden.splice(newIndex, 0, moved);
+        setSistemaOrden(newOrden);
+        localStorage.setItem('firecheck_revision_sistema_orden', JSON.stringify(newOrden));
+    };
+
     const toggleSistema = (sistemaId: string) => {
         setOpenSistemas(prev => ({ ...prev, [sistemaId]: !prev[sistemaId] }));
     };
@@ -606,7 +634,14 @@ export default function RevisionChecklist() {
                             <p className="text-slate-400 font-medium">Este centro no tiene sistemas registrados.</p>
                         </div>
                     ) : (
-                        sistemasDelCentro.map(sist => {
+                        [...sistemasDelCentro].sort((a, b) => {
+                            const idxA = sistemaOrden.indexOf(a.id);
+                            const idxB = sistemaOrden.indexOf(b.id);
+                            if (idxA === -1 && idxB === -1) return 0;
+                            if (idxA === -1) return 1;
+                            if (idxB === -1) return -1;
+                            return idxA - idxB;
+                        }).map((sist, index, arr) => {
                             // Buscar la imagen del sistema en categoriasSistema (cargado desde Firestore)
                             const sistemaCat = categoriasSistema.find(c => {
                                 const nombreSist = (sist.tipo || sist.familia || '').toLowerCase().trim();
@@ -615,6 +650,8 @@ export default function RevisionChecklist() {
                             });
                             const imagenUrl = sistemaCat?.imagenUrl;
                             const IconoCat = imagenUrl || getIconForSistema(sist.tipo || sist.familia || '');
+                            const isFirst = index === 0;
+                            const isLast = index === arr.length - 1;
                             return (
                                 <div key={sist.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm transition-shadow hover:shadow-md">
                                 {/* Accordion Header - sticky respecto al viewport */}
@@ -625,11 +662,11 @@ export default function RevisionChecklist() {
                                             onClick={() => toggleSistema(sist.id)}
                                             className="flex items-center gap-3 text-left flex-1 min-w-0"
                                         >
-                                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center transition-colors shrink-0 overflow-hidden ${openSistemas[sist.id] ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-500'}`}>
+                                            <div className="w-9 h-9 flex items-center justify-center shrink-0 overflow-hidden">
                                                 {typeof IconoCat === 'string' ? (
-                                                    <img src={IconoCat} alt="Icon" className="w-6 h-6 object-contain opacity-80" />
+                                                    <img src={IconoCat} alt="Icon" className="w-7 h-7 object-contain" />
                                                 ) : (
-                                                    <IconoCat className="w-5 h-5" />
+                                                    <IconoCat className="w-5 h-5 text-slate-500" />
                                                 )}
                                             </div>
                                             <div className="min-w-0">
@@ -642,6 +679,27 @@ export default function RevisionChecklist() {
                                             </div>
                                         </button>
                                         <div className="flex items-center gap-1.5 shrink-0">
+                                            {/* Flechas para reordenar */}
+                                            <div className="flex flex-col gap-0.5 mr-1">
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => { e.stopPropagation(); moveSistema(sist.id, 'up'); }}
+                                                    disabled={isFirst}
+                                                    className={`p-0.5 rounded transition-colors ${isFirst ? 'text-slate-200 cursor-not-allowed' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'}`}
+                                                    title="Mover arriba"
+                                                >
+                                                    <ChevronUp className="w-3.5 h-3.5" />
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => { e.stopPropagation(); moveSistema(sist.id, 'down'); }}
+                                                    disabled={isLast}
+                                                    className={`p-0.5 rounded transition-colors ${isLast ? 'text-slate-200 cursor-not-allowed' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'}`}
+                                                    title="Mover abajo"
+                                                >
+                                                    <ChevronDown className="w-3.5 h-3.5" />
+                                                </button>
+                                            </div>
                                             {openSistemas[sist.id] && (
                                                 <button
                                                     type="button"
@@ -656,9 +714,6 @@ export default function RevisionChecklist() {
                                                     <AlertTriangle className="w-5 h-5 text-amber-500" />
                                                 </span>
                                             )}
-                                            <div className={`w-7 h-7 rounded-full flex items-center justify-center transition-colors ${openSistemas[sist.id] ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-50 text-slate-400'}`}>
-                                                {openSistemas[sist.id] ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                                            </div>
                                         </div>
                                     </div>
                                 </div>
