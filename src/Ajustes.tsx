@@ -220,6 +220,8 @@ export default function Ajustes() {
   const [editingChecklistLabel, setEditingChecklistLabel] = useState('');
   const [editingChecklistTipo, setEditingChecklistTipo] = useState<'check' | 'texto' | 'numero'>('check');
   const [cargandoPlantilla, setCargandoPlantilla] = useState(false);
+  const [editandoPlantilla, setEditandoPlantilla] = useState(false);
+  const [plantillaEditada, setPlantillaEditada] = useState<{ key: string; label: string; tipoRespuesta: 'check' | 'texto' | 'numero' }[]>([]);
 
   // Plantilla predefinida de extintores (la misma que en RevisionChecklist.tsx)
   const PLANTILLA_EXTINTORES = [
@@ -248,13 +250,13 @@ export default function Ajustes() {
     return () => unsub();
   }, [checklistSistemaId]);
 
-  const handleCargarPlantillaExtintores = async () => {
+  const handleCargarPlantillaExtintoresConItems = async (items: { key: string; label: string; tipoRespuesta: 'check' | 'texto' | 'numero' }[]) => {
     if (!checklistSistemaId) return;
     const sistema = sistemas.find(s => s.id === checklistSistemaId);
     if (!sistema) return;
     setCargandoPlantilla(true);
     try {
-      const itemsToSave = PLANTILLA_EXTINTORES.map((item, index) => ({
+      const itemsToSave = items.map((item, index) => ({
         sistemaId: checklistSistemaId,
         sistemaNombre: sistema.nombre,
         label: item.label,
@@ -263,6 +265,7 @@ export default function Ajustes() {
         tipoRespuesta: item.tipoRespuesta,
       }));
       await saveChecklistBatch(itemsToSave);
+      setEditandoPlantilla(false);
     } catch (err) {
       console.error('Error cargando plantilla:', err);
       alert('Error al guardar la plantilla en Firestore');
@@ -825,48 +828,124 @@ export default function Ajustes() {
                   </div>
                 </div>
 
-                {/* Tarjeta de plantilla de extintores (solo si no hay items) */}
-                {checklistItems.length === 0 && (
-                  <div className="bg-white rounded-2xl border-2 border-dashed border-teal-300 overflow-hidden">
-                    <div className="px-4 py-3 bg-teal-50 border-b border-teal-100 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <FireExtinguisher className="w-4 h-4 text-teal-600" />
-                        <p className="text-xs font-bold text-teal-700 uppercase tracking-wider">
-                          Plantilla de Extintores
-                        </p>
-                      </div>
-                      <button
-                        onClick={handleCargarPlantillaExtintores}
-                        disabled={cargandoPlantilla}
-                        className="flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
-                      >
-                        {cargandoPlantilla ? (
-                          <Loader className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <Plus className="w-3.5 h-3.5" />
-                        )}
-                        Usar plantilla
-                      </button>
-                    </div>
-                    <div className="p-4">
-                      <p className="text-xs text-zinc-500 mb-3">
-                        Esta plantilla contiene los 14 checks predefinidos para revisión de extintores. 
-                        Al hacer clic en "Usar plantilla" se guardarán en Firestore y podrás modificarlos libremente.
+                {/* Tarjeta de plantilla de extintores (siempre visible) */}
+                <div className="bg-white rounded-2xl border-2 border-dashed border-teal-300 overflow-hidden">
+                  <div className="px-4 py-3 bg-teal-50 border-b border-teal-100 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <FireExtinguisher className="w-4 h-4 text-teal-600" />
+                      <p className="text-xs font-bold text-teal-700 uppercase tracking-wider">
+                        Plantilla de Extintores
                       </p>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                        {PLANTILLA_EXTINTORES.map((item) => (
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {editandoPlantilla ? (
+                        <>
+                          <button
+                            onClick={() => {
+                              setEditandoPlantilla(false);
+                            }}
+                            className="flex items-center gap-1.5 bg-zinc-400 hover:bg-zinc-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                            Cancelar
+                          </button>
+                          <button
+                            onClick={() => handleCargarPlantillaExtintoresConItems(plantillaEditada)}
+                            disabled={cargandoPlantilla}
+                            className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
+                          >
+                            {cargandoPlantilla ? (
+                              <Loader className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Save className="w-3.5 h-3.5" />
+                            )}
+                            Guardar plantilla
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => {
+                              setEditandoPlantilla(true);
+                              setPlantillaEditada(PLANTILLA_EXTINTORES.map(p => ({ ...p })));
+                            }}
+                            className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                            Editar plantilla
+                          </button>
+                          <button
+                            onClick={() => handleCargarPlantillaExtintoresConItems(PLANTILLA_EXTINTORES)}
+                            disabled={cargandoPlantilla}
+                            className="flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
+                          >
+                            {cargandoPlantilla ? (
+                              <Loader className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Plus className="w-3.5 h-3.5" />
+                            )}
+                            Usar plantilla
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <div className="p-4">
+                    <p className="text-xs text-zinc-500 mb-3">
+                      Esta plantilla contiene los 14 checks predefinidos para revisión de extintores.
+                      {editandoPlantilla 
+                        ? ' Puedes modificar las preguntas y tipos antes de guardarlas en Firestore.'
+                        : ' Haz clic en "Editar plantilla" para personalizar las preguntas antes de guardarlas.'}
+                    </p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                      {(editandoPlantilla ? plantillaEditada : PLANTILLA_EXTINTORES).map((item, idx) => (
+                        editandoPlantilla ? (
+                          <div key={item.key} className="flex flex-col gap-1 px-3 py-2 bg-amber-50/50 border border-amber-200 rounded-lg">
+                            <div className="flex items-center gap-1">
+                              <span className="text-[10px] font-bold text-amber-600 shrink-0">{idx + 1}.</span>
+                              <input
+                                type="text"
+                                value={item.label}
+                                onChange={e => {
+                                  const newPlantilla = [...plantillaEditada];
+                                  newPlantilla[idx] = { ...newPlantilla[idx], label: e.target.value };
+                                  setPlantillaEditada(newPlantilla);
+                                }}
+                                className="flex-1 px-1.5 py-0.5 bg-white border border-amber-300 rounded text-[11px] outline-none focus:border-amber-500"
+                              />
+                            </div>
+                            <select
+                              value={item.tipoRespuesta}
+                              onChange={e => {
+                                const newPlantilla = [...plantillaEditada];
+                                newPlantilla[idx] = { ...newPlantilla[idx], tipoRespuesta: e.target.value as 'check' | 'texto' | 'numero' };
+                                setPlantillaEditada(newPlantilla);
+                              }}
+                              className="text-[10px] px-1 py-0.5 bg-white border border-amber-200 rounded outline-none"
+                            >
+                              <option value="check">Check</option>
+                              <option value="texto">Texto</option>
+                              <option value="numero">Número</option>
+                            </select>
+                          </div>
+                        ) : (
                           <div
                             key={item.key}
                             className="flex items-center gap-2 px-3 py-2 bg-teal-50/50 border border-teal-100 rounded-lg text-xs"
                           >
                             <CheckSquare className="w-3.5 h-3.5 text-teal-500 shrink-0" />
                             <span className="font-medium text-zinc-700">{item.label}</span>
+                            <span className={`ml-auto text-[9px] font-mono font-bold ${
+                              item.tipoRespuesta === 'check' ? 'text-teal-600' : item.tipoRespuesta === 'numero' ? 'text-blue-600' : 'text-amber-600'
+                            }`}>
+                              {item.tipoRespuesta === 'check' ? '✓/✗' : item.tipoRespuesta === 'numero' ? '#0' : 'Abc'}
+                            </span>
                           </div>
-                        ))}
-                      </div>
+                        )
+                      ))}
                     </div>
                   </div>
-                )}
+                </div>
 
                 {/* Lista de preguntas */}
                 <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden">
