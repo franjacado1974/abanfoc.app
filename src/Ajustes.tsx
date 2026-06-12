@@ -245,11 +245,21 @@ export default function Ajustes() {
   // Suscribirse a los items del checklist cuando se selecciona un sistema
   useEffect(() => {
     if (!checklistSistemaId) return;
-    const unsub = subscribeChecklists(checklistSistemaId, (items) => {
-      setChecklistItems(items);
-    });
-    return () => unsub();
-  }, [checklistSistemaId]);
+    const sistema = sistemas.find(s => s.id === checklistSistemaId);
+    const sistemaNombre = sistema?.nombre || '';
+    if (sistemaNombre) {
+      const unsub = subscribeChecklistsPorSistema(sistemaNombre, (items) => {
+        setChecklistItems(items);
+      });
+      return () => unsub();
+    } else {
+      // Fallback: usar la colección antigua
+      const unsub = subscribeChecklists(checklistSistemaId, (items) => {
+        setChecklistItems(items);
+      });
+      return () => unsub();
+    }
+  }, [checklistSistemaId, sistemas]);
 
   const handleCargarPlantillaExtintoresConItems = async (items: { key: string; label: string; tipoRespuesta: 'check' | 'texto' | 'numero' }[]) => {
     if (!checklistSistemaId) return;
@@ -266,7 +276,7 @@ export default function Ajustes() {
         tipoRespuesta: item.tipoRespuesta,
       }));
       // Guardar en colección dinámica: checklist_{sistemaNombre}
-      await saveChecklistBatchPorSistema(plantillaTitulo, itemsToSave);
+      await saveChecklistBatchPorSistema(sistema.nombre, itemsToSave);
       setEditandoPlantilla(false);
     } catch (err) {
       console.error('Error cargando plantilla:', err);
@@ -279,17 +289,29 @@ export default function Ajustes() {
   const handleAddChecklistItem = async () => {
     if (!checklistSistemaId || !newChecklistLabel.trim()) return;
     const sistema = sistemas.find(s => s.id === checklistSistemaId);
+    const sistemaNombre = sistema?.nombre || '';
     const key = 'check' + newChecklistLabel.trim().replace(/\s+/g, '');
     const maxOrden = checklistItems.reduce((max, item) => Math.max(max, item.orden), 0);
     try {
-      await addChecklistItem({
-        sistemaId: checklistSistemaId,
-        sistemaNombre: sistema?.nombre || '',
-        label: newChecklistLabel.trim(),
-        key,
-        orden: maxOrden + 1,
-        tipoRespuesta: newChecklistTipo,
-      });
+      if (sistemaNombre) {
+        await saveChecklistBatchPorSistema(sistemaNombre, [{
+          sistemaId: checklistSistemaId,
+          sistemaNombre,
+          label: newChecklistLabel.trim(),
+          key,
+          orden: maxOrden + 1,
+          tipoRespuesta: newChecklistTipo,
+        }]);
+      } else {
+        await addChecklistItem({
+          sistemaId: checklistSistemaId,
+          sistemaNombre: '',
+          label: newChecklistLabel.trim(),
+          key,
+          orden: maxOrden + 1,
+          tipoRespuesta: newChecklistTipo,
+        });
+      }
       setNewChecklistLabel('');
       setNewChecklistTipo('check');
     } catch (err) {
@@ -300,8 +322,14 @@ export default function Ajustes() {
 
   const handleUpdateChecklistItem = async (id: string) => {
     if (!editingChecklistLabel.trim()) return;
+    const sistema = sistemas.find(s => s.id === checklistSistemaId);
+    const sistemaNombre = sistema?.nombre || '';
     try {
-      await updateChecklistItem(id, { label: editingChecklistLabel.trim(), tipoRespuesta: editingChecklistTipo });
+      if (sistemaNombre) {
+        await updateChecklistItemPorSistema(sistemaNombre, id, { label: editingChecklistLabel.trim(), tipoRespuesta: editingChecklistTipo });
+      } else {
+        await updateChecklistItem(id, { label: editingChecklistLabel.trim(), tipoRespuesta: editingChecklistTipo });
+      }
       setEditingChecklistId(null);
       setEditingChecklistLabel('');
       setEditingChecklistTipo('check');
@@ -312,8 +340,14 @@ export default function Ajustes() {
   };
 
   const handleDeleteChecklistItem = async (id: string) => {
+    const sistema = sistemas.find(s => s.id === checklistSistemaId);
+    const sistemaNombre = sistema?.nombre || '';
     try {
-      await deleteChecklistItem(id);
+      if (sistemaNombre) {
+        await deleteChecklistItemPorSistema(sistemaNombre, id);
+      } else {
+        await deleteChecklistItem(id);
+      }
     } catch (err) {
       console.error('Error eliminando item de checklist:', err);
       alert('Error al eliminar de Firestore');

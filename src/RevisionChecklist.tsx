@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Save, Building2, Layers, MapPin, FileText, ChevronDown, ChevronUp, Plus, X, CheckCircle2, XCircle, Trash2, AlertTriangle, Pencil, PenLine, RotateCcw, CheckCheck, Eye } from 'lucide-react';
-import { addAlbaran, updateEquipoInstalado, updateParte as updateParteFirestore, subscribePartes, subscribeCentros, subscribeClientes, subscribeCentroSistemas, subscribeEquiposInstalados, subscribeArticulos, subscribeSistemasCategorias, subscribeChecklists, type Albaran, type Tecnico, type ChecklistItem } from './firebase';
+import { addAlbaran, updateEquipoInstalado, updateParte as updateParteFirestore, subscribePartes, subscribeCentros, subscribeClientes, subscribeCentroSistemas, subscribeEquiposInstalados, subscribeArticulos, subscribeSistemasCategorias, subscribeChecklists, subscribeChecklistsPorSistema, type Albaran, type Tecnico, type ChecklistItem } from './firebase';
 import type { Centro, Parte, Cliente, CentroSistema, EquipoInstalado } from './Centros';
 import ConfirmationModal from './ConfirmationModal';
 import { getIconForSistema } from './Sistemas';
@@ -49,14 +49,25 @@ export default function RevisionChecklist() {
     const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>([]);
     const [checklistSistemaId, setChecklistSistemaId] = useState<string>('');
 
-    // Cargar checklist del sistema seleccionado
+    // Cargar checklist del sistema seleccionado desde colección dinámica
     useEffect(() => {
         if (!checklistSistemaId) return;
-        const unsub = subscribeChecklists(checklistSistemaId, (items) => {
-            setChecklistItems(items);
-        });
-        return () => unsub();
-    }, [checklistSistemaId]);
+        // Buscar el nombre del sistema en categoriasSistema
+        const sistemaCat = categoriasSistema.find(c => c.id === checklistSistemaId);
+        const sistemaNombre = sistemaCat?.nombre || '';
+        if (sistemaNombre) {
+            const unsub = subscribeChecklistsPorSistema(sistemaNombre, (items) => {
+                setChecklistItems(items);
+            });
+            return () => unsub();
+        } else {
+            // Fallback: usar la colección antigua
+            const unsub = subscribeChecklists(checklistSistemaId, (items) => {
+                setChecklistItems(items);
+            });
+            return () => unsub();
+        }
+    }, [checklistSistemaId, categoriasSistema]);
 
     const [selectedCatalogItem, setSelectedCatalogItem] = useState<string>('');
     const [newEquipo, setNewEquipo] = useState<{ codigo: string; nombre: string; ubicacion: string; placa: string; fechaFabricacion: string; ultimoRetimbre: string }>({ codigo: '', nombre: '', ubicacion: '', placa: '', fechaFabricacion: '', ultimoRetimbre: '' });
