@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Building2, Users, ShieldCheck, FireExtinguisher, Plus, Trash2, ArrowLeft, Image as ImageIcon, X, Loader, Edit, Percent, CheckSquare, Save, GripVertical
 } from 'lucide-react';
-import { addUserToFirestore, subscribeSistemasCategorias, addSistemaCategoria, deleteSistemaCategoria, uploadFile, subscribeImpuestos, saveImpuestoConfig, subscribeChecklists, addChecklistItem, updateChecklistItem, deleteChecklistItem, type ChecklistItem } from './firebase';
+import { addUserToFirestore, subscribeSistemasCategorias, addSistemaCategoria, deleteSistemaCategoria, uploadFile, subscribeImpuestos, saveImpuestoConfig, subscribeChecklists, addChecklistItem, updateChecklistItem, deleteChecklistItem, saveChecklistBatch, type ChecklistItem } from './firebase';
 import ConfirmationModal from './ConfirmationModal';
 
 const generateId = () => {
@@ -219,6 +219,25 @@ export default function Ajustes() {
   const [editingChecklistId, setEditingChecklistId] = useState<string | null>(null);
   const [editingChecklistLabel, setEditingChecklistLabel] = useState('');
   const [editingChecklistTipo, setEditingChecklistTipo] = useState<'check' | 'texto' | 'numero'>('check');
+  const [cargandoPlantilla, setCargandoPlantilla] = useState(false);
+
+  // Plantilla predefinida de extintores (la misma que en RevisionChecklist.tsx)
+  const PLANTILLA_EXTINTORES = [
+    { key: 'checkAcceso', label: 'Acceso', tipoRespuesta: 'check' as const },
+    { key: 'checkAltura', label: 'Altura', tipoRespuesta: 'check' as const },
+    { key: 'checkSoporte', label: 'Soporte', tipoRespuesta: 'check' as const },
+    { key: 'checkSenalizacion', label: 'Señalización', tipoRespuesta: 'check' as const },
+    { key: 'checkManguera', label: 'Manguera', tipoRespuesta: 'check' as const },
+    { key: 'checkPeso', label: 'Peso', tipoRespuesta: 'check' as const },
+    { key: 'checkManometro', label: 'Manómetro', tipoRespuesta: 'check' as const },
+    { key: 'checkMarcado', label: 'Marcado', tipoRespuesta: 'check' as const },
+    { key: 'checkEtiquetas', label: 'Etiquetas', tipoRespuesta: 'check' as const },
+    { key: 'checkRetimbre', label: 'Retimbre', tipoRespuesta: 'check' as const },
+    { key: 'checkRiesgo', label: 'Riesgo', tipoRespuesta: 'check' as const },
+    { key: 'checkDistancia', label: 'Distancia', tipoRespuesta: 'check' as const },
+    { key: 'checkPasador', label: 'Pasador', tipoRespuesta: 'check' as const },
+    { key: 'checkMovilidad', label: 'Movilidad', tipoRespuesta: 'check' as const },
+  ];
 
   // Suscribirse a los items del checklist cuando se selecciona un sistema
   useEffect(() => {
@@ -228,6 +247,29 @@ export default function Ajustes() {
     });
     return () => unsub();
   }, [checklistSistemaId]);
+
+  const handleCargarPlantillaExtintores = async () => {
+    if (!checklistSistemaId) return;
+    const sistema = sistemas.find(s => s.id === checklistSistemaId);
+    if (!sistema) return;
+    setCargandoPlantilla(true);
+    try {
+      const itemsToSave = PLANTILLA_EXTINTORES.map((item, index) => ({
+        sistemaId: checklistSistemaId,
+        sistemaNombre: sistema.nombre,
+        label: item.label,
+        key: item.key,
+        orden: index + 1,
+        tipoRespuesta: item.tipoRespuesta,
+      }));
+      await saveChecklistBatch(itemsToSave);
+    } catch (err) {
+      console.error('Error cargando plantilla:', err);
+      alert('Error al guardar la plantilla en Firestore');
+    } finally {
+      setCargandoPlantilla(false);
+    }
+  };
 
   const handleAddChecklistItem = async () => {
     if (!checklistSistemaId || !newChecklistLabel.trim()) return;
@@ -783,16 +825,55 @@ export default function Ajustes() {
                   </div>
                 </div>
 
+                {/* Tarjeta de plantilla de extintores (solo si no hay items) */}
+                {checklistItems.length === 0 && (
+                  <div className="bg-white rounded-2xl border-2 border-dashed border-teal-300 overflow-hidden">
+                    <div className="px-4 py-3 bg-teal-50 border-b border-teal-100 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <FireExtinguisher className="w-4 h-4 text-teal-600" />
+                        <p className="text-xs font-bold text-teal-700 uppercase tracking-wider">
+                          Plantilla de Extintores
+                        </p>
+                      </div>
+                      <button
+                        onClick={handleCargarPlantillaExtintores}
+                        disabled={cargandoPlantilla}
+                        className="flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
+                      >
+                        {cargandoPlantilla ? (
+                          <Loader className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Plus className="w-3.5 h-3.5" />
+                        )}
+                        Usar plantilla
+                      </button>
+                    </div>
+                    <div className="p-4">
+                      <p className="text-xs text-zinc-500 mb-3">
+                        Esta plantilla contiene los 14 checks predefinidos para revisión de extintores. 
+                        Al hacer clic en "Usar plantilla" se guardarán en Firestore y podrás modificarlos libremente.
+                      </p>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                        {PLANTILLA_EXTINTORES.map((item) => (
+                          <div
+                            key={item.key}
+                            className="flex items-center gap-2 px-3 py-2 bg-teal-50/50 border border-teal-100 rounded-lg text-xs"
+                          >
+                            <CheckSquare className="w-3.5 h-3.5 text-teal-500 shrink-0" />
+                            <span className="font-medium text-zinc-700">{item.label}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Lista de preguntas */}
                 <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden">
                   <p className="px-4 py-3 text-xs font-bold text-zinc-400 uppercase tracking-wider border-b border-zinc-100">
                     Preguntas del Checklist ({checklistItems.length})
                   </p>
-                  {checklistItems.length === 0 ? (
-                    <div className="p-8 text-center text-zinc-400 text-sm">
-                      No hay preguntas para este sistema. Añade la primera pregunta arriba.
-                    </div>
-                  ) : (
+                  {checklistItems.length > 0 && (
                     <ul className="divide-y divide-zinc-100">
                       {checklistItems.map((item, index) => (
                         <li key={item.id} className="p-4 flex items-center gap-3 hover:bg-zinc-50 transition-colors">
