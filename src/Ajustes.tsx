@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Building2, Users, ShieldCheck, FireExtinguisher, Plus, Trash2, ArrowLeft, Image as ImageIcon, X, Loader, Edit, Percent, CheckSquare, Save, GripVertical
 } from 'lucide-react';
-import { addUserToFirestore, subscribeSistemasCategorias, addSistemaCategoria, deleteSistemaCategoria, uploadFile, subscribeImpuestos, saveImpuestoConfig, subscribeChecklists, addChecklistItem, updateChecklistItem, deleteChecklistItem, saveChecklistBatch, subscribeChecklistsPorSistema, saveChecklistBatchPorSistema, deleteChecklistItemPorSistema, updateChecklistItemPorSistema, type ChecklistItem, type TipoRespuestaChecklist } from './firebase';
+import { addUserToFirestore, subscribeSistemasCategorias, addSistemaCategoria, deleteSistemaCategoria, uploadFile, subscribeImpuestos, saveImpuestoConfig, subscribeChecklists, addChecklistItem, updateChecklistItem, deleteChecklistItem, saveChecklistBatch, subscribeChecklistsPorSistema, saveChecklistBatchPorSistema, deleteChecklistItemPorSistema, updateChecklistItemPorSistema, type ChecklistItem } from './firebase';
 import ConfirmationModal from './ConfirmationModal';
 
 const generateId = () => {
@@ -215,39 +215,31 @@ export default function Ajustes() {
   const [checklistSistemaId, setChecklistSistemaId] = useState<string>('');
   const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>([]);
   const [newChecklistLabel, setNewChecklistLabel] = useState('');
-  const [newChecklistTipo, setNewChecklistTipo] = useState<TipoRespuestaChecklist>('check');
+  const [newChecklistTipo, setNewChecklistTipo] = useState<'check' | 'texto' | 'numero'>('check');
   const [editingChecklistId, setEditingChecklistId] = useState<string | null>(null);
   const [editingChecklistLabel, setEditingChecklistLabel] = useState('');
-  const [editingChecklistTipo, setEditingChecklistTipo] = useState<TipoRespuestaChecklist>('check');
+  const [editingChecklistTipo, setEditingChecklistTipo] = useState<'check' | 'texto' | 'numero'>('check');
   const [cargandoPlantilla, setCargandoPlantilla] = useState(false);
   const [editandoPlantilla, setEditandoPlantilla] = useState(false);
   const [plantillaTitulo, setPlantillaTitulo] = useState('PLANTILLA');
   const [plantillaEditada, setPlantillaEditada] = useState<{ key: string; label: string; tipoRespuesta: 'check' | 'texto' | 'numero' }[]>([]);
 
-  // Plantilla de extintores según el documento "Preguntas check list extintores"
+  // Plantilla predefinida de extintores (la misma que en RevisionChecklist.tsx)
   const PLANTILLA_EXTINTORES = [
-    { key: 'numero', label: 'N.º', tipoRespuesta: 'numero' as const },
-    { key: 'nivelPlantaUbicacion', label: 'Nivel de planta y ubicación', tipoRespuesta: 'texto' as const },
-    { key: 'placa', label: 'Placa', tipoRespuesta: 'texto' as const },
-    { key: 'clase', label: 'Clase', tipoRespuesta: 'seleccion' as const },
-    { key: 'tipo', label: 'Tipo', tipoRespuesta: 'seleccion' as const },
-    { key: 'fabricante', label: 'Fabricante', tipoRespuesta: 'seleccion' as const },
-    { key: 'fechaFabricacion', label: 'Fecha fabricación', tipoRespuesta: 'fecha' as const },
-    { key: 'ultimoRetimbre', label: 'Último Retimbre', tipoRespuesta: 'fecha' as const },
-    { key: 'checkAcceso', label: 'Acceso al extintor', tipoRespuesta: 'check' as const },
-    { key: 'checkAltura', label: 'Altura del extintor', tipoRespuesta: 'check' as const },
-    { key: 'checkSoporte', label: 'Soporte correcto', tipoRespuesta: 'check' as const },
+    { key: 'checkAcceso', label: 'Acceso', tipoRespuesta: 'check' as const },
+    { key: 'checkAltura', label: 'Altura', tipoRespuesta: 'check' as const },
+    { key: 'checkSoporte', label: 'Soporte', tipoRespuesta: 'check' as const },
     { key: 'checkSenalizacion', label: 'Señalización', tipoRespuesta: 'check' as const },
-    { key: 'checkManguera', label: 'Difusor-manguera', tipoRespuesta: 'check' as const },
-    { key: 'checkPeso', label: 'Peso total del aparato', tipoRespuesta: 'check' as const },
-    { key: 'checkManometro', label: 'Presión manómetro', tipoRespuesta: 'check' as const },
-    { key: 'checkMarcado', label: 'Extintor con Marcado CE', tipoRespuesta: 'check' as const },
-    { key: 'checkEtiquetas', label: 'Etiquetas de tipo y manejo', tipoRespuesta: 'check' as const },
-    { key: 'checkRetimbre', label: 'Etiquetas de último retimbrado', tipoRespuesta: 'check' as const },
-    { key: 'checkRiesgo', label: 'Adecuado para su riesgo', tipoRespuesta: 'check' as const },
-    { key: 'checkDistancia', label: 'La distancia entre extintores es inferior a 15 metros', tipoRespuesta: 'check' as const },
-    { key: 'checkPasador', label: 'Anilla pasador y estado del precinto', tipoRespuesta: 'check' as const },
-    { key: 'checkMovilidad', label: 'Si es un carro comprobar su movilidad, ruedas etc.', tipoRespuesta: 'check' as const },
+    { key: 'checkManguera', label: 'Manguera', tipoRespuesta: 'check' as const },
+    { key: 'checkPeso', label: 'Peso', tipoRespuesta: 'check' as const },
+    { key: 'checkManometro', label: 'Manómetro', tipoRespuesta: 'check' as const },
+    { key: 'checkMarcado', label: 'Marcado', tipoRespuesta: 'check' as const },
+    { key: 'checkEtiquetas', label: 'Etiquetas', tipoRespuesta: 'check' as const },
+    { key: 'checkRetimbre', label: 'Retimbre', tipoRespuesta: 'check' as const },
+    { key: 'checkRiesgo', label: 'Riesgo', tipoRespuesta: 'check' as const },
+    { key: 'checkDistancia', label: 'Distancia', tipoRespuesta: 'check' as const },
+    { key: 'checkPasador', label: 'Pasador', tipoRespuesta: 'check' as const },
+    { key: 'checkMovilidad', label: 'Movilidad', tipoRespuesta: 'check' as const },
   ];
 
   // Suscribirse a los items del checklist cuando se selecciona un sistema
@@ -269,7 +261,7 @@ export default function Ajustes() {
     }
   }, [checklistSistemaId, sistemas]);
 
-  const handleCargarPlantillaExtintoresConItems = async (items: { key: string; label: string; tipoRespuesta: TipoRespuestaChecklist }[]) => {
+  const handleCargarPlantillaExtintoresConItems = async (items: { key: string; label: string; tipoRespuesta: 'check' | 'texto' | 'numero' }[]) => {
     if (!checklistSistemaId) return;
     const sistema = sistemas.find(s => s.id === checklistSistemaId);
     if (!sistema) return;
@@ -840,25 +832,25 @@ export default function Ajustes() {
                 <div className="bg-white rounded-2xl border border-zinc-200 p-4">
                   <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3">Añadir Pregunta al Checklist</p>
                   <div className="flex flex-col gap-2">
-                    <input
-                      type="text"
-                      value={newChecklistLabel}
-                      onChange={e => setNewChecklistLabel(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddChecklistItem(); } }}
-                      placeholder="Ej: Acceso, Altura, Soporte, Señalización..."
-                      className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-all"
-                    />
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newChecklistLabel}
+                        onChange={e => setNewChecklistLabel(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddChecklistItem(); } }}
+                        placeholder="Ej: Número de placa, Ubicación, Estado presión..."
+                        className="flex-1 px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-all"
+                      />
+                    </div>
                     <div className="flex gap-2 items-center">
                       <select
                         value={newChecklistTipo}
-                        onChange={e => setNewChecklistTipo(e.target.value as TipoRespuestaChecklist)}
+                        onChange={e => setNewChecklistTipo(e.target.value as 'check' | 'texto' | 'numero')}
                         className="px-3 py-2.5 bg-white border border-zinc-200 rounded-xl text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-all"
                       >
                         <option value="check">Check (✓/✗)</option>
                         <option value="texto">Texto alfanumérico</option>
                         <option value="numero">Número</option>
-                        <option value="fecha">Fecha</option>
-                        <option value="seleccion">Selección desplegable</option>
                       </select>
                       <button
                         onClick={handleAddChecklistItem}
@@ -868,106 +860,99 @@ export default function Ajustes() {
                         <Plus className="w-4 h-4" />
                         Añadir
                       </button>
-                      {checklistItems.length === 0 && (
-                        <button
-                          onClick={() => handleCargarPlantillaExtintoresConItems(PLANTILLA_EXTINTORES)}
-                          disabled={cargandoPlantilla}
-                          className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white px-4 py-2.5 rounded-xl text-sm font-medium transition-all"
-                        >
-                          {cargandoPlantilla ? (
-                            <Loader className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Plus className="w-4 h-4" />
-                          )}
-                          Cargar plantilla extintores
-                        </button>
-                      )}
                     </div>
                   </div>
                 </div>
 
-                {/* Lista de preguntas del Checklist */}
-                <div className="bg-white rounded-2xl border border-zinc-200 overflow-hidden">
+                {/* Lista de preguntas del Checklist - diseño completo editable */}
+                <div className="bg-white rounded-2xl border-2 border-dashed border-teal-300 overflow-hidden w-full">
+                  {/* Cabecera */}
                   <div className="px-5 py-4 bg-teal-50 border-b border-teal-100 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <CheckSquare className="w-5 h-5 text-teal-600 shrink-0" />
+                      <FireExtinguisher className="w-5 h-5 text-teal-600 shrink-0" />
                       <div>
                         <p className="text-sm font-bold text-teal-800 uppercase tracking-wider">
                           Checklist de {sistemas.find(s => s.id === checklistSistemaId)?.nombre || ''}
                         </p>
-                        <p className="text-xs text-zinc-500 mt-0.5">
-                          {checklistItems.length} preguntas
+                        <p className="text-[10px] text-red-500 font-medium mt-0.5">
+                          Edita directamente las preguntas. Los cambios se guardan automáticamente al añadir/modificar/eliminar.
                         </p>
                       </div>
                     </div>
+                    <div className="flex items-center gap-2">
+                      {checklistItems.length === 0 && (
+                        <button
+                          onClick={() => handleCargarPlantillaExtintoresConItems(PLANTILLA_EXTINTORES)}
+                          disabled={cargandoPlantilla}
+                          className="flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white px-3 py-2 rounded-lg text-xs font-bold transition-all"
+                        >
+                          {cargandoPlantilla ? (
+                            <Loader className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Plus className="w-3.5 h-3.5" />
+                          )}
+                          Cargar plantilla
+                        </button>
+                      )}
+                    </div>
                   </div>
 
-                  {checklistItems.length === 0 ? (
-                    <div className="p-8 text-center">
-                      <p className="text-sm text-zinc-400">No hay preguntas en el checklist. Añade preguntas usando el formulario de arriba o carga la plantilla predefinida.</p>
-                    </div>
-                  ) : (
-                    <div className="divide-y divide-zinc-100">
-                      {checklistItems.map((item, index) => (
-                        <div key={item.id} className="px-5 py-3 flex items-center gap-3 hover:bg-zinc-50 transition-colors">
-                          <span className="w-7 h-7 bg-teal-100 text-teal-700 rounded-lg flex items-center justify-center text-xs font-bold shrink-0">
-                            {index + 1}
-                          </span>
-                          {editingChecklistId === item.id ? (
-                            <>
-                              <input
-                                type="text"
-                                value={editingChecklistLabel}
-                                onChange={e => setEditingChecklistLabel(e.target.value)}
-                                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleUpdateChecklistItem(item.id); } }}
-                                className="flex-1 px-3 py-2 bg-white border border-teal-300 rounded-lg text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-all"
-                                autoFocus
-                              />
-                              <select
-                                value={editingChecklistTipo}
-                                onChange={e => setEditingChecklistTipo(e.target.value as TipoRespuestaChecklist)}
-                                className="px-3 py-2 bg-white border border-teal-300 rounded-lg text-xs outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-all min-w-[100px]"
-                              >
-                                <option value="check">✓/✗ Check</option>
-                                <option value="texto">Abc Texto</option>
-                                <option value="numero">#0 Número</option>
-                                <option value="fecha">📅 Fecha</option>
-                                <option value="seleccion">📋 Selección</option>
-                              </select>
-                              <button
-                                onClick={() => handleUpdateChecklistItem(item.id)}
-                                className="p-2 text-teal-600 hover:bg-teal-100 rounded-lg transition-colors"
-                                title="Guardar"
-                              >
-                                <Save className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => { setEditingChecklistId(null); setEditingChecklistLabel(''); }}
-                                className="p-2 text-zinc-400 hover:bg-zinc-100 rounded-lg transition-colors"
-                                title="Cancelar"
-                              >
-                                <X className="w-4 h-4" />
-                              </button>
-                            </>
-                          ) : (
-                            <>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-zinc-900">{item.label}</p>
-                                <p className="text-[10px] text-zinc-400 mt-0.5">
-                                  Tipo: <span className={`font-bold ${
-                                    item.tipoRespuesta === 'check' ? 'text-teal-600' : 
-                                    item.tipoRespuesta === 'numero' ? 'text-blue-600' : 
-                                    item.tipoRespuesta === 'fecha' ? 'text-purple-600' :
-                                    item.tipoRespuesta === 'seleccion' ? 'text-orange-600' : 'text-amber-600'
-                                  }`}>{
-                                    item.tipoRespuesta === 'check' ? 'Check (✓/✗)' : 
-                                    item.tipoRespuesta === 'numero' ? 'Número' : 
-                                    item.tipoRespuesta === 'fecha' ? 'Fecha' :
-                                    item.tipoRespuesta === 'seleccion' ? 'Selección' : 'Texto'
-                                  }</span>
-                                </p>
-                              </div>
-                              <div className="flex items-center gap-1 shrink-0">
+                  {/* Cuerpo: lista de items directamente editables */}
+                  <div className="p-5">
+                    {checklistItems.length === 0 ? (
+                      <div className="text-center py-8">
+                        <p className="text-sm text-zinc-400 mb-4">No hay preguntas en el checklist. Añade preguntas usando el formulario de arriba o carga la plantilla predefinida.</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {checklistItems.map((item, index) => (
+                          <div key={item.id} className="flex items-center gap-3 px-4 py-3 bg-teal-50/30 border border-teal-100 rounded-xl hover:bg-teal-50/50 transition-colors">
+                            <span className="w-7 h-7 bg-teal-100 text-teal-700 rounded-lg flex items-center justify-center text-xs font-bold shrink-0">
+                              {index + 1}
+                            </span>
+                            {editingChecklistId === item.id ? (
+                              <>
+                                <input
+                                  type="text"
+                                  value={editingChecklistLabel}
+                                  onChange={e => setEditingChecklistLabel(e.target.value)}
+                                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleUpdateChecklistItem(item.id); } }}
+                                  className="flex-1 px-3 py-2 bg-white border border-teal-300 rounded-lg text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-all"
+                                  autoFocus
+                                />
+                                <select
+                                  value={editingChecklistTipo}
+                                  onChange={e => setEditingChecklistTipo(e.target.value as 'check' | 'texto' | 'numero')}
+                                  className="px-3 py-2 bg-white border border-teal-300 rounded-lg text-xs outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-all min-w-[100px]"
+                                >
+                                  <option value="check">✓/✗ Check</option>
+                                  <option value="texto">Abc Texto</option>
+                                  <option value="numero">#0 Número</option>
+                                </select>
+                                <button
+                                  onClick={() => handleUpdateChecklistItem(item.id)}
+                                  className="p-2 text-teal-600 hover:bg-teal-100 rounded-lg transition-colors"
+                                  title="Guardar"
+                                >
+                                  <Save className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => { setEditingChecklistId(null); setEditingChecklistLabel(''); }}
+                                  className="p-2 text-zinc-400 hover:bg-zinc-100 rounded-lg transition-colors"
+                                  title="Cancelar"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <CheckSquare className="w-4 h-4 text-teal-500 shrink-0" />
+                                <span className="flex-1 text-sm font-medium text-zinc-800">{item.label}</span>
+                                <span className={`text-[10px] font-mono font-bold px-2 py-1 rounded ${
+                                  item.tipoRespuesta === 'check' ? 'bg-teal-100 text-teal-700' : item.tipoRespuesta === 'numero' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'
+                                }`}>
+                                  {item.tipoRespuesta === 'check' ? '✓/✗' : item.tipoRespuesta === 'numero' ? '#0' : 'Abc'}
+                                </span>
                                 <button
                                   onClick={() => { setEditingChecklistId(item.id); setEditingChecklistLabel(item.label); setEditingChecklistTipo(item.tipoRespuesta); }}
                                   className="p-1.5 text-zinc-500 hover:text-zinc-800 hover:bg-zinc-100 rounded-lg transition-colors"
@@ -982,13 +967,13 @@ export default function Ajustes() {
                                 >
                                   <Trash2 className="w-4 h-4" />
                                 </button>
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                              </>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </>
             )}
