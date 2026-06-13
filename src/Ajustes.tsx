@@ -221,7 +221,7 @@ export default function Ajustes() {
   const [editingChecklistTipo, setEditingChecklistTipo] = useState<'check' | 'texto' | 'numero'>('check');
   const [cargandoPlantilla, setCargandoPlantilla] = useState(false);
   const [editandoPlantilla, setEditandoPlantilla] = useState(false);
-  const [plantillaTitulo, setPlantillaTitulo] = useState('Plantilla de Extintores');
+  const [plantillaTitulo, setPlantillaTitulo] = useState('PLANTILLA');
   const [plantillaEditada, setPlantillaEditada] = useState<{ key: string; label: string; tipoRespuesta: 'check' | 'texto' | 'numero' }[]>([]);
 
   // Plantilla predefinida de extintores (la misma que en RevisionChecklist.tsx)
@@ -870,19 +870,26 @@ export default function Ajustes() {
                   <div className="px-5 py-4 bg-teal-50 border-b border-teal-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                     <div className="flex items-center gap-3 w-full sm:w-auto">
                       <FireExtinguisher className="w-5 h-5 text-teal-600 shrink-0" />
-                      {editandoPlantilla ? (
-                        <input
-                          type="text"
-                          value={plantillaTitulo}
-                          onChange={e => setPlantillaTitulo(e.target.value)}
-                          className="px-3 py-1.5 bg-white border-2 border-teal-400 rounded-lg text-sm font-bold text-teal-800 outline-none focus:border-teal-600 w-full sm:w-64"
-                          placeholder="Nombre de la plantilla"
-                        />
-                      ) : (
-                        <p className="text-sm font-bold text-teal-800 uppercase tracking-wider">
-                          {plantillaTitulo}
-                        </p>
-                      )}
+                      <div>
+                        {editandoPlantilla ? (
+                          <input
+                            type="text"
+                            value={plantillaTitulo}
+                            onChange={e => setPlantillaTitulo(e.target.value)}
+                            className="px-3 py-1.5 bg-white border-2 border-teal-400 rounded-lg text-sm font-bold text-teal-800 outline-none focus:border-teal-600 w-full sm:w-64"
+                            placeholder="Nombre de la plantilla"
+                          />
+                        ) : (
+                          <p className="text-sm font-bold text-teal-800 uppercase tracking-wider">
+                            {plantillaTitulo}
+                          </p>
+                        )}
+                        {!editandoPlantilla && (
+                          <p className="text-[10px] text-red-500 font-medium mt-0.5">
+                            Al pulsar editar plantilla se puede cambiar los campos y después al guardar debajo aparece la definitiva.
+                          </p>
+                        )}
+                      </div>
                     </div>
                     <div className="flex items-center gap-2 w-full sm:w-auto">
                       {editandoPlantilla ? (
@@ -941,7 +948,7 @@ export default function Ajustes() {
                     <p className="text-xs text-zinc-500 mb-4">
                       {editandoPlantilla 
                         ? 'Modifica las preguntas y tipos de respuesta. Al guardar se almacenarán en la colección correspondiente de Firestore.'
-                        : 'Usa esta plantilla predefinida para extintores o haz clic en "Editar plantilla" para personalizarla.'}
+                        : 'Usa esta plantilla predefinida o haz clic en "Editar plantilla" para personalizarla.'}
                     </p>
 
                     {/* Lista de items - ancho completo */}
