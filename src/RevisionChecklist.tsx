@@ -52,28 +52,17 @@ export default function RevisionChecklist() {
     // Cargar checklist del sistema seleccionado desde colección dinámica
     useEffect(() => {
         if (!checklistSistemaId) return;
-        // Buscar el nombre del sistema en categoriasSistema (o en localStorage como fallback)
-        let sistemaCat = categoriasSistema.find(c => c.id === checklistSistemaId);
-        if (!sistemaCat) {
-            // Intentar desde localStorage
-            try {
-                const stored = JSON.parse(localStorage.getItem('firecheck_db_sistemas_categorias') || '[]');
-                sistemaCat = stored.find((c: any) => c.id === checklistSistemaId);
-            } catch {}
-        }
+        // Buscar el nombre del sistema en categoriasSistema
+        const sistemaCat = categoriasSistema.find(c => c.id === checklistSistemaId);
         const sistemaNombre = sistemaCat?.nombre || '';
-        console.log(`[RevisionChecklist] Cargando checklist para sistemaId=${checklistSistemaId}, nombre="${sistemaNombre}"`);
         if (sistemaNombre) {
             const unsub = subscribeChecklistsPorSistema(sistemaNombre, (items) => {
-                console.log(`[RevisionChecklist] Recibidos ${items.length} items de colección dinámica para "${sistemaNombre}"`);
                 setChecklistItems(items);
             });
             return () => unsub();
         } else {
             // Fallback: usar la colección antigua
-            console.log(`[RevisionChecklist] Fallback a colección antigua para sistemaId=${checklistSistemaId}`);
             const unsub = subscribeChecklists(checklistSistemaId, (items) => {
-                console.log(`[RevisionChecklist] Recibidos ${items.length} items de colección antigua`);
                 setChecklistItems(items);
             });
             return () => unsub();
