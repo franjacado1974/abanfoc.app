@@ -864,207 +864,95 @@ export default function Ajustes() {
                   </div>
                 </div>
 
-                {/* Tarjeta de plantilla de extintores (siempre visible, ancho completo) */}
+                {/* Lista de preguntas del Checklist - diseño completo editable */}
                 <div className="bg-white rounded-2xl border-2 border-dashed border-teal-300 overflow-hidden w-full">
-                  {/* Cabecera con título editable */}
-                  <div className="px-5 py-4 bg-teal-50 border-b border-teal-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                    <div className="flex items-center gap-3 w-full sm:w-auto">
+                  {/* Cabecera */}
+                  <div className="px-5 py-4 bg-teal-50 border-b border-teal-100 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
                       <FireExtinguisher className="w-5 h-5 text-teal-600 shrink-0" />
                       <div>
-                        {editandoPlantilla ? (
-                          <input
-                            type="text"
-                            value={plantillaTitulo}
-                            onChange={e => setPlantillaTitulo(e.target.value)}
-                            className="px-3 py-1.5 bg-white border-2 border-teal-400 rounded-lg text-sm font-bold text-teal-800 outline-none focus:border-teal-600 w-full sm:w-64"
-                            placeholder="Nombre de la plantilla"
-                          />
-                        ) : (
-                          <p className="text-sm font-bold text-teal-800 uppercase tracking-wider">
-                            {plantillaTitulo}
-                          </p>
-                        )}
-                        {!editandoPlantilla && (
-                          <p className="text-[10px] text-red-500 font-medium mt-0.5">
-                            Al pulsar editar plantilla se puede cambiar los campos y después al guardar debajo aparece la definitiva.
-                          </p>
-                        )}
+                        <p className="text-sm font-bold text-teal-800 uppercase tracking-wider">
+                          Checklist de {sistemas.find(s => s.id === checklistSistemaId)?.nombre || ''}
+                        </p>
+                        <p className="text-[10px] text-red-500 font-medium mt-0.5">
+                          Edita directamente las preguntas. Los cambios se guardan automáticamente al añadir/modificar/eliminar.
+                        </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 w-full sm:w-auto">
-                      {editandoPlantilla ? (
-                        <>
-                          <button
-                            onClick={() => { setEditandoPlantilla(false); }}
-                            className="flex items-center gap-1.5 bg-zinc-400 hover:bg-zinc-500 text-white px-3 py-2 rounded-lg text-xs font-bold transition-all"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                            Cancelar
-                          </button>
-                          <button
-                            onClick={() => handleCargarPlantillaExtintoresConItems(plantillaEditada)}
-                            disabled={cargandoPlantilla}
-                            className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-3 py-2 rounded-lg text-xs font-bold transition-all"
-                          >
-                            {cargandoPlantilla ? (
-                              <Loader className="w-3.5 h-3.5 animate-spin" />
-                            ) : (
-                              <Save className="w-3.5 h-3.5" />
-                            )}
-                            Guardar plantilla
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <button
-                            onClick={() => {
-                              setEditandoPlantilla(true);
-                              setPlantillaEditada(PLANTILLA_EXTINTORES.map(p => ({ ...p })));
-                            }}
-                            className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white px-3 py-2 rounded-lg text-xs font-bold transition-all"
-                          >
-                            <Edit className="w-3.5 h-3.5" />
-                            Editar plantilla
-                          </button>
-                          <button
-                            onClick={() => handleCargarPlantillaExtintoresConItems(PLANTILLA_EXTINTORES)}
-                            disabled={cargandoPlantilla}
-                            className="flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white px-3 py-2 rounded-lg text-xs font-bold transition-all"
-                          >
-                            {cargandoPlantilla ? (
-                              <Loader className="w-3.5 h-3.5 animate-spin" />
-                            ) : (
-                              <Plus className="w-3.5 h-3.5" />
-                            )}
-                            Usar plantilla
-                          </button>
-                        </>
+                    <div className="flex items-center gap-2">
+                      {checklistItems.length === 0 && (
+                        <button
+                          onClick={() => handleCargarPlantillaExtintoresConItems(PLANTILLA_EXTINTORES)}
+                          disabled={cargandoPlantilla}
+                          className="flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white px-3 py-2 rounded-lg text-xs font-bold transition-all"
+                        >
+                          {cargandoPlantilla ? (
+                            <Loader className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Plus className="w-3.5 h-3.5" />
+                          )}
+                          Cargar plantilla
+                        </button>
                       )}
                     </div>
                   </div>
 
-                  {/* Cuerpo de la plantilla */}
+                  {/* Cuerpo: lista de items directamente editables */}
                   <div className="p-5">
-                    <p className="text-xs text-zinc-500 mb-4">
-                      {editandoPlantilla 
-                        ? 'Modifica las preguntas y tipos de respuesta. Al guardar se almacenarán en la colección correspondiente de Firestore.'
-                        : 'Usa esta plantilla predefinida o haz clic en "Editar plantilla" para personalizarla.'}
-                    </p>
-
-                    {/* Lista de items - ancho completo */}
-                    <div className="space-y-2">
-                      {(editandoPlantilla ? plantillaEditada : PLANTILLA_EXTINTORES).map((item, idx) => (
-                        editandoPlantilla ? (
-                          <div key={item.key} className="flex items-center gap-3 px-4 py-3 bg-amber-50/50 border border-amber-200 rounded-xl">
-                            <span className="w-7 h-7 bg-amber-200 text-amber-800 rounded-lg flex items-center justify-center text-xs font-bold shrink-0">
-                              {idx + 1}
-                            </span>
-                            <input
-                              type="text"
-                              value={item.label}
-                              onChange={e => {
-                                const newPlantilla = [...plantillaEditada];
-                                newPlantilla[idx] = { ...newPlantilla[idx], label: e.target.value };
-                                setPlantillaEditada(newPlantilla);
-                              }}
-                              className="flex-1 px-3 py-2 bg-white border border-amber-300 rounded-lg text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 transition-all"
-                              placeholder="Nombre de la pregunta"
-                            />
-                            <select
-                              value={item.tipoRespuesta}
-                              onChange={e => {
-                                const newPlantilla = [...plantillaEditada];
-                                newPlantilla[idx] = { ...newPlantilla[idx], tipoRespuesta: e.target.value as 'check' | 'texto' | 'numero' };
-                                setPlantillaEditada(newPlantilla);
-                              }}
-                              className="px-3 py-2 bg-white border border-amber-300 rounded-lg text-xs outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 transition-all min-w-[100px]"
-                            >
-                              <option value="check">✓/✗ Check</option>
-                              <option value="texto">Abc Texto</option>
-                              <option value="numero">#0 Número</option>
-                            </select>
-                          </div>
-                        ) : (
-                          <div
-                            key={item.key}
-                            className="flex items-center gap-3 px-4 py-3 bg-teal-50/30 border border-teal-100 rounded-xl hover:bg-teal-50/50 transition-colors"
-                          >
+                    {checklistItems.length === 0 ? (
+                      <div className="text-center py-8">
+                        <p className="text-sm text-zinc-400 mb-4">No hay preguntas en el checklist. Añade preguntas usando el formulario de arriba o carga la plantilla predefinida.</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {checklistItems.map((item, index) => (
+                          <div key={item.id} className="flex items-center gap-3 px-4 py-3 bg-teal-50/30 border border-teal-100 rounded-xl hover:bg-teal-50/50 transition-colors">
                             <span className="w-7 h-7 bg-teal-100 text-teal-700 rounded-lg flex items-center justify-center text-xs font-bold shrink-0">
-                              {idx + 1}
+                              {index + 1}
                             </span>
-                            <CheckSquare className="w-4 h-4 text-teal-500 shrink-0" />
-                            <span className="flex-1 text-sm font-medium text-zinc-800">{item.label}</span>
-                            <span className={`text-[10px] font-mono font-bold px-2 py-1 rounded ${
-                              item.tipoRespuesta === 'check' ? 'bg-teal-100 text-teal-700' : item.tipoRespuesta === 'numero' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'
-                            }`}>
-                              {item.tipoRespuesta === 'check' ? '✓/✗' : item.tipoRespuesta === 'numero' ? '#0' : 'Abc'}
-                            </span>
-                          </div>
-                        )
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Lista de preguntas */}
-                <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden">
-                  <p className="px-4 py-3 text-xs font-bold text-zinc-400 uppercase tracking-wider border-b border-zinc-100">
-                    Preguntas del Checklist ({checklistItems.length})
-                  </p>
-                  {checklistItems.length > 0 && (
-                    <ul className="divide-y divide-zinc-100">
-                      {checklistItems.map((item, index) => (
-                        <li key={item.id} className="p-4 flex items-center gap-3 hover:bg-zinc-50 transition-colors">
-                          <span className="w-6 h-6 bg-teal-100 text-teal-700 rounded-lg flex items-center justify-center text-xs font-bold shrink-0">
-                            {index + 1}
-                          </span>
-                          {editingChecklistId === item.id ? (
-                            <div className="flex-1 flex flex-col gap-2">
-                              <div className="flex gap-2">
+                            {editingChecklistId === item.id ? (
+                              <>
                                 <input
                                   type="text"
                                   value={editingChecklistLabel}
                                   onChange={e => setEditingChecklistLabel(e.target.value)}
                                   onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleUpdateChecklistItem(item.id); } }}
-                                  className="flex-1 px-3 py-1.5 bg-white border border-teal-300 rounded-lg text-sm outline-none focus:border-teal-500"
+                                  className="flex-1 px-3 py-2 bg-white border border-teal-300 rounded-lg text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-all"
                                   autoFocus
                                 />
                                 <select
                                   value={editingChecklistTipo}
                                   onChange={e => setEditingChecklistTipo(e.target.value as 'check' | 'texto' | 'numero')}
-                                  className="px-2 py-1.5 bg-white border border-teal-300 rounded-lg text-xs outline-none focus:border-teal-500"
+                                  className="px-3 py-2 bg-white border border-teal-300 rounded-lg text-xs outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-all min-w-[100px]"
                                 >
-                                  <option value="check">Check</option>
-                                  <option value="texto">Texto</option>
-                                  <option value="numero">Número</option>
+                                  <option value="check">✓/✗ Check</option>
+                                  <option value="texto">Abc Texto</option>
+                                  <option value="numero">#0 Número</option>
                                 </select>
                                 <button
                                   onClick={() => handleUpdateChecklistItem(item.id)}
-                                  className="p-1.5 text-teal-600 hover:bg-teal-50 rounded-lg transition-colors"
+                                  className="p-2 text-teal-600 hover:bg-teal-100 rounded-lg transition-colors"
                                   title="Guardar"
                                 >
                                   <Save className="w-4 h-4" />
                                 </button>
                                 <button
                                   onClick={() => { setEditingChecklistId(null); setEditingChecklistLabel(''); }}
-                                  className="p-1.5 text-zinc-400 hover:bg-zinc-100 rounded-lg transition-colors"
+                                  className="p-2 text-zinc-400 hover:bg-zinc-100 rounded-lg transition-colors"
                                   title="Cancelar"
                                 >
                                   <X className="w-4 h-4" />
                                 </button>
-                              </div>
-                            </div>
-                          ) : (
-                            <>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-zinc-900">{item.label}</p>
-                                <p className="text-[10px] text-zinc-400 font-mono mt-0.5">
-                                  key: {item.key} · orden: {item.orden} · tipo: <span className={`font-bold ${
-                                    item.tipoRespuesta === 'check' ? 'text-teal-600' : item.tipoRespuesta === 'numero' ? 'text-blue-600' : 'text-amber-600'
-                                  }`}>{item.tipoRespuesta === 'check' ? 'Check (✓/✗)' : item.tipoRespuesta === 'numero' ? 'Número' : 'Texto'}</span>
-                                </p>
-                              </div>
-                              <div className="flex items-center gap-1 shrink-0">
+                              </>
+                            ) : (
+                              <>
+                                <CheckSquare className="w-4 h-4 text-teal-500 shrink-0" />
+                                <span className="flex-1 text-sm font-medium text-zinc-800">{item.label}</span>
+                                <span className={`text-[10px] font-mono font-bold px-2 py-1 rounded ${
+                                  item.tipoRespuesta === 'check' ? 'bg-teal-100 text-teal-700' : item.tipoRespuesta === 'numero' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'
+                                }`}>
+                                  {item.tipoRespuesta === 'check' ? '✓/✗' : item.tipoRespuesta === 'numero' ? '#0' : 'Abc'}
+                                </span>
                                 <button
                                   onClick={() => { setEditingChecklistId(item.id); setEditingChecklistLabel(item.label); setEditingChecklistTipo(item.tipoRespuesta); }}
                                   className="p-1.5 text-zinc-500 hover:text-zinc-800 hover:bg-zinc-100 rounded-lg transition-colors"
@@ -1079,13 +967,13 @@ export default function Ajustes() {
                                 >
                                   <Trash2 className="w-4 h-4" />
                                 </button>
-                              </div>
-                            </>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
+                              </>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </>
             )}
