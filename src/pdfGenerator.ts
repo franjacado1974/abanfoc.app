@@ -29,7 +29,7 @@ export const guardarDatosEmpresa = (data: any) => {
 export const obtenerDatosEmpresa = () => cargaDatosEmpresa();
 
 // ============ ACTA DE REVISIÓN ============
-export const generarActaExtintoresPDF = (
+export const generarActaExtintoresPDF = async (
   cliente: Record<string, any>,
   centro: Record<string, any>,
   sistemas: Record<string, any>[],
@@ -39,151 +39,155 @@ export const generarActaExtintoresPDF = (
   anomalyTextColor: [number, number, number] = [200, 0, 0],
   firmaCliente?: string,
   firmaTecnico?: string,
-  nombreFirmante?: string
+  nombreFirmante?: string,
+  checklistItems?: { key: string; label: string; tipoRespuesta?: string }[]
 ) => {
   const doc = new jsPDF('landscape');
   const pageWidth = doc.internal.pageSize.getWidth();
   const empData = cargaDatosEmpresa();
 
-  const drawSectionTitle = (title: string, x: number, y: number) => {
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(0, 0, 0);
-    doc.setDrawColor(0, 0, 0);
+  // ============ FIRST PAGE: INFO PAGE (REDISEÑO ELEGANTE) ============
+  const drawInfoPage = async () => {
+    // ── Borde decorativo exterior ──
+    doc.setDrawColor(180, 180, 180);
     doc.setLineWidth(0.3);
-    doc.line(x, y + 2, x + 50, y + 2);
-    doc.text(title, x, y);
-  };
+    doc.roundedRect(8, 8, pageWidth - 16, 190, 4, 4, 'D');
 
-  const drawFieldRows = (fields: [string, any][], labelX: number, valueX: number, startY: number) => {
-    doc.setFontSize(8.5);
-    let ly = startY;
-    fields.forEach(([label, value]) => {
-      doc.setFont("helvetica", "bold");
-      doc.text(label, labelX, ly);
-      let valStr = value != null ? String(value) : '';
-      if (valStr.length > 80) valStr = valStr.substring(0, 77) + '...';
-      doc.setFont("helvetica", "normal");
-      doc.text(valStr, valueX, ly);
-      ly += 6.2;
-    });
-  };
-
-  // ============ FIRST PAGE: INFO PAGE ============
-  const drawInfoPage = () => {
-    doc.setFontSize(13);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(0, 0, 0);
-    doc.text('ACTA DE REVISIÓN DE SISTEMAS DE PROTECCIÓN CONTRA INCENDIOS', pageWidth / 2, 14, { align: 'center' });
-
+    // ── Logo (esquina superior derecha) ──
     try {
       const logoBase64 = localStorage.getItem('firecheck_db_logo');
       if (logoBase64) {
-        doc.addImage(logoBase64, 'PNG', pageWidth - 65, 6, 55, 13);
         const logoProps = doc.getImageProperties(logoBase64);
-        const maxLogoWidth = 70;
-        const maxLogoHeight = 18;
+        const maxLogoWidth = 65;
+        const maxLogoHeight = 16;
         const logoRatio = logoProps.width / logoProps.height;
         const logoWidth = Math.min(maxLogoWidth, maxLogoHeight * logoRatio);
         const logoHeight = logoWidth / logoRatio;
-        doc.addImage(logoBase64, 'PNG', pageWidth - 10 - logoWidth, 6, logoWidth, logoHeight);
+        doc.addImage(logoBase64, 'PNG', pageWidth - 14 - logoWidth, 12, logoWidth, logoHeight);
       }
     } catch (e) { console.error("Error loading logo for Acta PDF:", e); }
 
-    doc.setDrawColor(0, 0, 0);
-    doc.setLineWidth(0.5);
-    doc.line(10, 20, pageWidth - 10, 20);
+    // ── Título principal ──
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14);
+    doc.setTextColor(30, 30, 30);
+    doc.text('ACTA DE REVISIÓN', pageWidth / 2, 22, { align: 'center' });
 
-    let y = 28;
-    const col1X = 10;
-    const col2X = pageWidth / 2 + 5;
-    const boxWidth = (pageWidth / 2) - 15;
-    const boxHeight = 68;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(100, 100, 100);
+    doc.text('Sistemas de Protección Contra Incendios — RIPCI (RD 513/2017)', pageWidth / 2, 28, { align: 'center' });
 
-    // DATOS CLIENTE
-    doc.setDrawColor(180, 180, 180);
-    doc.setFillColor(248, 250, 252);
-    doc.roundedRect(col1X, y, boxWidth, boxHeight, 3, 3, 'FD');
-    drawSectionTitle('DATOS CLIENTE', col1X + 4, y + 7);
-    const cliFields: [string, any][] = [
-      ['Cliente:', cliente?.nombre],
-      ['Dirección:', cliente?.direccion],
-      ['Localidad:', cliente?.poblacion],
-      ['Provincia:', cliente?.provincia],
-      ['Código postal:', cliente?.cp],
-      ['Teléfono:', cliente?.telefono],
-      ['Correo electrónico:', cliente?.correo],
-      ['Persona de contacto:', cliente?.contacto],
+    // ── Línea decorativa doble ──
+    doc.setDrawColor(50, 50, 50);
+    doc.setLineWidth(0.6);
+    doc.line(14, 32, pageWidth - 14, 32);
+    doc.setDrawColor(200, 200, 200);
+    doc.setLineWidth(0.2);
+    doc.line(14, 33.5, pageWidth - 14, 33.5);
+
+    // ── Número de acta y fecha (barra superior) ──
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.5);
+    doc.setTextColor(120, 120, 120);
+    doc.text(`N.º Acta: ${numeroMantenimiento || '—'}`, 14, 40);
+    doc.text(`Fecha: ${new Date().toLocaleDateString('es-ES')}`, pageWidth - 14, 40, { align: 'right' });
+
+    // ── SECCIÓN: DATOS DEL CLIENTE Y CENTRO (dos columnas) ──
+    let y = 48;
+    const col1X = 14;
+    const col2X = pageWidth / 2 + 4;
+
+    // Título de sección
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(50, 50, 50);
+    doc.text('DATOS DEL CLIENTE Y CENTRO', pageWidth / 2, y, { align: 'center' });
+    y += 5;
+
+    // Línea sutil bajo el título
+    doc.setDrawColor(210, 210, 210);
+    doc.setLineWidth(0.2);
+    doc.line(14, y, pageWidth - 14, y);
+    y += 5;
+
+    // Columna izquierda: Cliente
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(80, 80, 80);
+    doc.text('CLIENTE', col1X, y);
+    y += 4;
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(50, 50, 50);
+    const cliLines = [
+      cliente?.nombre || '—',
+      cliente?.direccion || '',
+      `${cliente?.poblacion || ''}${cliente?.provincia ? ', ' + cliente.provincia : ''}${cliente?.cp ? ' - ' + cliente.cp : ''}`,
+      `Tel: ${cliente?.telefono || '—'}  |  ${cliente?.correo || ''}`,
+      `Contacto: ${cliente?.contacto || '—'}`,
     ];
-    drawFieldRows(cliFields, col1X + 4, col1X + 50, y + 14);
+    cliLines.forEach(line => {
+      if (line.trim()) { doc.text(line, col1X, y); y += 4.2; }
+    });
 
-    // DATOS DEL CENTRO
-    doc.setFillColor(248, 250, 252);
-    doc.roundedRect(col2X, y, boxWidth, boxHeight, 3, 3, 'FD');
-    drawSectionTitle('DATOS DEL CENTRO', col2X + 4, y + 7);
-    const cenFields: [string, any][] = [
-      ['Centro:', centro?.nombre],
-      ['Dirección:', centro?.direccion],
-      ['Localidad:', centro?.poblacion],
-      ['Provincia:', centro?.provincia],
-      ['Código postal:', centro?.cp],
-      ['Teléfono:', centro?.telefono],
-      ['Correo electrónico:', centro?.correo],
-      ['Persona de contacto:', centro?.contacto],
+    // Columna derecha: Centro
+    const cenY = 48 + 5 + 5; // misma posición Y que cliente
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(80, 80, 80);
+    doc.text('CENTRO', col2X, cenY);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(50, 50, 50);
+    let cy = cenY + 4;
+    const cenLines = [
+      centro?.nombre || '—',
+      centro?.direccion || '',
+      `${centro?.poblacion || ''}${centro?.provincia ? ', ' + centro.provincia : ''}${centro?.cp ? ' - ' + centro.cp : ''}`,
+      `Tel: ${centro?.telefono || '—'}  |  ${centro?.correo || ''}`,
+      `Contacto: ${centro?.contacto || '—'}`,
     ];
-    drawFieldRows(cenFields, col2X + 4, col2X + 50, y + 14);
+    cenLines.forEach(line => {
+      if (line.trim()) { doc.text(line, col2X, cy); cy += 4.2; }
+    });
 
-    y += boxHeight + 5;
+    // ── SECCIÓN: INFORMACIÓN DEL MANTENIMIENTO ──
+    y = Math.max(y, cy) + 6;
+    doc.setDrawColor(210, 210, 210);
+    doc.setLineWidth(0.2);
+    doc.line(14, y, pageWidth - 14, y);
+    y += 5;
 
-    // INFORMACIÓN DEL MANTENIMIENTO
-    const infoBoxHeight = 70;
-    doc.setFillColor(235, 248, 240);
-    doc.roundedRect(col1X, y, boxWidth, infoBoxHeight, 3, 3, 'FD');
-    drawSectionTitle('INFORMACIÓN DEL MANTENIMIENTO', col1X + 4, y + 7);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(50, 50, 50);
+    doc.text('INFORMACIÓN DEL MANTENIMIENTO', pageWidth / 2, y, { align: 'center' });
+    y += 5;
 
     const periodicidad: string[] = centro?.periodicidad || [];
     const mesRevision: string = (centro?.mesesRevision && centro.mesesRevision.length > 0) ? centro.mesesRevision[0] : '';
 
-    doc.setFontSize(9);
-    let ly = y + 17;
-    doc.setFont("helvetica", "bold");
-    doc.text('N.º de mantenimiento:', col1X + 4, ly);
-    doc.setFont("helvetica", "normal");
-    doc.text(numeroMantenimiento || '', col1X + 50, ly);
-    ly += 7;
+    // Tabla de información en dos columnas
+    const infoLeft: [string, string][] = [
+      ['N.º de mantenimiento:', numeroMantenimiento || '—'],
+      ['Fecha del mantenimiento:', new Date().toLocaleDateString('es-ES')],
+      ['Técnico actuante:', tecnicoNombre || 'No asignado'],
+      ['N.I.F. Técnico:', empData?.nifTecnico || 'No especificado'],
+    ];
+    const infoRight: [string, string][] = [
+      ['RASIC:', empData?.rasic || 'No especificado'],
+      ['Periodicidad contratada:', periodicidad.length > 0 ? periodicidad.join(', ') : 'No definida'],
+      ['Revisiones programadas:', ''],
+    ];
 
-    doc.setFont("helvetica", "bold");
-    doc.text('Fecha del mantenimiento:', col1X + 4, ly);
-    doc.setFont("helvetica", "normal");
-    doc.text(new Date().toLocaleDateString(), col1X + 50, ly);
-    ly += 8;
-
-    doc.setFont("helvetica", "bold");
-    doc.text('N.I.F. Técnico:', col1X + 4, ly);
-    doc.setFont("helvetica", "normal");
-    doc.text(empData?.nifTecnico || 'No especificado', col1X + 50, ly);
-    ly += 7;
-
-    doc.setFont("helvetica", "bold");
-    doc.text('RASIC:', col1X + 4, ly);
-    doc.setFont("helvetica", "normal");
-    doc.text(empData?.rasic || 'No especificado', col1X + 50, ly);
-    ly += 7;
-
-    doc.setFont("helvetica", "bold");
-    doc.text('Periodicidad contratada:', col1X + 4, ly);
-    doc.setFont("helvetica", "normal");
-    const periodicidadStr = periodicidad.length > 0 ? periodicidad.join(', ') : 'No definida';
-    doc.text(periodicidadStr, col1X + 50, ly);
-    ly += 7;
-
+    // Calcular revisiones programadas
+    let revList = '';
     if (mesRevision) {
       const idx = MESES.indexOf(mesRevision);
       if (idx >= 0) {
-        doc.setFont("helvetica", "bold");
-        doc.text('Revisiones programadas:', col1X + 4, ly);
-        doc.setFont("helvetica", "normal");
-        let revList = '';
         if (periodicidad.includes('Anual')) revList += mesRevision;
         if (periodicidad.includes('Trimestral')) {
           if (revList) revList += ' | ';
@@ -193,42 +197,112 @@ export const generarActaExtintoresPDF = (
           if (revList) revList += ' | ';
           revList += 'Mensual';
         }
-        doc.text(revList || mesRevision, col1X + 50, ly);
       }
-    } else {
-      doc.setFont("helvetica", "bold");
-      doc.text('Revisiones:', col1X + 4, ly);
-      doc.setFont("helvetica", "normal");
-      doc.text(periodicidad.join(', ') || 'No definidas', col1X + 50, ly);
     }
+    if (!revList) revList = periodicidad.join(', ') || 'No definidas';
+    infoRight[2] = ['Revisiones programadas:', revList];
 
-    // EMPRESA MANTENEDORA
-    doc.setFillColor(248, 250, 252);
-    doc.roundedRect(col2X, y, boxWidth, infoBoxHeight, 3, 3, 'FD');
-    drawSectionTitle('EMPRESA MANTENEDORA', col2X + 4, y + 7);
-
-    doc.setFontSize(8.5);
-    let ey = y + 17;
-    const empFields: [string, any][] = [
-      ['Empresa:', empData?.nombre || 'ABANFOC S.L.'],
-      ['CIF:', empData?.cif || 'B16794679'],
-      ['RASIC:', empData?.rasic || '106001687'],
-      ['Dirección:', empData?.direccion || 'C/ America 16B Ático'],
-      ['Población:', empData?.poblacion || 'Sta. Coloma de Gramanet'],
-      ['Provincia:', empData?.provincia || 'Barcelona'],
-      ['Código postal:', empData?.cp || '08921'],
-      ['Teléfono:', empData?.telefono || '651 019 229'],
-    ];
-    empFields.forEach(([label, value]) => {
+    doc.setFontSize(7.5);
+    let iy = y + 2;
+    infoLeft.forEach(([label, value], i) => {
+      const colX = i < 2 ? col1X : col2X;
+      const rowY = iy + (i % 2) * 5.5;
       doc.setFont("helvetica", "bold");
-      doc.text(label, col2X + 4, ey);
+      doc.setTextColor(80, 80, 80);
+      doc.text(label, colX, rowY);
       doc.setFont("helvetica", "normal");
-      doc.text(String(value), col2X + 36, ey);
-      ey += 5.8;
+      doc.setTextColor(50, 50, 50);
+      doc.text(value, colX + 42, rowY);
     });
+    infoRight.forEach(([label, value], i) => {
+      const colX = i < 2 ? col1X : col2X;
+      const rowY = iy + 11 + (i % 2) * 5.5;
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(80, 80, 80);
+      doc.text(label, colX, rowY);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(50, 50, 50);
+      doc.text(value, colX + 42, rowY);
+    });
+
+    // ── SECCIÓN: EMPRESA MANTENEDORA ──
+    y = iy + 24;
+    doc.setDrawColor(210, 210, 210);
+    doc.setLineWidth(0.2);
+    doc.line(14, y, pageWidth - 14, y);
+    y += 5;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(50, 50, 50);
+    doc.text('EMPRESA MANTENEDORA', pageWidth / 2, y, { align: 'center' });
+    y += 5;
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(50, 50, 50);
+    const empNombre = empData?.nombre || 'ABANFOC S.L.';
+    const empCif = empData?.cif || 'B16794679';
+    const empRasic = empData?.rasic || '106001687';
+    const empDir = empData?.direccion || 'C/ America 16B Ático';
+    const empLoc = `${empData?.poblacion || 'Sta. Coloma de Gramanet'}, ${empData?.provincia || 'Barcelona'} ${empData?.cp || '08921'}`;
+    const empTel = empData?.telefono || '651 019 229';
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.setTextColor(60, 60, 60);
+    doc.text(empNombre, col1X, y);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(80, 80, 80);
+    doc.text(`CIF: ${empCif}  |  RASIC: ${empRasic}`, col1X, y + 5);
+    doc.text(empDir, col1X, y + 10);
+    doc.text(empLoc, col1X, y + 15);
+    doc.text(`Tel: ${empTel}`, col1X, y + 20);
+
+    // Logo de la empresa mantenedora (esquina inferior derecha)
+    // Cargar logo de la empresa mantenedora (esquina inferior derecha)
+    try {
+      // Intentar primero desde localStorage (base64)
+      let logoData = localStorage.getItem('firecheck_db_logo');
+      
+      // Si no hay en localStorage, intentar desde la URL de Firebase Storage
+      if (!logoData && empData?.logoUrl) {
+        try {
+          const response = await fetch(empData.logoUrl);
+          if (response.ok) {
+            const blob = await response.blob();
+            logoData = await new Promise<string>((resolve) => {
+              const reader = new FileReader();
+              reader.onloadend = () => resolve(reader.result as string);
+              reader.readAsDataURL(blob);
+            });
+          }
+        } catch (fetchErr) {
+          console.error("Error fetching logo from Firebase Storage:", fetchErr);
+        }
+      }
+      
+      if (logoData) {
+        const logoProps = doc.getImageProperties(logoData);
+        const maxLogoWidth = 55;
+        const maxLogoHeight = 20;
+        const logoRatio = logoProps.width / logoProps.height;
+        const logoWidth = Math.min(maxLogoWidth, maxLogoHeight * logoRatio);
+        const logoHeight = logoWidth / logoRatio;
+        doc.addImage(logoData, 'PNG', pageWidth - 14 - logoWidth, y - 2, logoWidth, logoHeight);
+      }
+    } catch (e) { console.error("Error loading logo for Acta PDF:", e); }
+
+    // ── Sello / firma digital (esquina inferior derecha) ──
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(6.5);
+    doc.setTextColor(150, 150, 150);
+    doc.text('Documento generado electrónicamente', pageWidth - 14, 185, { align: 'right' });
+    doc.text(`Fecha de emisión: ${new Date().toLocaleDateString('es-ES')}`, pageWidth - 14, 189, { align: 'right' });
   };
 
-  drawInfoPage();
+  await drawInfoPage();
 
   // ============ SECOND PAGE ONWARDS: TABLES ============
 //@ts-ignore
@@ -253,7 +327,7 @@ export const generarActaExtintoresPDF = (
 
   const drawnTablePages = new Set<number>();
 
-  const renderSection = (title: string, equipos: any[], isBie: boolean, currentY: number, iconoBase64?: string) => {
+  const renderSection = async (title: string, equipos: any[], isBie: boolean, currentY: number, iconoBase64?: string) => {
     if (equipos.length === 0) return currentY;
 
     if (currentY > 130) {
@@ -287,38 +361,46 @@ export const generarActaExtintoresPDF = (
       ['Nº', 'Nivel planta y ubicación', 'Placa', 'Tipo', 'Longitud', 'Fabricante', 'Fecha\nFabricación', 'Prueba\nHidráulica'] :
       ['Nº', 'Nivel planta y ubicación', 'Placa', 'Clase', 'Tipo', 'Fabricante', 'Fecha\nFabricación', 'Último\nRetimbre'];
 
-    const tableData = equipos.map(eq => [
-      eq.codigo || '-',
-      eq.ubicacion || '-',
-      eq.placa || '-',
-      isBie ? (eq.clase || '-') : (eq.clase || '-'),
-      isBie ? (eq.longitud || '-') : (eq.nombre || '-'),
-      eq.fabricante || '-',
-      eq.fechaFabricacion || '-',
-      isBie ? (eq.pruebaHidraulica || '-') : (eq.ultimoRetimbre || '-'),
-      getMark(eq.checkAcceso),
-      getMark(eq.checkAltura),
-      getMark(eq.checkSoporte),
-      getMark(eq.checkSenalizacion),
-      getMark(eq.checkManguera),
-      getMark(eq.checkPeso),
-      getMark(eq.checkManometro),
-      getMark(eq.checkMarcado),
-      getMark(eq.checkEtiquetas),
-      getMark(eq.checkRetimbre),
-      getMark(eq.checkRiesgo),
-      getMark(eq.checkDistancia),
-      getMark(eq.checkPasador),
-      getMark(eq.checkMovilidad)
-    ]);
+    // Usar los items del checklist dinámico si están disponibles
+    const checkItems = (checklistItems || []).filter(item => {
+      const lbl = (item.label || '').toLowerCase();
+      return !lbl.includes('notas') && !lbl.includes('observaciones') && !lbl.includes('anomal');
+    });
+
+    const checkKeys = checkItems.length > 0 
+      ? checkItems.map(item => item.key)
+      : ['checkAcceso', 'checkAltura', 'checkSoporte', 'checkSenalizacion',
+         'checkManguera', 'checkPeso', 'checkManometro', 'checkMarcado',
+         'checkEtiquetas', 'checkRetimbre', 'checkRiesgo', 'checkDistancia',
+         'checkPasador', 'checkMovilidad'];
+
+    // Cabeceras de los checks: usar labels de los items o números por defecto
+    const checkHeaders = checkItems.length > 0
+      ? checkItems.map((_, idx) => String(idx + 1))
+      : ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14'];
+
+    const tableData = equipos.map(eq => {
+      return [
+        eq.codigo || '-',
+        eq.ubicacion || '-',
+        eq.placa || '-',
+        isBie ? (eq.clase || '-') : (eq.clase || '-'),
+        isBie ? (eq.longitud || '-') : (eq.nombre || '-'),
+        eq.fabricante || '-',
+        eq.fechaFabricacion || '-',
+        isBie ? (eq.pruebaHidraulica || '-') : (eq.ultimoRetimbre || '-'),
+        ...checkKeys.map(k => getMark(eq[k]))
+      ];
+    });
 
     autoTable(doc, {
       startY: currentY,
       margin: { top: 40 },
-      headStyles: { fillColor: [100, 100, 100], textColor: [255, 255, 255], fontSize: 6.5, halign: 'center', lineWidth: 0.1, lineColor: [0, 0, 0] },
-      bodyStyles: { fontSize: 6.5, halign: 'center', lineWidth: 0.1, lineColor: [200, 200, 200] },
+      headStyles: { fillColor: [100, 100, 100], textColor: [255, 255, 255], fontSize: 7, halign: 'center', lineWidth: 0.1, lineColor: [0, 0, 0] },
+      bodyStyles: { fontSize: 7, halign: 'center', lineWidth: 0.1, lineColor: [200, 200, 200] },
+
       columnStyles: { 0: { halign: 'left' }, 1: { halign: 'left' } },
-      head: [[...headersBase, '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14']],
+      head: [[...headersBase, ...checkHeaders]],
       body: tableData,
       didDrawPage: function (data: any) {
         if (!drawnTablePages.has(data.pageNumber)) {
@@ -373,11 +455,85 @@ export const generarActaExtintoresPDF = (
       finalY += 6;
     } else {
       doc.setTextColor(anomalyTextColor[0], anomalyTextColor[1], anomalyTextColor[2]);
-      anomalias.forEach(eq => {
+      for (const eq of anomalias) {
+        // Verificar si necesitamos una nueva página
+        if (finalY > 170) {
+          doc.addPage();
+          const newPageNum = (doc.internal as any).getNumberOfPages();
+          if (!drawnTablePages.has(newPageNum)) {
+            drawTableHeader(newPageNum);
+            drawnTablePages.add(newPageNum);
+          }
+          finalY = 34;
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(10);
+          doc.setTextColor(0, 0, 0);
+          doc.text('OBSERVACIONES TÉCNICAS Y ANOMALÍAS (continuación):', 14, finalY);
+          doc.setFont("helvetica", "normal");
+          finalY += 7;
+          doc.setTextColor(anomalyTextColor[0], anomalyTextColor[1], anomalyTextColor[2]);
+        }
+
         const textAnomalia = eq.anomalias ? eq.anomalias : 'No supera las comprobaciones visuales.';
         doc.text(`Nº ${eq.codigo} ${eq.placa ? `(${eq.placa})` : ''} — Anomalías: ${textAnomalia}`, 14, finalY);
         finalY += 5.5;
-      });
+
+        // Si hay foto, añadirla
+        if (eq.foto && typeof eq.foto === 'string' && eq.foto.trim() !== '') {
+          try {
+            // Verificar si necesitamos espacio para la imagen
+            if (finalY > 140) {
+              doc.addPage();
+              const newPageNum = (doc.internal as any).getNumberOfPages();
+              if (!drawnTablePages.has(newPageNum)) {
+                drawTableHeader(newPageNum);
+                drawnTablePages.add(newPageNum);
+              }
+              finalY = 34;
+            }
+
+            // Cargar la imagen
+            let imageData = eq.foto;
+            
+            // Si es una URL de Firebase Storage, convertirla a base64
+            if (imageData.startsWith('http')) {
+              try {
+                const response = await fetch(imageData);
+                if (response.ok) {
+                  const blob = await response.blob();
+                  imageData = await new Promise<string>((resolve) => {
+                    const reader = new FileReader();
+                    reader.onloadend = () => resolve(reader.result as string);
+                    reader.readAsDataURL(blob);
+                  });
+                }
+              } catch (fetchErr) {
+                console.error("Error fetching image from URL:", fetchErr);
+                continue;
+              }
+            }
+
+            // Añadir la imagen al PDF
+            const imgProps = doc.getImageProperties(imageData);
+            const maxWidth = 80;
+            const maxHeight = 60;
+            const imgRatio = imgProps.width / imgProps.height;
+            let imgWidth = maxWidth;
+            let imgHeight = imgWidth / imgRatio;
+            
+            if (imgHeight > maxHeight) {
+              imgHeight = maxHeight;
+              imgWidth = imgHeight * imgRatio;
+            }
+
+            doc.addImage(imageData, 'JPEG', 14, finalY, imgWidth, imgHeight);
+            finalY += imgHeight + 5;
+          } catch (imgErr) {
+            console.error("Error adding image to PDF:", imgErr);
+            // Continuar sin la imagen si hay error
+          }
+        }
+      }
       doc.setTextColor(0, 0, 0);
       finalY += 3;
     }
@@ -400,7 +556,9 @@ export const generarActaExtintoresPDF = (
     doc.setTextColor(80, 80, 80);
     const firstColumnX = pageWidth / 2 + 40;
     const secondColumnX = firstColumnX + 52;
-    const legendStartY = finalY - 18;
+    const legendStartY = finalY - 24;
+
+
     legendQuestions.forEach((q, index) => {
       const columnX = index < 7 ? firstColumnX : secondColumnX;
       const rowY = legendStartY + (index % 7) * 4;
@@ -413,26 +571,38 @@ export const generarActaExtintoresPDF = (
 
   let tableStartY = 34;
 
-  const extintores = equiposTodos.filter(eq => {
-    const sist = sistemas.find(s => s.id === eq.sistemaId);
-    return sist && ((sist.tipo && sist.tipo.toUpperCase().includes('EXTINTOR')) || (sist.familia && sist.familia.toUpperCase().includes('EXTINTOR')));
-  });
-
-  const bies = equiposTodos.filter(eq => {
-    const sist = sistemas.find(s => s.id === eq.sistemaId);
-    return sist && ((sist.tipo && (sist.tipo.toUpperCase().includes('BIE') || sist.tipo.toUpperCase().includes('BOCA'))) ||
-      (sist.familia && (sist.familia.toUpperCase().includes('BIE') || sist.familia.toUpperCase().includes('BOCA'))));
-  });
-
-  // Draw table header on first table page
+  // Dibujar cabecera en la primera página de tablas
   drawTableHeader(2);
 
-  if (extintores.length > 0) {
-    tableStartY = renderSection('EXTINTORES PORTÁTILES', extintores, false, tableStartY, extintorBase64);
-  }
+  // Ordenar: sistemas con "EXTINTOR" primero, luego el resto
+  const sistemasOrdenados = [...sistemas].sort((a, b) => {
+    const aEsExtintor = (a.familia || a.tipo || '').toUpperCase().includes('EXTINTOR');
+    const bEsExtintor = (b.familia || b.tipo || '').toUpperCase().includes('EXTINTOR');
+    if (aEsExtintor && !bEsExtintor) return -1;
+    if (!aEsExtintor && bEsExtintor) return 1;
+    return 0;
+  });
 
-  if (bies.length > 0) {
-    tableStartY = renderSection('BOCAS DE INCENDIO EQUIPADAS (BIE)', bies, true, tableStartY, biesBase64);
+  // Renderizar cada sistema en una página separada
+  for (let index = 0; index < sistemasOrdenados.length; index++) {
+    const sist = sistemasOrdenados[index];
+    const equiposSistema = equiposTodos.filter(eq => eq.sistemaId === sist.id);
+    if (equiposSistema.length === 0) continue;
+
+    const nombreSistema = sist.familia || sist.tipo || 'Sistema';
+    const esBie = nombreSistema.toUpperCase().includes('BIE') || nombreSistema.toUpperCase().includes('BOCA');
+    const icono = esBie ? biesBase64 : extintorBase64;
+
+    // Si no es el primer sistema, añadir nueva página
+    if (index > 0) {
+      doc.addPage();
+      const newPageNum = (doc.internal as any).getNumberOfPages();
+      drawnTablePages.add(newPageNum);
+      drawTableHeader(newPageNum);
+      tableStartY = 34;
+    }
+
+    tableStartY = await renderSection(nombreSistema.toUpperCase(), equiposSistema, esBie, tableStartY, icono);
   }
 
   // ============ SIGNATURE PAGE (PÁGINA FINAL DEDICADA) ============
@@ -663,10 +833,11 @@ export const generarActaExtintoresPDFView = async (
   anomalyTextColor: [number, number, number] = [200, 0, 0],
   firmaCliente?: string,
   firmaTecnico?: string,
-  nombreFirmante?: string
+  nombreFirmante?: string,
+  checklistItems?: { key: string; label: string; tipoRespuesta?: string }[]
 ): Promise<string> => {
   const doc = new jsPDF('landscape');
-  generarActaExtintoresPDF(cliente, centro, sistemas, equiposTodos, numeroMantenimiento, tecnicoNombre, anomalyTextColor, firmaCliente, firmaTecnico, nombreFirmante);
+  await generarActaExtintoresPDF(cliente, centro, sistemas, equiposTodos, numeroMantenimiento, tecnicoNombre, anomalyTextColor, firmaCliente, firmaTecnico, nombreFirmante, checklistItems);
   return doc.output('bloburl').toString();
 };
 
@@ -866,18 +1037,18 @@ export const generarAlbaranPDF = async (
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(60, 60, 60);
     const line1 = `${empData?.nombre || ''}`;
-    doc.text(line1, pageWidth / 2, pageHeight - 13, { align: 'center' });
+    doc.text(line1, 14, pageHeight - 13);
     // Nombre en negrita, luego CIF y RASIC sin negrita en la misma línea
     const nombreWidth = doc.getTextWidth(line1);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(100, 100, 100);
     const cifRasic = `  ${cifText}${rasic}`;
-    doc.text(cifRasic, pageWidth / 2 + nombreWidth / 2, pageHeight - 13);
-    // Línea 2: Dirección y teléfono centrados
+    doc.text(cifRasic, 14 + nombreWidth, pageHeight - 13);
+    // Línea 2: Dirección y teléfono
     const dirParts = [empData?.direccion, empData?.localidad, empData?.provincia, empData?.codigoPostal].filter(Boolean).join(', ');
     const telPart = empData?.telefono ? `  |  Tel: ${empData.telefono}` : '';
     doc.setFontSize(7);
-    doc.text(`${dirParts}${telPart}`, pageWidth / 2, pageHeight - 8, { align: 'center' });
+    doc.text(`${dirParts}${telPart}`, 14, pageHeight - 8);
   }
 
   if (!noSave) doc.save(`Albaran_${centro?.nombre || 'Centro'}_${numeroMantenimiento}.pdf`);

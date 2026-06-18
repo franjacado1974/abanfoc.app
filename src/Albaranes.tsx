@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { ArrowLeft, FileDigit, Download, Search, CheckCircle2, Circle, Clock, Trash2, Plus, Building2, MapPin, Save, Trash, Edit, Eye, Copy } from 'lucide-react';
-import { addAlbaran, updateAlbaran, deleteAlbaran, subscribeAlbaranes, subscribeEmpresas, subscribeTecnicos, subscribeCentros, subscribeClientes, type Albaran, type Cliente, type Centro, type Equipo, type Tecnico, type Empresa } from './firebase';
-import { generarAlbaranPDF, generarAlbaranPDFView } from './pdfGenerator';
+import { ArrowLeft, FileDigit, Download, Search, CheckCircle2, Circle, Clock, Trash2, Plus, Building2, MapPin, Save, Trash, Edit, Copy, Maximize2, X } from 'lucide-react';
+import { addAlbaran, updateAlbaran, deleteAlbaran, subscribeAlbaranes, subscribeEmpresas, subscribeTecnicos, subscribeCentros, subscribeClientes, subscribeTrabajos, type Albaran, type Cliente, type Centro, type Equipo, type Tecnico, type Empresa, type TrabajoConfig } from './firebase';
+import { generarAlbaranPDF } from './pdfGenerator';
 import ConfirmationModal from './ConfirmationModal';
 
 const formatMoneda = (valor: number) => 
@@ -9,7 +9,11 @@ const formatMoneda = (valor: number) =>
     style: 'currency', currency: 'EUR' 
   }).format(valor || 0);
 
-export default function Albaranes() {
+interface AlbaranesProps {
+  isTecnicoMode?: boolean;
+}
+
+export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
   // Obtener rol del usuario logueado
   const loggedUser = useMemo(() => {
     try {
@@ -26,10 +30,12 @@ export default function Albaranes() {
   const [equipos] = useState<Equipo[]>(() => { try { return JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]'); } catch { return []; } });
   const [tecnicos, setTecnicos] = useState<Tecnico[]>(() => { try { return JSON.parse(localStorage.getItem('firecheck_db_tecnicos') || '[]'); } catch { return []; } });
   const [empresas, setEmpresas] = useState<Empresa[]>(() => { try { return JSON.parse(localStorage.getItem('firecheck_db_empresas') || '[]'); } catch { return []; } });
+  const [trabajosConfig, setTrabajosConfig] = useState<TrabajoConfig[]>(() => { try { return JSON.parse(localStorage.getItem('firecheck_db_trabajos') || '[]'); } catch { return []; } });
   const [searchTerm, setSearchTerm] = useState('');
   const [showOnlyPending, setShowOnlyPending] = useState(false);
   const [view, setView] = useState<'list' | 'form'>('list');
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingDescriptionIndex, setEditingDescriptionIndex] = useState<number | null>(null);
 
   const [form, setForm] = useState<Albaran>({
     id: '',
@@ -37,7 +43,7 @@ export default function Albaranes() {
     clienteId: '',
     centroId: '',
     fechaCreacion: new Date().toISOString(),
-    items: [{ cantidad: 1, concepto: 'Revisión', descripcion: '', precioUnidad: 0, subtotal: 0 }],
+    items: [{ cantidad: 1, concepto: '', descripcion: '', precioUnidad: 0, subtotal: 0 }],
     nombreFirmante: '',
     tecnicoId: '',
     facturado: false,
@@ -88,6 +94,10 @@ export default function Albaranes() {
   // State for confirmation modal
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [albaranIdToDelete, setAlbaranIdToDelete] = useState<string | null>(null);
+  const [clienteSearchTerm, setClienteSearchTerm] = useState('');
+  const [showClienteDropdown, setShowClienteDropdown] = useState(false);
+  const [signingRole, setSigningRole] = useState<'cliente' | 'tecnico' | null>(null);
+  const modalCanvasRef = useRef<HTMLCanvasElement>(null);
 
   const pendingCount = useMemo(() => 
     albaranes.filter(alb => !alb.facturado).length,
@@ -119,12 +129,18 @@ export default function Albaranes() {
       localStorage.setItem('firecheck_db_clientes', JSON.stringify(firebaseClientes));
     });
 
+    const unsubTrabajos = subscribeTrabajos((firebaseTrabajos) => {
+      setTrabajosConfig(firebaseTrabajos);
+      localStorage.setItem('firecheck_db_trabajos', JSON.stringify(firebaseTrabajos));
+    });
+
     return () => {
       unsubAlbaranes();
       unsubEmpresas();
       unsubTecnicos();
       unsubCentros();
       unsubClientes();
+      unsubTrabajos();
     };
   }, []);
 
@@ -153,17 +169,6 @@ export default function Albaranes() {
     setAlbaranIdToDelete(null);
   };
 
-  const handleViewPDF = async (alb: Albaran) => {
-    const cliente = clientes.find(c => c.id === alb.clienteId);
-    const centro = centros.find(c => c.id === alb.centroId);
-    const eqsDelCentro = equipos.filter(e => e.centroId === alb.centroId);
-    const empresa = empresas.find(e => e._docId === alb.empresaId);
-    const tecnico = tecnicos.find(t => t.id === alb.tecnicoId);
-    const tecnicoNombre = tecnico ? `${tecnico.nombre} ${tecnico.apellidos}` : '';
-    const pdfBlobUrl = await generarAlbaranPDFView(cliente as any, centro as any, eqsDelCentro as any[], alb.numeroMantenimiento || alb.id, tecnicoNombre, alb.firmaCliente, alb.firmaTecnico, alb.nombreFirmante, alb.items, empresa as any, alb.titulo);
-    window.open(pdfBlobUrl, '_blank');
-  };
-
   const handleDuplicateAlbaran = (alb: Albaran) => {
     // Usar el generador de IDs existente para mantener formato ALB-YY-XXX
     const newId = generateNextAlbaranId();
@@ -184,6 +189,8 @@ export default function Albaranes() {
   };
 
   const filtered = albaranes.filter(alb => {
+    if (isTecnicoMode && alb.facturado) return false;
+    
     const cliente = clientes.find(c => c.id === alb.clienteId); // Removed type assertion
     const term = searchTerm.toLowerCase();
     
@@ -217,7 +224,7 @@ export default function Albaranes() {
   const addItem = () => {
     setForm({
       ...form,
-      items: [...form.items, { cantidad: 1, concepto: 'Revisión', descripcion: '', precioUnidad: 0, subtotal: 0 }]
+      items: [...form.items, { cantidad: 1, concepto: '', descripcion: '', precioUnidad: 0, subtotal: 0 }]
     });
   };
 
@@ -264,7 +271,7 @@ export default function Albaranes() {
         clientY = 0;
       }
       
-      return { x: clientX - rect.left, y: clientY - rect.top };
+      return { x: (clientX - rect.left) * (canvas.width / rect.width), y: (clientY - rect.top) * (canvas.height / rect.height) };
     };
     canvas.onmousedown = (e) => { drawing = true; const pos = getPos(e); ctx.beginPath(); ctx.moveTo(pos.x, pos.y); };
     canvas.onmousemove = (e) => { if (!drawing) return; e.preventDefault(); const pos = getPos(e); ctx.lineTo(pos.x, pos.y); ctx.stroke(); };
@@ -302,6 +309,14 @@ export default function Albaranes() {
       }, 100);
     }
   }, [view, editingId, albaranes]);
+
+  useEffect(() => {
+    if (signingRole !== null) {
+      setTimeout(() => {
+        initDraw(modalCanvasRef.current);
+      }, 50);
+    }
+  }, [signingRole]);
 
   const handleSaveForm = async (e: React.FormEvent) => {
     e.preventDefault(); // Prevent default form submission
@@ -350,7 +365,7 @@ export default function Albaranes() {
 
   if (view === 'list') {
     return (
-      <div className="px-4 md:px-8 py-6">
+      <div className={`px-4 md:px-8 py-6 ${isTecnicoMode ? 'max-w-4xl mx-auto' : ''}`}>
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
           <div className="text-center md:text-left">
             <h1 className="text-2xl font-bold text-zinc-900 tracking-tight flex items-center justify-center md:justify-start gap-3">
@@ -364,21 +379,23 @@ export default function Albaranes() {
             <p className="text-sm text-zinc-500 mt-1">{albaranes.length} albaranes en el sistema.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={() => setShowOnlyPending(!showOnlyPending)}
-              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg font-medium transition-all text-xs shadow-sm border ${
-                showOnlyPending ? 'bg-amber-100 border-amber-200 text-amber-700' : 'bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-50'
-              }`}
-            >
-              <Clock className="w-3.5 h-3.5" />
-              {showOnlyPending ? 'Pendientes' : 'Todos'}
-            </button>
+            {!isTecnicoMode && (
+              <button
+                onClick={() => setShowOnlyPending(!showOnlyPending)}
+                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg font-medium transition-all text-xs shadow-sm border ${
+                  showOnlyPending ? 'bg-amber-100 border-amber-200 text-amber-700' : 'bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-50'
+                }`}
+              >
+                <Clock className="w-3.5 h-3.5" />
+                {showOnlyPending ? 'Pendientes' : 'Todos'}
+              </button>
+            )}
             {!isVisualizador && (
               <button
                 onClick={() => {
                   setEditingId(null);
                   const nextId = generateNextAlbaranId();
-                  setForm({ id: nextId, empresaId: '', clienteId: '', centroId: '', fechaCreacion: new Date().toISOString(), items: [{ cantidad: 1, concepto: 'Revisión', descripcion: '', precioUnidad: 0, subtotal: 0 }], nombreFirmante: '', tecnicoId: '', facturado: false, numeroPedido: '' });
+                  setForm({ id: nextId, empresaId: '', clienteId: '', centroId: '', fechaCreacion: new Date().toISOString(), items: [{ cantidad: 1, concepto: '', descripcion: '', precioUnidad: 0, subtotal: 0 }], nombreFirmante: '', tecnicoId: '', facturado: false, numeroPedido: '' });
                   setView('form');
                 }}
                 className="flex items-center gap-1.5 bg-black text-white px-4 py-2 rounded-lg font-medium hover:bg-zinc-800 transition-all text-xs shadow-md shadow-black/10"
@@ -423,10 +440,12 @@ export default function Albaranes() {
                 <div>Centro</div>
                 <div className="absolute top-0 right-0 h-full w-4 -mr-2 cursor-col-resize border-l-2 border-dashed border-zinc-600" onMouseDown={(e) => handleMouseDownResize('centro', e)} />
               </div>
-              <div className="relative text-center pr-3 select-none" style={{ width: colWidths.estado }}>
-                <div>Estado</div>
-                <div className="absolute top-0 right-0 h-full w-4 -mr-2 cursor-col-resize border-l-2 border-dashed border-zinc-600" onMouseDown={(e) => handleMouseDownResize('estado', e)} />
-              </div>
+              {!isTecnicoMode && (
+                <div className="relative text-center pr-3 select-none" style={{ width: colWidths.estado }}>
+                  <div>Estado</div>
+                  <div className="absolute top-0 right-0 h-full w-4 -mr-2 cursor-col-resize border-l-2 border-dashed border-zinc-600" onMouseDown={(e) => handleMouseDownResize('estado', e)} />
+                </div>
+              )}
               <div className="relative text-center select-none" style={{ width: colWidths.acciones }}>
                 <div>Acciones</div>
               </div>
@@ -439,7 +458,16 @@ export default function Albaranes() {
                   <div key={alb.id} className="flex flex-col md:flex-row md:items-center px-4 py-3.5 hover:bg-zinc-50/80 transition-colors group">
                     <div className="flex md:hidden items-center justify-between mb-2">
                       <span className="text-[10px] font-mono font-bold text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded">{alb.id}</span>
-                      <button onClick={() => handleEditAlbaran(alb)} className="p-1.5 text-zinc-400 hover:text-blue-900 hover:bg-blue-50 rounded-lg transition-colors"><Eye className="w-4 h-4" /></button>
+                      <div className="flex items-center gap-1">
+                        <button onClick={async () => {
+                          const eqsDelCentro = equipos.filter(e => e.centroId === alb.centroId);
+                          const empresa = empresas.find(e => e._docId === alb.empresaId);
+                          const tecnico = tecnicos.find(t => t.id === alb.tecnicoId);
+                          const tecnicoNombre = tecnico ? `${tecnico.nombre} ${tecnico.apellidos}` : '';
+                          await generarAlbaranPDF(cliente as any || null, centro as any || null, eqsDelCentro as any[], alb.numeroMantenimiento || alb.id, tecnicoNombre, alb.firmaCliente, alb.firmaTecnico, alb.nombreFirmante, alb.items, empresa as any, false, alb.titulo);
+                        }} className="p-1.5 text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100 rounded-lg transition-colors" title="Descargar PDF"><Download className="w-4 h-4" /></button>
+                        <button onClick={() => handleEditAlbaran(alb)} className="p-1.5 text-zinc-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"><Edit className="w-4 h-4" /></button>
+                      </div>
                     </div>
                     <div className="flex md:hidden">
                       <div className="flex-1 min-w-0">
@@ -453,27 +481,27 @@ export default function Albaranes() {
                       <div className="pr-3 text-sm text-zinc-600 truncate" style={{ width: colWidths.pedido }}>{alb.numeroPedido || '-'}</div>
                       <div className="pr-3 min-w-0" style={{ width: colWidths.cliente }}><p className="text-sm font-bold text-zinc-900 truncate">{cliente?.nombre || 'Desconocido'}</p></div>
                       <div className="pr-3 text-sm text-zinc-600 truncate flex items-center gap-1" style={{ width: colWidths.centro }}><MapPin className="w-3 h-3 text-zinc-400 shrink-0" />{centro?.nombre || '-'}</div>
-                      <div className="flex justify-center pr-2" style={{ width: colWidths.estado }}>
-                        <button onClick={() => toggleFacturado(alb.id)} className={`text-[10px] font-bold px-2 py-1 rounded-lg border flex items-center gap-1 ${
-                          alb.facturado ? 'bg-blue-600 border-blue-700 text-white' : 'bg-zinc-100 border-zinc-200 text-zinc-500'
-                        }`}>
-                          {alb.facturado ? <CheckCircle2 className="w-3 h-3" /> : <Circle className="w-3 h-3" />}
-                          {alb.facturado ? 'Facturado' : 'Pendiente'}
-                        </button>
-                      </div>
+                      {!isTecnicoMode && (
+                        <div className="flex justify-center pr-2" style={{ width: colWidths.estado }}>
+                          <button onClick={() => toggleFacturado(alb.id)} className={`text-[10px] font-bold px-2 py-1 rounded-lg border flex items-center gap-1 ${
+                            alb.facturado ? 'bg-blue-600 border-blue-700 text-white' : 'bg-zinc-100 border-zinc-200 text-zinc-500'
+                          }`}>
+                            {alb.facturado ? <CheckCircle2 className="w-3 h-3" /> : <Circle className="w-3 h-3" />}
+                            {alb.facturado ? 'Facturado' : 'Pendiente'}
+                          </button>
+                        </div>
+                      )}
                       <div className="flex items-center justify-center gap-1" style={{ width: colWidths.acciones }}>
-                        <button onClick={() => handleViewPDF(alb)} className="p-1.5 text-zinc-400 hover:text-blue-900 hover:bg-blue-50 rounded-lg transition-colors" title="Ver PDF"><Eye className="w-4 h-4" /></button>
                         <button onClick={async () => {
                           const eqsDelCentro = equipos.filter(e => e.centroId === alb.centroId);
-                          if (!cliente || !centro) { alert('No se puede generar el PDF: datos incompletos'); return; }
                           const empresa = empresas.find(e => e._docId === alb.empresaId);
                           const tecnico = tecnicos.find(t => t.id === alb.tecnicoId);
                           const tecnicoNombre = tecnico ? `${tecnico.nombre} ${tecnico.apellidos}` : '';
-                          await generarAlbaranPDF(cliente as any, centro as any, eqsDelCentro as any[], alb.numeroMantenimiento || alb.id, tecnicoNombre, alb.firmaCliente, alb.firmaTecnico, alb.nombreFirmante, alb.items, empresa as any, false, alb.titulo);
+                          await generarAlbaranPDF(cliente as any || null, centro as any || null, eqsDelCentro as any[], alb.numeroMantenimiento || alb.id, tecnicoNombre, alb.firmaCliente, alb.firmaTecnico, alb.nombreFirmante, alb.items, empresa as any, false, alb.titulo);
                         }} className="p-1.5 text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100 rounded-lg transition-colors" title="Descargar PDF"><Download className="w-4 h-4" /></button>
                         {!isVisualizador && <button onClick={() => handleEditAlbaran(alb)} className="p-1.5 text-zinc-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors" title="Editar"><Edit className="w-4 h-4" /></button>}
-                        {!isVisualizador && <button onClick={() => handleDuplicateAlbaran(alb)} className="p-1.5 text-zinc-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-colors" title="Duplicar"><Copy className="w-4 h-4" /></button>}
-                        {!isVisualizador && <button onClick={() => handleDeleteAlbaran(alb.id)} className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Eliminar"><Trash2 className="w-4 h-4" /></button>}
+                        {!isVisualizador && !isTecnicoMode && <button onClick={() => handleDuplicateAlbaran(alb)} className="p-1.5 text-zinc-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-colors" title="Duplicar"><Copy className="w-4 h-4" /></button>}
+                        {!isVisualizador && !isTecnicoMode && <button onClick={() => handleDeleteAlbaran(alb.id)} className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Eliminar"><Trash2 className="w-4 h-4" /></button>}
                       </div>
                     </div>
                   </div>
@@ -541,17 +569,46 @@ export default function Albaranes() {
               {/* Vinculación y Datos */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div className="space-y-6">
-                  <div className="space-y-2">
+                  <div className="space-y-2 relative">
                     <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Cliente *</label>
-                    <select 
-                      required
-                      value={form.clienteId}
-                      onChange={e => setForm({...form, clienteId: e.target.value, centroId: ''})}
-                      className="w-full px-5 py-3.5 bg-zinc-50 border border-zinc-200 rounded-2xl outline-none"
-                    >
-                      <option value="">Selecciona Cliente...</option>
-                      {clientes.map(cli => <option key={cli.id} value={cli.id}>{cli.nombre}</option>)}
-                    </select>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="Escribe para buscar cliente..."
+                        value={showClienteDropdown ? clienteSearchTerm : (clientes.find(c => c.id === form.clienteId)?.nombre || '')}
+                        onFocus={() => {
+                          setShowClienteDropdown(true);
+                          setClienteSearchTerm('');
+                        }}
+                        onChange={(e) => {
+                          setClienteSearchTerm(e.target.value);
+                          setShowClienteDropdown(true);
+                        }}
+                        className="w-full px-5 py-3.5 bg-zinc-50 border border-zinc-200 rounded-2xl outline-none focus:ring-2 focus:ring-violet-500/20"
+                      />
+                      {showClienteDropdown && (
+                        <div className="absolute z-50 w-full mt-1 bg-white border border-zinc-200 rounded-xl shadow-xl max-h-60 overflow-y-auto">
+                          {clientes.filter(c => c.nombre.toLowerCase().includes(clienteSearchTerm.toLowerCase())).map(cli => (
+                            <div 
+                              key={cli.id} 
+                              className="px-4 py-3 hover:bg-zinc-50 cursor-pointer text-sm font-medium border-b border-zinc-50 last:border-0"
+                              onClick={() => {
+                                setForm({...form, clienteId: cli.id, centroId: ''});
+                                setShowClienteDropdown(false);
+                              }}
+                            >
+                              {cli.nombre}
+                            </div>
+                          ))}
+                          {clientes.filter(c => c.nombre.toLowerCase().includes(clienteSearchTerm.toLowerCase())).length === 0 && (
+                            <div className="px-4 py-3 text-sm text-zinc-500 italic">No se encontraron clientes</div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    {showClienteDropdown && (
+                      <div className="fixed inset-0 z-40" onClick={() => setShowClienteDropdown(false)} />
+                    )}
                   </div>
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Centro de Trabajo</label>
@@ -647,10 +704,26 @@ export default function Albaranes() {
                           <td className="p-2"><input type="number" min="1" value={item.cantidad} onChange={e => updateItem(index, 'cantidad', parseInt(e.target.value))} className="w-full bg-transparent border-b border-transparent group-hover:border-zinc-200 outline-none p-1" /></td>
                           <td className="p-2">
                             <select value={item.concepto} onChange={e => updateItem(index, 'concepto', e.target.value)} className="w-full bg-transparent border-b border-transparent group-hover:border-zinc-200 outline-none p-1">
-                              {['Nuevo', 'Revisión', 'Reparación', 'Instalación', 'Suministro', 'Visita técnica'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                              <option value="">Seleccionar concepto...</option>
+                              {trabajosConfig.length > 0 ? (
+                                trabajosConfig.map(tc => (
+                                  <optgroup key={tc.id} label={tc.id}>
+                                    {tc.opciones.map(opt => <option key={`${tc.id}-${opt}`} value={opt}>{opt}</option>)}
+                                  </optgroup>
+                                ))
+                              ) : (
+                                ['Nuevo', 'Revisión', 'Reparación', 'Instalación', 'Suministro', 'Visita técnica'].map(opt => <option key={opt} value={opt}>{opt}</option>)
+                              )}
                             </select>
                           </td>
-                          <td className="p-2"><input type="text" value={item.descripcion} onChange={e => updateItem(index, 'descripcion', e.target.value)} className="w-full bg-transparent border-b border-transparent group-hover:border-zinc-200 outline-none p-1" placeholder="Detalle del trabajo..." /></td>
+                          <td className="p-2 relative">
+                            <div className="flex items-center gap-1">
+                              <input type="text" value={item.descripcion} onChange={e => updateItem(index, 'descripcion', e.target.value)} className="w-full bg-transparent border-b border-transparent group-hover:border-zinc-200 outline-none p-1" placeholder="Detalle del trabajo..." />
+                              <button type="button" onClick={() => setEditingDescriptionIndex(index)} className="p-1.5 text-zinc-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-colors" title="Ampliar descripción">
+                                <Maximize2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </td>
                           <td className="p-2"><input type="number" step="0.01" value={item.precioUnidad} onChange={e => updateItem(index, 'precioUnidad', parseFloat(e.target.value))} className="w-full text-right bg-transparent border-b border-transparent group-hover:border-zinc-200 outline-none p-1" /></td>
                           <td className="px-4 py-2 text-right font-bold text-zinc-900">{formatMoneda(item.subtotal)}</td>
                           <td className="p-2"><button type="button" onClick={() => removeItem(index)} className="p-1 text-zinc-300 hover:text-red-500 transition-colors"><Trash className="w-4 h-4" /></button></td>
@@ -666,20 +739,26 @@ export default function Albaranes() {
                 <div className="space-y-3">
                   <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Firma del Cliente</label>
                   <div className="space-y-2">
-                    <input type="text" value={form.nombreFirmante} onChange={e => setForm({...form, nombreFirmante: e.target.value})} placeholder="Nombre del receptor" className="w-full px-4 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl outline-none" />
-                    <canvas ref={canvasClienteRef} width={400} height={120} className="w-full h-32 bg-zinc-50 border border-zinc-200 rounded-2xl touch-none shadow-inner" />
-                    <button type="button" onClick={() => canvasClienteRef.current?.getContext('2d')?.clearRect(0,0,1000,1000)} className="text-[10px] text-zinc-400 underline">Limpiar firma</button>
+                    <input type="text" value={form.nombreFirmante} onChange={e => setForm({...form, nombreFirmante: e.target.value})} placeholder="Nombre del receptor" className="w-full px-4 py-3 text-sm bg-zinc-50 border border-zinc-200 rounded-xl outline-none" />
+                    <canvas ref={canvasClienteRef} width={600} height={200} className="w-full h-48 bg-zinc-50 border border-zinc-200 rounded-2xl touch-none shadow-inner" />
+                    <div className="flex justify-between items-center px-1">
+                      <button type="button" onClick={() => canvasClienteRef.current?.getContext('2d')?.clearRect(0,0,2000,2000)} className="text-[10px] text-zinc-400 underline p-1">Limpiar firma</button>
+                      <button type="button" onClick={() => setSigningRole('cliente')} className="text-xs font-bold text-violet-600 bg-violet-50 hover:bg-violet-100 px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors"><Maximize2 className="w-3 h-3"/> Pantalla completa</button>
+                    </div>
                   </div>
                 </div>
                 <div className="space-y-3">
                   <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Firma del Técnico</label>
                   <div className="space-y-2">
-                    <select value={form.tecnicoId} onChange={e => setForm({...form, tecnicoId: e.target.value})} className="w-full px-4 py-2 text-sm bg-zinc-50 border border-zinc-200 rounded-xl outline-none">
+                    <select value={form.tecnicoId} onChange={e => setForm({...form, tecnicoId: e.target.value})} className="w-full px-4 py-3 text-sm bg-zinc-50 border border-zinc-200 rounded-xl outline-none">
                       <option value="">Selecciona Técnico...</option>
                       {tecnicos.map(t => <option key={t.id} value={t.id}>{t.nombre} {t.apellidos}</option>)}
                     </select>
-                    <canvas ref={canvasTecnicoRef} width={400} height={120} className="w-full h-32 bg-zinc-50 border border-zinc-200 rounded-2xl touch-none shadow-inner" />
-                    <button type="button" onClick={() => canvasTecnicoRef.current?.getContext('2d')?.clearRect(0,0,1000,1000)} className="text-[10px] text-zinc-400 underline">Limpiar firma</button>
+                    <canvas ref={canvasTecnicoRef} width={600} height={200} className="w-full h-48 bg-zinc-50 border border-zinc-200 rounded-2xl touch-none shadow-inner" />
+                    <div className="flex justify-between items-center px-1">
+                      <button type="button" onClick={() => canvasTecnicoRef.current?.getContext('2d')?.clearRect(0,0,2000,2000)} className="text-[10px] text-zinc-400 underline p-1">Limpiar firma</button>
+                      <button type="button" onClick={() => setSigningRole('tecnico')} className="text-xs font-bold text-violet-600 bg-violet-50 hover:bg-violet-100 px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors"><Maximize2 className="w-3 h-3"/> Pantalla completa</button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -692,7 +771,97 @@ export default function Albaranes() {
             </form>
           </div>
         </div>
+
+        {/* Modal de Descripción Ampliada */}
+        {editingDescriptionIndex !== null && (
+          <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+             <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                <div className="px-5 py-4 border-b border-zinc-100 flex justify-between items-center bg-zinc-50">
+                   <h3 className="font-bold text-zinc-800">Descripción del trabajo</h3>
+                   <button onClick={() => setEditingDescriptionIndex(null)} className="p-1.5 hover:bg-zinc-200 rounded-lg transition-colors"><X className="w-5 h-5 text-zinc-500"/></button>
+                </div>
+                <div className="p-5">
+                   <textarea
+                     autoFocus
+                     className="w-full h-48 p-4 bg-zinc-50 border border-zinc-200 rounded-xl resize-none outline-none focus:ring-2 focus:ring-violet-500/20 text-sm"
+                     value={form.items[editingDescriptionIndex].descripcion}
+                     onChange={e => updateItem(editingDescriptionIndex, 'descripcion', e.target.value)}
+                     placeholder="Escribe la descripción detallada del trabajo realizado..."
+                   />
+                </div>
+                <div className="px-5 py-4 border-t border-zinc-100 flex justify-end bg-zinc-50">
+                   <button type="button" onClick={() => setEditingDescriptionIndex(null)} className="px-6 py-2.5 bg-black text-white rounded-xl font-bold text-sm hover:bg-zinc-800 transition-colors shadow-lg active:scale-95">Aceptar</button>
+                </div>
+             </div>
+          </div>
+        )}
       </div>
+
+        {/* Modal de Firma en Pantalla Completa */}
+        {signingRole !== null && (
+          <div className="fixed inset-0 z-[110] bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center p-2 sm:p-6">
+            <div className="bg-white rounded-3xl w-full max-w-3xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+              <div className="px-6 py-4 border-b border-zinc-100 flex justify-between items-center bg-zinc-50">
+                <h3 className="font-bold text-zinc-800 text-lg">
+                  {signingRole === 'cliente' ? 'Firma del Cliente' : 'Firma del Técnico'}
+                </h3>
+                <button type="button" onClick={() => setSigningRole(null)} className="p-2 hover:bg-zinc-200 rounded-xl transition-colors">
+                  <X className="w-6 h-6 text-zinc-500" />
+                </button>
+              </div>
+              
+              <div className="p-4 sm:p-8 bg-zinc-100/50 flex-1 flex flex-col items-center justify-center min-h-[50vh]">
+                <div className="w-full bg-white p-2 rounded-2xl shadow-sm border border-zinc-200">
+                  <canvas 
+                    ref={modalCanvasRef} 
+                    width={800} 
+                    height={400} 
+                    className="w-full h-[40vh] sm:h-80 bg-white rounded-xl touch-none" 
+                  />
+                </div>
+              </div>
+
+              <div className="px-6 py-5 border-t border-zinc-100 flex justify-between items-center bg-white">
+                <button 
+                  type="button" 
+                  onClick={() => modalCanvasRef.current?.getContext('2d')?.clearRect(0,0,2000,2000)} 
+                  className="px-6 py-3 text-sm font-bold text-zinc-500 hover:text-zinc-800 hover:bg-zinc-100 rounded-xl transition-colors"
+                >
+                  Limpiar
+                </button>
+                <div className="flex gap-3">
+                  <button 
+                    type="button" 
+                    onClick={() => setSigningRole(null)} 
+                    className="px-6 py-3 text-sm font-bold text-zinc-600 bg-zinc-100 hover:bg-zinc-200 rounded-xl transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    type="button" 
+                    onClick={() => {
+                      const dataUrl = modalCanvasRef.current?.toDataURL('image/png');
+                      const targetCanvas = signingRole === 'cliente' ? canvasClienteRef.current : canvasTecnicoRef.current;
+                      if (dataUrl && targetCanvas) {
+                        const img = new Image();
+                        img.onload = () => {
+                          const ctx = targetCanvas.getContext('2d');
+                          ctx?.clearRect(0, 0, targetCanvas.width, targetCanvas.height);
+                          ctx?.drawImage(img, 0, 0, targetCanvas.width, targetCanvas.height);
+                        };
+                        img.src = dataUrl;
+                      }
+                      setSigningRole(null);
+                    }} 
+                    className="px-8 py-3 text-sm font-bold text-white bg-black hover:bg-zinc-800 rounded-xl transition-all shadow-md active:scale-95"
+                  >
+                    Guardar Firma
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
     </div>
   );
 }

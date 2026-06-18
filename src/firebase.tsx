@@ -17,6 +17,7 @@ export interface SistemaCategoria {
   id: string;
   nombre: string;
   imagenUrl?: string;
+  tipos?: { id: string; nombre: string }[];
 }
 export interface SistemaEquipo {
   id: string;
@@ -82,6 +83,11 @@ export interface Albaran {
   parteId?: string;
   numeroPedido?: string;
   titulo?: string;
+}
+
+export interface TrabajoConfig {
+  id: string;
+  opciones: string[];
 }
 
 export interface Cliente {
@@ -348,6 +354,22 @@ export const subscribeEmpresas = (onUpdate: (data: Empresa[]) => void) => {
       _docId: doc.id, 
       ...doc.data() 
     })) as Empresa[];
+    onUpdate(data);
+  });
+};
+
+export const subscribeTrabajos = (onUpdate: (data: TrabajoConfig[]) => void) => {
+  const q = query(collection(db, 'trabajos'));
+  return onSnapshot(q, (snapshot) => {
+    const data = snapshot.docs.map(doc => {
+      const docData = doc.data();
+      return {
+        id: doc.id,
+        opciones: Object.keys(docData).filter(k => k !== 'id' && k !== '_docId')
+      };
+    });
+    // Sort by id for consistent display
+    data.sort((a, b) => a.id.localeCompare(b.id));
     onUpdate(data);
   });
 };
@@ -1188,6 +1210,7 @@ export interface EquipoInstaladoFirestore {
   anomalias?: string;
   longitud?: string;
   pruebaHidraulica?: string;
+  foto?: string;
   checkAcceso?: boolean | null;
   checkAltura?: boolean | null;
   checkSoporte?: boolean | null;
@@ -1202,45 +1225,26 @@ export interface EquipoInstaladoFirestore {
   checkDistancia?: boolean | null;
   checkPasador?: boolean | null;
   checkMovilidad?: boolean | null;
+  [key: string]: any; // Allow for dynamic properties from templates
   _docId?: string;
+}
+
+/** Elimina campos con valor undefined de un objeto (Firestore no permite undefined en setDoc) */
+function limpiarUndefined<T extends Record<string, any>>(obj: T): Record<string, any> {
+  const limpio: Record<string, any> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) {
+      limpio[key] = value;
+    }
+  }
+  return limpio;
 }
 
 export async function addEquipoInstalado(equipo: EquipoInstaladoFirestore) {
   try {
     console.log('addEquipoInstalado: centroId=', equipo.centroId, 'sistemaId=', equipo.sistemaId, 'equipoId=', equipo.id);
-    const equipoData = {
-      centroId: equipo.centroId,
-      sistemaId: equipo.sistemaId,
-      codigo: equipo.codigo || '',
-      nombre: equipo.nombre || '',
-      ubicacion: equipo.ubicacion || '',
-      revisable: equipo.revisable,
-      revisado: equipo.revisado,
-      placa: equipo.placa,
-      clase: equipo.clase,
-      fabricante: equipo.fabricante,
-      fechaFabricacion: equipo.fechaFabricacion,
-      ultimoRetimbre: equipo.ultimoRetimbre,
-      pesoCapacidad: equipo.pesoCapacidad,
-      anomalias: equipo.anomalias,
-      longitud: equipo.longitud,
-      pruebaHidraulica: equipo.pruebaHidraulica,
-      checkAcceso: equipo.checkAcceso,
-      checkAltura: equipo.checkAltura,
-      checkSoporte: equipo.checkSoporte,
-      checkSenalizacion: equipo.checkSenalizacion,
-      checkManguera: equipo.checkManguera,
-      checkPeso: equipo.checkPeso,
-      checkManometro: equipo.checkManometro,
-      checkMarcado: equipo.checkMarcado,
-      checkEtiquetas: equipo.checkEtiquetas,
-      checkRetimbre: equipo.checkRetimbre,
-      checkRiesgo: equipo.checkRiesgo,
-      checkDistancia: equipo.checkDistancia,
-      checkPasador: equipo.checkPasador,
-      checkMovilidad: equipo.checkMovilidad,
-      updatedAt: new Date().toISOString()
-    };
+    // Guardar TODOS los campos del equipo (incluyendo campos dinámicos de plantilla)
+    const equipoData = limpiarUndefined({ ...equipo, updatedAt: new Date().toISOString() });
 
     if (equipo.id) {
       const ref = doc(db, 'centros', equipo.centroId, 'inventario', equipo.sistemaId, 'equipos', equipo.id);
@@ -1264,7 +1268,8 @@ export async function updateEquipoInstalado(id: string, equipo: Partial<EquipoIn
       return { _docId: id, ...equipo };
     }
     const ref = doc(db, 'centros', equipo.centroId, 'inventario', equipo.sistemaId, 'equipos', id);
-    await setDoc(ref, { ...equipo, updatedAt: new Date().toISOString() }, { merge: true });
+    const cleanData = limpiarUndefined({ ...equipo, updatedAt: new Date().toISOString() });
+    await setDoc(ref, cleanData, { merge: true });
     return { _docId: id, ...equipo };
   } catch (e) {
     console.error('updateEquipoInstalado error:', e);
@@ -1361,7 +1366,7 @@ export async function saveImpuestoConfig(config: { iva: number; exento: boolean 
 // CHECKLIST - Firestore CRUD
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type TipoRespuestaChecklist = 'check' | 'texto' | 'numero';
+export type TipoRespuestaChecklist = 'check' | 'texto' | 'texto-largo' | 'numero' | 'fecha' | 'imagen';
 
 export interface ChecklistItem {
   id: string;
@@ -1370,7 +1375,7 @@ export interface ChecklistItem {
   label: string;           // Texto de la pregunta/check
   key: string;             // Clave única para el check (ej: checkAcceso, checkAltura)
   orden: number;           // Orden de aparición
-  tipoRespuesta: TipoRespuestaChecklist;  // Tipo de respuesta: 'check' | 'texto' | 'numero'
+  tipoRespuesta: TipoRespuestaChecklist;  // Tipo de respuesta: 'check' | 'texto' | 'numero' | 'fecha'
 }
 
 // ─── CHECKLIST POR COLECCIÓN DINÁMICA (checklist_{sistemaNombre}) ────────

@@ -1,8 +1,11 @@
 import { useState, useMemo } from 'react';
-import { FileText, Package, Users, Power, LogOut } from 'lucide-react';
+import { FileText, Package, Users, Power, LogOut, FileCheck } from 'lucide-react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import PartesTecnico from './PartesTecnico';
 import RevisionChecklist from './RevisionChecklist';
+import Albaranes from './Albaranes';
+import Clientes from './Clientes';
+import Centros from './Centros';
 
 interface Usuario {
   id: string;
@@ -16,7 +19,7 @@ interface DashboardTecnicoProps {
   onLogout: () => void;
 }
 
-type TecnicoView = 'dashboard' | 'partes';
+type TecnicoView = 'dashboard' | 'partes' | 'albaranes' | 'clientes' | 'centros';
 
 // ─── PANTALLA PRINCIPAL DEL TÉCNICO ──────────────────────────────────────────
 function DashboardHome({ loggedUser, onLogout, onNavigate }: DashboardTecnicoProps & { onNavigate: (view: TecnicoView) => void }) {
@@ -99,6 +102,22 @@ function DashboardHome({ loggedUser, onLogout, onNavigate }: DashboardTecnicoPro
       ],
     },
     {
+      id: 'albaranes' as TecnicoView,
+      title: 'Albaranes',
+      description: 'Consulta y gestiona albaranes',
+      icon: FileCheck,
+      bgColor: 'bg-emerald-50',
+      iconColor: 'text-emerald-600',
+      borderColor: 'border-emerald-200',
+      hoverBorder: 'hover:border-emerald-400',
+      textColor: 'text-emerald-900',
+      badgeBg: 'bg-emerald-100',
+      badgeText: 'text-emerald-700',
+      badgeLabel: 'Documentos',
+      clickable: true,
+      stats: [],
+    },
+    {
       id: 'catalogo' as TecnicoView,
       title: 'Catálogo',
       description: 'Consulta artículos y servicios disponibles',
@@ -117,9 +136,9 @@ function DashboardHome({ loggedUser, onLogout, onNavigate }: DashboardTecnicoPro
       ],
     },
     {
-      id: 'clientes-centros' as TecnicoView,
-      title: 'Clientes y Centros',
-      description: 'Consulta clientes e instalaciones',
+      id: 'clientes' as TecnicoView,
+      title: 'Clientes',
+      description: 'Consulta el listado de clientes',
       icon: Users,
       bgColor: 'bg-blue-50',
       iconColor: 'text-blue-600',
@@ -129,9 +148,26 @@ function DashboardHome({ loggedUser, onLogout, onNavigate }: DashboardTecnicoPro
       badgeBg: 'bg-blue-100',
       badgeText: 'text-blue-700',
       badgeLabel: 'Gestión',
-      clickable: false,
+      clickable: true,
       stats: [
         { label: 'Clientes', value: stats.clientes },
+      ],
+    },
+    {
+      id: 'centros' as TecnicoView,
+      title: 'Centros',
+      description: 'Consulta los centros de trabajo',
+      icon: Users,
+      bgColor: 'bg-sky-50',
+      iconColor: 'text-sky-600',
+      borderColor: 'border-sky-200',
+      hoverBorder: 'hover:border-sky-400',
+      textColor: 'text-sky-900',
+      badgeBg: 'bg-sky-100',
+      badgeText: 'text-sky-700',
+      badgeLabel: 'Instalaciones',
+      clickable: true,
+      stats: [
         { label: 'Centros', value: stats.centros },
       ],
     },
@@ -263,6 +299,69 @@ function TecnicoApp({ loggedUser, onLogout }: DashboardTecnicoProps) {
         loggedUser={loggedUser}
         onBack={() => setCurrentView('dashboard')}
       />
+    );
+  }
+
+  if (currentView === 'albaranes') {
+    return (
+      <div className="min-h-screen bg-zinc-50 relative">
+        {/* Cabecera para volver */}
+        <div className="sticky top-0 z-50 bg-white border-b border-zinc-200 px-4 py-3 flex items-center justify-between">
+          <button
+            onClick={() => setCurrentView('dashboard')}
+            className="flex items-center gap-2 text-zinc-600 font-semibold"
+          >
+            <span className="w-8 h-8 rounded-full bg-zinc-100 flex items-center justify-center">
+              ←
+            </span>
+            Volver
+          </button>
+        </div>
+        {/* Renderizamos Albaranes (que ya controla su propio layout/scroll) */}
+        <div className="pb-20">
+          <Albaranes isTecnicoMode={true} />
+        </div>
+      </div>
+    );
+  }
+
+  if (currentView === 'clientes') {
+    return (
+      <div className="min-h-screen bg-zinc-50 relative">
+        <div className="sticky top-0 z-50 bg-white border-b border-zinc-200 px-4 py-3 flex items-center justify-between">
+          <button
+            onClick={() => setCurrentView('dashboard')}
+            className="flex items-center gap-2 text-zinc-600 font-semibold"
+          >
+            <span className="w-8 h-8 rounded-full bg-zinc-100 flex items-center justify-center">←</span>
+            Volver
+          </button>
+          <h1 className="text-lg font-bold text-zinc-900">Directorio de Clientes</h1>
+        </div>
+        <div className="p-4 sm:p-6 pb-20">
+          <Clientes hideHeader={true} />
+        </div>
+      </div>
+    );
+  }
+
+  if (currentView === 'centros') {
+    return (
+      <div className="min-h-screen bg-zinc-50 relative">
+        <div className="sticky top-0 z-50 bg-white border-b border-zinc-200 px-4 py-3 flex items-center justify-between">
+          <button
+            onClick={() => setCurrentView('dashboard')}
+            className="flex items-center gap-2 text-zinc-600 font-semibold"
+          >
+            <span className="w-8 h-8 rounded-full bg-zinc-100 flex items-center justify-center">←</span>
+            Volver
+          </button>
+          <h1 className="text-lg font-bold text-zinc-900">Directorio de Centros</h1>
+        </div>
+        <div className="p-4 sm:p-6 pb-20">
+          <Centros hideHeader={true} />
+        </div>
+      </div>
     );
   }
 

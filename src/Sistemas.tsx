@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Layers, ArrowLeft, Plus, Edit, Trash2, X, FileBox, LayoutList, Droplets, BellRing, Wind, Download, Upload, Copy, Search, Cloud, Loader } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { syncSistemas, subscribeSistemasCategorias, saveEquipoToSystemCollection, deleteEquipoFromSystemCollection, subscribeEquiposBySystem, addSistemaCategoria, deleteSistemaCategoria, getCollectionName } from './firebase';
+import { syncSistemas, subscribeSistemasCategorias, deleteEquipoFromSystemCollection, subscribeEquiposBySystem, addSistemaCategoria, deleteSistemaCategoria, getCollectionName, addCentroSistema, sistemaToSlug } from './firebase';
 import ConfirmationModal from './ConfirmationModal'; // Ruta corregida
 
 // Updated interface to include imagenUrl
@@ -65,14 +65,11 @@ export default function Sistemas() {
 
   // Estados modales
   const [isCatModalOpen, setIsCatModalOpen] = useState(false);
-  const [isEquipoModalOpen, setIsEquipoModalOpen] = useState(false);
   
   // Formularios
   const [catNombre, setCatNombre] = useState('');
   const [editCatId, setEditCatId] = useState<string | null>(null);
   
-  const [formEquipo, setFormEquipo] = useState({ id: '', codigo: '', nombre: '', familia: '', revisable: true });
-
   // State for confirmation modal
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<{ type: 'cat' | 'equipo', id: string } | null>(null);
@@ -267,41 +264,6 @@ export default function Sistemas() {
     setItemToDelete(null);
   };
 
-  // ----- LOGICA EQUIPOS -----
-const handleSaveEquipo = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedCategoria) return;
-
-    const newEquipo: SistemaEquipo = {
-      id: formEquipo.id || crypto.randomUUID(),
-      idCategoria: selectedCategoria.id,
-      codigo: formEquipo.codigo.toUpperCase(),
-      nombre: formEquipo.nombre,
-      familia: selectedCategoria.nombre.toUpperCase(),
-      revisable: formEquipo.revisable
-    };
-
-    // Actualizar estado local SIEMPRE primero (antes de intentar Firestore)
-    let updatedEquipos: SistemaEquipo[];
-    if (formEquipo.id) {
-      updatedEquipos = equipos.map(eq => eq.id === formEquipo.id ? newEquipo : eq);
-    } else {
-      updatedEquipos = [...equipos, newEquipo];
-    }
-
-    // Guardar en localStorage inmediatamente
-    if (selectedCategoria) saveEquiposToSystem(updatedEquipos, selectedCategoria.nombre);
-    saveEquipos(updatedEquipos);
-    setIsEquipoModalOpen(false);
-
-    // Intentar guardar en Firestore (en segundo plano, no bloqueante)
-    try {
-      await saveEquipoToSystemCollection(selectedCategoria.nombre, newEquipo);
-    } catch (error) {
-      console.warn('No se pudo guardar en Firestore, los datos están en localStorage:', error);
-    }
-  };
-
   const handleDeleteEquipo = async (id: string) => {
     setItemToDelete({ type: 'equipo', id });
     setIsConfirmModalOpen(true);
@@ -324,35 +286,52 @@ const handleSaveEquipo = async (e: React.FormEvent) => {
   };
 
   const handleDuplicateEquipo = (eq: SistemaEquipo) => {
-    const newEquipo = {
+    // Calcular el siguiente número correlativo en el sistema actual
+    const equiposDelSistemaActual = equipos.filter(e => e.idCategoria === eq.idCategoria);
+    let maxNum = 0;
+    equiposDelSistemaActual.forEach(e => {
+      const num = parseInt(e.codigo, 10);
+      if (!isNaN(num) && num > maxNum) maxNum = num;
+    });
+    const siguienteNumero = (maxNum + 1).toString().padStart(2, '0');
+
+    const newEquipo: SistemaEquipo = {
       ...eq,
       id: crypto.randomUUID(),
-      codigo: `${eq.codigo}-COPIA`
+      codigo: siguienteNumero
     };
     saveEquipos([...equipos, newEquipo]);
   };
 
   const equiposDelSistema = selectedCategoria ? equipos.filter(e => e.idCategoria === selectedCategoria.id) : [];
 
-  const handleAddToCentro = (cat: SistemaCategoria) => {
+  const handleAddToCentro = async (cat: SistemaCategoria) => {
     if (!selectForCentroId) return;
     
-    // Guardar el sistema
-    const saved = localStorage.getItem('firecheck_db_centro_sistemas');
-    const db = saved ? JSON.parse(saved) : [];
-    
-    const newSysId = crypto.randomUUID();
-    const newSys = {
-      id: newSysId,
-      centroId: selectForCentroId,
-      tipo: cat.nombre,
-      familia: cat.nombre,
-      descripcion: ''
-    };
-    db.push(newSys);
-    localStorage.setItem('firecheck_db_centro_sistemas', JSON.stringify(db));
+    try {
+      // Guardar en Firebase en centros/{centroId}/inventario/{slug}
+      const slug = sistemaToSlug(cat.nombre);
+      const newSys = {
+        id: slug,
+        centroId: selectForCentroId,
+        tipo: cat.nombre,
+        familia: cat.nombre,
+        descripcion: ''
+      };
+      
+      await addCentroSistema(newSys);
+      
+      // También guardar en localStorage para compatibilidad
+      const saved = localStorage.getItem('firecheck_db_centro_sistemas');
+      const db = saved ? JSON.parse(saved) : [];
+      db.push(newSys);
+      localStorage.setItem('firecheck_db_centro_sistemas', JSON.stringify(db));
 
-    alert(`Sistema ${cat.nombre} añadido correctamente a ${selectForCentroNombre}. Ahora puedes entrar al sistema para añadirle modelos y cantidades.`);
+      alert(`Sistema ${cat.nombre} añadido correctamente a ${selectForCentroNombre}. Ahora puedes entrar al sistema para añadirle modelos y cantidades.`);
+    } catch (error) {
+      console.error('Error al añadir sistema al centro en Firebase:', error);
+      alert('Error al guardar el sistema en la base de datos. Inténtalo de nuevo.');
+    }
   };
 
   // ----- IMPORTAR / EXPORTAR CATEGORÍAS (SISTEMAS) -----
@@ -727,13 +706,6 @@ const handleSaveEquipo = async (e: React.FormEvent) => {
                   <Upload className="w-5 h-5" />
                   <span className="hidden sm:inline">Exportar</span>
                 </button>
-                <button 
-                  onClick={() => { setFormEquipo({ id: '', codigo: '', nombre: '', familia: '', revisable: true }); setIsEquipoModalOpen(true); }}
-                  className="flex items-center justify-center gap-2 bg-white border border-fuchsia-200 hover:border-fuchsia-300 text-fuchsia-700 px-5 py-2.5 rounded-xl font-medium transition-colors shadow-sm"
-                >
-                  <Plus className="w-5 h-5" />
-                  Añadir
-                </button>
               </div>
             </div>
 
@@ -761,12 +733,6 @@ const handleSaveEquipo = async (e: React.FormEvent) => {
                         </div>
                       </div>
                       <div className="flex items-center gap-1 shrink-0 ml-4">
-                        <button 
-                          onClick={() => { setFormEquipo(eq); setIsEquipoModalOpen(true); }} 
-                          className="p-2 text-black hover:text-zinc-600 hover:bg-zinc-100 rounded-lg transition-colors"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </button>
                         <button 
                           onClick={() => handleDuplicateEquipo(eq)} 
                           className="p-2 text-fuchsia-400 hover:text-fuchsia-700 hover:bg-fuchsia-100 rounded-lg transition-colors"
@@ -815,55 +781,6 @@ const handleSaveEquipo = async (e: React.FormEvent) => {
                 <button type="button" onClick={() => setIsCatModalOpen(false)} className="flex-1 px-4 py-2.5 text-fuchsia-700 bg-fuchsia-50 hover:bg-fuchsia-100 rounded-xl font-medium transition-colors">Cancelar</button>
                 <button type="submit" className="flex-1 px-4 py-2.5 text-white bg-fuchsia-600 hover:bg-fuchsia-700 rounded-xl font-medium transition-colors shadow-sm">Guardar</button>
               </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL EQUIPO */}
-      {isEquipoModalOpen && (
-        <div className="fixed inset-0 bg-fuchsia-950/20 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div className="px-6 py-4 border-b border-fuchsia-100 flex items-center justify-between bg-fuchsia-50/30">
-              <h2 className="text-lg font-bold text-fuchsia-950">
-                {formEquipo.id ? 'Editar Equipo' : 'Añadir Equipo'}
-              </h2>
-              <button onClick={() => setIsEquipoModalOpen(false)} className="p-2 text-fuchsia-400 hover:text-fuchsia-700 hover:bg-white rounded-xl transition-colors">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <form onSubmit={handleSaveEquipo} className="p-6 space-y-4">
-              <div className="grid grid-cols-1 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-sm font-semibold text-fuchsia-950">Código *</label>
-                  <input
-                    required autoFocus type="text" value={formEquipo.codigo} onChange={e => setFormEquipo({...formEquipo, codigo: e.target.value})}
-                    className="w-full px-4 py-2.5 bg-fuchsia-50/50 border border-fuchsia-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-fuchsia-500/20 focus:border-fuchsia-500 transition-all text-fuchsia-950 uppercase"
-                    placeholder="Ej: EXT-001"
-                  />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-semibold text-fuchsia-950">Tipo *</label>
-                <input
-                  required type="text" value={formEquipo.nombre} onChange={e => setFormEquipo({...formEquipo, nombre: e.target.value})}
-                  className="w-full px-4 py-3 bg-fuchsia-50/50 border border-fuchsia-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-fuchsia-500/20 focus:border-fuchsia-500 transition-all text-fuchsia-950"
-                  placeholder="Ej: Extintor Polvo ABC 6Kg"
-                />
-              </div>
-               <div className="space-y-1.5">
-                 <label className="text-sm font-semibold text-fuchsia-950">Revisable</label>
-                 <input
-                   type="checkbox"
-                   checked={formEquipo.revisable}
-                   onChange={e => setFormEquipo({...formEquipo, revisable: e.target.checked})}
-                   className="w-4 h-4 text-fuchsia-600"
-                 />
-               </div>
-               <div className="pt-2 flex gap-3">
-                 <button type="button" onClick={() => setIsEquipoModalOpen(false)} className="flex-1 px-4 py-2.5 text-fuchsia-700 bg-fuchsia-50 hover:bg-fuchsia-100 rounded-xl font-medium transition-colors">Cancelar</button>
-                 <button type="submit" className="flex-1 px-4 py-2.5 text-white bg-fuchsia-600 hover:bg-fuchsia-700 rounded-xl font-medium transition-colors shadow-sm">Guardar</button>
-               </div>
             </form>
           </div>
         </div>

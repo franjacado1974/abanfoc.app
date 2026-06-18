@@ -15,12 +15,12 @@ import Presupuestos from './Presupuestos';
 import Catalogo from './Catalogo';
 import Articulos from './Articulos';
 import Servicios from './Servicios';
-import Partes from './Partes';
 import Albaranes from './Albaranes';
 import Certificados from './Certificados';
 import ConfiguracionEmpresa from './ConfiguracionEmpresa';
 import Pedidos from './Pedidos';
 import Planificacion from './Planificacion';
+import Partes from './Partes';
 import RevisionChecklist from './RevisionChecklist';
 import Revisiones from './Revisiones';
 import Ajustes from './Ajustes';
@@ -112,7 +112,7 @@ function AccessDenied() {
           onClick={() => navigate('/')} 
           className="w-full bg-black hover:bg-zinc-800 text-white py-4 rounded-2xl font-bold shadow-lg transition-all active:scale-95"
         >
-          Volver al Inicio
+          Volver al Home
         </button>
       </div>
     </div>
@@ -150,8 +150,6 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
     let centros = 0;
     let catalogo = 0;
     let albaranes = 0;
-    let partes = 0;
-    let pendientes = 0;
     let certificados = 0;
     let pedidos = 0;
     try {
@@ -184,12 +182,6 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
         albaranes = Array.isArray(parsed) ? parsed.length : 0;
       }
 
-      const savedPartes = localStorage.getItem('firecheck_db_partes');
-      if (savedPartes) {
-        const parsed = JSON.parse(savedPartes);
-        partes = Array.isArray(parsed) ? parsed.length : 0;
-        pendientes = Array.isArray(parsed) ? parsed.filter((p: any) => p.estado === 'Planificado' || p.estado === 'En Proceso').length : 0;
-      }
 
       const savedCertificados = localStorage.getItem('firecheck_db_certificados');
       if (savedCertificados) {
@@ -203,7 +195,7 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
         pedidos = Array.isArray(parsed) ? parsed.length : 0;
       }
     } catch { /* ignore */ }
-    return { clientes, centros, catalogo, albaranes, partes, pendientes, certificados, pedidos };
+    return { clientes, centros, catalogo, albaranes, certificados, pedidos, partes: 0, pendientes: 0 };
   };
 
   const stats = useMemo(() => getStats(), []);
@@ -217,7 +209,7 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
         <div className="sticky top-0 z-40 bg-[#f8f6f3]/80 backdrop-blur-md border-b border-zinc-200/60">
           <div className="flex items-center justify-center px-6 py-4">
             <div className="text-center">
-              <h1 className="text-xl font-bold text-zinc-900">Inicio</h1>
+              <h1 className="text-xl font-bold text-zinc-900">Home</h1>
               <p className="text-xs text-zinc-500 mt-0.5">Bienvenido, {loggedUser.nombre}</p>
             </div>
           </div>
@@ -261,7 +253,7 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
                 <Clock className="w-4 h-4" />
               </div>
               <div>
-                <p className="text-lg font-bold text-amber-900 leading-none">{stats.pendientes}</p>
+                <p className="text-lg font-bold text-amber-900 leading-none">0</p>
                 <p className="text-[10px] text-zinc-500 mt-0.5">Pendientes</p>
               </div>
             </div>
@@ -271,7 +263,7 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
                 <FileText className="w-4 h-4" />
               </div>
               <div>
-                <p className="text-lg font-bold text-violet-900 leading-none">{stats.partes}</p>
+                <p className="text-lg font-bold text-violet-900 leading-none">0</p>
                 <p className="text-[10px] text-zinc-500 mt-0.5">Partes</p>
               </div>
             </div>
@@ -369,7 +361,7 @@ function PlaceholderPage({ title, bgColor = "bg-zinc-50" }: { title: string, bgC
       <div className={`flex-1 overflow-y-auto ${bgColor}`}>
         <div className="p-6">
           <button onClick={() => navigate('/')} className="text-sm font-medium text-zinc-500 hover:text-black mb-6 flex items-center gap-2 transition-colors">
-            <ArrowLeft className="w-4 h-4" /> Volver al inicio
+            <ArrowLeft className="w-4 h-4" /> Volver al Home
           </button>
           <h1 className="text-2xl font-bold text-zinc-900">{title}</h1>
           <p className="text-zinc-500 mt-2">Esta seccion esta en construccion y se implementara proximamente.</p>

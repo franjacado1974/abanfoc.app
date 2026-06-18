@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Building2, Users, ShieldCheck, FireExtinguisher, Plus, Trash2, ArrowLeft, Image as ImageIcon, X, Loader, Edit, Percent, CheckSquare, Save, GripVertical
+  Building2, Users, ShieldCheck, FireExtinguisher, Plus, Trash2, ArrowLeft, Image as ImageIcon, X, Loader, Edit, Percent, ClipboardList, ChevronDown, ChevronUp
 } from 'lucide-react';
-import { addUserToFirestore, subscribeSistemasCategorias, addSistemaCategoria, deleteSistemaCategoria, uploadFile, subscribeImpuestos, saveImpuestoConfig, subscribeChecklists, addChecklistItem, updateChecklistItem, deleteChecklistItem, saveChecklistBatch, subscribeChecklistsPorSistema, saveChecklistBatchPorSistema, deleteChecklistItemPorSistema, updateChecklistItemPorSistema, type ChecklistItem } from './firebase';
+import { addUserToFirestore, subscribeSistemasCategorias, addSistemaCategoria, deleteSistemaCategoria, updateSistemaCategoria, uploadFile, subscribeImpuestos, saveImpuestoConfig } from './firebase';
+import FormBuilderPlantillas from './FormBuilderPlantillas';
 import ConfirmationModal from './ConfirmationModal';
 
 const generateId = () => {
@@ -22,15 +23,21 @@ interface Usuario {
   password?: string;
 }
 
+interface SistemaTipo {
+  id: string;
+  nombre: string;
+}
+
 interface SistemaItem {
   id: string;
   nombre: string;
   imagenUrl?: string;
+  tipos?: SistemaTipo[];
 }
 
 export default function Ajustes() {
   const navigate = useNavigate();
-  const [view, setView] = useState<'menu' | 'tecnicos' | 'usuarios' | 'sistemas' | 'impuestos' | 'checklist'>('menu');
+  const [view, setView] = useState<'menu' | 'tecnicos' | 'usuarios' | 'sistemas' | 'impuestos' | 'plantillas'>('menu');
 
   const [tecnicos, setTecnicos] = useState<{ id: string; nombre: string; apellidos: string }[]>(() => {
     try {
@@ -81,6 +88,13 @@ export default function Ajustes() {
   const [sistemaNombre, setSistemaNombre] = useState('');
   const [sistemaImagen, setSistemaImagen] = useState<File | null>(null);
   const [sistemaImagenPreview, setSistemaImagenPreview] = useState<string | null>(null);
+
+  // Estados para acordeón y tipos de equipos
+  const [expandedSistemaId, setExpandedSistemaId] = useState<string | null>(null);
+  const [isTipoModalOpen, setIsTipoModalOpen] = useState(false);
+  const [editTipoId, setEditTipoId] = useState<string | null>(null);
+  const [tipoNombre, setTipoNombre] = useState('');
+  const [activeSistemaForTipo, setActiveSistemaForTipo] = useState<string | null>(null);
 
   // ─── GESTION DE IMPUESTOS ──────────────────────────────────────────────
   const [impuestosConfig, setImpuestosConfig] = useState({ iva: 21, exento: false });
@@ -211,148 +225,63 @@ export default function Ajustes() {
     reader.readAsDataURL(file);
   };
 
-  // ─── GESTION DE CHECKLIST ──────────────────────────────────────────────
-  const [checklistSistemaId, setChecklistSistemaId] = useState<string>('');
-  const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>([]);
-  const [newChecklistLabel, setNewChecklistLabel] = useState('');
-  const [newChecklistTipo, setNewChecklistTipo] = useState<'check' | 'texto' | 'numero'>('check');
-  const [editingChecklistId, setEditingChecklistId] = useState<string | null>(null);
-  const [editingChecklistLabel, setEditingChecklistLabel] = useState('');
-  const [editingChecklistTipo, setEditingChecklistTipo] = useState<'check' | 'texto' | 'numero'>('check');
-  const [cargandoPlantilla, setCargandoPlantilla] = useState(false);
-  const [editandoPlantilla, setEditandoPlantilla] = useState(false);
-  const [plantillaTitulo, setPlantillaTitulo] = useState('Plantilla de Extintores');
-  const [plantillaEditada, setPlantillaEditada] = useState<{ key: string; label: string; tipoRespuesta: 'check' | 'texto' | 'numero' }[]>([]);
+  // --- LOGICA PARA TIPOS DE EQUIPOS ---
+  const toggleExpandedSistema = (id: string) => {
+    setExpandedSistemaId(prev => (prev === id ? null : id));
+  };
 
-  // Plantilla predefinida de extintores (la misma que en RevisionChecklist.tsx)
-  const PLANTILLA_EXTINTORES = [
-    { key: 'checkAcceso', label: 'Acceso', tipoRespuesta: 'check' as const },
-    { key: 'checkAltura', label: 'Altura', tipoRespuesta: 'check' as const },
-    { key: 'checkSoporte', label: 'Soporte', tipoRespuesta: 'check' as const },
-    { key: 'checkSenalizacion', label: 'Señalización', tipoRespuesta: 'check' as const },
-    { key: 'checkManguera', label: 'Manguera', tipoRespuesta: 'check' as const },
-    { key: 'checkPeso', label: 'Peso', tipoRespuesta: 'check' as const },
-    { key: 'checkManometro', label: 'Manómetro', tipoRespuesta: 'check' as const },
-    { key: 'checkMarcado', label: 'Marcado', tipoRespuesta: 'check' as const },
-    { key: 'checkEtiquetas', label: 'Etiquetas', tipoRespuesta: 'check' as const },
-    { key: 'checkRetimbre', label: 'Retimbre', tipoRespuesta: 'check' as const },
-    { key: 'checkRiesgo', label: 'Riesgo', tipoRespuesta: 'check' as const },
-    { key: 'checkDistancia', label: 'Distancia', tipoRespuesta: 'check' as const },
-    { key: 'checkPasador', label: 'Pasador', tipoRespuesta: 'check' as const },
-    { key: 'checkMovilidad', label: 'Movilidad', tipoRespuesta: 'check' as const },
-  ];
+  const handleSaveTipo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!tipoNombre.trim() || !activeSistemaForTipo) return;
 
-  // Suscribirse a los items del checklist cuando se selecciona un sistema
-  useEffect(() => {
-    if (!checklistSistemaId) return;
-    const sistema = sistemas.find(s => s.id === checklistSistemaId);
-    const sistemaNombre = sistema?.nombre || '';
-    if (sistemaNombre) {
-      const unsub = subscribeChecklistsPorSistema(sistemaNombre, (items) => {
-        setChecklistItems(items);
-      });
-      return () => unsub();
+    const sistemaActual = sistemas.find(s => s.id === activeSistemaForTipo);
+    if (!sistemaActual) return;
+
+    let updatedTipos = sistemaActual.tipos ? [...sistemaActual.tipos] : [];
+    
+    if (editTipoId) {
+      updatedTipos = updatedTipos.map(t => t.id === editTipoId ? { ...t, nombre: tipoNombre.trim() } : t);
     } else {
-      // Fallback: usar la colección antigua
-      const unsub = subscribeChecklists(checklistSistemaId, (items) => {
-        setChecklistItems(items);
-      });
-      return () => unsub();
+      updatedTipos.push({ id: generateId(), nombre: tipoNombre.trim() });
     }
-  }, [checklistSistemaId, sistemas]);
 
-  const handleCargarPlantillaExtintoresConItems = async (items: { key: string; label: string; tipoRespuesta: 'check' | 'texto' | 'numero' }[]) => {
-    if (!checklistSistemaId) return;
-    const sistema = sistemas.find(s => s.id === checklistSistemaId);
-    if (!sistema) return;
-    setCargandoPlantilla(true);
     try {
-      const itemsToSave = items.map((item, index) => ({
-        sistemaId: checklistSistemaId,
-        sistemaNombre: sistema.nombre,
-        label: item.label,
-        key: item.key,
-        orden: index + 1,
-        tipoRespuesta: item.tipoRespuesta,
-      }));
-      // Guardar en colección dinámica: checklist_{sistemaNombre}
-      await saveChecklistBatchPorSistema(sistema.nombre, itemsToSave);
-      setEditandoPlantilla(false);
+      await updateSistemaCategoria(activeSistemaForTipo, { tipos: updatedTipos } as any);
+      setSistemas(sistemas.map(s => s.id === activeSistemaForTipo ? { ...s, tipos: updatedTipos } : s));
+      setIsTipoModalOpen(false);
+      setTipoNombre('');
+      setEditTipoId(null);
     } catch (err) {
-      console.error('Error cargando plantilla:', err);
-      alert('Error al guardar la plantilla en Firestore');
-    } finally {
-      setCargandoPlantilla(false);
+      console.error('Error guardando tipo:', err);
+      alert('Error guardando el tipo de equipo.');
     }
   };
 
-  const handleAddChecklistItem = async () => {
-    if (!checklistSistemaId || !newChecklistLabel.trim()) return;
-    const sistema = sistemas.find(s => s.id === checklistSistemaId);
-    const sistemaNombre = sistema?.nombre || '';
-    const key = 'check' + newChecklistLabel.trim().replace(/\s+/g, '');
-    const maxOrden = checklistItems.reduce((max, item) => Math.max(max, item.orden), 0);
-    try {
-      if (sistemaNombre) {
-        await saveChecklistBatchPorSistema(sistemaNombre, [{
-          sistemaId: checklistSistemaId,
-          sistemaNombre,
-          label: newChecklistLabel.trim(),
-          key,
-          orden: maxOrden + 1,
-          tipoRespuesta: newChecklistTipo,
-        }]);
-      } else {
-        await addChecklistItem({
-          sistemaId: checklistSistemaId,
-          sistemaNombre: '',
-          label: newChecklistLabel.trim(),
-          key,
-          orden: maxOrden + 1,
-          tipoRespuesta: newChecklistTipo,
-        });
-      }
-      setNewChecklistLabel('');
-      setNewChecklistTipo('check');
-    } catch (err) {
-      console.error('Error añadiendo item de checklist:', err);
-      alert('Error al guardar en Firestore');
-    }
+  const handleEditTipo = (sistId: string, tipo: SistemaTipo) => {
+    setActiveSistemaForTipo(sistId);
+    setEditTipoId(tipo.id);
+    setTipoNombre(tipo.nombre);
+    setIsTipoModalOpen(true);
   };
 
-  const handleUpdateChecklistItem = async (id: string) => {
-    if (!editingChecklistLabel.trim()) return;
-    const sistema = sistemas.find(s => s.id === checklistSistemaId);
-    const sistemaNombre = sistema?.nombre || '';
-    try {
-      if (sistemaNombre) {
-        await updateChecklistItemPorSistema(sistemaNombre, id, { label: editingChecklistLabel.trim(), tipoRespuesta: editingChecklistTipo });
-      } else {
-        await updateChecklistItem(id, { label: editingChecklistLabel.trim(), tipoRespuesta: editingChecklistTipo });
-      }
-      setEditingChecklistId(null);
-      setEditingChecklistLabel('');
-      setEditingChecklistTipo('check');
-    } catch (err) {
-      console.error('Error actualizando item de checklist:', err);
-      alert('Error al guardar en Firestore');
-    }
-  };
+  const handleDeleteTipo = async (sistId: string, tipoId: string) => {
+    if (!window.confirm('¿Seguro que quieres eliminar este tipo de equipo?')) return;
+    const sistemaActual = sistemas.find(s => s.id === sistId);
+    if (!sistemaActual) return;
 
-  const handleDeleteChecklistItem = async (id: string) => {
-    const sistema = sistemas.find(s => s.id === checklistSistemaId);
-    const sistemaNombre = sistema?.nombre || '';
+    const updatedTipos = (sistemaActual.tipos || []).filter(t => t.id !== tipoId);
     try {
-      if (sistemaNombre) {
-        await deleteChecklistItemPorSistema(sistemaNombre, id);
-      } else {
-        await deleteChecklistItem(id);
-      }
+      await updateSistemaCategoria(sistId, { tipos: updatedTipos } as any);
+      setSistemas(sistemas.map(s => s.id === sistId ? { ...s, tipos: updatedTipos } : s));
     } catch (err) {
-      console.error('Error eliminando item de checklist:', err);
-      alert('Error al eliminar de Firestore');
+      console.error('Error borrando tipo:', err);
+      alert('Error eliminando el tipo de equipo.');
     }
   };
+  // ------------------------------------
+
+  // ─── GESTION DE PLANTILLAS ────────────────────────────────────────────
+  // (gestionada por el componente FormBuilderPlantillas)
 
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<{ type: 'tecnico' | 'usuario' | 'sistema'; id: string } | null>(null);
@@ -471,17 +400,17 @@ export default function Ajustes() {
               className="flex items-center gap-2 text-sm font-medium text-zinc-500 hover:text-zinc-900 transition-colors"
             >
               <ArrowLeft className="w-4 h-4" />
-              <span>Inicio</span>
+              <span>Home</span>
             </button>
           )}
           <h1 className="text-lg font-bold text-zinc-900 flex-1 text-center">
-            {view === 'menu' ? 'Panel de Configuracion' : view === 'tecnicos' ? 'Gestion de Tecnicos' : view === 'usuarios' ? 'Gestion de Usuarios' : view === 'sistemas' ? 'Gestion de Sistemas' : view === 'impuestos' ? 'Impuestos' : 'Checklist'}
+            {view === 'menu' ? 'Panel de Configuracion' : view === 'tecnicos' ? 'Gestion de Tecnicos' : view === 'usuarios' ? 'Gestion de Usuarios' : view === 'sistemas' ? 'Gestion de Sistemas' : view === 'plantillas' ? 'Editor de Plantillas' : 'Impuestos'}
           </h1>
           <div className="w-16" />
         </div>
       </div>
 
-      <div className="max-w-2xl mx-auto p-4 sm:p-6">
+      <div className={`${view === 'plantillas' ? 'w-full' : 'max-w-2xl mx-auto'} p-4 sm:p-6`}>
         {view === 'menu' && (
           <div className="space-y-4">
             <button
@@ -550,15 +479,15 @@ export default function Ajustes() {
             </button>
 
             <button
-              onClick={() => setView('checklist')}
+              onClick={() => setView('plantillas')}
               className="w-full flex items-center gap-4 p-4 rounded-2xl border border-zinc-200 bg-white hover:border-teal-200 hover:bg-teal-50/50 transition-all text-left group"
             >
               <div className="w-12 h-12 bg-teal-100 text-teal-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                <CheckSquare className="w-6 h-6" />
+                <ClipboardList className="w-6 h-6" />
               </div>
               <div>
-                <p className="font-bold text-zinc-800">Checklist</p>
-                <p className="text-xs text-zinc-500">Gestion de preguntas de revision por sistema.</p>
+                <p className="font-bold text-zinc-800">Plantillas</p>
+                <p className="text-xs text-zinc-500">Gestión de plantillas de checklists.</p>
               </div>
             </button>
           </div>
@@ -715,41 +644,97 @@ export default function Ajustes() {
                 <div className="p-8 text-center text-zinc-400 text-sm">No hay sistemas registrados.</div>
               ) : (
                 <ul className="divide-y divide-zinc-100">
-                  {sistemas.map(sist => (
-                    <li key={sist.id} className="p-4 flex items-center justify-between hover:bg-zinc-50 transition-colors">
-                      <div className="flex items-center gap-3 min-w-0 flex-1">
-                        {/* Imagen del sistema */}
-                        <div className="w-12 h-12 flex items-center justify-center shrink-0">
-                          {sist.imagenUrl ? (
-                            <img src={sist.imagenUrl} alt={sist.nombre} className="w-10 h-10 object-contain" />
+                  {sistemas.map(sist => {
+                    const isExpanded = expandedSistemaId === sist.id;
+                    return (
+                    <li key={sist.id} className="flex flex-col border-b border-zinc-100 last:border-b-0">
+                      {/* Cabecera del sistema */}
+                      <div 
+                        className="p-4 flex items-center justify-between hover:bg-zinc-50 transition-colors cursor-pointer"
+                        onClick={() => toggleExpandedSistema(sist.id)}
+                      >
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          {/* Imagen del sistema */}
+                          <div className="w-12 h-12 flex items-center justify-center shrink-0">
+                            {sist.imagenUrl ? (
+                              <img src={sist.imagenUrl} alt={sist.nombre} className="w-10 h-10 object-contain" />
+                            ) : (
+                              <div className="w-12 h-12 rounded-xl bg-fuchsia-50 flex items-center justify-center border border-fuchsia-100">
+                                <ImageIcon className="w-5 h-5 text-fuchsia-400" />
+                              </div>
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-bold text-zinc-900 text-sm truncate">{sist.nombre}</p>
+                            <p className="text-[10px] text-zinc-500 mt-0.5">
+                              {sist.tipos?.length || 0} tipos registrados
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0 ml-2">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleEditSistema(sist); }}
+                            className="p-1.5 text-zinc-500 hover:text-zinc-800 hover:bg-zinc-100 rounded-lg transition-colors"
+                            title="Editar"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleDeleteSistema(sist.id); }}
+                            className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Eliminar"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                          {isExpanded ? <ChevronUp className="w-5 h-5 text-zinc-400" /> : <ChevronDown className="w-5 h-5 text-zinc-400" />}
+                        </div>
+                      </div>
+
+                      {/* Contenido desplegable: Tipos de equipos */}
+                      {isExpanded && (
+                        <div className="bg-zinc-50 border-t border-zinc-100 px-6 py-4 pl-20">
+                          <div className="flex items-center justify-between mb-3">
+                            <h5 className="text-xs font-bold text-zinc-600 uppercase tracking-wider">Tipos de Equipos</h5>
+                            <button
+                              onClick={() => { setActiveSistemaForTipo(sist.id); setEditTipoId(null); setTipoNombre(''); setIsTipoModalOpen(true); }}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-black hover:bg-zinc-800 text-white rounded-md text-[11px] font-bold transition-colors shadow-sm"
+                            >
+                              <Plus className="w-3 h-3" /> Añadir tipo
+                            </button>
+                          </div>
+
+                          {!sist.tipos || sist.tipos.length === 0 ? (
+                            <p className="text-xs text-zinc-400 italic py-3 text-center bg-white rounded-lg border border-dashed border-zinc-200">No hay tipos registrados en este sistema.</p>
                           ) : (
-                            <div className="w-12 h-12 rounded-xl bg-fuchsia-50 flex items-center justify-center border border-fuchsia-100">
-                              <ImageIcon className="w-5 h-5 text-fuchsia-400" />
+                            <div className="space-y-1.5">
+                              {sist.tipos.map(tipo => (
+                                <div key={tipo.id} className="flex items-center justify-between px-3 py-2 bg-white border border-zinc-200 rounded-lg hover:border-zinc-300 transition-colors">
+                                  <span className="text-sm font-semibold text-zinc-700">{tipo.nombre}</span>
+                                  <div className="flex items-center gap-1">
+                                    <button 
+                                      onClick={() => handleEditTipo(sist.id, tipo)} 
+                                      className="p-1.5 text-zinc-400 hover:text-amber-600 hover:bg-amber-50 rounded transition-colors" 
+                                      title="Editar tipo"
+                                    >
+                                      <Edit className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button 
+                                      onClick={() => handleDeleteTipo(sist.id, tipo.id)} 
+                                      className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors" 
+                                      title="Eliminar tipo"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
                             </div>
                           )}
                         </div>
-                        <div className="min-w-0">
-                          <p className="font-bold text-zinc-900 text-sm truncate">{sist.nombre}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1 shrink-0 ml-2">
-                        <button
-                          onClick={() => handleEditSistema(sist)}
-                          className="p-1.5 text-zinc-500 hover:text-zinc-800 hover:bg-zinc-100 rounded-lg transition-colors"
-                          title="Editar"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteSistema(sist.id)}
-                          className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors"
-                          title="Eliminar"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+                      )}
                     </li>
-                  ))}
+                  );
+                  })}
                 </ul>
               )}
             </div>
@@ -806,284 +791,10 @@ export default function Ajustes() {
           </section>
         )}
 
-        {view === 'checklist' && (
-          <section className="space-y-6">
-            {/* Selector de sistema */}
-            <div className="bg-white rounded-2xl border border-zinc-200 p-4">
-              <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider block mb-2">Seleccionar Sistema</label>
-              <select
-                value={checklistSistemaId}
-                onChange={e => setChecklistSistemaId(e.target.value)}
-                className="w-full px-4 py-2.5 bg-white border border-zinc-200 rounded-xl text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-all"
-              >
-                <option value="">-- Elige un sistema --</option>
-                {sistemas.map(sist => (
-                  <option key={sist.id} value={sist.id}>{sist.nombre}</option>
-                ))}
-              </select>
-              {sistemas.length === 0 && (
-                <p className="text-xs text-amber-600 mt-2">No hay sistemas creados. Crea un sistema primero en "Gestión de sistemas".</p>
-              )}
-            </div>
-
-            {checklistSistemaId && (
-              <>
-                {/* Añadir nueva pregunta */}
-                <div className="bg-white rounded-2xl border border-zinc-200 p-4">
-                  <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3">Añadir Pregunta al Checklist</p>
-                  <div className="flex flex-col gap-2">
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={newChecklistLabel}
-                        onChange={e => setNewChecklistLabel(e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddChecklistItem(); } }}
-                        placeholder="Ej: Número de placa, Ubicación, Estado presión..."
-                        className="flex-1 px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-all"
-                      />
-                    </div>
-                    <div className="flex gap-2 items-center">
-                      <select
-                        value={newChecklistTipo}
-                        onChange={e => setNewChecklistTipo(e.target.value as 'check' | 'texto' | 'numero')}
-                        className="px-3 py-2.5 bg-white border border-zinc-200 rounded-xl text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-all"
-                      >
-                        <option value="check">Check (✓/✗)</option>
-                        <option value="texto">Texto alfanumérico</option>
-                        <option value="numero">Número</option>
-                      </select>
-                      <button
-                        onClick={handleAddChecklistItem}
-                        disabled={!newChecklistLabel.trim()}
-                        className="flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white px-4 py-2.5 rounded-xl text-sm font-medium transition-all"
-                      >
-                        <Plus className="w-4 h-4" />
-                        Añadir
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Tarjeta de plantilla de extintores (siempre visible, ancho completo) */}
-                <div className="bg-white rounded-2xl border-2 border-dashed border-teal-300 overflow-hidden w-full">
-                  {/* Cabecera con título editable */}
-                  <div className="px-5 py-4 bg-teal-50 border-b border-teal-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                    <div className="flex items-center gap-3 w-full sm:w-auto">
-                      <FireExtinguisher className="w-5 h-5 text-teal-600 shrink-0" />
-                      {editandoPlantilla ? (
-                        <input
-                          type="text"
-                          value={plantillaTitulo}
-                          onChange={e => setPlantillaTitulo(e.target.value)}
-                          className="px-3 py-1.5 bg-white border-2 border-teal-400 rounded-lg text-sm font-bold text-teal-800 outline-none focus:border-teal-600 w-full sm:w-64"
-                          placeholder="Nombre de la plantilla"
-                        />
-                      ) : (
-                        <p className="text-sm font-bold text-teal-800 uppercase tracking-wider">
-                          {plantillaTitulo}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 w-full sm:w-auto">
-                      {editandoPlantilla ? (
-                        <>
-                          <button
-                            onClick={() => { setEditandoPlantilla(false); }}
-                            className="flex items-center gap-1.5 bg-zinc-400 hover:bg-zinc-500 text-white px-3 py-2 rounded-lg text-xs font-bold transition-all"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                            Cancelar
-                          </button>
-                          <button
-                            onClick={() => handleCargarPlantillaExtintoresConItems(plantillaEditada)}
-                            disabled={cargandoPlantilla}
-                            className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-3 py-2 rounded-lg text-xs font-bold transition-all"
-                          >
-                            {cargandoPlantilla ? (
-                              <Loader className="w-3.5 h-3.5 animate-spin" />
-                            ) : (
-                              <Save className="w-3.5 h-3.5" />
-                            )}
-                            Guardar plantilla
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <button
-                            onClick={() => {
-                              setEditandoPlantilla(true);
-                              setPlantillaEditada(PLANTILLA_EXTINTORES.map(p => ({ ...p })));
-                            }}
-                            className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white px-3 py-2 rounded-lg text-xs font-bold transition-all"
-                          >
-                            <Edit className="w-3.5 h-3.5" />
-                            Editar plantilla
-                          </button>
-                          <button
-                            onClick={() => handleCargarPlantillaExtintoresConItems(PLANTILLA_EXTINTORES)}
-                            disabled={cargandoPlantilla}
-                            className="flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white px-3 py-2 rounded-lg text-xs font-bold transition-all"
-                          >
-                            {cargandoPlantilla ? (
-                              <Loader className="w-3.5 h-3.5 animate-spin" />
-                            ) : (
-                              <Plus className="w-3.5 h-3.5" />
-                            )}
-                            Usar plantilla
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Cuerpo de la plantilla */}
-                  <div className="p-5">
-                    <p className="text-xs text-zinc-500 mb-4">
-                      {editandoPlantilla 
-                        ? 'Modifica las preguntas y tipos de respuesta. Al guardar se almacenarán en la colección correspondiente de Firestore.'
-                        : 'Usa esta plantilla predefinida para extintores o haz clic en "Editar plantilla" para personalizarla.'}
-                    </p>
-
-                    {/* Lista de items - ancho completo */}
-                    <div className="space-y-2">
-                      {(editandoPlantilla ? plantillaEditada : PLANTILLA_EXTINTORES).map((item, idx) => (
-                        editandoPlantilla ? (
-                          <div key={item.key} className="flex items-center gap-3 px-4 py-3 bg-amber-50/50 border border-amber-200 rounded-xl">
-                            <span className="w-7 h-7 bg-amber-200 text-amber-800 rounded-lg flex items-center justify-center text-xs font-bold shrink-0">
-                              {idx + 1}
-                            </span>
-                            <input
-                              type="text"
-                              value={item.label}
-                              onChange={e => {
-                                const newPlantilla = [...plantillaEditada];
-                                newPlantilla[idx] = { ...newPlantilla[idx], label: e.target.value };
-                                setPlantillaEditada(newPlantilla);
-                              }}
-                              className="flex-1 px-3 py-2 bg-white border border-amber-300 rounded-lg text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 transition-all"
-                              placeholder="Nombre de la pregunta"
-                            />
-                            <select
-                              value={item.tipoRespuesta}
-                              onChange={e => {
-                                const newPlantilla = [...plantillaEditada];
-                                newPlantilla[idx] = { ...newPlantilla[idx], tipoRespuesta: e.target.value as 'check' | 'texto' | 'numero' };
-                                setPlantillaEditada(newPlantilla);
-                              }}
-                              className="px-3 py-2 bg-white border border-amber-300 rounded-lg text-xs outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 transition-all min-w-[100px]"
-                            >
-                              <option value="check">✓/✗ Check</option>
-                              <option value="texto">Abc Texto</option>
-                              <option value="numero">#0 Número</option>
-                            </select>
-                          </div>
-                        ) : (
-                          <div
-                            key={item.key}
-                            className="flex items-center gap-3 px-4 py-3 bg-teal-50/30 border border-teal-100 rounded-xl hover:bg-teal-50/50 transition-colors"
-                          >
-                            <span className="w-7 h-7 bg-teal-100 text-teal-700 rounded-lg flex items-center justify-center text-xs font-bold shrink-0">
-                              {idx + 1}
-                            </span>
-                            <CheckSquare className="w-4 h-4 text-teal-500 shrink-0" />
-                            <span className="flex-1 text-sm font-medium text-zinc-800">{item.label}</span>
-                            <span className={`text-[10px] font-mono font-bold px-2 py-1 rounded ${
-                              item.tipoRespuesta === 'check' ? 'bg-teal-100 text-teal-700' : item.tipoRespuesta === 'numero' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'
-                            }`}>
-                              {item.tipoRespuesta === 'check' ? '✓/✗' : item.tipoRespuesta === 'numero' ? '#0' : 'Abc'}
-                            </span>
-                          </div>
-                        )
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Lista de preguntas */}
-                <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden">
-                  <p className="px-4 py-3 text-xs font-bold text-zinc-400 uppercase tracking-wider border-b border-zinc-100">
-                    Preguntas del Checklist ({checklistItems.length})
-                  </p>
-                  {checklistItems.length > 0 && (
-                    <ul className="divide-y divide-zinc-100">
-                      {checklistItems.map((item, index) => (
-                        <li key={item.id} className="p-4 flex items-center gap-3 hover:bg-zinc-50 transition-colors">
-                          <span className="w-6 h-6 bg-teal-100 text-teal-700 rounded-lg flex items-center justify-center text-xs font-bold shrink-0">
-                            {index + 1}
-                          </span>
-                          {editingChecklistId === item.id ? (
-                            <div className="flex-1 flex flex-col gap-2">
-                              <div className="flex gap-2">
-                                <input
-                                  type="text"
-                                  value={editingChecklistLabel}
-                                  onChange={e => setEditingChecklistLabel(e.target.value)}
-                                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleUpdateChecklistItem(item.id); } }}
-                                  className="flex-1 px-3 py-1.5 bg-white border border-teal-300 rounded-lg text-sm outline-none focus:border-teal-500"
-                                  autoFocus
-                                />
-                                <select
-                                  value={editingChecklistTipo}
-                                  onChange={e => setEditingChecklistTipo(e.target.value as 'check' | 'texto' | 'numero')}
-                                  className="px-2 py-1.5 bg-white border border-teal-300 rounded-lg text-xs outline-none focus:border-teal-500"
-                                >
-                                  <option value="check">Check</option>
-                                  <option value="texto">Texto</option>
-                                  <option value="numero">Número</option>
-                                </select>
-                                <button
-                                  onClick={() => handleUpdateChecklistItem(item.id)}
-                                  className="p-1.5 text-teal-600 hover:bg-teal-50 rounded-lg transition-colors"
-                                  title="Guardar"
-                                >
-                                  <Save className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={() => { setEditingChecklistId(null); setEditingChecklistLabel(''); }}
-                                  className="p-1.5 text-zinc-400 hover:bg-zinc-100 rounded-lg transition-colors"
-                                  title="Cancelar"
-                                >
-                                  <X className="w-4 h-4" />
-                                </button>
-                              </div>
-                            </div>
-                          ) : (
-                            <>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-zinc-900">{item.label}</p>
-                                <p className="text-[10px] text-zinc-400 font-mono mt-0.5">
-                                  key: {item.key} · orden: {item.orden} · tipo: <span className={`font-bold ${
-                                    item.tipoRespuesta === 'check' ? 'text-teal-600' : item.tipoRespuesta === 'numero' ? 'text-blue-600' : 'text-amber-600'
-                                  }`}>{item.tipoRespuesta === 'check' ? 'Check (✓/✗)' : item.tipoRespuesta === 'numero' ? 'Número' : 'Texto'}</span>
-                                </p>
-                              </div>
-                              <div className="flex items-center gap-1 shrink-0">
-                                <button
-                                  onClick={() => { setEditingChecklistId(item.id); setEditingChecklistLabel(item.label); setEditingChecklistTipo(item.tipoRespuesta); }}
-                                  className="p-1.5 text-zinc-500 hover:text-zinc-800 hover:bg-zinc-100 rounded-lg transition-colors"
-                                  title="Editar"
-                                >
-                                  <Edit className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteChecklistItem(item.id)}
-                                  className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors"
-                                  title="Eliminar"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              </div>
-                            </>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              </>
-            )}
-          </section>
+        {view === 'plantillas' && (
+          <FormBuilderPlantillas />
         )}
+
       </div>
 
       {isConfirmModalOpen && itemToDelete && (
@@ -1146,6 +857,38 @@ export default function Ajustes() {
               <div className="flex gap-3">
                 <button type="button" onClick={() => setIsSistemaModalOpen(false)} className="flex-1 px-4 py-2.5 text-zinc-700 bg-zinc-50 hover:bg-zinc-100 rounded-xl font-medium transition-colors">Cancelar</button>
                 <button type="submit" className="flex-1 px-4 py-2.5 text-white bg-fuchsia-600 hover:bg-fuchsia-700 rounded-xl font-medium transition-colors shadow-sm">Guardar</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL TIPO EQUIPO */}
+      {isTipoModalOpen && (
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="px-6 py-4 border-b border-zinc-100 flex items-center justify-between bg-zinc-50/30">
+              <h2 className="text-lg font-bold text-zinc-900">
+                {editTipoId ? 'Editar Tipo de Equipo' : 'Nuevo Tipo de Equipo'}
+              </h2>
+              <button onClick={() => setIsTipoModalOpen(false)} className="p-2 text-zinc-400 hover:text-zinc-700 hover:bg-white rounded-xl transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleSaveTipo} className="p-6">
+              <div className="space-y-4 mb-6">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-semibold text-zinc-900">Nombre del Tipo</label>
+                  <input
+                    required autoFocus type="text" value={tipoNombre} onChange={e => setTipoNombre(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-zinc-50/50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-black/20 focus:border-black transition-all text-zinc-900"
+                    placeholder="Ej: Polvo ABC 6Kg"
+                  />
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <button type="button" onClick={() => setIsTipoModalOpen(false)} className="flex-1 px-4 py-2.5 text-zinc-700 bg-zinc-50 hover:bg-zinc-100 rounded-xl font-medium transition-colors">Cancelar</button>
+                <button type="submit" className="flex-1 px-4 py-2.5 text-white bg-black hover:bg-zinc-800 rounded-xl font-medium transition-colors shadow-sm">Guardar</button>
               </div>
             </form>
           </div>

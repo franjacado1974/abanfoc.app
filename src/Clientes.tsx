@@ -49,6 +49,15 @@ const emptyCliente: Cliente = {
 
 export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) {
   const navigate = useNavigate();
+  const loggedUser = useMemo(() => {
+    try {
+      const session = sessionStorage.getItem('firecheck_logged_user');
+      return session ? JSON.parse(session) : null;
+    } catch { return null; }
+  }, []);
+  const isTecnicoMode = loggedUser?.rol === 'tecnico';
+  const isVisualizador = loggedUser?.rol === 'visualizador' || isTecnicoMode;
+
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [_centros, setCentros] = useState<any[]>([]);
   const [view, setView] = useState<'list' | 'form'>('list');
@@ -62,6 +71,7 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
   // Detail modal state
   const [selectedCliente, setSelectedCliente] = useState<Cliente | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [showVinculatedCentros, setShowVinculatedCentros] = useState(false);
 
   const fetchClientes = async () => {
     try {
@@ -226,6 +236,7 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
 
   const handleViewDetail = (cliente: Cliente) => {
     setSelectedCliente(cliente);
+    setShowVinculatedCentros(false);
     setIsDetailOpen(true);
   };
 
@@ -244,18 +255,20 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
               <h1 className="text-2xl font-bold text-zinc-900 tracking-tight">Directorio de Clientes</h1>
               <p className="text-sm text-zinc-500 mt-1">{clientes.length} registrados en la base de datos.</p>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <input type="file" accept=".xlsx, .xls, .csv" className="hidden" ref={fileInputRef} onChange={handleImportExcel} />
-              <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-1.5 bg-white border border-zinc-200 text-zinc-700 px-3.5 py-2 rounded-lg font-medium hover:bg-zinc-50 hover:border-zinc-300 transition-all text-xs shadow-sm" title="Importar Excel">
-                <Download className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Importar</span>
-              </button>
-              <button onClick={handleExportExcel} className="flex items-center gap-1.5 bg-white border border-zinc-200 text-zinc-700 px-3.5 py-2 rounded-lg font-medium hover:bg-zinc-50 hover:border-zinc-300 transition-all text-xs shadow-sm" title="Exportar Excel">
-                <Upload className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Exportar</span>
-              </button>
-              <button onClick={handleOpenNewForm} className="flex items-center gap-1.5 bg-black text-white px-4 py-2 rounded-lg font-medium hover:bg-zinc-800 transition-all text-xs shadow-md shadow-black/10">
-                <Plus className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Nuevo Cliente</span><span className="sm:hidden">Nuevo</span>
-              </button>
-            </div>
+            {!isVisualizador && (
+              <div className="flex flex-wrap items-center gap-2">
+                <input type="file" accept=".xlsx, .xls, .csv" className="hidden" ref={fileInputRef} onChange={handleImportExcel} />
+                <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-1.5 bg-white border border-zinc-200 text-zinc-700 px-3.5 py-2 rounded-lg font-medium hover:bg-zinc-50 hover:border-zinc-300 transition-all text-xs shadow-sm" title="Importar Excel">
+                  <Download className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Importar</span>
+                </button>
+                <button onClick={handleExportExcel} className="flex items-center gap-1.5 bg-white border border-zinc-200 text-zinc-700 px-3.5 py-2 rounded-lg font-medium hover:bg-zinc-50 hover:border-zinc-300 transition-all text-xs shadow-sm" title="Exportar Excel">
+                  <Upload className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Exportar</span>
+                </button>
+                <button onClick={handleOpenNewForm} className="flex items-center gap-1.5 bg-black text-white px-4 py-2 rounded-lg font-medium hover:bg-zinc-800 transition-all text-xs shadow-md shadow-black/10">
+                  <Plus className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Nuevo Cliente</span><span className="sm:hidden">Nuevo</span>
+                </button>
+              </div>
+            )}
           </div>
           ) : null}
 
@@ -299,7 +312,7 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
               <div className="hidden md:flex items-center bg-[#f9f7f4] border-b-2 border-zinc-200 px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-zinc-500">
                 <div className="w-24 shrink-0">Código</div>
                 <div className="flex-1 min-w-0">Cliente</div>
-                <div className="w-36 shrink-0">CIF / NIF</div>
+                {!isTecnicoMode && <div className="w-36 shrink-0">CIF / NIF</div>}
                 <div className="w-44 shrink-0">Población</div>
                 <div className="w-36 shrink-0">Teléfono</div>
                 <div className="w-28 shrink-0 text-right">Acciones</div>
@@ -329,7 +342,7 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
                       </div>
                       <div className="flex md:hidden items-center gap-3 mt-2">
                         {cliente.telefono && <span className="text-xs text-zinc-500">{cliente.telefono}</span>}
-                        {cliente.cif && <span className="text-xs text-zinc-400">{cliente.cif}</span>}
+                        {(!isTecnicoMode && cliente.cif) && <span className="text-xs text-zinc-400">{cliente.cif}</span>}
                       </div>
 
                       {/* Desktop cells */}
@@ -340,7 +353,7 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
                         <div className="flex-1 min-w-0 pr-2">
                           <p className="text-sm font-bold text-zinc-900 truncate group-hover:text-blue-900 transition-colors">{cliente.nombre}</p>
                         </div>
-                        <div className="w-36 shrink-0 text-sm text-zinc-600 truncate pr-2">{cliente.cif || '-'}</div>
+                        {!isTecnicoMode && <div className="w-36 shrink-0 text-sm text-zinc-600 truncate pr-2">{cliente.cif || '-'}</div>}
                         <div className="w-44 shrink-0 text-sm text-zinc-600 truncate pr-2 flex items-center gap-1">
                           <MapPin className="w-3 h-3 text-zinc-400 shrink-0" />
                           {cliente.poblacion || '-'}
@@ -354,20 +367,24 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
                           >
                             <Eye className="w-4 h-4" />
                           </button>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleEdit(cliente); }}
-                            className="p-1.5 text-zinc-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
-                            title="Editar"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleDelete(cliente.id); }}
-                            className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                            title="Eliminar"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          {!isVisualizador && (
+                            <>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleEdit(cliente); }}
+                                className="p-1.5 text-zinc-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                                title="Editar"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleDelete(cliente.id); }}
+                                className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                title="Eliminar"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -519,20 +536,56 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
                 </div>
               )}
 
+              {/* Centros vinculados (Solo visible al pulsar el botón) */}
+              {showVinculatedCentros && (
+                <div className="pt-4 border-t border-zinc-200">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-500 mb-3 flex items-center gap-2">
+                    <Building2 className="w-3.5 h-4" /> Centros Vinculados
+                  </h4>
+                  <div className="space-y-2">
+                    {(() => {
+                      const vinculated = _centros.filter(c => c.clienteId === selectedCliente.id);
+                      if (vinculated.length === 0) {
+                        return <p className="text-sm text-zinc-500 italic">No hay centros vinculados a este cliente.</p>;
+                      }
+                      return vinculated.map((c: any) => (
+                        <div key={c.id} className="bg-zinc-50 border border-zinc-200 rounded-lg p-3">
+                          <p className="font-bold text-zinc-900 text-sm">{c.nombre}</p>
+                          <p className="text-xs text-zinc-500 flex items-center gap-1 mt-1">
+                            <MapPin className="w-3 h-3" /> {c.direccion}, {c.poblacion}
+                          </p>
+                        </div>
+                      ));
+                    })()}
+                  </div>
+                </div>
+              )}
+
               {/* Actions */}
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-zinc-200">
-                <button
-                  onClick={() => { setIsDetailOpen(false); handleEdit(selectedCliente); }}
-                  className="flex items-center gap-1.5 bg-zinc-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-zinc-800 transition-colors"
-                >
-                  <Edit className="w-4 h-4" /> Editar Cliente
-                </button>
-                <button
-                  onClick={() => navigate('/centros', { state: { search: selectedCliente.id } })}
-                  className="flex items-center gap-1.5 bg-white border border-zinc-200 text-zinc-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-zinc-50 transition-colors"
-                >
-                  <Building2 className="w-4 h-4" /> Ver Centros
-                </button>
+                {!isVisualizador && (
+                  <button
+                    onClick={() => { setIsDetailOpen(false); handleEdit(selectedCliente); }}
+                    className="flex items-center gap-1.5 bg-zinc-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-zinc-800 transition-colors"
+                  >
+                    <Edit className="w-4 h-4" /> Editar Cliente
+                  </button>
+                )}
+                {!isVisualizador ? (
+                  <button
+                    onClick={() => navigate('/centros', { state: { search: selectedCliente.id } })}
+                    className="flex items-center gap-1.5 bg-white border border-zinc-200 text-zinc-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-zinc-50 transition-colors"
+                  >
+                    <Building2 className="w-4 h-4" /> Ver Centros
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setShowVinculatedCentros(!showVinculatedCentros)}
+                    className="flex items-center gap-1.5 bg-white border border-zinc-200 text-zinc-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-zinc-50 transition-colors"
+                  >
+                    <Building2 className="w-4 h-4" /> {showVinculatedCentros ? 'Ocultar Centros' : 'Ver centros vinculados'}
+                  </button>
+                )}
               </div>
             </div>
           )}

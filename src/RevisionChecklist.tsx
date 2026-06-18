@@ -1,28 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Save, Building2, Layers, MapPin, FileText, ChevronDown, ChevronUp, Plus, X, CheckCircle2, XCircle, Trash2, AlertTriangle, Pencil, PenLine, RotateCcw, CheckCheck, Eye } from 'lucide-react';
-import { addAlbaran, updateEquipoInstalado, updateParte as updateParteFirestore, subscribePartes, subscribeCentros, subscribeClientes, subscribeCentroSistemas, subscribeEquiposInstalados, subscribeArticulos, subscribeSistemasCategorias, subscribeChecklists, subscribeChecklistsPorSistema, type Albaran, type Tecnico, type ChecklistItem } from './firebase';
+import { addEquipoInstalado, addAlbaran, updateEquipoInstalado, updateParte as updateParteFirestore, subscribePartes, subscribeCentros, subscribeClientes, subscribeCentroSistemas, subscribeEquiposInstalados, subscribeArticulos, subscribeSistemasCategorias, uploadFile, type Albaran, type Tecnico, type ChecklistItem } from './firebase';
+import { subscribePlantillas, subscribeItemsDePlantilla, type ItemPlantilla } from './plantillas';
 import type { Centro, Parte, Cliente, CentroSistema, EquipoInstalado } from './Centros';
 import ConfirmationModal from './ConfirmationModal';
 import { getIconForSistema } from './Sistemas';
 import { generarActaExtintoresPDFView } from './pdfGenerator';
-
-const CHECKLIST_ITEMS = [
-    { key: 'checkAcceso', label: 'Acceso' },
-    { key: 'checkAltura', label: 'Altura' },
-    { key: 'checkSoporte', label: 'Soporte' },
-    { key: 'checkSenalizacion', label: 'Señalización' },
-    { key: 'checkManguera', label: 'Manguera' },
-    { key: 'checkPeso', label: 'Peso' },
-    { key: 'checkManometro', label: 'Manómetro' },
-    { key: 'checkMarcado', label: 'Marcado' },
-    { key: 'checkEtiquetas', label: 'Etiquetas' },
-    { key: 'checkRetimbre', label: 'Retimbre' },
-    { key: 'checkRiesgo', label: 'Riesgo' },
-    { key: 'checkDistancia', label: 'Distancia' },
-    { key: 'checkPasador', label: 'Pasador' },
-    { key: 'checkMovilidad', label: 'Movilidad' },
-];
+import EquipoFormulario from './components/EquipoFormulario';
 
 export default function RevisionChecklist() {
     const navigate = useNavigate();
@@ -33,7 +18,7 @@ export default function RevisionChecklist() {
     const [parte, setParte] = useState<Parte | null>(null);
     const [sistemasDelCentro, setSistemasDelCentro] = useState<CentroSistema[]>([]);
     const [equiposInstalados, setEquiposInstalados] = useState<EquipoInstalado[]>([]);
-    const [equiposCatalogo, setEquiposCatalogo] = useState<any[]>(() => JSON.parse(localStorage.getItem('firecheck_db_sistemas_equipos') || '[]'));
+    const [, setEquiposCatalogo] = useState<any[]>(() => JSON.parse(localStorage.getItem('firecheck_db_sistemas_equipos') || '[]'));
     const [categoriasSistema, setCategoriasSistema] = useState<any[]>(() => JSON.parse(localStorage.getItem('firecheck_db_sistemas_categorias') || '[]'));
     const [loading, setLoading] = useState(true);
     const [clientes, setClientes] = useState<Cliente[]>(() => JSON.parse(localStorage.getItem('firecheck_db_clientes') || '[]'));
@@ -45,39 +30,98 @@ export default function RevisionChecklist() {
             return stored ? JSON.parse(stored) : [];
         } catch { return []; }
     });
-    // Checklist dinámico desde Firestore
-    const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>([]);
-    const [checklistSistemaId, setChecklistSistemaId] = useState<string>('');
+    // Checklist dinámico desde Firestore (usando plantillas) - mapa por sistemaId
+    const [checklistItemsPorSistema, setChecklistItemsPorSistema] = useState<Record<string, ChecklistItem[]>>({});
+    const [plantillas, setPlantillas] = useState<any[]>([]);
 
-    // Cargar checklist del sistema seleccionado desde colección dinámica
+    // Cargar todas las plantillas
     useEffect(() => {
-        if (!checklistSistemaId) return;
-        // Buscar el nombre del sistema en categoriasSistema
-        const sistemaCat = categoriasSistema.find(c => c.id === checklistSistemaId);
-        const sistemaNombre = sistemaCat?.nombre || '';
-        if (sistemaNombre) {
-            const unsub = subscribeChecklistsPorSistema(sistemaNombre, (items) => {
-                setChecklistItems(items);
-            });
-            return () => unsub();
-        } else {
-            // Fallback: usar la colección antigua
-            const unsub = subscribeChecklists(checklistSistemaId, (items) => {
-                setChecklistItems(items);
-            });
-            return () => unsub();
-        }
-    }, [checklistSistemaId, categoriasSistema]);
+        const unsub = subscribePlantillas((lista) => {
+            setPlantillas(lista);
+        });
+        return () => unsub();
+    }, []);
 
-    const [selectedCatalogItem, setSelectedCatalogItem] = useState<string>('');
-    const [newEquipo, setNewEquipo] = useState<{ codigo: string; nombre: string; ubicacion: string; placa: string; fechaFabricacion: string; ultimoRetimbre: string }>({ codigo: '', nombre: '', ubicacion: '', placa: '', fechaFabricacion: '', ultimoRetimbre: '' });
-    const [addSistemaId, setAddSistemaId] = useState<string | null>(null);
+    // Cuando cambian los sistemas del centro o las plantillas, cargar los items de cada sistema
+    useEffect(() => {
+        if (sistemasDelCentro.length === 0 || plantillas.length === 0 || categoriasSistema.length === 0) return;
+
+        const normalizarNombre = (nombre: string) =>
+            nombre
+                .toLowerCase()
+                .trim()
+                .replace(/^sistema\s+/i, '')
+                .replace(/^check\s*list\s+/i, '')
+                .replace(/^checklist\s+/i, '')
+                .replace(/\s+/g, ' ')
+                .replace(/[áàäâ]/g, 'a')
+                .replace(/[éèëê]/g, 'e')
+                .replace(/[íìïî]/g, 'i')
+                .replace(/[óòöô]/g, 'o')
+                .replace(/[úùüû]/g, 'u');
+
+        const unsubs: (() => void)[] = [];
+
+        sistemasDelCentro.forEach(sist => {
+            // Obtener el nombre del sistema desde categoriasSistema
+            const sistemaCat = categoriasSistema.find(c => {
+                const nombreSist = (sist.tipo || sist.familia || '').toLowerCase().trim();
+                const nombreCat = (c.nombre || '').toLowerCase().trim();
+                return nombreCat === nombreSist || nombreCat.includes(nombreSist) || nombreSist.includes(nombreCat);
+            });
+            const sistemaNombre = sistemaCat?.nombre || sist.tipo || sist.familia || '';
+            if (!sistemaNombre) return;
+
+            const nombreSistemaNorm = normalizarNombre(sistemaNombre);
+
+            // Buscar la plantilla que coincida con el nombre del sistema
+            const plantilla = plantillas.find(p => {
+                const nombrePlantillaNorm = normalizarNombre(p.nombre);
+                const coincideExacto = nombrePlantillaNorm === nombreSistemaNorm;
+                const plantillaContieneSistema = nombrePlantillaNorm.includes(nombreSistemaNorm);
+                const sistemaContienePlantilla = nombreSistemaNorm.includes(nombrePlantillaNorm);
+                const palabrasSistema = nombreSistemaNorm.split(' ').filter(w => w.length > 3);
+                const palabrasPlantilla = nombrePlantillaNorm.split(' ').filter(w => w.length > 3);
+                const coincidePalabras = palabrasSistema.some(ps => palabrasPlantilla.some(pp => ps === pp || pp.includes(ps) || ps.includes(pp)));
+                return coincideExacto || plantillaContieneSistema || sistemaContienePlantilla || coincidePalabras;
+            });
+
+            if (!plantilla) {
+                console.warn(`❌ No se encontró plantilla para sistema: "${sistemaNombre}"`);
+                return;
+            }
+
+            const unsub = subscribeItemsDePlantilla(plantilla.id, (items: ItemPlantilla[]) => {
+                const checklistItems: ChecklistItem[] = items.map(item => ({
+                    id: item.id,
+                    key: item.key,
+                    label: item.label,
+                    tipoRespuesta: item.tipoRespuesta,
+                    sistemaId: sist.id,
+                    sistemaNombre: sistemaNombre,
+                    orden: item.orden,
+                }));
+                setChecklistItemsPorSistema(prev => ({ ...prev, [sist.id]: checklistItems }));
+            });
+            unsubs.push(unsub);
+        });
+
+        return () => unsubs.forEach(u => u());
+    }, [sistemasDelCentro, plantillas, categoriasSistema]);
 
     const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
     const [equipoIdToDelete, setEquipoIdToDelete] = useState<string | null>(null);
 
+    // Modal Revisar todo
+    const [revisarTodoConfirm, setRevisarTodoConfirm] = useState<{ isOpen: boolean; sistemaId: string | null }>({ isOpen: false, sistemaId: null });
+
     // Estado para modal de edición de equipo
     const [editEquipo, setEditEquipo] = useState<{ id: string; codigo: string; nombre: string; ubicacion: string; placa: string; fechaFabricacion: string; ultimoRetimbre: string } | null>(null);
+
+    // Estado para modal de añadir equipo
+    const [addEquipo, setAddEquipo] = useState<{ isOpen: boolean; sistemaId: string | null; codigo: string; nombre: string; ubicacion: string; placa: string; fechaFabricacion: string; ultimoRetimbre: string }>({
+        isOpen: false, sistemaId: null, codigo: '', nombre: '', ubicacion: '', placa: '', fechaFabricacion: '', ultimoRetimbre: ''
+    });
 
     // Estados para pre-cierre y firmas
     const [showPreCierreModal, setShowPreCierreModal] = useState(false);
@@ -89,6 +133,13 @@ export default function RevisionChecklist() {
     const [firmaClienteOk, setFirmaClienteOk] = useState(false);
     const [firmaTecnicoOk, setFirmaTecnicoOk] = useState(false);
     const [nombreClienteFirma, setNombreClienteFirma] = useState('');
+    const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+    // Función para mostrar el toast temporalmente
+    const showToast = (message: string) => {
+        setToastMessage(message);
+        setTimeout(() => setToastMessage(null), 2500);
+    };
 
     // ── Si el parte está Cerrado, redirigir ───────────────────────────
     useEffect(() => {
@@ -168,26 +219,11 @@ export default function RevisionChecklist() {
 
         const unsubs = sistemasDelCentro.map(sist =>
             subscribeEquiposInstalados(centroId, sist.id, (items: EquipoInstalado[]) => {
-                // Normalizar equipos según el estado del parte
-                const itemsToUse = getItemsToUse();
-                const normalizedItems = items.map(eq => {
-                    // Si el parte está en "Planificado", es una nueva revisión
-                    // Resetear todos los checks a null para que el técnico revise de nuevo
-                    if (parte?.estado === 'Planificado') {
-                        const normalized = { ...eq, revisado: false };
-                        itemsToUse.forEach(item => {
-                            (normalized as any)[item.key] = null;
-                        });
-                        // Mantener las anomalías anteriores como referencia pero limpiar para nueva revisión
-                        normalized.anomalias = '';
-                        return normalized;
-                    }
-                    // Si el parte ya está en otro estado (Abierto, etc.), mantener los valores actuales
-                    return eq;
-                });
+                // Mantener todos los datos tal como están en Firestore (centro y parte comparten los mismos equipos)
+                // NO resetear ningún campo: los datos introducidos en el centro deben verse en el parte
                 setEquiposInstalados(prev => {
                     const otros = prev.filter(e => e.sistemaId !== sist.id);
-                    return [...otros, ...normalizedItems];
+                    return [...otros, ...items];
                 });
             })
         );
@@ -219,12 +255,103 @@ export default function RevisionChecklist() {
         if (updatedParte) setParte(updatedParte);
     };
 
-    const handleCheckChange = (equipoId: string, checkKey: string, value: boolean | string | number) => {
-        setEquiposInstalados(prevEquipos =>
-            prevEquipos.map(eq =>
-                eq.id === equipoId ? { ...eq, [checkKey]: value, revisado: true } : eq
-            )
-        );
+    const handleCheckChange = (equipoId: string, checkKey: string, value: boolean | string | number | string[], checkLabel?: string) => {
+        setEquiposInstalados(prevEquipos => {
+            const updatedEquipos = prevEquipos.map(eq => {
+                if (eq.id !== equipoId) return eq;
+                
+                // Actualizar el valor del check
+                const updated = { ...eq, [checkKey]: value, revisado: true };
+                
+                // Lógica Extintores (igual que en EquipoFormulario)
+                const sistema = sistemasDelCentro.find(s => s.id === eq.sistemaId);
+                const isExtintor = (sistema?.tipo || sistema?.familia || '').toLowerCase().includes('extintor');
+                if (isExtintor) {
+                    const itemsToUse = checklistItemsPorSistema[eq.sistemaId] || [];
+                    const fabItem = itemsToUse.find(i => (i.label||'').toLowerCase().includes('fabricaci'));
+                    const retItem = itemsToUse.find(i => (i.label||'').toLowerCase().includes('retimbre'));
+                    const anoItem = itemsToUse.find(i => (i.label||'').toLowerCase().includes('anomal') || (i.label||'').toLowerCase().includes('observacion'));
+
+                    if (anoItem && fabItem) {
+                        const valFab = updated[fabItem.key as keyof EquipoInstalado] as string;
+                        const valRet = retItem ? updated[retItem.key as keyof EquipoInstalado] as string : null;
+                        let autoMsg = "";
+
+                        if (valFab) {
+                            const today = new Date();
+                            const dateFab = new Date(valFab);
+                            if (!isNaN(dateFab.getTime())) {
+                                const monthsSinceFab = (today.getFullYear() - dateFab.getFullYear()) * 12 + today.getMonth() - dateFab.getMonth();
+                                if (monthsSinceFab >= 240) {
+                                    autoMsg = "Extintor caducado + 20 años";
+                                } else {
+                                    let refDate = dateFab;
+                                    if (valRet) {
+                                        const dr = new Date(valRet);
+                                        if (!isNaN(dr.getTime())) refDate = dr;
+                                    }
+                                    const monthsSinceRef = (today.getFullYear() - refDate.getFullYear()) * 12 + today.getMonth() - refDate.getMonth();
+                                    if (monthsSinceRef >= 60) {
+                                        autoMsg = "Extintor necesita retimbre";
+                                    } else if (monthsSinceFab >= 237 || monthsSinceRef >= 57) {
+                                        autoMsg = "Se aproxima caducidad o retimbrado del equipo";
+                                    }
+                                }
+                            }
+                        }
+
+                        let currentAno = (updated[anoItem.key as keyof EquipoInstalado] as string) || "";
+                        const autoMsgs = ["Extintor caducado + 20 años", "Extintor necesita retimbre", "Se aproxima caducidad o retimbrado del equipo"];
+                        autoMsgs.forEach(m => { currentAno = currentAno.replace(m, '').trim(); });
+                        if (autoMsg) {
+                            currentAno = (currentAno + (currentAno ? "\n" : "") + autoMsg).trim();
+                        }
+                        (updated as any)[anoItem.key] = currentAno;
+                    }
+                }
+                
+                // Si es un check booleano y tenemos el label, auto-gestionar anomalías
+                if (typeof value === 'boolean' && checkLabel) {
+                    const itemsToUse = checklistItemsPorSistema[eq.sistemaId] || [];
+                    const notasItem = itemsToUse.find(item => {
+                        const lbl = (item.label || '').toLowerCase();
+                        return lbl.includes('notas') || lbl.includes('observaciones') || lbl.includes('anomal');
+                    });
+                    const notasKey = notasItem?.key || null;
+
+                    if (notasKey) {
+                        const textoAnomalia = `${checkLabel} mal`;
+                        const notasActuales = typeof (updated as any)[notasKey] === 'string' 
+                            ? ((updated as any)[notasKey] as string) 
+                            : '';
+                        
+                        if (value === false) {
+                            if (!notasActuales.includes(textoAnomalia)) {
+                                const nuevoTexto = notasActuales.trim() 
+                                    ? notasActuales + ', ' + textoAnomalia 
+                                    : textoAnomalia;
+                                (updated as any)[notasKey] = nuevoTexto;
+                            }
+                        } else {
+                            const partes = notasActuales.split(', ').filter(p => p.trim() !== textoAnomalia);
+                            (updated as any)[notasKey] = partes.join(', ');
+                        }
+                    }
+                }
+                
+                return updated;
+            });
+
+            // Guardar inmediatamente en Firestore el equipo modificado
+            const equipoModificado = updatedEquipos.find(eq => eq.id === equipoId);
+            if (equipoModificado) {
+                updateEquipoInstalado(equipoId, equipoModificado as any).catch(err => 
+                    console.error('Error guardando cambio en Firestore:', err)
+                );
+            }
+
+            return updatedEquipos;
+        });
     };
 
   const handlePreviewPDF = async () => {
@@ -248,7 +375,8 @@ export default function RevisionChecklist() {
         undefined,
         undefined, // Sin firma cliente aún
         undefined, // Sin firma técnico aún
-        ''
+        '',
+        Object.values(checklistItemsPorSistema).flat() // Pasar los items del checklist dinámico
       );
       window.open(pdfBlobUrl, '_blank');
     } catch (e) {
@@ -449,7 +577,56 @@ export default function RevisionChecklist() {
         setIsConfirmModalOpen(true);
     };
 
-    const confirmDeleteEquipo = () => {
+    const handleConfirmarRevisarTodo = async () => {
+        const sistId = revisarTodoConfirm.sistemaId;
+        if (!sistId) return;
+        setRevisarTodoConfirm({ isOpen: false, sistemaId: null });
+
+        const itemsToUse = getItemsToUse(sistId);
+        let updatedCount = 0;
+        const updatedEquipos = equiposInstalados.map(eq => {
+            if (eq.sistemaId === sistId) {
+                updatedCount++;
+                const allChecked: Record<string, any> = {};
+                itemsToUse.forEach(item => {
+                    if (item.tipoRespuesta === 'check') {
+                        allChecked[item.key] = true;
+                    }
+                });
+                return {
+                    ...eq,
+                    revisado: true,
+                    ...allChecked
+                };
+            }
+            return eq;
+        });
+
+        if (updatedCount > 0) {
+            setEquiposInstalados(updatedEquipos);
+            saveEquiposProgress(updatedEquipos);
+            
+            // Guardar individualmente en Firestore para asegurar sincronía
+            updatedEquipos.filter(eq => eq.sistemaId === sistId).forEach(async (equipoModificado) => {
+                try {
+                    await updateEquipoInstalado(equipoModificado.id, equipoModificado as any);
+                } catch (err) {
+                    console.error('Error guardando en Firestore desde Revisar Todo:', err);
+                }
+            });
+
+            showToast('Guardado');
+            if (parte?.estado === 'Planificado') {
+                updateParte({ estado: 'Abierto' });
+                const storedPartes = JSON.parse(localStorage.getItem('firecheck_db_partes') || '[]');
+                const parteActual = storedPartes.find((p: any) => p.id === parteId);
+                const docId = parteActual?._docId || parteId;
+                try { await updateParteFirestore(docId, { estado: 'Abierto' }); } catch (err) { console.error('Error actualizando estado en Firestore:', err); }
+            }
+        }
+    };
+
+    const confirmDeleteEquipo = async () => {
         if (!equipoIdToDelete) return;
         setIsConfirmModalOpen(false);
         const updatedEquipos = equiposInstalados.filter(eq => eq.id !== equipoIdToDelete);
@@ -458,6 +635,17 @@ export default function RevisionChecklist() {
         const allEquipos = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
         const updatedAll = allEquipos.filter((eq: any) => eq.id !== equipoIdToDelete);
         localStorage.setItem('firecheck_db_equipos_instalados', JSON.stringify(updatedAll));
+
+        // Eliminar también de Firestore
+        const eqEliminado = allEquipos.find((eq: any) => eq.id === equipoIdToDelete);
+        if (eqEliminado?.centroId && eqEliminado?.sistemaId) {
+            try {
+                const { deleteEquipoInstalado } = await import('./firebase');
+                await deleteEquipoInstalado(eqEliminado.centroId, eqEliminado.sistemaId, equipoIdToDelete);
+            } catch (err) {
+                console.warn('Error eliminando equipo de Firestore:', err);
+            }
+        }
     };
 
     const moveSistema = (sistemaId: string, direction: 'up' | 'down') => {
@@ -482,108 +670,37 @@ export default function RevisionChecklist() {
     };
 
     const toggleSistema = (sistemaId: string) => {
-        setOpenSistemas(prev => {
-            const newState = !prev[sistemaId];
-            // Si se abre un sistema, cargar su checklist
-            if (newState) {
-                setChecklistSistemaId(sistemaId);
-            }
-            return { ...prev, [sistemaId]: newState };
-        });
+        setOpenSistemas(prev => ({ ...prev, [sistemaId]: !prev[sistemaId] }));
     };
 
-    const openAddModal = (sistemaId: string) => {
-        setAddSistemaId(sistemaId);
-        setSelectedCatalogItem('');
-
-        const eqDelSist = equiposInstalados.filter(eq => eq.sistemaId === sistemaId);
-        let nextCode = '01';
-        if (eqDelSist.length > 0) {
-            const nums = eqDelSist.map(eq => parseInt(eq.codigo)).filter(n => !isNaN(n));
-            const startNum = nums.length > 0 ? Math.max(...nums) + 1 : eqDelSist.length + 1;
-            nextCode = startNum.toString().padStart(2, '0');
+    const getItemsToUse = (sistemaId?: string): ChecklistItem[] => {
+        if (sistemaId && checklistItemsPorSistema[sistemaId]?.length > 0) {
+            return checklistItemsPorSistema[sistemaId];
         }
-
-        setNewEquipo({ codigo: nextCode, nombre: '', ubicacion: '', placa: '', fechaFabricacion: '', ultimoRetimbre: '' });
+        // Si no hay sistemaId, buscar en cualquier sistema cargado
+        const allItems = Object.values(checklistItemsPorSistema).flat();
+        if (allItems.length > 0) return allItems;
+        return [];
     };
-
-    const closeAddModal = () => {
-        setAddSistemaId(null);
-        setNewEquipo({ codigo: '', nombre: '', ubicacion: '', placa: '', fechaFabricacion: '', ultimoRetimbre: '' });
-        setSelectedCatalogItem('');
-    };
-
-    const handleAddEquipo = (sistemaId: string) => {
-        if (!newEquipo.codigo.trim() || !newEquipo.nombre.trim()) {
-            alert('El código y el nombre son obligatorios.');
-            return;
-        }
-
-        // Inicializar campos dinámicos del checklist
-        const dynamicChecks: Record<string, null> = {};
-        const itemsToUse = checklistItems.length > 0 ? checklistItems : CHECKLIST_ITEMS;
-        itemsToUse.forEach(item => {
-            dynamicChecks[item.key] = null;
-        });
-
-        const nuevoEquipo: EquipoInstalado = {
-            id: `EQ-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
-            centroId: centroId,
-            sistemaId: sistemaId,
-            codigo: newEquipo.codigo.trim(),
-            nombre: newEquipo.nombre.trim(),
-            ubicacion: newEquipo.ubicacion.trim(),
-            placa: newEquipo.placa.trim(),
-            fechaFabricacion: newEquipo.fechaFabricacion,
-            ultimoRetimbre: newEquipo.ultimoRetimbre,
-            revisado: false,
-            ...dynamicChecks
-        };
-
-        const updatedEquipos = [...equiposInstalados, nuevoEquipo];
-        setEquiposInstalados(updatedEquipos);
-
-        const allEquipos = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
-        localStorage.setItem('firecheck_db_equipos_instalados', JSON.stringify([...allEquipos, nuevoEquipo]));
-
-        setNewEquipo({ codigo: '', nombre: '', ubicacion: '', placa: '', fechaFabricacion: '', ultimoRetimbre: '' });
-        setSelectedCatalogItem('');
-        closeAddModal();
-    };
-
-    const getFilteredCatalog = (sistName: string) => {
-        if (!sistName) return [];
-        const normalize = (s: string) => 
-            (s || '')
-             .toLowerCase()
-             .normalize('NFD')
-             .replace(/[\u0300-\u036f]/g, '') // Quita tildes
-             .replace(/^sistema\s+/i, '')     // Quita el prefijo "Sistema "
-             .trim();
-             
-        const target = normalize(sistName);
-        if (!target) return [];
-
-        return equiposCatalogo.filter(eq => {
-            const eqFam = normalize(eq.familia);
-            // Validamos que eqFam no esté vacío para evitar que target.includes("") devuelva true
-            if (eqFam && (eqFam === target || eqFam.includes(target) || target.includes(eqFam))) return true;
-            
-            const cat = categoriasSistema.find(c => c.id === eq.idCategoria || c.id === eq.familiaId);
-            const catName = cat ? normalize(cat.nombre) : '';
-            return catName && (catName === target || catName.includes(target) || target.includes(catName));
-        });
-    };
-
-    const getItemsToUse = () => checklistItems.length > 0 ? checklistItems : CHECKLIST_ITEMS;
 
     const sistemaTieneAnomalias = (sistemaId: string) => {
         const equiposSistema = equiposInstalados.filter((eq) => eq.sistemaId === sistemaId);
-        const items = getItemsToUse();
+        const items = getItemsToUse(sistemaId);
         return equiposSistema.some((eq) => {
             const checkRojo = items.some((item) => eq[item.key as keyof EquipoInstalado] === false);
+            
+            // Comprobar si hay mensajes de anomalias en los campos de notas
+            const campoNotasConAnomalia = items.some(item => {
+                const lbl = (item.label || '').toLowerCase();
+                if (lbl.includes('notas') || lbl.includes('observaciones') || lbl.includes('anomal')) {
+                    const val = eq[item.key as keyof EquipoInstalado];
+                    if (typeof val === 'string' && val.trim() !== '') return true;
+                }
+                return false;
+            });
+
             const textoAnomalia = !!eq.anomalias && eq.anomalias.trim() !== '';
-            return checkRojo || textoAnomalia;
+            return checkRojo || textoAnomalia || campoNotasConAnomalia;
         });
     };
 
@@ -591,7 +708,7 @@ export default function RevisionChecklist() {
         let ok = 0;
         let fail = 0;
         let pending = 0;
-        const items = getItemsToUse();
+        const items = getItemsToUse(eq.sistemaId);
         items.forEach(item => {
             const val = eq[item.key as keyof EquipoInstalado];
             if (val === true) ok++;
@@ -625,8 +742,6 @@ export default function RevisionChecklist() {
     }
 
     const clientInfo = clientes.find(cl => cl.id === centro.clienteId);
-    const currentAddSistema = sistemasDelCentro.find(s => s.id === addSistemaId);
-    const filteredCatalog = currentAddSistema ? getFilteredCatalog(currentAddSistema.tipo || currentAddSistema.familia || '') : [];
 
     return (
         <div className="min-h-screen bg-slate-50">
@@ -716,7 +831,27 @@ export default function RevisionChecklist() {
                                                     {sist.familia || sist.tipo}
                                                 </h2>
                                                 <p className="text-xs text-slate-400 mt-0.5">
-                                                    {equiposInstalados.filter(eq => eq.sistemaId === sist.id).length} equipos
+                                                    {(() => {
+                                                        const equiposSistema = equiposInstalados.filter(eq => eq.sistemaId === sist.id);
+                                                        const numEquipos = equiposSistema.length;
+                                                        
+                                                        // Buscar el campo "Referencia instalación" en el primer equipo
+                                                        const itemReferenciaInstalacion = getItemsToUse(sist.id).find((item: ChecklistItem) => {
+                                                            const lbl = (item.label || '').toLowerCase();
+                                                            return lbl.includes('referencia') && lbl.includes('instalacion');
+                                                        });
+                                                        
+                                                        let referenciaTexto = '';
+                                                        if (itemReferenciaInstalacion && equiposSistema.length > 0) {
+                                                            const primerEquipo = equiposSistema[0];
+                                                            const valorReferencia = primerEquipo[itemReferenciaInstalacion.key as keyof EquipoInstalado];
+                                                            if (typeof valorReferencia === 'string' && valorReferencia.trim() !== '') {
+                                                                referenciaTexto = valorReferencia.trim() + ', ';
+                                                            }
+                                                        }
+                                                        
+                                                        return `${referenciaTexto}${numEquipos} equipo${numEquipos !== 1 ? 's' : ''}`;
+                                                    })()}
                                                 </p>
                                             </div>
                                         </button>
@@ -742,21 +877,14 @@ export default function RevisionChecklist() {
                                                     <ChevronDown className="w-3.5 h-3.5" />
                                                 </button>
                                             </div>
-                                            {openSistemas[sist.id] && (
-                                                <button
-                                                    type="button"
-                                                    onClick={(e) => { e.stopPropagation(); openAddModal(sist.id); }}
-                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-bold transition-colors border border-indigo-200"
-                                                >
-                                                    <Plus className="w-3.5 h-3.5" /> Añadir
-                                                </button>
-                                            )}
                                             {sistemaTieneAnomalias(sist.id) && (
                                                 <span title="Este sistema tiene anomalías">
                                                     <AlertTriangle className="w-5 h-5 text-amber-500" />
                                                 </span>
                                             )}
                                         </div>
+
+
                                     </div>
                                 </div>
 
@@ -771,45 +899,23 @@ export default function RevisionChecklist() {
                                         <div className="mb-5 flex flex-wrap gap-2">
                                             <button
                                                 type="button"
-                                                onClick={(e) => { e.stopPropagation(); openAddModal(sist.id); }}
-                                                className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold transition-all shadow-sm shadow-indigo-200"
-                                            >
-                                                <Plus className="w-4 h-4" /> Añadir equipo
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={async (e) => {
+                                                onClick={(e) => {
                                                     e.stopPropagation();
-                                                    // Revisar todos los equipos del sistema
-                                                    const itemsToUse = getItemsToUse();
-                                                    const updatedEquipos = equiposInstalados.map(eq => {
-                                                        if (eq.sistemaId === sist.id) {
-                                                            const allChecked: Record<string, any> = {};
-                                                            itemsToUse.forEach(item => {
-                                                                allChecked[item.key] = true;
-                                                            });
-                                                            return {
-                                                                ...eq,
-                                                                revisado: true,
-                                                                ...allChecked
-                                                            };
-                                                        }
-                                                        return eq;
-                                                    });
-                                                    setEquiposInstalados(updatedEquipos);
-                                                    saveEquiposProgress(updatedEquipos);
-                                                    // Cambiar estado del parte a "Abierto" si estaba en "Planificado"
-                                                    if (parte?.estado === 'Planificado') {
-                                                        updateParte({ estado: 'Abierto' });
-                                                        const storedPartes = JSON.parse(localStorage.getItem('firecheck_db_partes') || '[]');
-                                                        const parteActual = storedPartes.find((p: any) => p.id === parteId);
-                                                        const docId = parteActual?._docId || parteId;
-                                                        try { await updateParteFirestore(docId, { estado: 'Abierto' }); } catch (err) { console.error('Error actualizando estado en Firestore:', err); }
-                                                    }
+                                                    setRevisarTodoConfirm({ isOpen: true, sistemaId: sist.id });
                                                 }}
                                                 className="inline-flex items-center gap-2 px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl text-sm font-semibold transition-all shadow-sm shadow-green-200"
                                             >
-                                                <CheckCheck className="w-4 h-4" /> Revisar todo
+                                                <CheckCheck className="w-4 h-4" /> Revisar todo como ok
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setAddEquipo(prev => ({ ...prev, isOpen: true, sistemaId: sist.id }));
+                                                }}
+                                                className="inline-flex items-center gap-2 px-4 py-2.5 bg-black hover:bg-slate-800 text-white rounded-xl text-sm font-semibold transition-all shadow-sm"
+                                            >
+                                                <Plus className="w-4 h-4" /> Añadir equipo
                                             </button>
                                         </div>
 
@@ -825,10 +931,48 @@ export default function RevisionChecklist() {
                                                     </div>
                                                 ) : (
                                                     filteredEqs.map((eq, i) => {
-                                                        const itemsToUse = getItemsToUse();
+                                                        const itemsToUse = getItemsToUse(sist.id);
                                                         const algunCheckRojo = itemsToUse.some((item) => eq[item.key as keyof EquipoInstalado] === false);
-                                                        const anomaliaObligatoriaVacia = algunCheckRojo && (!eq.anomalias || eq.anomalias.trim() === '');
                                                         const stats = getCheckStats(eq);
+                                                        
+                                                        const isExtintor = (sist.tipo || sist.familia || '').toLowerCase().includes('extintor');
+                                                        let caducado = false;
+                                                        let necesitaRetimbre = false;
+                                                        let seAproxima = false;
+                                                        let fabItemKey = "";
+                                                        let retItemKey = "";
+                                                        if (isExtintor) {
+                                                            const fabItem = itemsToUse.find(i => (i.label||'').toLowerCase().includes('fabricaci'));
+                                                            const retItem = itemsToUse.find(i => (i.label||'').toLowerCase().includes('retimbre'));
+                                                            fabItemKey = fabItem?.key || "";
+                                                            retItemKey = retItem?.key || "";
+                                                            if (fabItem) {
+                                                                const valFab = eq[fabItem.key as keyof EquipoInstalado] as string;
+                                                                const valRet = retItem ? eq[retItem.key as keyof EquipoInstalado] as string : null;
+                                                                if (valFab) {
+                                                                    const today = new Date();
+                                                                    const dateFab = new Date(valFab);
+                                                                    if (!isNaN(dateFab.getTime())) {
+                                                                        const monthsSinceFab = (today.getFullYear() - dateFab.getFullYear()) * 12 + today.getMonth() - dateFab.getMonth();
+                                                                        if (monthsSinceFab >= 240) {
+                                                                            caducado = true;
+                                                                        } else {
+                                                                            let refDate = dateFab;
+                                                                            if (valRet) {
+                                                                                const dr = new Date(valRet);
+                                                                                if (!isNaN(dr.getTime())) refDate = dr;
+                                                                            }
+                                                                            const monthsSinceRef = (today.getFullYear() - refDate.getFullYear()) * 12 + today.getMonth() - refDate.getMonth();
+                                                                            if (monthsSinceRef >= 60) {
+                                                                                necesitaRetimbre = true;
+                                                                            } else if (monthsSinceFab >= 237 || monthsSinceRef >= 57) {
+                                                                                seAproxima = true;
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
 
                                                         return (
                                                             <div key={eq.id} className={`rounded-xl border transition-all ${algunCheckRojo ? 'bg-red-50/30 border-red-200' : 'bg-slate-50 border-slate-150'}`}>
@@ -837,31 +981,27 @@ export default function RevisionChecklist() {
                                                                         <span className="px-3 py-1 bg-black text-white text-sm font-mono font-bold rounded-lg shadow-md min-w-[36px] text-center shrink-0">
                                                                             {eq.codigo || (i + 1).toString().padStart(2, '0')}
                                                                         </span>
-                                                                        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 min-w-0 uppercase">
-                                                                            <span className="text-sm font-semibold text-slate-700">{eq.nombre}</span>
-                                                                            {eq.placa && (
-                                                                                <><span className="text-slate-300 font-light">/</span><span className="text-sm font-medium text-slate-500">#{eq.placa}</span></>
-                                                                            )}
-                                                                            {eq.ubicacion && (
-                                                                                <><span className="text-slate-300 font-light">/</span><span className="text-sm font-medium text-slate-500">{eq.ubicacion}</span></>
-                                                                            )}
-                                                                            {eq.fechaFabricacion && (
-                                                                                <><span className="text-slate-300 font-light">/</span><span className="text-sm font-medium text-slate-500">F. Fabricación {eq.fechaFabricacion.substring(0,7).split('-').reverse().join('-')}</span></>
-                                                                            )}
-                                                                            {eq.ultimoRetimbre && (
-                                                                                <><span className="text-slate-300 font-light">/</span><span className="text-sm font-medium text-slate-500">F. Retimbre {eq.ultimoRetimbre.substring(0,7).split('-').reverse().join('-')}</span></>
-                                                                            )}
-                                                                        </div>
                                                                     </div>
                                                                     <div className="flex items-center gap-1.5">
                                                                     </div>
                                                                 </div>
 
                                                                 <div className="px-4 pb-3">
-                                                                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-3 gap-y-1.5">
-                                                                        {(checklistItems.length > 0 ? checklistItems : CHECKLIST_ITEMS).map(item => {
-                                                                            const val = eq[item.key as keyof EquipoInstalado];
-                                                                            const tipo = (item as ChecklistItem).tipoRespuesta || 'check';
+                                                                    <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 gap-x-3 gap-y-1.5">
+                                                                        {/* SOLO los items del checklist dinámico (exactamente como en el editor de plantillas) */}
+                                                                        {getItemsToUse(sist.id).filter((item: ChecklistItem) => {
+                                                                            const lbl = (item.label || '').toLowerCase();
+                                                                            // Solo filtrar campo de notas para ponerlo debajo del grid
+                                                                            if (lbl.includes('notas') || lbl.includes('observaciones') || lbl.includes('anomal')) return false;
+                                                                            return true;
+                                                                        }).map(item => {
+                                                                             const val = eq[item.key as keyof EquipoInstalado];
+                                                                             const tipo = (item as ChecklistItem).tipoRespuesta || 'check';
+                                                                             const lbl = (item.label || '').toLowerCase();
+                                                                             const esCampoNotas = lbl.includes('notas') || lbl.includes('observaciones') || lbl.includes('anomal');
+                                                                             
+                                                                             // No renderizar campo notas en el grid (se renderiza debajo)
+                                                                             if (esCampoNotas) return null;
                                                                             
                                                                             if (tipo === 'check') {
                                                                                 const isChecked = val === true;
@@ -880,7 +1020,7 @@ export default function RevisionChecklist() {
                                                                                         <input
                                                                                             type="checkbox"
                                                                                             checked={isChecked}
-                                                                                            onChange={(e) => handleCheckChange(eq.id, item.key, e.target.checked)}
+                                                                                            onChange={(e) => handleCheckChange(eq.id, item.key, e.target.checked, item.label)}
                                                                                             className={`w-3.5 h-3.5 rounded cursor-pointer ${
                                                                                                 isUnchecked
                                                                                                     ? 'text-red-500 border-red-300 focus:ring-red-400'
@@ -894,180 +1034,376 @@ export default function RevisionChecklist() {
                                                                                         {isUnchecked && <XCircle className="w-3 h-3 text-red-400 ml-auto" />}
                                                                                     </label>
                                                                                 );
-                                                                            } else if (tipo === 'numero') {
+                                                                             } else if (tipo === 'numero') {
+                                                                                 const tieneValor = typeof val === 'number';
+                                                                                 return (
+                                                                                     <div key={item.key} className="flex flex-col gap-0.5">
+                                                                                         <label className="text-[10px] font-semibold text-slate-500">{item.label}</label>
+                                                                                         <input
+                                                                                             type="number"
+                                                                                             value={tieneValor ? val : ''}
+                                                                                             onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value ? Number(e.target.value) : '')}
+                                                                                             className={`w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${tieneValor ? 'font-bold' : ''}`}
+                                                                                             placeholder="0"
+                                                                                         />
+                                                                                     </div>
+                                                                                 );
+                                                                                } else if (tipo === 'fecha') {
+                                                                                const fechaVal = typeof val === 'string' && val ? val.substring(0, 7) : '';
+                                                                                const isErrorDate = (caducado || necesitaRetimbre || seAproxima) && (item.key === fabItemKey || item.key === retItemKey);
                                                                                 return (
                                                                                     <div key={item.key} className="flex flex-col gap-0.5">
                                                                                         <label className="text-[10px] font-semibold text-slate-500">{item.label}</label>
                                                                                         <input
-                                                                                            type="number"
-                                                                                            value={(typeof val === 'number' ? val : '') as any}
-                                                                                            onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value ? Number(e.target.value) : '')}
-                                                                                            className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
-                                                                                            placeholder="0"
+                                                                                            type="month"
+                                                                                            value={fechaVal}
+                                                                                            onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value ? e.target.value + '-01' : '')}
+                                                                                            className={`w-full px-2 py-1.5 border rounded-lg text-xs outline-none focus:ring-2 transition-colors ${
+                                                                                                isErrorDate
+                                                                                                ? 'bg-red-50 border-red-400 text-red-700 focus:border-red-500 focus:ring-red-500/20'
+                                                                                                : `bg-white border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20 ${fechaVal ? 'font-bold' : ''}`
+                                                                                            }`}
                                                                                         />
                                                                                     </div>
                                                                                 );
-                                                                            } else {
-                                                                                // tipo === 'texto'
-                                                                                return (
-                                                                                    <div key={item.key} className="flex flex-col gap-0.5">
-                                                                                        <label className="text-[10px] font-semibold text-slate-500">{item.label}</label>
-                                                                                        <input
-                                                                                            type="text"
-                                                                                            value={val as string || ''}
-                                                                                            onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value)}
-                                                                                            className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
-                                                                                            placeholder="..."
-                                                                                        />
-                                                                                    </div>
-                                                                                );
-                                                                            }
+                                                                             } else if (tipo === 'texto') {
+                                                                                 const labelLower = (item.label || '').toLowerCase().replace(/[áéíóú]/g, (c) => ({'á':'a','é':'e','í':'i','ó':'o','ú':'u'})[c] || c);
+                                                                                 const esNumeroOrden = labelLower.includes('orden');
+                                                                                 if (esNumeroOrden) console.log('🔍 Campo Nº Orden detectado, eq.codigo =', eq.codigo);
+                                                                                 const placeholderTexto = labelLower.includes('referencia') && labelLower.includes('instalacion')
+                                                                                     ? 'Ejemplo: Area general o zona'
+                                                                                     : '...';
+                                                                                 const tieneValorTexto = !esNumeroOrden && typeof val === 'string' && val.trim() !== '';
+                                                                                 return (
+                                                                                     <div key={item.key} className="flex flex-col gap-0.5">
+                                                                                         <label className="text-[10px] font-semibold text-slate-500">{item.label}</label>
+                                                                                         <input
+                                                                                             type="text"
+                                                                                             value={esNumeroOrden ? (eq.codigo || '') : (typeof val === 'string' ? val : '')}
+                                                                                             onChange={(e) => {
+                                                                                                 if (!esNumeroOrden) {
+                                                                                                     handleCheckChange(eq.id, item.key, e.target.value);
+                                                                                                 }
+                                                                                             }}
+                                                                                             className={`w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${esNumeroOrden ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''} ${tieneValorTexto ? 'font-bold' : ''}`}
+                                                                                             placeholder={placeholderTexto}
+                                                                                             readOnly={esNumeroOrden}
+                                                                                         />
+                                                                                     </div>
+                                                                                 );
+                                                                              } else if (tipo === 'texto-largo') {
+                                                                                 // No renderizar "notas" en el grid
+                                                                                 const lbl = (item.label || '').toLowerCase();
+                                                                                 if (lbl.includes('notas') || lbl.includes('observaciones') || lbl.includes('anomal')) return null;
+                                                                                 const tieneValorTextoLargo = typeof val === 'string' && val.trim() !== '';
+                                                                                 return (
+                                                                                     <div key={item.key} className="flex flex-col gap-0.5 col-span-2">
+                                                                                         <label className="text-[10px] font-semibold text-slate-500">{item.label}</label>
+                                                                                         <textarea
+                                                                                             value={typeof val === 'string' ? val : ''}
+                                                                                             onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value)}
+                                                                                             className={`w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 resize-none ${tieneValorTextoLargo ? 'font-bold' : ''}`}
+                                                                                             rows={3}
+                                                                                             placeholder="..."
+                                                                                         />
+                                                                                     </div>
+                                                                                 );
+                                                                             }
                                                                         })}
-                                                                    </div>
-                                                                </div>
+                                                                     </div>
+                                                                 </div>
+                                                                 {/* Campo notas debajo del grid, a ancho completo */}
+                                                                 {getItemsToUse(sist.id).filter((item: ChecklistItem) => {
+                                                                     const lbl = (item.label || '').toLowerCase();
+                                                                     return lbl.includes('notas') || lbl.includes('observaciones') || lbl.includes('anomal');
+                                                                 }).map(item => {
+                                                                     const val = eq[item.key as keyof EquipoInstalado];
+                                                                     const esNoEncontrado = typeof val === 'string' && val.includes('no localizarse');
+                                                                     const esAvisoAutoMsg = typeof val === 'string' && (val.includes('Extintor caducado') || val.includes('Extintor necesita retimbre') || val.includes('Se aproxima caducidad o retimbrado'));
+                                                                     const tieneValorNotas = typeof val === 'string' && val.trim() !== '' && !esNoEncontrado;
+                                                                     const isErrorNotas = esNoEncontrado || algunCheckRojo || esAvisoAutoMsg;
+                                                                     return (
+                                                                         <div key={item.key} className="px-4 pb-3 mt-4">
+                                                                             <label className={`text-xs font-semibold mb-1 block ${isErrorNotas ? 'text-red-700' : 'text-slate-600'}`}>Observaciones y anomalías del equipo:</label>
+                                                                             <textarea
+                                                                                 value={typeof val === 'string' ? val : ''}
+                                                                                 onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value)}
+                                                                                 className={`w-full px-4 py-3 rounded-xl text-sm outline-none focus:ring-2 resize-y min-h-[80px] ${isErrorNotas ? 'bg-red-50 border-2 border-red-400 text-red-800 font-bold focus:border-red-500 focus:ring-red-500/20' : `bg-white border border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20 ${tieneValorNotas ? 'font-bold' : ''}`}`}
+                                                                                 rows={4}
+                                                                                 placeholder="Escribe aquí las anomalías, observaciones o notas..."
+                                                                             />
+                                                                         </div>
+                                                                     );
+                                                                 })}
 
-                                                                <div className={`px-4 pb-4 ${algunCheckRojo ? 'border-t border-red-200 pt-3' : 'border-t border-slate-200 pt-3'}`}>
-                                                                    <div className="flex items-center justify-between mb-1.5">
-                                                                        <label className={`text-xs font-semibold ${anomaliaObligatoriaVacia ? 'text-red-600' : 'text-slate-600'}`}>
-                                                                            Anomalías / Observaciones {algunCheckRojo ? <span className="text-red-500">(obligatorio)</span> : ''}
-                                                                        </label>
-                                                                        <div className="flex items-center gap-1.5">
-                                                                            <span className="flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded-lg text-xs font-bold">
-                                                                                <CheckCircle2 className="w-3 h-3" /> {stats.ok}
-                                                                            </span>
-                                                                            {stats.fail > 0 && (
-                                                                                <span className="flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-700 rounded-lg text-xs font-bold">
-                                                                                    <XCircle className="w-3 h-3" /> {stats.fail}
-                                                                                </span>
-                                                                            )}
-                                                                            {stats.pending > 0 && (
-                                                                                <span className="px-2 py-0.5 bg-slate-200 text-slate-500 rounded-lg text-xs font-bold">
-                                                                                    {stats.pending}?
-                                                                                </span>
-                                                                            )}
-                                                                            <div className="w-px h-4 bg-slate-200 mx-0.5" />
-                                                                            <button
-                                                                                onClick={() => setEditEquipo({ id: eq.id, codigo: eq.codigo || '', nombre: eq.nombre || '', ubicacion: eq.ubicacion || '', placa: eq.placa || '', fechaFabricacion: eq.fechaFabricacion || '', ultimoRetimbre: eq.ultimoRetimbre || '' })}
-                                                                                className="p-1 text-slate-700 hover:bg-slate-200 rounded-lg transition-colors"
-                                                                                title="Editar equipo"
-                                                                            >
-                                                                                <Pencil className="w-3.5 h-3.5" />
-                                                                            </button>
-                                                                            <button
-                                                                                onClick={() => handleDeleteEquipo(eq.id)}
-                                                                                className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
-                                                                                title="Eliminar equipo"
-                                                                            >
-                                                                                <Trash2 className="w-3.5 h-3.5" />
-                                                                            </button>
-                                                                        </div>
-                                                                    </div>
-                                                                    <textarea
-                                                                        value={eq.anomalias || ''}
-                                                                        onChange={(e) => setEquiposInstalados(prevEquipos =>
-                                                                            prevEquipos.map(currEq =>
-                                                                                currEq.id === eq.id ? { ...currEq, anomalias: e.target.value, revisado: true } : currEq
-                                                                            )
-                                                                        )}
-                                                                        className={`w-full px-3 py-2.5 rounded-lg text-sm resize-none outline-none transition-all ${
-                                                                            anomaliaObligatoriaVacia
-                                                                                ? 'bg-red-50 border-2 border-red-300 text-red-700 placeholder-red-400 focus:ring-2 focus:ring-red-500/20'
-                                                                                : 'bg-white border border-slate-200 text-slate-700 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500'
-                                                                        }`}
-                                                                        rows={2}
-                                                                        placeholder={algunCheckRojo ? 'Obligatorio: describe la anomalía encontrada...' : 'Añadir anomalías, observaciones o notas...'}
-                                                                    />
-                                                                    <div className="mt-2 flex flex-wrap gap-2">
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={async () => {
-                                                                                const itemsToUse = getItemsToUse();
-                                                                                const updatedEquipos = equiposInstalados.map(currEq => {
-                                                                                    if (currEq.id === eq.id) {
-                                                                                        const allChecked: Record<string, any> = {};
-                                                                                        itemsToUse.forEach(item => {
-                                                                                            allChecked[item.key] = true;
-                                                                                        });
-                                                                                        return {
-                                                                                            ...currEq,
-                                                                                            revisado: true,
-                                                                                            ...allChecked
-                                                                                        };
-                                                                                    }
-                                                                                    return currEq;
-                                                                                });
-                                                                                setEquiposInstalados(updatedEquipos);
-                                                                                saveEquiposProgress(updatedEquipos);
-                                                                                // Cambiar estado del parte a "Abierto" si estaba en "Planificado"
-                                                                                if (parte?.estado === 'Planificado') {
-                                                                                    updateParte({ estado: 'Abierto' });
-                                                                                    const storedPartes = JSON.parse(localStorage.getItem('firecheck_db_partes') || '[]');
-                                                                                    const parteActual = storedPartes.find((p: any) => p.id === parteId);
-                                                                                    const docId = parteActual?._docId || parteId;
-                                                                                    try { await updateParteFirestore(docId, { estado: 'Abierto' }); } catch (err) { console.error('Error actualizando estado en Firestore:', err); }
-                                                                                }
-                                                                            }}
-                                                                            className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-semibold transition-all shadow-sm"
-                                                                        >
-                                                                            <CheckCheck className="w-4 h-4" /> Revisado
-                                                                        </button>
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={async () => {
-                                                                                const itemsToUse = getItemsToUse();
-                                                                                const updatedEquipos = equiposInstalados.map(currEq => {
-                                                                                    if (currEq.id === eq.id) {
-                                                                                        const allFalse: Record<string, any> = {};
-                                                                                        itemsToUse.forEach(item => {
-                                                                                            allFalse[item.key] = false;
-                                                                                        });
-                                                                                        return {
-                                                                                            ...currEq,
-                                                                                            revisado: true,
-                                                                                            ...allFalse,
-                                                                                            anomalias: 'Equipo no revisado por no localizarse en su lugar.'
-                                                                                        };
-                                                                                    }
-                                                                                    return currEq;
-                                                                                });
-                                                                                setEquiposInstalados(updatedEquipos);
-                                                                                saveEquiposProgress(updatedEquipos);
-                                                                                // Cambiar estado del parte a "Abierto" si estaba en "Planificado"
-                                                                                if (parte?.estado === 'Planificado') {
-                                                                                    updateParte({ estado: 'Abierto' });
-                                                                                    const storedPartes = JSON.parse(localStorage.getItem('firecheck_db_partes') || '[]');
-                                                                                    const parteActual = storedPartes.find((p: any) => p.id === parteId);
-                                                                                    const docId = parteActual?._docId || parteId;
-                                                                                    try { await updateParteFirestore(docId, { estado: 'Abierto' }); } catch (err) { console.error('Error actualizando estado en Firestore:', err); }
-                                                                                }
-                                                                            }}
-                                                                            className="inline-flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-semibold transition-all shadow-sm"
-                                                                        >
-                                                                            <AlertTriangle className="w-4 h-4" /> Equipo no encontrado
-                                                                        </button>
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={async () => {
-                                                                                const itemsToUse = getItemsToUse();
-                                                                                const updatedEquipos = equiposInstalados.map(currEq => {
-                                                                                    if (currEq.id === eq.id) {
-                                                                                        const cleanedEq = { ...currEq, revisado: false, anomalias: '' };
-                                                                                        itemsToUse.forEach(item => {
-                                                                                            (cleanedEq as any)[item.key] = null;
-                                                                                        });
-                                                                                        return cleanedEq;
-                                                                                    }
-                                                                                    return currEq;
-                                                                                });
-                                                                                setEquiposInstalados(updatedEquipos);
-                                                                                saveEquiposProgress(updatedEquipos);
-                                                                            }}
-                                                                            className="inline-flex items-center gap-2 px-4 py-2 bg-slate-400 hover:bg-slate-500 text-white rounded-lg text-xs font-semibold transition-all shadow-sm"
-                                                                        >
-                                                                            <RotateCcw className="w-4 h-4" /> Limpiar
-                                                                        </button>
-                                                                    </div>
-                                                                </div>
+                                                                 {/* Galería de fotos debajo de las anomalías */}
+                                                                 {(() => {
+                                                                     const currentFotos = Array.isArray((eq as any)['fotos']) 
+                                                                         ? (eq as any)['fotos'] 
+                                                                         : ((eq as any)['foto'] ? [(eq as any)['foto']] : []);
+                                                                     
+                                                                     return (
+                                                                         <div className="px-4 pb-4 flex flex-wrap gap-3">
+                                                                             {currentFotos.map((fotoUrl: string, idx: number) => (
+                                                                                 <div key={idx} className="relative w-16 h-16 rounded-lg overflow-hidden border border-slate-200 shrink-0 shadow-sm group">
+                                                                                     <img src={fotoUrl} alt="Foto equipo" className="w-full h-full object-cover cursor-pointer hover:scale-110 transition-transform duration-300" onClick={() => window.open(fotoUrl, '_blank')} />
+                                                                                     <button
+                                                                                         onClick={() => {
+                                                                                             const newFotos = currentFotos.filter((_: any, i: number) => i !== idx);
+                                                                                             handleCheckChange(eq.id, 'fotos', newFotos);
+                                                                                             if (newFotos.length === 0) handleCheckChange(eq.id, 'foto', ''); // Mantenemos retrocompatibilidad vaciando 'foto'
+                                                                                             else if (idx === 0) handleCheckChange(eq.id, 'foto', newFotos[0]);
+                                                                                         }}
+                                                                                         className="absolute top-0 right-0 p-1 bg-red-500 text-white rounded-bl-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                                                                                         title="Eliminar foto"
+                                                                                     >
+                                                                                         <X className="w-3 h-3" />
+                                                                                     </button>
+                                                                                 </div>
+                                                                             ))}
+                                                                             
+                                                                             <input
+                                                                                 type="file"
+                                                                                 accept="image/*"
+                                                                                 capture="environment"
+                                                                                 onChange={async (e) => {
+                                                                                     const file = e.target.files?.[0];
+                                                                                     if (!file) return;
+                                                                                     try {
+                                                                                         const thumbnail = await new Promise<Blob>((resolve, reject) => {
+                                                                                             const img = new Image();
+                                                                                             const objectUrl = URL.createObjectURL(file);
+                                                                                             img.onload = () => {
+                                                                                                 URL.revokeObjectURL(objectUrl);
+                                                                                                 const canvas = document.createElement('canvas');
+                                                                                                 const MAX = 640;
+                                                                                                 let w = img.width, h = img.height;
+                                                                                                 if (w > h) { if (w > MAX) { h = Math.floor(h * MAX / w); w = MAX; } }
+                                                                                                 else { if (h > MAX) { w = Math.floor(w * MAX / h); h = MAX; } }
+                                                                                                 canvas.width = w; canvas.height = h;
+                                                                                                 const ctx = canvas.getContext('2d');
+                                                                                                 if (!ctx) { reject(new Error('No canvas context')); return; }
+                                                                                                 ctx.drawImage(img, 0, 0, w, h);
+                                                                                                 canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Error blob')), 'image/jpeg', 0.75);
+                                                                                             };
+                                                                                             img.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error('Error cargando imagen')); };
+                                                                                             img.src = objectUrl;
+                                                                                         });
+                                                                                         const thumbFile = new File([thumbnail], `thumb_${Date.now()}.jpg`, { type: 'image/jpeg' });
+                                                                                         const path = `revisiones/${parteId}/${eq.id}/foto_${Date.now()}`;
+                                                                                         const url = await uploadFile(thumbFile, path);
+                                                                                         
+                                                                                         const newFotos = [...currentFotos, url];
+                                                                                         handleCheckChange(eq.id, 'fotos', newFotos);
+                                                                                         if (currentFotos.length === 0) handleCheckChange(eq.id, 'foto', url); // Mantenemos retrocompatibilidad con el primer string
+                                                                                     } catch (err) {
+                                                                                         console.error('Error al subir imagen:', err);
+                                                                                         alert('Error al subir la imagen');
+                                                                                     }
+                                                                                 }}
+                                                                                 className="hidden"
+                                                                                 id={`foto-file-multi-${eq.id}`}
+                                                                             />
+                                                                             <label
+                                                                                 htmlFor={`foto-file-multi-${eq.id}`}
+                                                                                 className="flex flex-col items-center justify-center w-16 h-16 border-2 border-dashed border-slate-300 rounded-lg text-slate-500 hover:text-indigo-600 hover:border-indigo-400 hover:bg-indigo-50 transition-colors cursor-pointer shrink-0"
+                                                                                 title="Añadir foto"
+                                                                             >
+                                                                                 <span className="text-xl leading-none mb-0.5">+</span>
+                                                                                 <span className="text-[9px] font-bold">Foto</span>
+                                                                             </label>
+                                                                         </div>
+                                                                     );
+                                                                 })()}
+
+                                                                   <div className={`px-4 pb-4 ${algunCheckRojo ? 'border-t border-red-200 pt-3' : 'border-t border-slate-200 pt-3'}`}>
+                                                                      <div className="flex flex-wrap items-center justify-between gap-2">
+                                                                          <div className="flex items-center gap-2">
+                                                                             <button
+                                                                                 type="button"
+                                                                                 onClick={async () => {
+                                                                                     const itemsToUse = getItemsToUse(eq.sistemaId);
+                                                                                     const updatedEquipos = equiposInstalados.map(currEq => {
+                                                                                         if (currEq.id === eq.id) {
+                                                                                             const allChecked: Record<string, any> = {};
+                                                                                             itemsToUse.forEach(item => {
+                                                                                                 if (item.tipoRespuesta === 'check') {
+                                                                                                     allChecked[item.key] = true;
+                                                                                                 }
+                                                                                             });
+                                                                                             return {
+                                                                                                 ...currEq,
+                                                                                                 revisado: true,
+                                                                                                 ...allChecked
+                                                                                             };
+                                                                                         }
+                                                                                         return currEq;
+                                                                                     });
+                                                                                     setEquiposInstalados(updatedEquipos);
+                                                                                     saveEquiposProgress(updatedEquipos);
+                                                                                     const equipoModificado = updatedEquipos.find(currEq => currEq.id === eq.id);
+                                                                                     if (equipoModificado) {
+                                                                                         try { await updateEquipoInstalado(eq.id, equipoModificado as any); } catch (err) { console.error('Error guardando en Firestore:', err); }
+                                                                                     }
+                                                                                     showToast('Guardado');
+                                                                                     // Cambiar estado del parte a "Abierto" si estaba en "Planificado"
+                                                                                     if (parte?.estado === 'Planificado') {
+                                                                                         updateParte({ estado: 'Abierto' });
+                                                                                         const storedPartes = JSON.parse(localStorage.getItem('firecheck_db_partes') || '[]');
+                                                                                         const parteActual = storedPartes.find((p: any) => p.id === parteId);
+                                                                                         const docId = parteActual?._docId || parteId;
+                                                                                         try { await updateParteFirestore(docId, { estado: 'Abierto' }); } catch (err) { console.error('Error actualizando estado en Firestore:', err); }
+                                                                                     }
+                                                                                 }}
+                                                                                 className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-semibold transition-all shadow-sm"
+                                                                             >
+                                                                                 Revisado OK
+                                                                             </button>
+                                                                             <button
+                                                                                 type="button"
+                                                                                 onClick={async () => {
+                                                                                     const updatedEquipos = equiposInstalados.map(currEq => {
+                                                                                         if (currEq.id === eq.id) {
+                                                                                             return {
+                                                                                                 ...currEq,
+                                                                                                 revisado: true
+                                                                                             };
+                                                                                         }
+                                                                                         return currEq;
+                                                                                     });
+                                                                                     setEquiposInstalados(updatedEquipos);
+                                                                                     saveEquiposProgress(updatedEquipos);
+                                                                                     const equipoModificado = updatedEquipos.find(currEq => currEq.id === eq.id);
+                                                                                     if (equipoModificado) {
+                                                                                         try { await updateEquipoInstalado(eq.id, equipoModificado as any); } catch (err) { console.error('Error guardando en Firestore:', err); }
+                                                                                     }
+                                                                                     showToast('Guardado');
+                                                                                     // Cambiar estado del parte a "Abierto" si estaba en "Planificado"
+                                                                                     if (parte?.estado === 'Planificado') {
+                                                                                         updateParte({ estado: 'Abierto' });
+                                                                                         const storedPartes = JSON.parse(localStorage.getItem('firecheck_db_partes') || '[]');
+                                                                                         const parteActual = storedPartes.find((p: any) => p.id === parteId);
+                                                                                         const docId = parteActual?._docId || parteId;
+                                                                                         try { await updateParteFirestore(docId, { estado: 'Abierto' }); } catch (err) { console.error('Error actualizando estado en Firestore:', err); }
+                                                                                     }
+                                                                                 }}
+                                                                                 className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-semibold transition-all shadow-sm"
+                                                                             >
+                                                                                 Revisado con anomalía
+                                                                             </button>
+                                                                             <button
+                                                                                 type="button"
+                                                                                 onClick={async () => {
+                                                                                     const itemsToUse = getItemsToUse(eq.sistemaId);
+                                                                                     const updatedEquipos = equiposInstalados.map(currEq => {
+                                                                                         if (currEq.id === eq.id) {
+                                                                                             const allFalse: Record<string, any> = {};
+                                                                                             itemsToUse.forEach(item => {
+                                                                                                 if (item.tipoRespuesta === 'check') {
+                                                                                                     allFalse[item.key] = false;
+                                                                                                 }
+                                                                                             });
+                                                                                             // También establecer el campo notas con el texto de anomalía
+                                                                                             const notasItem = itemsToUse.find(item => {
+                                                                                                 const lbl = (item.label || '').toLowerCase();
+                                                                                                 return lbl.includes('notas') || lbl.includes('observaciones') || lbl.includes('anomal');
+                                                                                             });
+                                                                                             if (notasItem) {
+                                                                                                 allFalse[notasItem.key] = 'Equipo no revisado por no localizarse en su sitio.';
+                                                                                             }
+                                                                                             return {
+                                                                                                 ...currEq,
+                                                                                                 revisado: true,
+                                                                                                 ...allFalse,
+                                                                                                 anomalias: 'Equipo no revisado por no localizarse en su sitio.'
+                                                                                             };
+                                                                                         }
+                                                                                         return currEq;
+                                                                                     });
+                                                                                     setEquiposInstalados(updatedEquipos);
+                                                                                     saveEquiposProgress(updatedEquipos);
+                                                                                     const equipoModificado = updatedEquipos.find(currEq => currEq.id === eq.id);
+                                                                                     if (equipoModificado) {
+                                                                                         try { await updateEquipoInstalado(eq.id, equipoModificado as any); } catch (err) { console.error('Error guardando en Firestore:', err); }
+                                                                                     }
+                                                                                     showToast('Guardado');
+                                                                                     // Cambiar estado del parte a "Abierto" si estaba en "Planificado"
+                                                                                     if (parte?.estado === 'Planificado') {
+                                                                                         updateParte({ estado: 'Abierto' });
+                                                                                         const storedPartes = JSON.parse(localStorage.getItem('firecheck_db_partes') || '[]');
+                                                                                         const parteActual = storedPartes.find((p: any) => p.id === parteId);
+                                                                                         const docId = parteActual?._docId || parteId;
+                                                                                         try { await updateParteFirestore(docId, { estado: 'Abierto' }); } catch (err) { console.error('Error actualizando estado en Firestore:', err); }
+                                                                                     }
+                                                                                 }}
+                                                                                 className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-semibold transition-all shadow-sm"
+                                                                             >
+                                                                                 Equipo no encontrado
+                                                                             </button>
+                                                                             <button
+                                                                                 type="button"
+                                                                                 onClick={async () => {
+                                                                                     const itemsToUse = getItemsToUse(eq.sistemaId);
+                                                                                     const updatedEquipos = equiposInstalados.map(currEq => {
+                                                                                         if (currEq.id === eq.id) {
+                                                                                             const cleanedEq = { ...currEq, revisado: false };
+                                                                                             cleanedEq.anomalias = ''; // Limpiar siempre anomalías principales
+                                                                                             
+                                                                                             itemsToUse.forEach(item => {
+                                                                                                 const lbl = (item.label || '').toLowerCase();
+                                                                                                 const isNotas = lbl.includes('notas') || lbl.includes('observaciones') || lbl.includes('anomal');
+                                                                                                 
+                                                                                                 // Limpiar checks y campos de observaciones
+                                                                                                 if (item.tipoRespuesta === 'check') {
+                                                                                                     (cleanedEq as any)[item.key] = null;
+                                                                                                 } else if (isNotas) {
+                                                                                                     (cleanedEq as any)[item.key] = '';
+                                                                                                 }
+                                                                                             });
+                                                                                             return cleanedEq;
+                                                                                         }
+                                                                                         return currEq;
+                                                                                     });
+                                                                                     setEquiposInstalados(updatedEquipos);
+                                                                                     saveEquiposProgress(updatedEquipos);
+                                                                                 }}
+                                                                                 className="px-4 py-2 bg-slate-400 hover:bg-slate-500 text-white rounded-lg text-xs font-semibold transition-all shadow-sm"
+                                                                             >
+                                                                                 Limpiar Checks
+                                                                             </button>
+                                                                          </div>
+                                                                          <div className="flex items-center gap-1.5">
+                                                                              <span className="flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded-lg text-xs font-bold">
+                                                                                  <CheckCircle2 className="w-3 h-3" /> {stats.ok}
+                                                                              </span>
+                                                                              {stats.fail > 0 && (
+                                                                                  <span className="flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-700 rounded-lg text-xs font-bold">
+                                                                                      <XCircle className="w-3 h-3" /> {stats.fail}
+                                                                                  </span>
+                                                                              )}
+                                                                              {stats.pending > 0 && (
+                                                                                  <span className="px-2 py-0.5 bg-slate-200 text-slate-500 rounded-lg text-xs font-bold">
+                                                                                      {stats.pending}?
+                                                                                  </span>
+                                                                              )}
+                                                                              <div className="w-px h-5 bg-slate-200" />
+                                                                              <button
+                                                                                  onClick={() => setEditEquipo({ id: eq.id, codigo: eq.codigo || '', nombre: eq.nombre || '', ubicacion: eq.ubicacion || '', placa: eq.placa || '', fechaFabricacion: eq.fechaFabricacion || '', ultimoRetimbre: eq.ultimoRetimbre || '' })}
+                                                                                  className="p-1.5 text-slate-700 hover:bg-slate-200 rounded-lg transition-colors"
+                                                                                  title="Editar equipo"
+                                                                              >
+                                                                                  <Pencil className="w-3.5 h-3.5" />
+                                                                              </button>
+                                                                              <button
+                                                                                  onClick={() => handleDeleteEquipo(eq.id)}
+                                                                                  className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                                                                                  title="Eliminar equipo"
+                                                                              >
+                                                                                  <Trash2 className="w-3.5 h-3.5" />
+                                                                              </button>
+                                                                          </div>
+                                                                      </div>
+                                                                 </div>
                                                             </div>
                                                         );
                                                     })
@@ -1105,128 +1441,6 @@ export default function RevisionChecklist() {
                 </div>
             </div>
 
-            {/* MODAL AÑADIR EQUIPO */}
-            {addSistemaId && (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[100]">
-                    <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl flex flex-col animate-in fade-in zoom-in-95 duration-200">
-                        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-                            <div>
-                                <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                                    <Plus className="w-5 h-5 text-slate-600" /> Añadir equipo
-                                </h2>
-                                <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">
-                                    Sistema: {currentAddSistema?.familia || currentAddSistema?.tipo}
-                                </p>
-                            </div>
-                            <button onClick={closeAddModal} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors">
-                                <X className="w-5 h-5" />
-                            </button>
-                        </div>
-                        <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
-                            {/* Catalog Helper */}
-                            <div className="pb-4 border-b border-slate-100">
-                                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Autocompletar desde catálogo</label>
-                                <select
-                                    value={selectedCatalogItem}
-                                    onChange={e => {
-                                        const val = e.target.value;
-                                        setSelectedCatalogItem(val);
-                                        const itemBase = equiposCatalogo.find(eq => eq.id === val);
-                                        if (itemBase) {
-                                            setNewEquipo(prev => ({ ...prev, nombre: itemBase.nombre }));
-                                        }
-                                    }}
-                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-indigo-500/20"
-                                >
-                                    <option value="">-- Selecciona para cargar nombre --</option>
-                                    {filteredCatalog.map((eq: any) => (
-                                        <option key={eq.id} value={eq.id}>{eq.codigo} - {eq.nombre}</option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                    <label className="block text-xs font-semibold text-slate-500 mb-1.5">Código</label>
-                                    <input
-                                        type="text"
-                                        value={newEquipo.codigo}
-                                        onChange={e => setNewEquipo(prev => ({ ...prev, codigo: e.target.value }))}
-                                        className="w-full px-3 py-2.5 bg-white rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-semibold text-slate-500 mb-1.5">Placa</label>
-                                    <input
-                                        type="text"
-                                        value={newEquipo.placa}
-                                        onChange={e => setNewEquipo(prev => ({ ...prev, placa: e.target.value }))}
-                                        className="w-full px-3 py-2.5 bg-white rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
-                                        placeholder="Ej: PL-12345"
-                                    />
-                                </div>
-                            </div>
-                            <div>
-                                <label className="block text-xs font-semibold text-slate-500 mb-1.5">Nombre</label>
-                                <input
-                                    type="text"
-                                    value={newEquipo.nombre}
-                                    onChange={e => setNewEquipo(prev => ({ ...prev, nombre: e.target.value }))}
-                                    className="w-full px-3 py-2.5 bg-white rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
-                                    placeholder="Ej: Extintor CO2 5kg"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-semibold text-slate-500 mb-1.5">Ubicación</label>
-                                <input
-                                    type="text"
-                                    value={newEquipo.ubicacion}
-                                    onChange={e => setNewEquipo(prev => ({ ...prev, ubicacion: e.target.value }))}
-                                    className="w-full px-3 py-2.5 bg-white rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
-                                    placeholder="Ej: Planta baja, entrada"
-                                />
-                            </div>
-                            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100">
-                                <div>
-                                    <label className="block text-xs font-semibold text-slate-500 mb-1.5">F. Fabricación</label>
-                                    <input
-                                        type="month"
-                                        value={newEquipo.fechaFabricacion ? newEquipo.fechaFabricacion.substring(0, 7) : ''}
-                                        onChange={e => setNewEquipo(prev => ({ ...prev, fechaFabricacion: e.target.value ? e.target.value + '-01' : '' }))}
-                                        className="w-full px-3 py-2 bg-white rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-semibold text-slate-500 mb-1.5">F. Retimbre</label>
-                                    <input
-                                        type="month"
-                                        value={newEquipo.ultimoRetimbre ? newEquipo.ultimoRetimbre.substring(0, 7) : ''}
-                                        onChange={e => setNewEquipo(prev => ({ ...prev, ultimoRetimbre: e.target.value ? e.target.value + '-01' : '' }))}
-                                        className="w-full px-3 py-2 bg-white rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
-                                    />
-                                </div>
-                            </div>
-                        </div>
-                        <div className="px-6 py-4 border-t border-slate-100 flex gap-3">
-                            <button
-                                type="button"
-                                onClick={closeAddModal}
-                                className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100 transition-colors"
-                            >
-                                Cancelar
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => addSistemaId && handleAddEquipo(addSistemaId)}
-                                className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 shadow-sm transition-all"
-                            >
-                                Guardar equipo
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
             {/* MODAL EDITAR EQUIPO */}
             {editEquipo && (
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[100]">
@@ -1240,66 +1454,14 @@ export default function RevisionChecklist() {
                             </button>
                         </div>
                         <div className="p-6 space-y-4">
-                            <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                    <label className="block text-xs font-semibold text-slate-500 mb-1.5">Código</label>
-                                    <input
-                                        type="text"
-                                        value={editEquipo.codigo}
-                                        onChange={e => setEditEquipo(prev => prev ? { ...prev, codigo: e.target.value } : null)}
-                                        className="w-full px-3 py-2.5 bg-white rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-semibold text-slate-500 mb-1.5">Placa</label>
-                                    <input
-                                        type="text"
-                                        value={editEquipo.placa}
-                                        onChange={e => setEditEquipo(prev => prev ? { ...prev, placa: e.target.value } : null)}
-                                        className="w-full px-3 py-2.5 bg-white rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
-                                        placeholder="Ej: PL-12345"
-                                    />
-                                </div>
-                            </div>
                             <div>
-                                <label className="block text-xs font-semibold text-slate-500 mb-1.5">Nombre</label>
+                                <label className="block text-xs font-semibold text-slate-500 mb-1.5">Código</label>
                                 <input
                                     type="text"
-                                    value={editEquipo.nombre}
-                                    onChange={e => setEditEquipo(prev => prev ? { ...prev, nombre: e.target.value } : null)}
+                                    value={editEquipo.codigo}
+                                    onChange={e => setEditEquipo(prev => prev ? { ...prev, codigo: e.target.value } : null)}
                                     className="w-full px-3 py-2.5 bg-white rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
-                                    placeholder="Ej: Extintor CO2 5kg"
                                 />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-semibold text-slate-500 mb-1.5">Ubicación</label>
-                                <input
-                                    type="text"
-                                    value={editEquipo.ubicacion}
-                                    onChange={e => setEditEquipo(prev => prev ? { ...prev, ubicacion: e.target.value } : null)}
-                                    className="w-full px-3 py-2.5 bg-white rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
-                                    placeholder="Ej: Planta baja, entrada"
-                                />
-                            </div>
-                            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100">
-                                <div>
-                                    <label className="block text-xs font-semibold text-slate-500 mb-1.5">F. Fabricación</label>
-                                    <input
-                                        type="month"
-                                        value={editEquipo.fechaFabricacion ? editEquipo.fechaFabricacion.substring(0, 7) : ''}
-                                        onChange={e => setEditEquipo(prev => prev ? { ...prev, fechaFabricacion: e.target.value ? e.target.value + '-01' : '' } : null)}
-                                        className="w-full px-3 py-2.5 bg-white rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-semibold text-slate-500 mb-1.5">F. Retimbre</label>
-                                    <input
-                                        type="month"
-                                        value={editEquipo.ultimoRetimbre ? editEquipo.ultimoRetimbre.substring(0, 7) : ''}
-                                        onChange={e => setEditEquipo(prev => prev ? { ...prev, ultimoRetimbre: e.target.value ? e.target.value + '-01' : '' } : null)}
-                                        className="w-full px-3 py-2.5 bg-white rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
-                                    />
-                                </div>
                             </div>
                         </div>
                         <div className="px-6 py-4 border-t border-slate-100 flex gap-3">
@@ -1340,6 +1502,54 @@ export default function RevisionChecklist() {
                     title="Confirmar Eliminación"
                     message="ATENCIÓN SE PROCEDE A BORRAR EL ELEMENTO Y SUS REGISTROS ¿ CONFIRMA SU PETICIÓN ?"
                     confirmText="Sí, eliminar"
+                    cancelText="No, cancelar"
+                />
+            )}
+
+            {/* MODAL AÑADIR EQUIPO */}
+            {addEquipo.isOpen && addEquipo.sistemaId && centroId && (
+                <EquipoFormulario
+                    equipo={null}
+                    sistemaId={addEquipo.sistemaId}
+                    sistemaNombre={sistemasDelCentro.find(s => s.id === addEquipo.sistemaId)?.tipo || sistemasDelCentro.find(s => s.id === addEquipo.sistemaId)?.familia || ''}
+                    centroId={centroId}
+                    plantillaId={sistemasDelCentro.find(s => s.id === addEquipo.sistemaId)?.tipo || sistemasDelCentro.find(s => s.id === addEquipo.sistemaId)?.familia || ''}
+                    equiposExistentes={equiposInstalados.filter(e => e.sistemaId === addEquipo.sistemaId)}
+                    onSave={async (equipo) => {
+                        const equipoConCodigo = {
+                            ...equipo,
+                            codigo: equipo.codigo || '',
+                            revisado: false
+                        };
+                        const updatedEquipos = [...equiposInstalados, equipoConCodigo as any];
+                        setEquiposInstalados(updatedEquipos);
+                        saveEquiposProgress(updatedEquipos);
+                        
+                        try {
+                            await addEquipoInstalado(equipoConCodigo as any);
+                            showToast('Equipo añadido');
+                        } catch (err) {
+                            console.error('Error al añadir equipo en Firestore:', err);
+                            showToast('Error al añadir en servidor');
+                        }
+                        
+                        setAddEquipo(prev => ({ ...prev, isOpen: false }));
+                    }}
+                    onCancel={() => {
+                        setAddEquipo(prev => ({ ...prev, isOpen: false }));
+                    }}
+                    isNew={true}
+                />
+            )}
+
+            {revisarTodoConfirm.isOpen && revisarTodoConfirm.sistemaId && (
+                <ConfirmationModal
+                    isOpen={revisarTodoConfirm.isOpen}
+                    onClose={() => setRevisarTodoConfirm({ isOpen: false, sistemaId: null })}
+                    onConfirm={handleConfirmarRevisarTodo}
+                    title="Confirmar Revisión"
+                    message="¿Seguro que quieres pasar todos los equipos como revisados y OK?"
+                    confirmText="Sí, revisar todo"
                     cancelText="No, cancelar"
                 />
             )}
@@ -1501,6 +1711,14 @@ export default function RevisionChecklist() {
                 </div>
                 );
             })()}
+
+            {/* TOAST DE GUARDADO */}
+            {toastMessage && (
+                <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-[300] flex items-center gap-2 bg-slate-900 text-white px-5 py-3 rounded-2xl shadow-xl font-medium text-sm animate-in slide-in-from-bottom-5 fade-in duration-300">
+                    <CheckCircle2 className="w-5 h-5 text-green-400" />
+                    {toastMessage}
+                </div>
+            )}
         </div>
     );
 }
