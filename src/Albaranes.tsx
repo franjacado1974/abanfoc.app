@@ -6,8 +6,10 @@ import ConfirmationModal from './ConfirmationModal';
 
 const formatMoneda = (valor: number) => 
   new Intl.NumberFormat('es-ES', { 
-    style: 'currency', currency: 'EUR' 
-  }).format(valor || 0);
+    style: 'currency', currency: 'EUR',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number(valor) || 0);
 
 interface AlbaranesProps {
   isTecnicoMode?: boolean;
