@@ -507,16 +507,58 @@ export default function Catalogo({ isTecnicoMode = false }: CatalogoProps) {
               filteredArticulos.map(a => {
                 return (
                   <div key={a.id} className="flex flex-col md:flex-row md:items-center px-4 py-3 hover:bg-zinc-50/80 transition-colors group">
-                    <div className="flex md:hidden items-center justify-between mb-1">
-                      <span className="text-[10px] font-mono font-bold text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded">{a.codigo}</span>
-                    </div>
-                    <div className="flex md:hidden mb-1">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-bold text-zinc-900 truncate">{a.nombre}</p>
-                        <p className="text-xs text-zinc-500">{a.familia}</p>
+                    {/* Vista Móvil */}
+                    <div className="flex md:hidden flex-col gap-3 w-full">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-mono font-bold text-zinc-500 bg-zinc-100 px-2 py-0.5 rounded">{a.codigo}</span>
+                        <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${a.revisable ? 'bg-emerald-100 text-emerald-700' : 'bg-zinc-100 text-zinc-400'}`}>
+                          {a.revisable ? 'Revisable' : 'No revisable'}
+                        </span>
                       </div>
+                      
+                      <div className="flex items-start gap-3">
+                        {a.fotoUrl ? (
+                          <img src={a.fotoUrl} alt={a.nombre} className="w-14 h-14 rounded-lg object-cover border border-zinc-200 shrink-0 bg-white" />
+                        ) : (
+                          <div className="w-14 h-14 rounded-lg bg-zinc-100 border border-zinc-200 shrink-0 flex items-center justify-center">
+                            <Package className="w-6 h-6 text-zinc-400" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-bold text-zinc-900 leading-snug mb-1">{a.nombre}</p>
+                          <p className="text-[11px] text-zinc-500 bg-zinc-100 px-1.5 py-0.5 rounded w-fit inline-block">{a.familia || 'Sin familia'}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col gap-1 mt-1 p-2.5 bg-blue-50/50 rounded-xl border border-blue-100/50">
+                        {!isTecnicoMode && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-zinc-500 font-medium">Precio Compra</span>
+                            <span className="text-xs font-bold text-zinc-700">{formatMoneda(a.precioCompra)}</span>
+                          </div>
+                        )}
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-blue-900 font-medium">Precio Venta</span>
+                          <span className="text-sm font-bold text-blue-700">{formatMoneda(a.precioVenta)}</span>
+                        </div>
+                      </div>
+
+                      {!isTecnicoMode && (
+                        <div className="flex items-center justify-end gap-1.5 mt-2">
+                          <button onClick={() => handleDuplicate(a)} className="flex-1 py-2 text-zinc-600 bg-zinc-100 hover:bg-emerald-50 hover:text-emerald-700 rounded-lg text-[11px] font-bold transition-colors flex items-center justify-center gap-1.5">
+                            <Copy className="w-3.5 h-3.5" /> Copiar
+                          </button>
+                          <button onClick={() => handleOpenModal(a)} className="flex-1 py-2 text-zinc-600 bg-zinc-100 hover:bg-blue-50 hover:text-blue-700 rounded-lg text-[11px] font-bold transition-colors flex items-center justify-center gap-1.5">
+                            <Edit className="w-3.5 h-3.5" /> Editar
+                          </button>
+                          <button onClick={() => handleDelete(a.id)} className="px-3 py-2 text-red-600 bg-red-50 hover:bg-red-100 rounded-lg text-[11px] font-bold transition-colors flex items-center justify-center">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
                     </div>
 
+                    {/* Vista Escritorio */}
                     <div className="hidden md:flex items-center w-full">
                       <div className="w-24 shrink-0">
                         <span className="text-[11px] font-mono font-bold text-zinc-500 bg-zinc-100 px-1.5 py-0.5 rounded">{a.codigo}</span>
