@@ -55,14 +55,14 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
   const canvasTecnicoRef = useRef<HTMLCanvasElement>(null);
 
   // Column resizing state
-  const [colWidths, setColWidths] = useState<Record<string, number>>({
-    albaran: 120,
-    fecha: 100,
-    pedido: 90,
-    cliente: 240,
-    centro: 140,
-    estado: 100,
-    acciones: 200,
+  const [colWidths, setColWidths] = useState<Record<string, number | string>>({
+    albaran: '12%',
+    fecha: '10%',
+    pedido: '10%',
+    cliente: '25%',
+    centro: '18%',
+    estado: '10%',
+    acciones: '15%',
   });
   const resizingRef = useRef<{ key: string; startX: number; startWidth: number } | null>(null);
 
@@ -87,9 +87,11 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
     };
   }, []);
 
-  const handleMouseDownResize = (key: string, e: React.MouseEvent) => {
+  const handleMouseDownResize = (key: string, e: React.MouseEvent<HTMLDivElement>) => {
     e.preventDefault();
-    resizingRef.current = { key, startX: e.clientX, startWidth: colWidths[key] };
+    const parent = e.currentTarget.parentElement;
+    const startWidth = parent ? parent.offsetWidth : (typeof colWidths[key] === 'number' ? colWidths[key] as number : 100);
+    resizingRef.current = { key, startX: e.clientX, startWidth };
   };
 
   // State for confirmation modal
