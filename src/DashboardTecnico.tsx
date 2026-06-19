@@ -131,7 +131,7 @@ function DashboardHome({ loggedUser, onLogout, onNavigate }: DashboardTecnicoPro
       badgeBg: 'bg-orange-100',
       badgeText: 'text-orange-700',
       badgeLabel: 'Recursos',
-      clickable: false,
+      clickable: true,
       stats: [
         { label: 'Artículos y servicios', value: stats.catalogo },
       ],
