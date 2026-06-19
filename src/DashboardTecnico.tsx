@@ -6,6 +6,7 @@ import RevisionChecklist from './RevisionChecklist';
 import Albaranes from './Albaranes';
 import Clientes from './Clientes';
 import Centros from './Centros';
+import Catalogo from './Catalogo';
 
 interface Usuario {
   id: string;
@@ -19,7 +20,7 @@ interface DashboardTecnicoProps {
   onLogout: () => void;
 }
 
-type TecnicoView = 'dashboard' | 'partes' | 'albaranes' | 'clientes' | 'centros';
+type TecnicoView = 'dashboard' | 'partes' | 'albaranes' | 'clientes' | 'centros' | 'catalogo';
 
 // ─── PANTALLA PRINCIPAL DEL TÉCNICO ──────────────────────────────────────────
 function DashboardHome({ loggedUser, onLogout, onNavigate }: DashboardTecnicoProps & { onNavigate: (view: TecnicoView) => void }) {
@@ -320,6 +321,25 @@ function TecnicoApp({ loggedUser, onLogout }: DashboardTecnicoProps) {
         {/* Renderizamos Albaranes (que ya controla su propio layout/scroll) */}
         <div className="pb-20">
           <Albaranes isTecnicoMode={true} />
+        </div>
+      </div>
+    );
+  }
+
+  if (currentView === 'catalogo') {
+    return (
+      <div className="min-h-screen bg-zinc-50 relative">
+        <div className="sticky top-0 z-50 bg-white border-b border-zinc-200 px-4 py-3 flex items-center justify-between">
+          <button
+            onClick={() => setCurrentView('dashboard')}
+            className="flex items-center gap-2 text-zinc-600 font-semibold"
+          >
+            <span className="w-8 h-8 rounded-full bg-zinc-100 flex items-center justify-center">←</span>
+            Volver
+          </button>
+        </div>
+        <div className="pb-20">
+          <Catalogo isTecnicoMode={true} />
         </div>
       </div>
     );

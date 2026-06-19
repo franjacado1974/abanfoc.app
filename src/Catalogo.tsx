@@ -31,7 +31,11 @@ const formatMoneda = (valor: number) =>
     maximumFractionDigits: 2,
   }).format(Number(valor) || 0);
 
-export default function Catalogo() {
+interface CatalogoProps {
+  isTecnicoMode?: boolean;
+}
+
+export default function Catalogo({ isTecnicoMode = false }: CatalogoProps) {
   const [tab, setTab] = useState<'articulos' | 'servicios'>('articulos');
   const [articulos, setArticulos] = useState<Articulo[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -411,38 +415,40 @@ export default function Catalogo() {
               </span>
             </button>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <input 
-              type="file" 
-              ref={fileInputRef} 
-              onChange={handleImport} 
-              accept=".xlsx, .xls, .csv" 
-              className="hidden" 
-            />
-            <button 
-              onClick={() => fileInputRef.current?.click()}
-              className="flex items-center gap-1.5 bg-white border border-zinc-200 text-zinc-700 px-3.5 py-2 rounded-lg font-medium hover:bg-zinc-50 hover:border-zinc-300 transition-all text-xs shadow-sm"
-              title="Importar Excel"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Importar</span>
-            </button>
-            <button 
-              onClick={handleExport}
-              className="flex items-center gap-1.5 bg-white border border-zinc-200 text-zinc-700 px-3.5 py-2 rounded-lg font-medium hover:bg-zinc-50 hover:border-zinc-300 transition-all text-xs shadow-sm"
-              title="Exportar a Excel"
-            >
-              <Upload className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Exportar</span>
-            </button>
-            <button 
-              onClick={() => handleOpenModal()}
-              className="flex items-center gap-1.5 bg-black text-white px-4 py-2 rounded-lg font-medium hover:bg-zinc-800 transition-all text-xs shadow-md shadow-black/10"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Nuevo {tab === 'articulos' ? 'Artículo' : 'Servicio'}</span><span className="sm:hidden">Nuevo</span>
-            </button>
-          </div>
+          {!isTecnicoMode && (
+            <div className="flex flex-wrap items-center gap-2">
+              <input 
+                type="file" 
+                ref={fileInputRef} 
+                onChange={handleImport} 
+                accept=".xlsx, .xls, .csv" 
+                className="hidden" 
+              />
+              <button 
+                onClick={() => fileInputRef.current?.click()}
+                className="flex items-center gap-1.5 bg-white border border-zinc-200 text-zinc-700 px-3.5 py-2 rounded-lg font-medium hover:bg-zinc-50 hover:border-zinc-300 transition-all text-xs shadow-sm"
+                title="Importar Excel"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Importar</span>
+              </button>
+              <button 
+                onClick={handleExport}
+                className="flex items-center gap-1.5 bg-white border border-zinc-200 text-zinc-700 px-3.5 py-2 rounded-lg font-medium hover:bg-zinc-50 hover:border-zinc-300 transition-all text-xs shadow-sm"
+                title="Exportar a Excel"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Exportar</span>
+              </button>
+              <button 
+                onClick={() => handleOpenModal()}
+                className="flex items-center gap-1.5 bg-black text-white px-4 py-2 rounded-lg font-medium hover:bg-zinc-800 transition-all text-xs shadow-md shadow-black/10"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Nuevo {tab === 'articulos' ? 'Artículo' : 'Servicio'}</span><span className="sm:hidden">Nuevo</span>
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Buscador */}
@@ -465,10 +471,10 @@ export default function Catalogo() {
             <div className="w-24 shrink-0">Código</div>
             <div className="flex-1 min-w-0">Artículo</div>
             <div className="w-36 shrink-0">Familia</div>
-            <div className="w-28 shrink-0 text-right">P. Compra</div>
+            {!isTecnicoMode && <div className="w-28 shrink-0 text-right">P. Compra</div>}
             <div className="w-28 shrink-0 text-right">P. Venta</div>
             <div className="w-24 shrink-0 text-center">Revisable</div>
-            <div className="w-28 shrink-0 text-right">Acciones</div>
+            {!isTecnicoMode && <div className="w-28 shrink-0 text-right">Acciones</div>}
           </div>
 
           <div className="divide-y divide-zinc-200">
@@ -506,21 +512,23 @@ export default function Catalogo() {
                         <p className="text-sm font-bold text-zinc-900 truncate group-hover:text-blue-900 transition-colors">{a.nombre}</p>
                       </div>
                       <div className="w-36 shrink-0 text-sm text-zinc-600 truncate pr-2">{a.familia || '-'}</div>
-                      <div className="w-28 shrink-0 text-sm text-zinc-600 text-right pr-2">{formatMoneda(a.precioCompra)}</div>
+                      {!isTecnicoMode && <div className="w-28 shrink-0 text-sm text-zinc-600 text-right pr-2">{formatMoneda(a.precioCompra)}</div>}
                       <div className="w-28 shrink-0 text-sm text-zinc-600 text-right pr-2">{formatMoneda(a.precioVenta)}</div>
                       <div className="w-24 shrink-0 text-center">
                         <span className={`text-[11px] px-1.5 py-0.5 rounded font-bold ${a.revisable ? 'bg-emerald-100 text-emerald-700' : 'bg-zinc-100 text-zinc-400'}`}>
                           {a.revisable ? 'Sí' : 'No'}
                         </span>
                       </div>
-                      <div className="w-28 shrink-0 flex items-center justify-end gap-1">
-                        <button onClick={() => handleOpenModal(a)} className="p-1.5 text-zinc-400 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors">
-                          <Edit className="w-4 h-4" />
-                        </button>
-                        <button onClick={() => handleDelete(a.id)} className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+                      {!isTecnicoMode && (
+                        <div className="w-28 shrink-0 flex items-center justify-end gap-1">
+                          <button onClick={() => handleOpenModal(a)} className="p-1.5 text-zinc-400 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors">
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button onClick={() => handleDelete(a.id)} className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
