@@ -9,9 +9,13 @@ const MESES = [
 ];
 
 // Helper para formatear moneda en español (punto para miles, coma para decimales)
-const formatM = (valor: number) => new Intl.NumberFormat('es-ES', { 
-  style: 'currency', currency: 'EUR' 
-}).format(valor || 0);
+const formatM = (valor: any) => {
+  const num = typeof valor === 'string' ? parseFloat(valor.replace(',', '.')) : Number(valor);
+  if (isNaN(num)) return '0,00 €';
+  const parts = num.toFixed(2).split('.');
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return `${parts.join(',')} €`;
+};
 
 // ============ DATOS DE EMPRESA MANTENEDORA (guardados en localStorage) ============
 export function cargaDatosEmpresa(): Record<string, any> | null {

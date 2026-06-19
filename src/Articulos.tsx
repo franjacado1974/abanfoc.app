@@ -23,12 +23,13 @@ export interface Articulo {
   revisable: boolean;
 }
 
-const formatMoneda = (valor: number) => 
-  new Intl.NumberFormat('es-ES', { 
-    style: 'currency', currency: 'EUR',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(Number(valor) || 0);
+const formatMoneda = (valor: any) => {
+  const num = typeof valor === 'string' ? parseFloat(valor.replace(',', '.')) : Number(valor);
+  if (isNaN(num)) return '0,00 €';
+  const parts = num.toFixed(2).split('.');
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return `${parts.join(',')} €`;
+};
 
 export default function Articulos() {
   const navigate = useNavigate();
