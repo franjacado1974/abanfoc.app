@@ -143,6 +143,7 @@ export interface PresupuestoLinea {
   codigo?: string;
   concepto: string;
   descripcion?: string;
+  fotoUrl?: string;
   cantidad: number;
   precioUnidad: number;
   subtotal: number;

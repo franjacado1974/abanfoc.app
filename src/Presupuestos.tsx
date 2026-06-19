@@ -293,6 +293,7 @@ export default function Presupuestos() {
       tipo,
       codigo: item.codigo,
       concepto: item.nombre,
+      fotoUrl: item.fotoUrl,
       cantidad: 1,
       precioUnidad: item.precioVenta,
       subtotal: item.precioVenta, // Se recalculará al cambiar cantidad/precio
@@ -738,7 +739,7 @@ export default function Presupuestos() {
                     <table className="w-full text-xs">
                       <thead>
                         <tr className="bg-zinc-50 text-zinc-500 font-bold uppercase tracking-wider">
-                          <th className="px-3 py-2 text-left w-8">Tipo</th>
+                          <th className="px-3 py-2 text-left w-12">Tipo</th>
                           <th className="px-3 py-2 text-left">Concepto</th>
                           <th className="px-3 py-2 text-center w-16">Cant.</th>
                           <th className="px-3 py-2 text-right w-28">Precio</th>
@@ -750,9 +751,13 @@ export default function Presupuestos() {
                         {formLineas.map((l, i) => (
                           <tr key={l.id} className={i % 2 === 0 ? 'bg-white' : 'bg-zinc-50/30'}>
                             <td className="px-3 py-2">
-                              {l.tipo === 'articulo' ? <Package className="w-3.5 h-3.5 text-orange-500" /> :
-                               l.tipo === 'servicio' ? <Wrench className="w-3.5 h-3.5 text-blue-500" /> :
-                               <Type className="w-3.5 h-3.5 text-zinc-400" />}
+                              {l.fotoUrl ? (
+                                <img src={l.fotoUrl} alt={l.concepto} className="w-8 h-8 rounded-md object-cover border border-zinc-200 shrink-0 bg-white" />
+                              ) : (
+                                l.tipo === 'articulo' ? <Package className="w-3.5 h-3.5 text-orange-500" /> :
+                                l.tipo === 'servicio' ? <Wrench className="w-3.5 h-3.5 text-blue-500" /> :
+                                <Type className="w-3.5 h-3.5 text-zinc-400" />
+                              )}
                             </td>
                             <td className="px-3 py-2">
                               <p className="text-zinc-800 font-medium truncate max-w-[300px]">{l.concepto}</p>
