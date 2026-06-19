@@ -538,18 +538,18 @@ export default function Catalogo({ isTecnicoMode = false }: CatalogoProps) {
                         </div>
                       </div>
 
-                      {!isTecnicoMode && (
-                        <div className="flex flex-col gap-1 mt-1 p-2.5 bg-blue-50/50 rounded-xl border border-blue-100/50">
+                      <div className="flex flex-col gap-1 mt-1 p-2.5 bg-blue-50/50 rounded-xl border border-blue-100/50">
+                        {!isTecnicoMode && (
                           <div className="flex items-center justify-between">
                             <span className="text-xs text-zinc-500 font-medium">Precio Compra</span>
                             <span className="text-xs font-bold text-zinc-700">{formatMoneda(a.precioCompra)}</span>
                           </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs text-blue-900 font-medium">Precio Venta</span>
-                            <span className="text-sm font-bold text-blue-700">{formatMoneda(a.precioVenta)}</span>
-                          </div>
+                        )}
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-blue-900 font-medium">Precio Venta</span>
+                          <span className="text-sm font-bold text-blue-700">{formatMoneda(a.precioVenta)}</span>
                         </div>
-                      )}
+                      </div>
 
                       {!isTecnicoMode && (
                         <div className="flex items-center justify-end gap-1.5 mt-2">
@@ -806,6 +806,13 @@ export default function Catalogo({ isTecnicoMode = false }: CatalogoProps) {
                   <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider block mb-1">Nombre / Descripción</label>
                   <p className="text-sm font-bold text-zinc-900 leading-relaxed">
                     {viewArticuloModal.nombre}
+                  </p>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-blue-900 uppercase tracking-wider block mb-1">Precio Venta</label>
+                  <p className="text-xl font-bold text-blue-700">
+                    {formatMoneda(viewArticuloModal.precioVenta)}
                   </p>
                 </div>
               </div>
