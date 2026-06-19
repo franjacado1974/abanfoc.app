@@ -37,6 +37,7 @@ export interface Articulo {
   precioCompra: number;
   precioVenta: number;
   revisable: boolean;
+  fotoUrl?: string;
 }
 
 export interface Familia {

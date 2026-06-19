@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Package, Wrench, Plus, Search, Edit, Trash2, X, Download, Upload } from 'lucide-react';
+import { Package, Wrench, Plus, Search, Edit, Trash2, X, Download, Upload, Image as ImageIcon } from 'lucide-react';
 import ConfirmationModal from './ConfirmationModal';
 import * as XLSX from 'xlsx';
 import { 
@@ -8,6 +8,7 @@ import {
   deleteArticulo, 
   getArticulos,
   subscribeSistemasCategorias,
+  uploadFile
 } from './firebase';
 import { type SistemaCategoria } from './Sistemas';
 
@@ -20,6 +21,7 @@ export interface Articulo {
   precioCompra: number;
   precioVenta: number;
   revisable: boolean;
+  fotoUrl?: string;
 }
 
 const formatMoneda = (valor: number) => 
@@ -40,6 +42,9 @@ export default function Catalogo() {
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingArticulo, setEditingArticulo] = useState<Articulo | null>(null);
+  const [fotoFile, setFotoFile] = useState<File | null>(null);
+  const [fotoPreview, setFotoPreview] = useState<string>('');
+  const [isSaving, setIsSaving] = useState(false);
   
   // Form state
   const [formData, setFormData] = useState({
@@ -49,7 +54,8 @@ export default function Catalogo() {
     familia: '',
     precioCompra: '',
     precioVenta: '',
-    revisable: true
+    revisable: true,
+    fotoUrl: ''
   });
   
   // State for confirmation modal
@@ -138,18 +144,36 @@ export default function Catalogo() {
         familia: articulo.familia,
         precioCompra: articulo.precioCompra.toString(),
         precioVenta: articulo.precioVenta.toString(),
-        revisable: articulo.revisable
+        revisable: articulo.revisable,
+        fotoUrl: articulo.fotoUrl || ''
       });
+      setFotoPreview(articulo.fotoUrl || '');
     } else {
       setEditingArticulo(null);
-      setFormData({ codigo: '', nombre: '', familiaId: '', familia: '', precioCompra: '', precioVenta: '', revisable: true });
+      setFormData({ codigo: '', nombre: '', familiaId: '', familia: '', precioCompra: '', precioVenta: '', revisable: true, fotoUrl: '' });
+      setFotoPreview('');
     }
+    setFotoFile(null);
     setIsModalOpen(true);
   };
 
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setEditingArticulo(null);
+    setFotoFile(null);
+    setFotoPreview('');
+  };
+
+  const handleFotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setFotoFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFotoPreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -159,25 +183,39 @@ export default function Catalogo() {
       return;
     }
 
-    const newArticulo: Articulo = {
-      id: editingArticulo ? editingArticulo.id : crypto.randomUUID(),
-      codigo: formData.codigo.trim(),
-      nombre: formData.nombre.trim(),
-      familiaId: formData.familiaId && formData.familiaId !== '__current__' ? formData.familiaId : undefined,
-      familia: formData.familia.trim(),
-      precioCompra: parseFloat(formData.precioCompra) || 0,
-      precioVenta: parseFloat(formData.precioVenta) || 0,
-      revisable: formData.revisable
-    };
+    setIsSaving(true);
+    try {
+      let url = formData.fotoUrl;
+      if (fotoFile) {
+        url = await uploadFile(fotoFile, `articulos/${crypto.randomUUID()}_${fotoFile.name}`);
+      }
 
-    if (editingArticulo) {
-      const updatedArticulos = articulos.map(a => a.id === editingArticulo.id ? newArticulo : a);
-      await saveToDb(updatedArticulos);
-    } else {
-      const updatedArticulos = [...articulos, newArticulo];
-      await saveToDb(updatedArticulos);
+      const newArticulo: Articulo = {
+        id: editingArticulo ? editingArticulo.id : crypto.randomUUID(),
+        codigo: formData.codigo.trim(),
+        nombre: formData.nombre.trim(),
+        familiaId: formData.familiaId && formData.familiaId !== '__current__' ? formData.familiaId : undefined,
+        familia: formData.familia.trim(),
+        precioCompra: parseFloat(formData.precioCompra) || 0,
+        precioVenta: parseFloat(formData.precioVenta) || 0,
+        revisable: formData.revisable,
+        fotoUrl: url
+      };
+
+      if (editingArticulo) {
+        const updatedArticulos = articulos.map(a => a.id === editingArticulo.id ? newArticulo : a);
+        await saveToDb(updatedArticulos);
+      } else {
+        const updatedArticulos = [...articulos, newArticulo];
+        await saveToDb(updatedArticulos);
+      }
+      handleCloseModal();
+    } catch (error) {
+      console.error('Error al guardar articulo:', error);
+      alert('Hubo un error al guardar el artículo. Por favor, inténtalo de nuevo.');
+    } finally {
+      setIsSaving(false);
     }
-    handleCloseModal();
   };
 
   const handleDelete = (id: string) => {
@@ -329,7 +367,7 @@ export default function Catalogo() {
     };
 
   return (
-    <div className="min-h-screen bg-fuchsia-50/40 p-4 md:p-6">
+    <div className="min-h-screen bg-blue-50/40 p-4 md:p-6">
       <div className="w-full">
         {/* Header */}
         <div className="mb-6 text-center">
@@ -436,8 +474,8 @@ export default function Catalogo() {
           <div className="divide-y divide-zinc-200">
             {filteredArticulos.length === 0 ? (
               <div className="p-12 text-center">
-                <Package className="w-12 h-12 text-fuchsia-200 mx-auto mb-3" />
-                <p className="text-fuchsia-900/50 font-medium">No hay artículos registrados</p>
+                <Package className="w-12 h-12 text-blue-200 mx-auto mb-3" />
+                <p className="text-blue-900/50 font-medium">No hay artículos registrados</p>
               </div>
             ) : (
               filteredArticulos.map(a => {
@@ -457,8 +495,15 @@ export default function Catalogo() {
                       <div className="w-24 shrink-0">
                         <span className="text-[11px] font-mono font-bold text-zinc-500 bg-zinc-100 px-1.5 py-0.5 rounded">{a.codigo}</span>
                       </div>
-                      <div className="flex-1 min-w-0 pr-2">
-                        <p className="text-sm font-bold text-zinc-900 truncate group-hover:text-fuchsia-900 transition-colors">{a.nombre}</p>
+                      <div className="flex-1 min-w-0 pr-2 flex items-center gap-3">
+                        {a.fotoUrl ? (
+                          <img src={a.fotoUrl} alt={a.nombre} className="w-8 h-8 rounded-lg object-cover border border-zinc-200 shrink-0 bg-white" />
+                        ) : (
+                          <div className="w-8 h-8 rounded-lg bg-zinc-100 border border-zinc-200 shrink-0 flex items-center justify-center">
+                            <Package className="w-4 h-4 text-zinc-400" />
+                          </div>
+                        )}
+                        <p className="text-sm font-bold text-zinc-900 truncate group-hover:text-blue-900 transition-colors">{a.nombre}</p>
                       </div>
                       <div className="w-36 shrink-0 text-sm text-zinc-600 truncate pr-2">{a.familia || '-'}</div>
                       <div className="w-28 shrink-0 text-sm text-zinc-600 text-right pr-2">{formatMoneda(a.precioCompra)}</div>
@@ -469,7 +514,7 @@ export default function Catalogo() {
                         </span>
                       </div>
                       <div className="w-28 shrink-0 flex items-center justify-end gap-1">
-                        <button onClick={() => handleOpenModal(a)} className="p-1.5 text-zinc-400 hover:text-fuchsia-700 hover:bg-fuchsia-50 rounded-lg transition-colors">
+                        <button onClick={() => handleOpenModal(a)} className="p-1.5 text-zinc-400 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors">
                           <Edit className="w-4 h-4" />
                         </button>
                         <button onClick={() => handleDelete(a.id)} className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors">
@@ -487,38 +532,58 @@ export default function Catalogo() {
 
       {/* Modal Formulario */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-fuchsia-950/20 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-blue-950/20 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div className="px-6 py-4 border-b border-fuchsia-100 flex items-center justify-between bg-fuchsia-50/30">
-              <h2 className="text-xl font-bold text-fuchsia-950">
+            <div className="px-6 py-4 border-b border-blue-100 flex items-center justify-between bg-blue-50/30">
+              <h2 className="text-xl font-bold text-blue-950">
                 {editingArticulo ? 'Editar Artículo' : 'Nuevo Artículo'}
               </h2>
-              <button onClick={handleCloseModal} className="p-2 text-fuchsia-400 hover:text-fuchsia-700 hover:bg-white rounded-xl transition-colors">
+              <button onClick={handleCloseModal} className="p-2 text-blue-400 hover:text-blue-700 hover:bg-white rounded-xl transition-colors">
                 <X className="w-5 h-5" />
               </button>
             </div>
             
             <form onSubmit={handleSave} className="p-6 space-y-4">
+              <div className="flex flex-col items-center gap-3">
+                <label className="text-sm font-medium text-blue-950 w-full">Foto del Artículo</label>
+                <div className="relative w-full h-40 bg-blue-50/50 border-2 border-dashed border-blue-200 rounded-xl flex items-center justify-center overflow-hidden hover:bg-blue-50 transition-colors group cursor-pointer">
+                  {fotoPreview ? (
+                    <img src={fotoPreview} alt="Vista previa" className="w-full h-full object-contain p-2" />
+                  ) : (
+                    <div className="flex flex-col items-center text-blue-400 group-hover:text-blue-600 transition-colors">
+                      <ImageIcon className="w-8 h-8 mb-2" />
+                      <span className="text-sm font-medium">Subir Imagen</span>
+                    </div>
+                  )}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFotoChange}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  />
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-fuchsia-950">Código</label>
+                  <label className="text-sm font-medium text-blue-950">Código</label>
                   <input
                     required
                     type="text"
                     value={formData.codigo}
                     onChange={e => setFormData({...formData, codigo: e.target.value})}
-                    className="w-full px-4 py-2.5 bg-fuchsia-50/50 border border-fuchsia-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-fuchsia-500/20 focus:border-fuchsia-500 transition-all text-fuchsia-950"
+                    className="w-full px-4 py-2.5 bg-blue-50/50 border border-blue-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-blue-950"
                     placeholder="Ej: EXT-001"
                   />
                 </div>
                   <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-fuchsia-950">Familia</label>
+                    <label className="text-sm font-medium text-blue-950">Familia</label>
                     <select
                       required
                       value={formData.familiaId || (formData.familia ? '__current__' : '')}
                       disabled={isFamiliasLoading || selectFamiliaOptions.length === 0}
                       onChange={e => handleFamiliaChange(e.target.value)}
-                      className="w-full px-4 py-2.5 bg-fuchsia-50/50 border border-fuchsia-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-fuchsia-500/20 focus:border-fuchsia-500 transition-all text-fuchsia-950 disabled:opacity-60 disabled:cursor-not-allowed"
+                      className="w-full px-4 py-2.5 bg-blue-50/50 border border-blue-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-blue-950 disabled:opacity-60 disabled:cursor-not-allowed"
                     >
                       <option value="">
                         {isFamiliasLoading ? 'Cargando familias...' : '-- Selecciona familia --'}
@@ -536,20 +601,20 @@ export default function Catalogo() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-fuchsia-950">Nombre / Descripción</label>
+                <label className="text-sm font-medium text-blue-950">Nombre / Descripción</label>
                 <input
                   required
                   type="text"
                   value={formData.nombre}
                   onChange={e => setFormData({...formData, nombre: e.target.value})}
-                  className="w-full px-4 py-2.5 bg-fuchsia-50/50 border border-fuchsia-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-fuchsia-500/20 focus:border-fuchsia-500 transition-all text-fuchsia-950"
+                  className="w-full px-4 py-2.5 bg-blue-50/50 border border-blue-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-blue-950"
                   placeholder="Ej: Extintor Polvo ABC 6kg"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4 pt-2">
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-fuchsia-950">Precio Compra (€)</label>
+                  <label className="text-sm font-medium text-blue-950">Precio Compra (€)</label>
                   <input
                     required
                     type="number"
@@ -557,12 +622,12 @@ export default function Catalogo() {
                     min="0"
                     value={formData.precioCompra}
                     onChange={e => setFormData({...formData, precioCompra: e.target.value})}
-                    className="w-full px-4 py-2.5 bg-fuchsia-50/50 border border-fuchsia-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-fuchsia-500/20 focus:border-fuchsia-500 transition-all text-fuchsia-950"
+                    className="w-full px-4 py-2.5 bg-blue-50/50 border border-blue-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-blue-950"
                     placeholder="0.00"
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-fuchsia-950">Precio Venta s/IVA (€)</label>
+                  <label className="text-sm font-medium text-blue-950">Precio Venta s/IVA (€)</label>
                   <input
                     required
                     type="number"
@@ -570,25 +635,25 @@ export default function Catalogo() {
                     min="0"
                     value={formData.precioVenta}
                     onChange={e => setFormData({...formData, precioVenta: e.target.value})}
-                    className="w-full px-4 py-2.5 bg-fuchsia-50/50 border border-fuchsia-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-fuchsia-500/20 focus:border-fuchsia-500 transition-all text-fuchsia-950"
+                    className="w-full px-4 py-2.5 bg-blue-50/50 border border-blue-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-blue-950"
                     placeholder="0.00"
                   />
                 </div>
                </div>
 
                <div className="flex items-center gap-4">
-                 <label className="text-sm font-medium text-fuchsia-950">Equipo revisable en los mantenimientos</label>
+                 <label className="text-sm font-medium text-blue-950">Equipo revisable en los mantenimientos</label>
                  <input
                    type="checkbox"
                    checked={formData.revisable}
                    onChange={e => setFormData({...formData, revisable: e.target.checked})}
-                   className="w-4 h-4 text-fuchsia-600"
+                   className="w-4 h-4 text-blue-600"
                  />
                </div>
 
-              <div className="mt-2 p-3 bg-fuchsia-50 rounded-xl border border-fuchsia-200/50 flex justify-between items-center">
-                <span className="text-xs font-medium text-fuchsia-700">Precio Final (IVA 21%)</span>
-                <span className="text-lg font-bold text-fuchsia-900">
+              <div className="mt-2 p-3 bg-blue-50 rounded-xl border border-blue-200/50 flex justify-between items-center">
+                <span className="text-xs font-medium text-blue-700">Precio Final (IVA 21%)</span>
+                <span className="text-lg font-bold text-blue-900">
                   {formData.precioVenta ? formatMoneda(parseFloat(formData.precioVenta) * 1.21) : formatMoneda(0)}
                 </span>
               </div>
@@ -597,15 +662,16 @@ export default function Catalogo() {
                 <button
                   type="button"
                   onClick={handleCloseModal}
-                  className="flex-1 px-4 py-2.5 text-fuchsia-700 bg-fuchsia-50 hover:bg-fuchsia-100 rounded-xl font-medium transition-colors"
+                  className="flex-1 px-4 py-2.5 text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-xl font-medium transition-colors"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 px-4 py-2.5 text-white bg-fuchsia-600 hover:bg-fuchsia-700 rounded-xl font-medium transition-colors shadow-sm"
+                  disabled={isSaving}
+                  className="flex-1 px-4 py-2.5 text-white bg-blue-600 hover:bg-blue-700 rounded-xl font-medium transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
-                  Guardar
+                  {isSaving ? 'Guardando...' : 'Guardar'}
                 </button>
               </div>
             </form>
