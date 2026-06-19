@@ -56,13 +56,13 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
 
   // Column resizing state
   const [colWidths, setColWidths] = useState<Record<string, number | string>>({
-    albaran: '12%',
-    fecha: '10%',
-    pedido: '10%',
-    centro: '20%',
-    titulo: '23%',
-    estado: '10%',
-    acciones: '15%',
+    albaran: 100,
+    fecha: 90,
+    pedido: 90,
+    centro: 160,
+    titulo: 200,
+    estado: 100,
+    acciones: 120,
   });
   const resizingRef = useRef<{ key: string; startX: number; startWidth: number } | null>(null);
 
@@ -443,6 +443,7 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                 <div>Título</div>
                 <div className="absolute top-0 right-0 h-full w-4 -mr-2 cursor-col-resize border-l-2 border-dashed border-zinc-600" onMouseDown={(e) => handleMouseDownResize('titulo', e)} />
               </div>
+              <div className="flex-1 min-w-0"></div>
               {!isTecnicoMode && (
                 <div className="relative text-center pr-3 select-none" style={{ width: colWidths.estado }}>
                   <div>Estado</div>
@@ -484,6 +485,7 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                       <div className="pr-3 text-sm text-zinc-600 truncate" style={{ width: colWidths.pedido }}>{alb.numeroPedido || '-'}</div>
                       <div className="pr-3 text-sm text-zinc-600 truncate flex items-center gap-1" style={{ width: colWidths.centro }}><MapPin className="w-3 h-3 text-zinc-400 shrink-0" />{centro?.nombre || cliente?.nombre || 'Desconocido'}</div>
                       <div className="pr-3 min-w-0" style={{ width: colWidths.titulo }}><p className="text-sm font-bold text-zinc-900 truncate">{alb.titulo || '-'}</p></div>
+                      <div className="flex-1 min-w-0"></div>
                       {!isTecnicoMode && (
                         <div className="flex justify-center pr-2" style={{ width: colWidths.estado }}>
                           <button onClick={() => toggleFacturado(alb.id)} className={`text-[10px] font-bold px-2 py-1 rounded-lg border flex items-center gap-1 ${
