@@ -62,6 +62,9 @@ export default function Catalogo({ isTecnicoMode = false }: CatalogoProps) {
     fotoUrl: ''
   });
   
+  // State for view modal (Tecnico mode)
+  const [viewArticuloModal, setViewArticuloModal] = useState<Articulo | null>(null);
+
   // State for confirmation modal
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [articuloIdToDelete, setArticuloIdToDelete] = useState<string | null>(null);
@@ -508,12 +511,17 @@ export default function Catalogo({ isTecnicoMode = false }: CatalogoProps) {
                 return (
                   <div key={a.id} className="flex flex-col md:flex-row md:items-center px-4 py-3 hover:bg-zinc-50/80 transition-colors group">
                     {/* Vista Móvil */}
-                    <div className="flex md:hidden flex-col gap-3 w-full">
+                    <div 
+                      className={`flex md:hidden flex-col gap-3 w-full ${isTecnicoMode ? 'cursor-pointer' : ''}`}
+                      onClick={() => { if (isTecnicoMode) setViewArticuloModal(a); }}
+                    >
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-mono font-bold text-zinc-500 bg-zinc-100 px-2 py-0.5 rounded">{a.codigo}</span>
-                        <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${a.revisable ? 'bg-emerald-100 text-emerald-700' : 'bg-zinc-100 text-zinc-400'}`}>
-                          {a.revisable ? 'Revisable' : 'No revisable'}
-                        </span>
+                        {!isTecnicoMode && (
+                          <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${a.revisable ? 'bg-emerald-100 text-emerald-700' : 'bg-zinc-100 text-zinc-400'}`}>
+                            {a.revisable ? 'Revisable' : 'No revisable'}
+                          </span>
+                        )}
                       </div>
                       
                       <div className="flex items-start gap-3">
@@ -530,18 +538,18 @@ export default function Catalogo({ isTecnicoMode = false }: CatalogoProps) {
                         </div>
                       </div>
 
-                      <div className="flex flex-col gap-1 mt-1 p-2.5 bg-blue-50/50 rounded-xl border border-blue-100/50">
-                        {!isTecnicoMode && (
+                      {!isTecnicoMode && (
+                        <div className="flex flex-col gap-1 mt-1 p-2.5 bg-blue-50/50 rounded-xl border border-blue-100/50">
                           <div className="flex items-center justify-between">
                             <span className="text-xs text-zinc-500 font-medium">Precio Compra</span>
                             <span className="text-xs font-bold text-zinc-700">{formatMoneda(a.precioCompra)}</span>
                           </div>
-                        )}
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs text-blue-900 font-medium">Precio Venta</span>
-                          <span className="text-sm font-bold text-blue-700">{formatMoneda(a.precioVenta)}</span>
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-blue-900 font-medium">Precio Venta</span>
+                            <span className="text-sm font-bold text-blue-700">{formatMoneda(a.precioVenta)}</span>
+                          </div>
                         </div>
-                      </div>
+                      )}
 
                       {!isTecnicoMode && (
                         <div className="flex items-center justify-end gap-1.5 mt-2">
@@ -748,6 +756,70 @@ export default function Catalogo({ isTecnicoMode = false }: CatalogoProps) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Vista Detalle (Tecnico) */}
+      {viewArticuloModal && (
+        <div className="fixed inset-0 bg-blue-950/20 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="px-6 py-4 border-b border-blue-100 flex items-center justify-between bg-blue-50/30">
+              <h2 className="text-xl font-bold text-blue-950">
+                Información del Artículo
+              </h2>
+              <button onClick={() => setViewArticuloModal(null)} className="p-2 text-blue-400 hover:text-blue-700 hover:bg-white rounded-xl transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-5">
+              <div className="flex flex-col items-center gap-3">
+                {viewArticuloModal.fotoUrl ? (
+                  <div className="w-full h-48 bg-zinc-50 border border-zinc-200 rounded-xl overflow-hidden flex items-center justify-center p-2">
+                    <img src={viewArticuloModal.fotoUrl} alt={viewArticuloModal.nombre} className="w-full h-full object-contain" />
+                  </div>
+                ) : (
+                  <div className="w-full h-48 bg-zinc-50 border border-zinc-200 rounded-xl flex flex-col items-center justify-center text-zinc-400">
+                    <Package className="w-12 h-12 mb-2 opacity-50" />
+                    <span className="text-sm font-medium">Sin imagen</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-zinc-50 rounded-xl p-4 border border-zinc-100 space-y-4">
+                <div>
+                  <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider block mb-1">Código</label>
+                  <p className="text-sm font-mono font-bold text-zinc-800 bg-white px-2 py-1 rounded border border-zinc-200 w-fit">
+                    {viewArticuloModal.codigo}
+                  </p>
+                </div>
+                
+                <div>
+                  <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider block mb-1">Familia</label>
+                  <p className="text-sm font-medium text-zinc-800">
+                    {viewArticuloModal.familia || 'Sin familia'}
+                  </p>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider block mb-1">Nombre / Descripción</label>
+                  <p className="text-sm font-bold text-zinc-900 leading-relaxed">
+                    {viewArticuloModal.nombre}
+                  </p>
+                </div>
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => setViewArticuloModal(null)}
+                  className="w-full px-4 py-3 text-white bg-blue-600 hover:bg-blue-700 rounded-xl font-medium transition-colors shadow-sm"
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
