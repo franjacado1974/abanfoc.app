@@ -490,7 +490,7 @@ export default function Catalogo({ isTecnicoMode = false }: CatalogoProps) {
 
         {/* Lista de Artículos */}
         <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden overflow-x-auto">
-          <div className="hidden md:flex items-center bg-[#f9f7f4] border-b-2 border-zinc-200 px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-zinc-500">
+          <div className={`${isTecnicoMode ? 'hidden' : 'hidden md:flex'} items-center bg-[#f9f7f4] border-b-2 border-zinc-200 px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-zinc-500`}>
             <div className="w-24 shrink-0">Código</div>
             <div className="flex-1 min-w-0">Artículo</div>
             <div className="w-36 shrink-0">Familia</div>
@@ -510,9 +510,9 @@ export default function Catalogo({ isTecnicoMode = false }: CatalogoProps) {
               filteredArticulos.map(a => {
                 return (
                   <div key={a.id} className="flex flex-col md:flex-row md:items-center px-4 py-3 hover:bg-zinc-50/80 transition-colors group">
-                    {/* Vista Móvil */}
+                    {/* Vista Móvil / Tarjeta (Forzada para técnico) */}
                     <div 
-                      className={`flex md:hidden flex-col gap-3 w-full ${isTecnicoMode ? 'cursor-pointer' : ''}`}
+                      className={`flex ${isTecnicoMode ? '' : 'md:hidden'} flex-col gap-3 w-full ${isTecnicoMode ? 'cursor-pointer' : ''}`}
                       onClick={() => { if (isTecnicoMode) setViewArticuloModal(a); }}
                     >
                       <div className="flex items-center justify-between">
@@ -567,7 +567,7 @@ export default function Catalogo({ isTecnicoMode = false }: CatalogoProps) {
                     </div>
 
                     {/* Vista Escritorio */}
-                    <div className="hidden md:flex items-center w-full">
+                    <div className={`${isTecnicoMode ? 'hidden' : 'hidden md:flex'} items-center w-full`}>
                       <div className="w-24 shrink-0">
                         <span className="text-[11px] font-mono font-bold text-zinc-500 bg-zinc-100 px-1.5 py-0.5 rounded">{a.codigo}</span>
                       </div>
