@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Package, Wrench, Plus, Search, Edit, Trash2, X, Download, Upload, Image as ImageIcon } from 'lucide-react';
+import { Package, Wrench, Plus, Search, Edit, Trash2, X, Download, Upload, Image as ImageIcon, Copy } from 'lucide-react';
 import ConfirmationModal from './ConfirmationModal';
 import * as XLSX from 'xlsx';
 import { 
@@ -220,6 +220,26 @@ export default function Catalogo({ isTecnicoMode = false }: CatalogoProps) {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleDuplicate = async (articulo: Articulo) => {
+    const duplicatedArticulo: Articulo = {
+      ...articulo,
+      id: crypto.randomUUID(),
+      codigo: `${articulo.codigo}-COPIA`,
+      nombre: `${articulo.nombre} (Copia)`
+    };
+    
+    // Insertar justo después del original
+    const index = articulos.findIndex(a => a.id === articulo.id);
+    const newArticulos = [...articulos];
+    if (index !== -1) {
+      newArticulos.splice(index + 1, 0, duplicatedArticulo);
+    } else {
+      newArticulos.push(duplicatedArticulo);
+    }
+    
+    await saveToDb(newArticulos);
   };
 
   const handleDelete = (id: string) => {
@@ -521,10 +541,13 @@ export default function Catalogo({ isTecnicoMode = false }: CatalogoProps) {
                       </div>
                       {!isTecnicoMode && (
                         <div className="w-28 shrink-0 flex items-center justify-end gap-1">
-                          <button onClick={() => handleOpenModal(a)} className="p-1.5 text-zinc-400 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors">
+                          <button onClick={() => handleDuplicate(a)} className="p-1.5 text-zinc-400 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors" title="Duplicar">
+                            <Copy className="w-4 h-4" />
+                          </button>
+                          <button onClick={() => handleOpenModal(a)} className="p-1.5 text-zinc-400 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors" title="Editar">
                             <Edit className="w-4 h-4" />
                           </button>
-                          <button onClick={() => handleDelete(a.id)} className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors">
+                          <button onClick={() => handleDelete(a.id)} className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors" title="Borrar">
                             <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
