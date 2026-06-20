@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, Save, Building2, Layers, MapPin, FileText, ChevronDown, ChevronUp, Plus, X, CheckCircle2, XCircle, Trash2, AlertTriangle, Pencil, PenLine, RotateCcw, CheckCheck, Lock } from 'lucide-react';
+import { ArrowLeft, Save, Layers, ChevronDown, ChevronUp, Plus, X, CheckCircle2, XCircle, Trash2, AlertTriangle, Pencil, PenLine, RotateCcw, CheckCheck, Lock } from 'lucide-react';
 import { addEquipoInstalado, addAlbaran, updateEquipoInstalado, updateParte as updateParteFirestore, subscribePartes, subscribeCentros, subscribeClientes, subscribeCentroSistemas, subscribeEquiposInstalados, subscribeArticulos, subscribeSistemasCategorias, uploadFile, generateNumeroMantenimiento, type Albaran, type ChecklistItem } from './firebase';
 import { subscribePlantillas, subscribeItemsDePlantilla, type ItemPlantilla } from './plantillas';
 import type { Centro, Parte, Cliente, CentroSistema, EquipoInstalado } from './Centros';
@@ -775,17 +775,14 @@ export default function RevisionChecklist() {
                             Revisión del parte: <span className="text-slate-500 font-mono text-lg">{parte.numeroMantenimiento || parte.id}</span>
                         </h1>
                         
-                        <div className="mt-4 space-y-2">
-                            <div className="flex items-center gap-2 text-sm font-semibold text-slate-700 uppercase tracking-wider">
-                                <Building2 className="w-4 h-4 text-slate-400" />
+                        <div className="mt-4">
+                            <div className="text-lg font-bold text-slate-700">
                                 {clientInfo?.nombre || 'Cliente'} - {centro.nombre}
                             </div>
-                            <div className="flex items-center gap-2 text-sm text-slate-500">
-                                <MapPin className="w-4 h-4 text-slate-400" />
+                            <div className="text-sm text-slate-500 mt-1">
                                 {centro.direccion}, {centro.poblacion}
                             </div>
-                            <div className="flex items-center gap-2 text-sm text-slate-500">
-                                <FileText className="w-4 h-4 text-slate-400" />
+                            <div className="text-sm text-slate-500 mt-1">
                                 Tipo de revisión: <span className="font-semibold text-slate-700">{parte.periodicidad || 'No definida'}</span>
                             </div>
                         </div>
@@ -793,21 +790,41 @@ export default function RevisionChecklist() {
                     
                     <div className="px-6 py-4 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div className="flex items-center gap-3">
-                            <label className="text-sm font-medium text-slate-600">Técnico:</label>
-                            <select
-                                value={parte.tecnicoId || ''}
-                                onChange={(e) => handleParteChange({ tecnicoId: e.target.value })}
-                                className="bg-white border border-slate-200 rounded-lg text-sm px-3 py-1.5 focus:outline-none focus:border-sky-500"
-                            >
-                                <option value="">-- Seleccionar Técnico --</option>
-                                {tecnicos.map(t => (
-                                    <option key={t.id} value={t.id}>{t.nombre} {t.apellidos}</option>
-                                ))}
-                            </select>
+                            {parte.tecnicoId ? (
+                                <div className="flex items-center gap-3">
+                                    <label className="text-sm font-medium text-slate-600">Técnico asignado:</label>
+                                    <select
+                                        value={parte.tecnicoId || ''}
+                                        onChange={(e) => handleParteChange({ tecnicoId: e.target.value })}
+                                        className="bg-white border border-slate-200 rounded-lg text-sm px-3 py-1.5 focus:outline-none focus:border-sky-500 font-semibold text-sky-700"
+                                    >
+                                        <option value="">-- Seleccionar Técnico --</option>
+                                        {tecnicos.map(t => (
+                                            <option key={t.id} value={t.id}>{t.nombre} {t.apellidos}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            ) : (
+                                <div className="relative">
+                                    <select
+                                        value=""
+                                        onChange={(e) => handleParteChange({ tecnicoId: e.target.value })}
+                                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                    >
+                                        <option value="" disabled>Asignar Técnico</option>
+                                        {tecnicos.map(t => (
+                                            <option key={t.id} value={t.id}>{t.nombre} {t.apellidos}</option>
+                                        ))}
+                                    </select>
+                                    <button className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold transition-colors flex items-center gap-2 shadow-sm pointer-events-none">
+                                        Asignar Técnico
+                                    </button>
+                                </div>
+                            )}
                         </div>
                         
                         <div className="flex items-center gap-3">
-                            {parte.estado !== 'En revisión' && parte.estado !== 'Cerrado' && (
+                            {parte.estado !== 'En revisión' && parte.estado !== 'Cerrado' && parte.estado !== 'Pre-Cerrado' && (
                                 <button
                                     onClick={() => handleParteChange({ estado: 'En revisión' })}
                                     className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-semibold transition-colors flex items-center gap-2"
@@ -815,8 +832,8 @@ export default function RevisionChecklist() {
                                     <CheckCircle2 className="w-4 h-4" /> Empezar revisión
                                 </button>
                             )}
-                            <span className="flex items-center gap-1.5 text-sm text-slate-500 bg-white px-3 py-1.5 rounded-lg border border-slate-200">
-                                <div className={`w-2 h-2 rounded-full ${parte.estado === 'En revisión' ? 'bg-green-500' : parte.estado === 'Cerrado' ? 'bg-amber-500' : 'bg-slate-300'}`}></div>
+                            <span className="flex items-center gap-1.5 text-sm text-slate-500 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm">
+                                <div className={`w-2 h-2 rounded-full ${parte.estado === 'En revisión' ? 'bg-green-500' : (parte.estado === 'Cerrado' || parte.estado === 'Pre-Cerrado') ? 'bg-amber-500' : 'bg-slate-300'}`}></div>
                                 Estado: <span className="font-semibold text-slate-700">{parte.estado}</span>
                             </span>
                         </div>
