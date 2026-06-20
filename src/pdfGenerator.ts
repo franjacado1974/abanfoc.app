@@ -32,6 +32,49 @@ export const guardarDatosEmpresa = (data: any) => {
 
 export const obtenerDatosEmpresa = () => cargaDatosEmpresa();
 
+const fetchImageToBase64 = async (urlOrBase64: string | null | undefined): Promise<string | null> => {
+  if (!urlOrBase64) return null;
+  if (urlOrBase64.startsWith('http')) {
+    try {
+      const response = await fetch(urlOrBase64);
+      if (response.ok) {
+        const blob = await response.blob();
+        return await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(blob);
+        });
+      }
+    } catch (e) {
+      console.error("Error fetching image via fetch():", e);
+    }
+    // Fallback si falla el fetch (ej. CORS)
+    return await new Promise<string | null>((resolve) => {
+      const img = new Image();
+      img.crossOrigin = 'Anonymous';
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0);
+          try {
+            resolve(canvas.toDataURL('image/png'));
+          } catch(err) {
+            resolve(urlOrBase64);
+          }
+        } else {
+          resolve(null);
+        }
+      };
+      img.onerror = () => resolve(urlOrBase64);
+      img.src = urlOrBase64;
+    });
+  }
+  return urlOrBase64;
+};
+
 // ============ ACTA DE REVISIÓN ============
 export const generarActaExtintoresPDF = async (
   cliente: Record<string, any>,
@@ -44,25 +87,28 @@ export const generarActaExtintoresPDF = async (
   firmaCliente?: string,
   firmaTecnico?: string,
   nombreFirmante?: string,
-  checklistItemsPorSistema?: Record<string, { key: string; label: string; tipoRespuesta?: string }[]>
+  checklistItemsPorSistema?: Record<string, { key: string; label: string; tipoRespuesta?: string }[]>,
+  empresa?: Record<string, any>
 ) => {
   const doc = new jsPDF('landscape');
   const pageWidth = doc.internal.pageSize.getWidth();
-  const empData = cargaDatosEmpresa();
+  const empData = empresa || cargaDatosEmpresa() || {};
+
+  const firmaIngenieroBase64 = await fetchImageToBase64(empData?.ingenieroFirmaUrl);
 
   // ============ FIRST PAGE: INFO PAGE (REDISEÑO ELEGANTE) ============
   const drawInfoPage = async () => {
     // ── Logo (esquina superior derecha) ──
     try {
-      const logoBase64 = localStorage.getItem('firecheck_db_logo');
-      if (logoBase64) {
-        const logoProps = doc.getImageProperties(logoBase64);
+      const logoData = await fetchImageToBase64(empData?.logoUrl) || await fetchImageToBase64(localStorage.getItem('firecheck_db_logo'));
+      if (logoData) {
+        const logoProps = doc.getImageProperties(logoData);
         const maxLogoWidth = 65;
         const maxLogoHeight = 16;
         const logoRatio = logoProps.width / logoProps.height;
         const logoWidth = Math.min(maxLogoWidth, maxLogoHeight * logoRatio);
         const logoHeight = logoWidth / logoRatio;
-        doc.addImage(logoBase64, 'PNG', pageWidth - 14 - logoWidth, 12, logoWidth, logoHeight);
+        doc.addImage(logoData, 'PNG', pageWidth - 14 - logoWidth, 12, logoWidth, logoHeight);
       }
     } catch (e) { console.error("Error loading logo for Acta PDF:", e); }
 
@@ -265,25 +311,7 @@ export const generarActaExtintoresPDF = async (
 
     // Cargar logo de la empresa mantenedora (a la derecha de los datos)
     try {
-      let logoData: string | null = null;
-      
-      // Intentar desde la URL de Firebase Storage (logotipo de la empresa seleccionada)
-      if (empData?.logoUrl) {
-        try {
-          const response = await fetch(empData.logoUrl);
-          if (response.ok) {
-            const blob = await response.blob();
-            logoData = await new Promise<string>((resolve) => {
-              const reader = new FileReader();
-              reader.onloadend = () => resolve(reader.result as string);
-              reader.readAsDataURL(blob);
-            });
-          }
-        } catch (fetchErr) {
-          console.error("Error fetching logo from Firebase Storage:", fetchErr);
-        }
-      }
-      
+      const logoData = await fetchImageToBase64(empData?.logoUrl || localStorage.getItem('firecheck_db_logo'));
       if (logoData) {
         const logoProps = doc.getImageProperties(logoData);
         const maxLogoWidth = 55;
@@ -600,7 +628,13 @@ export const generarActaExtintoresPDF = async (
           doc.setTextColor(anomalyTextColor[0], anomalyTextColor[1], anomalyTextColor[2]);
         }
 
-        const textAnomalia = eq.anomalias ? eq.anomalias : 'No supera las comprobaciones visuales.';
+    // Buscar el valor del campo "Observaciones y anomalías del equipo" en los items del checklist
+    const notasItem = checkItemsDeSistema.find(item => {
+      const lbl = (item.label || '').toLowerCase();
+      return lbl.includes('notas') || lbl.includes('observaciones') || lbl.includes('anomal');
+    });
+    const notasValue = notasItem && eq[notasItem.key] ? String(eq[notasItem.key]).trim() : '';
+    const textAnomalia = eq.anomalias ? eq.anomalias : (notasValue || 'No supera las comprobaciones visuales.');
         doc.text(`Nº ${eq.codigo} ${eq.placa ? `(${eq.placa})` : ''} — Anomalías: ${textAnomalia}`, 14, finalY);
         finalY += 5.5;
 
@@ -817,17 +851,6 @@ export const generarActaExtintoresPDF = async (
     const titles = ['TÉCNICO TITULADO', 'TÉCNICO HABILITADO', 'CLIENTE / TITULAR'];
     doc.text(titles[i], bx + blockW / 2, by + 8, { align: 'center' });
 
-    // Espacio para firma (solo una línea fina debajo de la firma)
-    doc.setDrawColor(200, 200, 200);
-    doc.setLineWidth(0.3);
-    doc.line(bx + 10, by + 26, bx + blockW - 10, by + 26);
-
-    // Texto descriptivo suave
-    doc.setFont("helvetica", "italic");
-    doc.setFontSize(6.5);
-    doc.setTextColor(170, 170, 170);
-    doc.text('Firma', bx + blockW / 2, by + 30, { align: 'center' });
-
     // Imagen de firma si existe
     if (i === 2 && firmaCliente) {
       try {
@@ -839,15 +862,24 @@ export const generarActaExtintoresPDF = async (
         doc.addImage(firmaTecnico, 'PNG', bx + 11, by + 10, blockW - 22, 16);
       } catch (_e) { }
     }
+    if (i === 0 && firmaIngenieroBase64) {
+      try {
+        doc.addImage(firmaIngenieroBase64, 'PNG', bx + 11, by + 10, blockW - 22, 16);
+      } catch (_e) { }
+    }
 
     // Nombre del firmante debajo de la firma
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8);
     doc.setTextColor(40, 40, 40);
+    const nombreIngenieroCompleto = (empData?.ingenieroNombre && empData?.ingenieroApellidos) 
+      ? `${empData.ingenieroNombre} ${empData.ingenieroApellidos}`
+      : (empData?.tecnicoTitulado || 'Técnico Titulado');
+
     const names = [
-    (empData?.tecnicoTitulado || 'Técnico Titulado'),
-    (tecnicoNombre || 'Técnico Habilitado'),
-    (nombreFirmante || 'Cliente / Titular')
+      nombreIngenieroCompleto,
+      (tecnicoNombre || 'Técnico Habilitado'),
+      (nombreFirmante || 'Cliente / Titular')
     ];
     doc.text(names[i], bx + blockW / 2, by + 36, { align: 'center' });
 
@@ -855,18 +887,16 @@ export const generarActaExtintoresPDF = async (
     doc.setFont("helvetica", "normal");
     doc.setFontSize(6.5);
     doc.setTextColor(100, 100, 100);
+    const cargoIngeniero = empData?.ingenieroColegiado
+      ? `Ingeniero Industrial N.º ${empData.ingenieroColegiado}`
+      : (empData?.numTecnicoTitulado ? `Ingeniero Industrial N.º ${empData.numTecnicoTitulado}` : 'Ingeniero Industrial');
+      
     const cargos = [
-    (empData?.numTecnicoTitulado ? `Ingeniero Industrial N.º ${empData.numTecnicoTitulado}` : 'Ingeniero Industrial'),
-    'Técnico Habilitado',
+      cargoIngeniero,
+      'Técnico Habilitado',
       'Titular / Responsable del centro'
     ];
     doc.text(cargos[i], bx + blockW / 2, by + 40, { align: 'center' });
-
-    // Fecha pequeña debajo
-    doc.setFont("helvetica", "italic");
-    doc.setFontSize(6);
-    doc.setTextColor(130, 130, 130);
-    doc.text(`Fecha: ${new Date().toLocaleDateString()}`, bx + blockW / 2, by + 44, { align: 'center' });
   }
 
   sigY += 55;
@@ -923,7 +953,9 @@ export const generarAlbaranPDF = async (
   items?: { cantidad: number; concepto: string; descripcion: string; precioUnidad: number; subtotal: number }[],
   empresa?: Record<string, any>,
   noSave?: boolean,
-  titulo?: string
+  titulo?: string,
+  periodicidad?: string,
+  sistemas?: Record<string, any>[]
 ) => {
   const doc = new jsPDF('p', 'mm', 'a4');
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -931,24 +963,15 @@ export const generarAlbaranPDF = async (
   // Datos de empresa: usar la empresa pasada como parámetro, o cargar de localStorage
   const empData = empresa || cargaDatosEmpresa() || {};
 
+  const firmaIngenieroBase64 = await fetchImageToBase64(empData?.ingenieroFirmaUrl);
+
   // ── CABECERA: Logo + Datos empresa ──
   let headerY = 12;
 
   // Logo a la derecha - cargar desde URL si es necesario
   try {
-    const logoUrl = empData?.logoUrl || localStorage.getItem('firecheck_db_logo');
-    if (logoUrl) {
-      let logoData = logoUrl;
-      // Si es una URL externa (no base64), convertir a base64
-      if (logoUrl.startsWith('http')) {
-        const response = await fetch(logoUrl);
-        const blob = await response.blob();
-        logoData = await new Promise<string>((resolve) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.readAsDataURL(blob);
-        });
-      }
+    const logoData = await fetchImageToBase64(empData?.logoUrl || localStorage.getItem('firecheck_db_logo'));
+    if (logoData) {
       const logoProps = doc.getImageProperties(logoData);
       const maxLogoWidth = 70;
       const maxLogoHeight = 25;
@@ -1020,13 +1043,24 @@ export const generarAlbaranPDF = async (
     ]);
     subtotalTotal = items.reduce((acc, item) => acc + (item.subtotal || 0), 0);
   } else {
-    const conteoPorModelo: Record<string, number> = {};
+    const conteoPorSistema: Record<string, { cantidad: number, nombre: string }> = {};
     equiposTodos.forEach(eq => {
-      const modelo = eq.nombre?.trim() || eq.clase?.trim() || 'Equipo';
-      conteoPorModelo[modelo] = (conteoPorModelo[modelo] || 0) + 1;
+      const sistId = eq.sistemaId || 'sin-sistema';
+      if (!conteoPorSistema[sistId]) {
+        const sist = sistemas?.find(s => s.id === sistId);
+        conteoPorSistema[sistId] = {
+           cantidad: 0,
+           nombre: sist?.nombre || sist?.tipo || sist?.familia || eq.nombre || eq.clase || 'Equipos varios'
+        };
+      }
+      conteoPorSistema[sistId].cantidad += 1;
     });
-    tableData = Object.entries(conteoPorModelo).map(([modelo, cantidad]) => [
-      `${cantidad} und.`, modelo, '', '', ''
+
+    const per = periodicidad || 'Revisión';
+    const conceptoStr = per.toLowerCase().includes('revisión') || per.toLowerCase().includes('revision') ? per : `Revisión ${per}`;
+
+    tableData = Object.values(conteoPorSistema).map((sys) => [
+      `${sys.cantidad} und.`, conceptoStr, sys.nombre, '', ''
     ]);
     subtotalTotal = equiposTodos.reduce((acc, eq) => acc + (parseFloat(eq.precioUnidad || eq.precio || 0) || 0), 0);
   }
@@ -1073,22 +1107,39 @@ export const generarAlbaranPDF = async (
   });
 
   const finalY = (doc as any).lastAutoTable.finalY + 20;
+  
+  doc.setFontSize(8);
   doc.setFont("helvetica", "bold");
-  doc.text('Firma del Técnico:', 14, finalY);
-  doc.setDrawColor(230, 230, 230);
-  doc.setLineWidth(0.2);
-  doc.roundedRect(14, finalY + 3, 60, 35, 3, 3);
-  if (firmaTecnico) {
-    doc.addImage(firmaTecnico, 'PNG', 15, finalY + 4, 58, 33);
-  }
-  doc.text(`Nombre: ${tecnicoNombre || 'N/A'}`, 14, finalY + 42);
+  doc.setTextColor(60, 60, 60);
 
-  doc.text('Conformidad del Cliente:', 100, finalY);
-  doc.roundedRect(100, finalY + 3, 60, 35, 3, 3);
-  if (firmaCliente) {
-    doc.addImage(firmaCliente, 'PNG', 101, finalY + 4, 58, 33);
+  // Firma Ingeniero
+  doc.text('El Técnico Titulado', 14, finalY);
+  doc.setDrawColor(220, 220, 220);
+  doc.setLineWidth(0.2);
+  doc.roundedRect(14, finalY + 3, 56, 30, 2, 2);
+  if (firmaIngenieroBase64) {
+    doc.addImage(firmaIngenieroBase64, 'PNG', 15, finalY + 4, 54, 28);
   }
-  doc.text(`Nombre: ${nombreFirmante || 'N/A'}`, 100, finalY + 42);
+  const tecnicoTitulado = (empData?.ingenieroNombre && empData?.ingenieroApellidos) 
+      ? `${empData.ingenieroNombre} ${empData.ingenieroApellidos}`
+      : (empData?.tecnicoTitulado || 'N/A');
+  doc.text(`Nombre: ${tecnicoTitulado}`, 14, finalY + 37);
+
+  // Firma del Técnico
+  doc.text('Firma del Técnico:', 75, finalY);
+  doc.roundedRect(75, finalY + 3, 56, 30, 2, 2);
+  if (firmaTecnico) {
+    doc.addImage(firmaTecnico, 'PNG', 76, finalY + 4, 54, 28);
+  }
+  doc.text(`Nombre: ${tecnicoNombre || 'N/A'}`, 75, finalY + 37);
+
+  // Conformidad Cliente
+  doc.text('Conformidad del Cliente:', 136, finalY);
+  doc.roundedRect(136, finalY + 3, 56, 30, 2, 2);
+  if (firmaCliente) {
+    doc.addImage(firmaCliente, 'PNG', 137, finalY + 4, 54, 28);
+  }
+  doc.text(`Nombre: ${nombreFirmante || 'N/A'}`, 136, finalY + 37);
 
   // ── PIE DE PÁGINA: Datos de la empresa (todas las páginas) ──
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -1137,10 +1188,11 @@ export const generarAlbaranPDFView = async (
   nombreFirmante?: string,
   items?: { cantidad: number; concepto: string; descripcion: string; precioUnidad: number; subtotal: number }[],
   empresa?: Record<string, any>,
-  titulo?: string
+  titulo?: string,
+  periodicidad?: string
 ): Promise<string> => {
   const tempDoc = new jsPDF('p', 'mm', 'a4');
-  await generarAlbaranPDF(cliente, centro, equiposTodos, numeroMantenimiento, tecnicoNombre, firmaCliente, firmaTecnico, nombreFirmante, items, empresa, true, titulo);
+  await generarAlbaranPDF(cliente, centro, equiposTodos, numeroMantenimiento, tecnicoNombre, firmaCliente, firmaTecnico, nombreFirmante, items, empresa, true, titulo, periodicidad);
   return tempDoc.output('bloburl').toString();
 };
 
@@ -1156,11 +1208,12 @@ export const generarCertificadoPDF = async (
   _firmaCliente?: string,
   _firmaTecnico?: string,
   _nombreFirmante?: string,
-  noSave?: boolean
+  noSave?: boolean,
+  empresa?: Record<string, any>
 ) => {
   const doc = new jsPDF('p', 'mm', 'a4');
   const pageWidth = doc.internal.pageSize.getWidth(); // 210 mm
-  const empData = cargaDatosEmpresa();
+  const empData = empresa || cargaDatosEmpresa() || {};
   const margen = 20;
 
   // ── FONDO: Borde decorativo sutil ──
@@ -1215,16 +1268,15 @@ export const generarCertificadoPDF = async (
 
   // Logo a la derecha dentro de la tarjeta
   try {
-    const logoBase64 = localStorage.getItem('firecheck_db_logo');
-    if (logoBase64) {
-      doc.addImage(logoBase64, 'PNG', pageWidth - margen - 58, y + 7, 52, 10);
-      const logoProps = doc.getImageProperties(logoBase64);
+    const logoData = await fetchImageToBase64(empData?.logoUrl || localStorage.getItem('firecheck_db_logo'));
+    if (logoData) {
+      const logoProps = doc.getImageProperties(logoData);
       const maxLogoWidth = 70;
       const maxLogoHeight = 15;
       const logoRatio = logoProps.width / logoProps.height;
       const logoWidth = Math.min(maxLogoWidth, maxLogoHeight * logoRatio);
       const logoHeight = logoWidth / logoRatio;
-      doc.addImage(logoBase64, 'PNG', pageWidth - margen - 4 - logoWidth, y + 6, logoWidth, logoHeight);
+      doc.addImage(logoData, 'PNG', pageWidth - margen - 4 - logoWidth, y + 6, logoWidth, logoHeight);
     }
   } catch (e) { console.error("Error loading logo for Certificado PDF:", e); }
 
@@ -1347,9 +1399,11 @@ export const generarCertificadoPDF = async (
 
   // Texto de certificación formal
   const nombreCentro = centro?.nombre || 'el centro indicado';
-  const tecnicoTitulado = empData?.tecnicoTitulado || 'Técnico Titulado de la Empresa';
-  const nifTecnico = empData?.nifTecnico || 'N.I.F. no especificado';
-  const numTecnico = empData?.numTecnicoTitulado || 'N.º de colegiado no especificado';
+  const tecnicoTitulado = (empData?.ingenieroNombre && empData?.ingenieroApellidos) 
+      ? `${empData.ingenieroNombre} ${empData.ingenieroApellidos}`
+      : (empData?.tecnicoTitulado || 'Técnico Titulado de la Empresa');
+  const nifTecnico = empData?.ingenieroNif || empData?.nifTecnico || 'N.I.F. no especificado';
+  const numTecnico = empData?.ingenieroColegiado || empData?.numTecnicoTitulado || 'N.º de colegiado no especificado';
 
   const textoCertificacion = 
     `Don ${tecnicoTitulado}, con N.I.F. ${nifTecnico}, Técnico titulado n.º ${numTecnico} y en calidad de responsable técnico ` +
@@ -1388,6 +1442,37 @@ export const generarCertificadoPDF = async (
   doc.text(`Resultado: ${estadoLimpio}`, margen + 4, ly + 4);
 
   y += cardResultH + 8;
+
+  // ── FIRMAS (Certificado) ──
+  const firmaIngenieroBase64 = await fetchImageToBase64(empData?.ingenieroFirmaUrl);
+  if (firmaIngenieroBase64 || _firmaTecnico || _firmaCliente) {
+    const firmasY = y;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.setTextColor(60, 60, 60);
+    
+    // Firma Ingeniero
+    doc.text('El Técnico Titulado', 20, firmasY);
+    doc.setDrawColor(220, 220, 220);
+    doc.roundedRect(20, firmasY + 3, 50, 25, 2, 2);
+    if (firmaIngenieroBase64) {
+      doc.addImage(firmaIngenieroBase64, 'PNG', 22, firmasY + 4, 46, 23);
+    }
+    
+    // Firma Técnico
+    doc.text('Técnico Revisor', 80, firmasY);
+    doc.roundedRect(80, firmasY + 3, 50, 25, 2, 2);
+    if (_firmaTecnico) {
+      doc.addImage(_firmaTecnico, 'PNG', 82, firmasY + 4, 46, 23);
+    }
+    
+    // Firma Cliente
+    doc.text('Conformidad Cliente', 140, firmasY);
+    doc.roundedRect(140, firmasY + 3, 50, 25, 2, 2);
+    if (_firmaCliente) {
+      doc.addImage(_firmaCliente, 'PNG', 142, firmasY + 4, 46, 23);
+    }
+  }
 
   // Footer
   const totalPages = (doc.internal as any).getNumberOfPages();

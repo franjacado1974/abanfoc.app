@@ -23,7 +23,7 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { id: 'dashboard', path: '/', title: 'Home', Icon: LayoutDashboard, allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador'], section: 'gestion' },
+  { id: 'dashboard', path: '/', title: 'Inicio', Icon: LayoutDashboard, allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador'], section: 'gestion' },
   { id: 'clientes-centros', path: '/clientes-centros', title: 'Clientes', Icon: Users, allowedRoles: ['super-administrador', 'administrador', 'editor'], section: 'gestion' },
   { id: 'catalogo', path: '/catalogo', title: 'Catálogo', Icon: Package, allowedRoles: ['super-administrador', 'administrador', 'editor'], section: 'gestion' },
   { id: 'partes_trabajo', path: '/partes_trabajo', title: 'Planificación', Icon: CalendarDays, allowedRoles: ['super-administrador', 'administrador'], section: 'operaciones' },
