@@ -344,23 +344,6 @@ export const generarActaExtintoresPDF = async (
       currentY = 34;
     }
 
-    if (iconoBase64) {
-      doc.addImage(iconoBase64, 'PNG', 14, currentY - 1, 8, 8);
-    }
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(12);
-    doc.setTextColor(0, 0, 0);
-    doc.text(title, iconoBase64 ? 26 : 14, currentY + 2);
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
-    doc.setTextColor(anomalyTextColor[0], anomalyTextColor[1], anomalyTextColor[2]);
-    doc.text('Las anotaciones en rojo o con una X indican anomalías que deben corregirse.', iconoBase64 ? 26 : 14, currentY + 7);
-    doc.setTextColor(0, 0, 0);
-
-    currentY += 12;
-
     const headersBase = isBie ?
       ['Nº', 'Nivel planta y ubicación', 'Placa', 'Tipo', 'Longitud', 'Fabricante', 'Fecha\nFabricación', 'Prueba\nHidráulica'] :
       ['Nº', 'Nivel planta y ubicación', 'Placa', 'Clase', 'Tipo', 'Fabricante', 'Fecha\nFabricación', 'Último\nRetimbre'];
@@ -417,14 +400,17 @@ export const generarActaExtintoresPDF = async (
     });
 
     autoTable(doc, {
-      startY: currentY,
+      startY: currentY + 4,
       margin: { top: 40 },
-      headStyles: { fillColor: [100, 100, 100], textColor: [255, 255, 255], fontSize: 7, halign: 'center', valign: 'middle', lineWidth: 0.1, lineColor: [0, 0, 0], minCellHeight: 20 },
+      headStyles: { fillColor: [100, 100, 100], textColor: [255, 255, 255], fontSize: 7, halign: 'center', valign: 'middle', lineWidth: 0.1, lineColor: [0, 0, 0] },
       bodyStyles: { fontSize: 7, halign: 'center', lineWidth: 0.1, lineColor: [200, 200, 200] },
 
       columnStyles: dynamicColumnStyles,
       head: [
-        [...headersBase.map(() => ''), ...checkHeaders.map(h => ({ content: h, rowSpan: 2 }))],
+        [
+          { content: '', colSpan: 8, styles: { fillColor: [255, 255, 255], lineWidth: 0.1, lineColor: [0,0,0], minCellHeight: 14 } },
+          ...checkHeaders.map(h => ({ content: h, rowSpan: 2 }))
+        ],
         headersBase
       ],
       body: tableData,
@@ -435,8 +421,14 @@ export const generarActaExtintoresPDF = async (
         }
       },
       didParseCell: function (data: any) {
-        if (data.section === 'head' && data.column.index >= 8) {
-          data.cell.text = [''];
+        if (data.section === 'head') {
+          if (data.row.index === 1 && data.column.index < 8) {
+             data.cell.styles.minCellHeight = 32;
+             data.cell.styles.valign = 'middle';
+          }
+          if (data.column.index >= 8) {
+             data.cell.text = [''];
+          }
         }
         if (data.section === 'body' && data.column.index >= 8) {
           if (data.cell.raw === 'X') {
@@ -449,6 +441,23 @@ export const generarActaExtintoresPDF = async (
         }
       },
       didDrawCell: function (data: any) {
+        if (data.section === 'head' && data.row.index === 0 && data.column.index === 0) {
+          const cellX = data.cell.x;
+          const cellY = data.cell.y;
+          if (iconoBase64) {
+            doc.addImage(iconoBase64, 'PNG', cellX + 2, cellY + 3, 8, 8);
+          }
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(12);
+          doc.setTextColor(0, 0, 0);
+          doc.text(title, cellX + (iconoBase64 ? 12 : 2), cellY + 7.5);
+          
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(8.5);
+          doc.setTextColor(anomalyTextColor[0], anomalyTextColor[1], anomalyTextColor[2]);
+          doc.text('Las anotaciones en rojo o con una X indican anomalías que deben corregirse.', cellX + (iconoBase64 ? 12 : 2), cellY + 12);
+        }
+
         if (data.section === 'head' && data.column.index >= 8 && data.row.index === 0) {
           const lbl = checkLabels[data.column.index - 8];
           if (lbl) {
