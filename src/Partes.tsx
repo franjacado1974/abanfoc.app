@@ -50,7 +50,10 @@ export default function Partes() {
 
   useEffect(() => {
     const unsubPartes = subscribePartes((items) => {
-      setPartes(items.map((d: any) => ({ ...d })) as ParteItem[]);
+      const mappedItems = items.map((d: any) => ({ ...d })) as ParteItem[];
+      setPartes(mappedItems);
+      // Mantener sincronizado el localStorage con Firestore para toda la app
+      localStorage.setItem('firecheck_db_partes', JSON.stringify(mappedItems));
     });
     const unsubCentros = subscribeCentros((items) => {
       setCentros(items);
