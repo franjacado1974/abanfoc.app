@@ -58,7 +58,7 @@ export interface Parte {
   tecnicoId: string;
   periodicidad: string;
   mesesRevision: string;
-  estado: 'Planificado' | 'Abierto' | 'Descargado (Offline)' | 'Finalizado' | 'Cerrado' | 'Pre-Cerrado';
+  estado: 'Planificado' | 'Abierto' | 'En revisión' | 'Descargado (Offline)' | 'Finalizado' | 'Cerrado' | 'Pre-Cerrado';
   tipoTrabajo?: string;
   numeroMantenimiento?: string;
   fechaProgramada?: string;

@@ -346,12 +346,19 @@ export default function Partes() {
                     return (
                       <tr key={parte.id} className="hover:bg-amber-50/40 transition-colors group">
                         <td className="px-6 py-4">
-                          <p className="font-bold text-zinc-900 text-sm">
-                            {cliente?.nombre || '—'}
-                          </p>
-                          {cliente?.cif && (
-                            <p className="text-[10px] text-zinc-400 mt-0.5">{cliente.cif}</p>
-                          )}
+                          <div className="flex items-center gap-2">
+                            {parte.estado === 'En revisión' && (
+                              <div className="w-2.5 h-2.5 rounded-full bg-green-500 shrink-0" title="En revisión"></div>
+                            )}
+                            <div>
+                              <p className="font-bold text-zinc-900 text-sm">
+                                {cliente?.nombre || '—'}
+                              </p>
+                              {cliente?.cif && (
+                                <p className="text-[10px] text-zinc-400 mt-0.5">{cliente.cif}</p>
+                              )}
+                            </div>
+                          </div>
                         </td>
                         <td className="px-6 py-4">
                           <p className="font-medium text-zinc-800 text-sm">

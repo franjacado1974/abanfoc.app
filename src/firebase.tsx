@@ -921,7 +921,7 @@ export interface ParteFirestore {
   empresaId?: string;
   periodicidad: string;
   mesesRevision: string;
-  estado: 'Planificado' | 'Abierto' | 'Descargado (Offline)' | 'Finalizado' | 'Cerrado' | 'Pre-Cerrado';
+  estado: 'Planificado' | 'Abierto' | 'En revisión' | 'Descargado (Offline)' | 'Finalizado' | 'Cerrado' | 'Pre-Cerrado';
   tipoTrabajo?: string;
   numeroMantenimiento?: string;
   fechaProgramada?: string;
@@ -931,6 +931,31 @@ export interface ParteFirestore {
 export async function addParte(parte: ParteFirestore) {
   try {
     const parteToSave = { ...parte, updatedAt: new Date().toISOString() };
+    
+    // Generar numeroMantenimiento si no existe
+    if (!parteToSave.numeroMantenimiento) {
+      const yearStr = new Date().getFullYear().toString().slice(-2);
+      const monthStr = (new Date().getMonth() + 1).toString().padStart(2, '0');
+      let maxCorr = 0;
+      try {
+        const partesSnap = await getDocs(collection(db, 'partes'));
+        partesSnap.forEach(d => {
+          const num = d.data().numeroMantenimiento;
+          if (num && typeof num === 'string' && num.startsWith(yearStr)) {
+            const corrStr = num.slice(4);
+            const corr = parseInt(corrStr, 10);
+            if (!isNaN(corr) && corr > maxCorr) {
+              maxCorr = corr;
+            }
+          }
+        });
+      } catch (e) {
+        console.error('Error calculando correlativo', e);
+      }
+      const nextCorr = (maxCorr + 1).toString().padStart(3, '0'); // Ejemplo 001, 130
+      parteToSave.numeroMantenimiento = `${yearStr}${monthStr}${nextCorr}`;
+    }
+
     if (parte.id) {
       const ref = doc(db, 'partes', parte.id);
       await setDoc(ref, parteToSave);

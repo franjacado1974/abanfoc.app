@@ -22,6 +22,11 @@ export default function RevisionChecklist() {
     const [loading, setLoading] = useState(true);
     const [clientes, setClientes] = useState<Cliente[]>(() => JSON.parse(localStorage.getItem('firecheck_db_clientes') || '[]'));
     const [openSistemas, setOpenSistemas] = useState<Record<string, boolean>>({});
+    const [tecnicos] = useState<{ id: string; nombre: string; apellidos: string }[]>(() => {
+        try {
+            return JSON.parse(localStorage.getItem('firecheck_db_tecnicos') || '[]');
+        } catch { return []; }
+    });
     // Orden personalizado de sistemas (guardado en localStorage)
     const [sistemaOrden, setSistemaOrden] = useState<string[]>(() => {
         try {
@@ -96,6 +101,7 @@ export default function RevisionChecklist() {
                     key: item.key,
                     label: item.label,
                     tipoRespuesta: item.tipoRespuesta,
+                    opciones: item.opciones || [],
                     sistemaId: sist.id,
                     sistemaNombre: sistemaNombre,
                     orden: item.orden,
@@ -115,7 +121,7 @@ export default function RevisionChecklist() {
     const [revisarTodoConfirm, setRevisarTodoConfirm] = useState<{ isOpen: boolean; sistemaId: string | null }>({ isOpen: false, sistemaId: null });
 
     // Estado para modal de edición de equipo
-    const [editEquipo, setEditEquipo] = useState<{ id: string; codigo: string; nombre: string; ubicacion: string; placa: string; fechaFabricacion: string; ultimoRetimbre: string } | null>(null);
+    const [editEquipo, setEditEquipo] = useState<string | null>(null);
 
     // Estado para modal de añadir equipo
     const [addEquipo, setAddEquipo] = useState<{ isOpen: boolean; sistemaId: string | null; codigo: string; nombre: string; ubicacion: string; placa: string; fechaFabricacion: string; ultimoRetimbre: string }>({
@@ -252,6 +258,18 @@ export default function RevisionChecklist() {
 
         localStorage.setItem('firecheck_db_partes', JSON.stringify(updatedPartes));
         if (updatedParte) setParte(updatedParte);
+    };
+
+    const handleParteChange = async (changes: Partial<Parte>) => {
+        updateParte(changes);
+        try {
+            const docId = (parte as any)?._docId || parte?.id;
+            if (docId) {
+                await updateParteFirestore(docId, changes);
+            }
+        } catch (err) {
+            console.error('Error updating parte in Firestore:', err);
+        }
     };
 
     const handleCheckChange = (equipoId: string, checkKey: string, value: boolean | string | number | string[], checkLabel?: string) => {
@@ -743,25 +761,56 @@ export default function RevisionChecklist() {
             <div className="max-w-5xl mx-auto px-6 py-8">
                 {/* Header Card */}
                 <div className="mb-8 bg-white rounded-2xl border border-slate-200 overflow-hidden">
-                    <div className="px-6 py-5 border-b border-slate-100">
-                        <div className="flex items-center gap-2 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
-                            <Building2 className="w-3.5 h-3.5" />
-                            {clientInfo?.nombre || 'Cliente'} &bull; {centro.nombre}
-                        </div>
+                    <div className="px-6 py-6 border-b border-slate-100 relative">
                         <h1 className="text-2xl font-bold text-slate-800 tracking-tight">
-                            Revisión del Parte: <span className="text-slate-500 font-mono text-lg">{parte.id}</span>
+                            Revisión del parte: <span className="text-slate-500 font-mono text-lg">{parte.numeroMantenimiento || parte.id}</span>
                         </h1>
+                        
+                        <div className="mt-4 space-y-2">
+                            <div className="flex items-center gap-2 text-sm font-semibold text-slate-700 uppercase tracking-wider">
+                                <Building2 className="w-4 h-4 text-slate-400" />
+                                {clientInfo?.nombre || 'Cliente'} - {centro.nombre}
+                            </div>
+                            <div className="flex items-center gap-2 text-sm text-slate-500">
+                                <MapPin className="w-4 h-4 text-slate-400" />
+                                {centro.direccion}, {centro.poblacion}
+                            </div>
+                            <div className="flex items-center gap-2 text-sm text-slate-500">
+                                <FileText className="w-4 h-4 text-slate-400" />
+                                Tipo de revisión: <span className="font-semibold text-slate-700">{parte.periodicidad || 'No definida'}</span>
+                            </div>
+                        </div>
                     </div>
-                    <div className="px-6 py-3 bg-slate-50/50 flex flex-wrap items-center gap-4 text-sm text-slate-500">
-                        <span className="flex items-center gap-1.5">
-                            <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                            {centro.direccion}, {centro.poblacion}
-                        </span>
-                        <span className="text-slate-300">|</span>
-                        <span className="flex items-center gap-1.5">
-                            <FileText className="w-3.5 h-3.5 text-slate-400" />
-                            Estado: <span className="font-semibold text-slate-700">{parte.estado}</span>
-                        </span>
+                    
+                    <div className="px-6 py-4 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                            <label className="text-sm font-medium text-slate-600">Técnico:</label>
+                            <select
+                                value={parte.tecnicoId || ''}
+                                onChange={(e) => handleParteChange({ tecnicoId: e.target.value })}
+                                className="bg-white border border-slate-200 rounded-lg text-sm px-3 py-1.5 focus:outline-none focus:border-sky-500"
+                            >
+                                <option value="">-- Seleccionar Técnico --</option>
+                                {tecnicos.map(t => (
+                                    <option key={t.id} value={t.id}>{t.nombre} {t.apellidos}</option>
+                                ))}
+                            </select>
+                        </div>
+                        
+                        <div className="flex items-center gap-3">
+                            {parte.estado !== 'En revisión' && parte.estado !== 'Cerrado' && (
+                                <button
+                                    onClick={() => handleParteChange({ estado: 'En revisión' })}
+                                    className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-semibold transition-colors flex items-center gap-2"
+                                >
+                                    <CheckCircle2 className="w-4 h-4" /> Empezar revisión
+                                </button>
+                            )}
+                            <span className="flex items-center gap-1.5 text-sm text-slate-500 bg-white px-3 py-1.5 rounded-lg border border-slate-200">
+                                <div className={`w-2 h-2 rounded-full ${parte.estado === 'En revisión' ? 'bg-green-500' : parte.estado === 'Cerrado' ? 'bg-amber-500' : 'bg-slate-300'}`}></div>
+                                Estado: <span className="font-semibold text-slate-700">{parte.estado}</span>
+                            </span>
+                        </div>
                     </div>
                 </div>
 
@@ -1387,7 +1436,7 @@ export default function RevisionChecklist() {
                                                                               )}
                                                                               <div className="w-px h-5 bg-slate-200" />
                                                                               <button
-                                                                                  onClick={() => setEditEquipo({ id: eq.id, codigo: eq.codigo || '', nombre: eq.nombre || '', ubicacion: eq.ubicacion || '', placa: eq.placa || '', fechaFabricacion: eq.fechaFabricacion || '', ultimoRetimbre: eq.ultimoRetimbre || '' })}
+                                                                                  onClick={() => setEditEquipo(eq.id)}
                                                                                   className="p-1.5 text-slate-700 hover:bg-slate-200 rounded-lg transition-colors"
                                                                                   title="Editar equipo"
                                                                               >
@@ -1435,56 +1484,37 @@ export default function RevisionChecklist() {
             </div>
 
             {/* MODAL EDITAR EQUIPO */}
-            {editEquipo && (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[100]">
-                    <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl flex flex-col animate-in fade-in zoom-in-95 duration-200">
-                        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-                            <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                                <Pencil className="w-5 h-5 text-slate-600" /> Editar equipo
-                            </h2>
-                            <button onClick={() => setEditEquipo(null)} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors">
-                                <X className="w-5 h-5" />
-                            </button>
-                        </div>
-                        <div className="p-6 space-y-4">
-                            <div>
-                                <label className="block text-xs font-semibold text-slate-500 mb-1.5">Código</label>
-                                <input
-                                    type="text"
-                                    value={editEquipo.codigo}
-                                    onChange={e => setEditEquipo(prev => prev ? { ...prev, codigo: e.target.value } : null)}
-                                    className="w-full px-3 py-2.5 bg-white rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
-                                />
-                            </div>
-                        </div>
-                        <div className="px-6 py-4 border-t border-slate-100 flex gap-3">
-                            <button
-                                type="button"
-                                onClick={() => setEditEquipo(null)}
-                                className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100 transition-colors"
-                            >
-                                Cancelar
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    if (!editEquipo) return;
-                                    const updated = equiposInstalados.map(eq =>
-                                        eq.id === editEquipo.id
-                                            ? { ...eq, codigo: editEquipo.codigo, nombre: editEquipo.nombre, ubicacion: editEquipo.ubicacion, placa: editEquipo.placa, fechaFabricacion: editEquipo.fechaFabricacion, ultimoRetimbre: editEquipo.ultimoRetimbre }
-                                            : eq
-                                    );
-                                    setEquiposInstalados(updated);
-                                    saveEquiposProgress(updated);
-                                    setEditEquipo(null);
-                                }}
-                                className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 shadow-sm transition-all"
-                            >
-                                Guardar cambios
-                            </button>
-                        </div>
-                    </div>
-                </div>
+            {editEquipo && equiposInstalados.find(e => e.id === editEquipo) && centroId && (
+                <EquipoFormulario
+                    equipo={equiposInstalados.find(e => e.id === editEquipo) || null}
+                    sistemaId={equiposInstalados.find(e => e.id === editEquipo)?.sistemaId || ''}
+                    sistemaNombre={sistemasDelCentro.find(s => s.id === equiposInstalados.find(e => e.id === editEquipo)?.sistemaId)?.tipo || sistemasDelCentro.find(s => s.id === equiposInstalados.find(e => e.id === editEquipo)?.sistemaId)?.familia || ''}
+                    centroId={centroId}
+                    parteId={parteId}
+                    plantillaId={sistemasDelCentro.find(s => s.id === equiposInstalados.find(e => e.id === editEquipo)?.sistemaId)?.tipo || sistemasDelCentro.find(s => s.id === equiposInstalados.find(e => e.id === editEquipo)?.sistemaId)?.familia || ''}
+                    equiposExistentes={equiposInstalados.filter(e => e.sistemaId === equiposInstalados.find(eq => eq.id === editEquipo)?.sistemaId)}
+                    onSave={async (updatedEq) => {
+                        const updated = equiposInstalados.map(eq =>
+                            eq.id === editEquipo ? { ...eq, ...updatedEq } as any : eq
+                        );
+                        setEquiposInstalados(updated);
+                        saveEquiposProgress(updated);
+
+                        try {
+                            if (updatedEq.id && !updatedEq.id.startsWith('temp_')) {
+                                await updateEquipoInstalado(updatedEq.id, updatedEq);
+                            }
+                            showToast('Equipo actualizado');
+                        } catch (err) {
+                            console.error('Error al actualizar equipo en Firestore:', err);
+                            showToast('Error al actualizar en servidor');
+                        }
+                        
+                        setEditEquipo(null);
+                    }}
+                    onCancel={() => setEditEquipo(null)}
+                    isNew={false}
+                />
             )}
 
             {isConfirmModalOpen && equipoIdToDelete && (
