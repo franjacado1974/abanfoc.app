@@ -381,7 +381,14 @@ export const generarActaExtintoresPDF = async (
       const lbl = (item.label || '').toLowerCase();
       const isNotas = lbl.includes('notas') || lbl.includes('observaciones') || lbl.includes('anomal');
       const isFixed = fixedItemsKeys.includes(item.key);
-      return !isNotas && !isFixed;
+      const isExcluded = lbl.includes('orden de lista') || 
+                         lbl.includes('ubicación') || 
+                         lbl.includes('ubicacion') || 
+                         lbl.includes('sin uso') || 
+                         lbl.includes('imagen') ||
+                         item.tipoRespuesta === 'imagen'; // Excluir campos de imagen explícitamente
+
+      return !isNotas && !isFixed && !isExcluded;
     });
 
     const checkKeys = checkItems.length > 0 
