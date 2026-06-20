@@ -328,8 +328,12 @@ export const generarActaExtintoresPDF = async (
   };
 
   const getMark = (val: any) => {
-    if (val === true) return 'TICK';
-    if (val === false) return 'X';
+    if (val === true || val === 'true') return 'TICK';
+    if (val === false || val === 'false') return 'X';
+    if (typeof val === 'string' || typeof val === 'number') {
+        const str = val.toString().trim();
+        return str !== '' ? str : '-';
+    }
     return '-';
   };
 
@@ -478,6 +482,10 @@ export const generarActaExtintoresPDF = async (
             data.cell.styles.fontSize = 9;
           } else if (data.cell.raw === 'TICK') {
             data.cell.text = [''];
+          } else if (data.cell.raw !== '-') {
+            // Es un número o texto (ej. presión 15, peso 12.5), lo imprimimos tal cual
+            data.cell.styles.textColor = [0,0,0];
+            data.cell.styles.fontStyle = 'normal';
           }
         }
       },

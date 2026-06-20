@@ -986,8 +986,8 @@ export default function RevisionChecklist() {
                                                                              if (esCampoNotas) return null;
                                                                             
                                                                             if (tipo === 'check') {
-                                                                                const isChecked = val === true;
-                                                                                const isUnchecked = val === false;
+                                                                                const isChecked = val === true || (typeof val === 'string' && val.toLowerCase() === 'true');
+                                                                                const isUnchecked = val === false || (typeof val === 'string' && val.toLowerCase() === 'false');
                                                                                 return (
                                                                                     <label
                                                                                         key={item.key}
