@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileText, Building2, MapPin, CalendarDays, Search, MoreVertical, ExternalLink, Trash2, Download } from 'lucide-react';
+import { FileText, Building2, MapPin, CalendarDays, Search, ExternalLink, Trash2, Download } from 'lucide-react';
 import { subscribePartes, subscribeCentros, subscribeClientes, deleteParte, db } from './firebase';
 import { collection, getDocs } from 'firebase/firestore';
 import { generarActaExtintoresPDF, generarAlbaranPDF, generarCertificadoPDF } from './pdfGenerator';
@@ -43,8 +43,6 @@ export default function Partes() {
   const [centros, setCentros] = useState<Centro[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [search, setSearch] = useState('');
-  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
-  const menuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const unsubPartes = subscribePartes((items) => {
@@ -63,12 +61,9 @@ export default function Partes() {
     };
   }, []);
 
-  // Cerrar menú al hacer clic fuera
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setMenuOpenId(null);
-      }
+    const handleClickOutside = (_e: MouseEvent) => {
+      // Menú ya no se usa
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -102,7 +97,6 @@ export default function Partes() {
   };
 
   const irARevision = (parte: ParteItem) => {
-    setMenuOpenId(null);
     navigate('/revision-checklist', {
       state: {
         parteId: parte.id,
@@ -115,7 +109,6 @@ export default function Partes() {
   };
 
   const eliminarParte = async (parte: ParteItem) => {
-    setMenuOpenId(null);
     if (!confirm('¿Estás seguro de eliminar este parte de trabajo?')) return;
     try {
       const docId = (parte as any)._docId || parte.id;
@@ -126,7 +119,6 @@ export default function Partes() {
   };
 
   const descargarPDFs = async (parte: ParteItem) => {
-    setMenuOpenId(null);
     const centro = getCentro(parte.centroId);
     const cliente = getCliente(parte.clienteId);
     if (!centro || !cliente) {
@@ -277,7 +269,7 @@ export default function Partes() {
                         Tipo Revisión
                       </div>
                     </th>
-                    <th className="text-center px-4 py-4 text-xs font-bold uppercase tracking-wider text-sky-600 w-20">
+                    <th className="text-right px-4 py-4 text-xs font-bold uppercase tracking-wider text-sky-600">
                       Acciones
                     </th>
                   </tr>
@@ -286,7 +278,6 @@ export default function Partes() {
                   {partesPlanificados.map(parte => {
                     const centro = getCentro(parte.centroId);
                     const cliente = getCliente(parte.clienteId);
-                    const docId = (parte as any)._docId || parte.id;
                     return (
                       <tr key={parte.id} className="hover:bg-amber-50/40 transition-colors group">
                         <td className="px-6 py-4">
@@ -320,51 +311,34 @@ export default function Partes() {
                             {getTipoRevision(parte.periodicidad)}
                           </span>
                         </td>
-                        <td className="px-4 py-4 text-center relative">
-                          <button
-                            onClick={() => setMenuOpenId(menuOpenId === docId ? null : docId)}
-                            className="p-2 rounded-lg hover:bg-zinc-100 transition-colors text-zinc-400 hover:text-zinc-700"
-                            title="Acciones"
-                          >
-                            <MoreVertical className="w-4 h-4" />
-                          </button>
-
-                          {menuOpenId === docId && (
-                            <div
-                              ref={menuRef}
-                              className="absolute right-0 top-12 z-50 w-52 bg-white rounded-2xl shadow-2xl border border-sky-100 overflow-hidden"
+                        <td className="px-4 py-4">
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={() => irARevision(parte)}
+                              className="p-2 rounded-lg hover:bg-sky-50 text-sky-600 transition-colors"
+                              title="Ir a Revisión"
                             >
+                              <ExternalLink className="w-5 h-5" />
+                            </button>
+                            
+                            {(parte.estado === 'Pre-Cerrado' || parte.estado === 'Cerrado' || parte.estado === 'Descargado (Offline)' || (parte as any).firmaCliente) && (
                               <button
-                                onClick={() => irARevision(parte)}
-                                className="w-full flex items-center gap-3 px-5 py-3.5 text-sm font-bold text-sky-700 hover:bg-sky-50 transition-colors text-left"
+                                onClick={() => descargarPDFs(parte)}
+                                className="p-2 rounded-lg hover:bg-amber-50 text-amber-600 transition-colors"
+                                title="Descargar PDFs"
                               >
-                                <ExternalLink className="w-4 h-4 text-sky-500" />
-                                Ir a Revisión
+                                <Download className="w-5 h-5" />
                               </button>
-                              
-                              {(parte.estado === 'Pre-Cerrado' || parte.estado === 'Cerrado' || parte.estado === 'Descargado (Offline)' || (parte as any).firmaCliente) && (
-                                <>
-                                  <div className="border-t border-sky-50" />
-                                  <button
-                                    onClick={() => descargarPDFs(parte)}
-                                    className="w-full flex items-center gap-3 px-5 py-3.5 text-sm font-bold text-amber-700 hover:bg-amber-50 transition-colors text-left"
-                                  >
-                                    <Download className="w-4 h-4 text-amber-500" />
-                                    Descargar PDFs
-                                  </button>
-                                </>
-                              )}
+                            )}
 
-                              <div className="border-t border-sky-50" />
-                              <button
-                                onClick={() => eliminarParte(parte)}
-                                className="w-full flex items-center gap-3 px-5 py-3.5 text-sm font-bold text-red-600 hover:bg-red-50 transition-colors text-left"
-                              >
-                                <Trash2 className="w-4 h-4 text-red-500" />
-                                Eliminar
-                              </button>
-                            </div>
-                          )}
+                            <button
+                              onClick={() => eliminarParte(parte)}
+                              className="p-2 rounded-lg hover:bg-red-50 text-red-500 transition-colors"
+                              title="Eliminar"
+                            >
+                              <Trash2 className="w-5 h-5" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
