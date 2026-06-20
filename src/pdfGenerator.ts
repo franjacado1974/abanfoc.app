@@ -407,7 +407,7 @@ export const generarActaExtintoresPDF = async (
       const w = doc.getTextWidth(cleanLbl);
       if (w > maxLabelWidth) maxLabelWidth = w;
     });
-    const calculatedHeaderHeight = Math.max(20, maxLabelWidth + 6);
+    const calculatedHeaderHeight = Math.max(20, maxLabelWidth + 1); // 5 puntos más corta
 
     autoTable(doc, {
       startY: currentY + 4,
