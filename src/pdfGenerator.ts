@@ -408,7 +408,7 @@ export const generarActaExtintoresPDF = async (
       columnStyles: dynamicColumnStyles,
       head: [
         [
-          { content: '', colSpan: 8, styles: { fillColor: [255, 255, 255], lineWidth: 0.1, lineColor: [0,0,0], minCellHeight: 18 } },
+          { content: '', colSpan: 8, styles: { fillColor: [255, 255, 255], lineWidth: 0.1, lineColor: [0,0,0], minCellHeight: 45 } },
           ...checkHeaders.map(h => ({ content: h, rowSpan: 2 }))
         ],
         headersBase
