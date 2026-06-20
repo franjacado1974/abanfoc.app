@@ -36,6 +36,7 @@ interface ItemLocal {
   orden: number;
   tipoRespuesta: TipoRespuestaChecklist;
   requerido: boolean;
+  opciones?: string[];  // Opciones para desplegable
   esNuevo?: boolean;    // true si aún no se ha guardado en Firestore
 }
 
@@ -93,6 +94,7 @@ export default function FormBuilderPlantillas() {
         orden: it.orden,
         tipoRespuesta: it.tipoRespuesta,
         requerido: it.requerido,
+        opciones: it.opciones || [],
         esNuevo: false,
       })));
     });
@@ -329,6 +331,7 @@ export default function FormBuilderPlantillas() {
       numero: 'bg-amber-100 text-amber-700 border-amber-200',
       fecha: 'bg-purple-100 text-purple-700 border-purple-200',
       imagen: 'bg-pink-100 text-pink-700 border-pink-200',
+      desplegable: 'bg-orange-100 text-orange-700 border-orange-200',
     };
     const labels: Record<string, string> = {
       check: 'Check',
@@ -337,6 +340,7 @@ export default function FormBuilderPlantillas() {
       numero: 'Número',
       fecha: 'Fecha',
       imagen: 'Imagen',
+      desplegable: 'Desplegable',
     };
     return (
       <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${estilos[tipo] || 'bg-zinc-100 text-zinc-600 border-zinc-200'}`}>
@@ -411,6 +415,21 @@ export default function FormBuilderPlantillas() {
               <Image className="w-5 h-5 text-zinc-400" />
               <span className="text-[10px] text-zinc-400">Añadir foto</span>
             </div>
+          </div>
+        );
+      case 'desplegable':
+        return (
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] font-semibold text-zinc-500">{item.label}</label>
+            <select
+              className="w-full px-3 py-2 bg-white border border-zinc-200 rounded-lg text-xs outline-none text-zinc-500"
+              disabled
+            >
+              <option value="">Selecciona...</option>
+              {(item.opciones || []).map((opt, i) => (
+                <option key={i} value={opt}>{opt}</option>
+              ))}
+            </select>
           </div>
         );
     }
@@ -624,11 +643,9 @@ export default function FormBuilderPlantillas() {
                   ) : (
                     <div className="space-y-2">
                       {items.map((item, idx) => (
-                        <div
-                          key={item.id}
-                          className="group flex items-center gap-2 p-3 bg-zinc-50 rounded-xl border border-zinc-200 hover:border-teal-200 hover:bg-teal-50/30 transition-all"
-                        >
-                          {/* ── Controles de orden ─────────────────────────── */}
+                        <div key={item.id} className="flex flex-col gap-2 p-3 bg-zinc-50 rounded-xl border border-zinc-200 hover:border-teal-200 hover:bg-teal-50/30 transition-all group">
+                          <div className="flex items-center gap-2">
+                            {/* ── Controles de orden ─────────────────────────── */}
                           <div className="flex flex-col gap-0.5 shrink-0">
                             <button
                               onClick={() => handleMoverItem(idx, 'up')}
@@ -677,6 +694,7 @@ export default function FormBuilderPlantillas() {
                             <option value="numero"># Número</option>
                             <option value="fecha">📅 Fecha</option>
                             <option value="imagen">🖼️ Imagen</option>
+                            <option value="desplegable">🔽 Desplegable</option>
                           </select>
 
                           {/* ── Badge del tipo ─────────────────────────────── */}
@@ -710,6 +728,24 @@ export default function FormBuilderPlantillas() {
                           >
                             <X className="w-3.5 h-3.5" />
                           </button>
+                          </div>
+                          
+                          {/* ── Editor de opciones para desplegable ───────── */}
+                          {item.tipoRespuesta === 'desplegable' && (
+                            <div className="pl-14 pr-2">
+                              <label className="text-[10px] font-semibold text-zinc-500 mb-1 block">Opciones del desplegable (separadas por comas)</label>
+                              <input
+                                type="text"
+                                value={(item.opciones || []).join(', ')}
+                                onChange={e => {
+                                  const opts = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
+                                  handleUpdateItem(item.id, { opciones: opts });
+                                }}
+                                className="w-full px-3 py-1.5 bg-white border border-zinc-200 rounded-md text-xs outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500/20"
+                                placeholder="Ej: Opción 1, Opción 2, Opción 3"
+                              />
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>

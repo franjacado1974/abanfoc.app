@@ -518,6 +518,25 @@ export default function EquipoFormulario({
                     </div>
                 );
 
+            case 'desplegable': {
+                const opciones = (item as any).opciones || [];
+                return (
+                    <div key={item.key} className="flex flex-col gap-1">
+                        <label className="text-xs font-semibold text-slate-600">{item.label}</label>
+                        <select
+                            value={typeof value === 'string' ? value : ''}
+                            onChange={(e) => handleChange(item.key, e.target.value)}
+                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                        >
+                            <option value="">Selecciona...</option>
+                            {opciones.map((opt: string, idx: number) => (
+                                <option key={idx} value={opt}>{opt}</option>
+                            ))}
+                        </select>
+                    </div>
+                );
+            }
+
             case 'texto':
             default: {
                 const labelLower = (item.label || '').toLowerCase().trim();

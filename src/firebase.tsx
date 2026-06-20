@@ -1368,7 +1368,7 @@ export async function saveImpuestoConfig(config: { iva: number; exento: boolean 
 // CHECKLIST - Firestore CRUD
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type TipoRespuestaChecklist = 'check' | 'texto' | 'texto-largo' | 'numero' | 'fecha' | 'imagen';
+export type TipoRespuestaChecklist = 'check' | 'texto' | 'texto-largo' | 'numero' | 'fecha' | 'imagen' | 'desplegable';
 
 export interface ChecklistItem {
   id: string;
@@ -1378,6 +1378,7 @@ export interface ChecklistItem {
   key: string;             // Clave única para el check (ej: checkAcceso, checkAltura)
   orden: number;           // Orden de aparición
   tipoRespuesta: TipoRespuestaChecklist;  // Tipo de respuesta: 'check' | 'texto' | 'numero' | 'fecha'
+  opciones?: string[];     // Opciones si es desplegable
 }
 
 // ─── CHECKLIST POR COLECCIÓN DINÁMICA (checklist_{sistemaNombre}) ────────

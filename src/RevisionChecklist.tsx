@@ -1090,6 +1090,23 @@ export default function RevisionChecklist() {
                                                                                          />
                                                                                      </div>
                                                                                  );
+                                                                             } else if (tipo === 'desplegable') {
+                                                                                 const opciones = (item as any).opciones || [];
+                                                                                 return (
+                                                                                     <div key={item.key} className="flex flex-col gap-0.5">
+                                                                                         <label className="text-[10px] font-semibold text-slate-500">{item.label}</label>
+                                                                                         <select
+                                                                                             value={typeof val === 'string' ? val : ''}
+                                                                                             onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value)}
+                                                                                             className={`w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${val ? 'font-bold' : 'text-slate-500'}`}
+                                                                                         >
+                                                                                             <option value="">Selecciona...</option>
+                                                                                             {opciones.map((opt: string, idx: number) => (
+                                                                                                 <option key={idx} value={opt}>{opt}</option>
+                                                                                             ))}
+                                                                                         </select>
+                                                                                     </div>
+                                                                                 );
                                                                              }
                                                                         })}
                                                                      </div>
