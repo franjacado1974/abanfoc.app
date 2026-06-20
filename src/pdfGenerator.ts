@@ -411,13 +411,18 @@ export const generarActaExtintoresPDF = async (
       ];
     });
 
+    const dynamicColumnStyles: any = { 0: { halign: 'left' }, 1: { halign: 'left' } };
+    checkHeaders.forEach((_, i) => {
+      dynamicColumnStyles[8 + i] = { halign: 'center', cellWidth: 7.5 };
+    });
+
     autoTable(doc, {
       startY: currentY,
       margin: { top: 40 },
       headStyles: { fillColor: [100, 100, 100], textColor: [255, 255, 255], fontSize: 7, halign: 'center', lineWidth: 0.1, lineColor: [0, 0, 0], minCellHeight: 40 },
       bodyStyles: { fontSize: 7, halign: 'center', lineWidth: 0.1, lineColor: [200, 200, 200] },
 
-      columnStyles: { 0: { halign: 'left' }, 1: { halign: 'left' } },
+      columnStyles: dynamicColumnStyles,
       head: [[...headersBase, ...checkHeaders]],
       body: tableData,
       didDrawPage: function (data: any) {
@@ -447,8 +452,8 @@ export const generarActaExtintoresPDF = async (
             const cleanLbl = lbl.replace(/^\d+\.\s*/, '');
             doc.setTextColor(255, 255, 255);
             doc.setFontSize(6.5);
-            const x = data.cell.x + (data.cell.width / 2) + 2;
-            const y = data.cell.y + data.cell.height - 2;
+            const x = data.cell.x + (data.cell.width / 2) + 0.8;
+            const y = data.cell.y + data.cell.height - 3;
             doc.text(cleanLbl, x, y, { angle: 90 });
           }
         }
