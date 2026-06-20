@@ -598,6 +598,10 @@ export default function RevisionChecklist() {
     const confirmDeleteEquipo = async () => {
         if (!equipoIdToDelete) return;
         setIsConfirmModalOpen(false);
+        
+        // Encontrar el equipo a eliminar desde el estado actual
+        const eqEliminado = equiposInstalados.find(eq => eq.id === equipoIdToDelete);
+        
         const updatedEquipos = equiposInstalados.filter(eq => eq.id !== equipoIdToDelete);
         setEquiposInstalados(updatedEquipos);
 
@@ -606,7 +610,6 @@ export default function RevisionChecklist() {
         localStorage.setItem('firecheck_db_equipos_instalados', JSON.stringify(updatedAll));
 
         // Eliminar también de Firestore
-        const eqEliminado = allEquipos.find((eq: any) => eq.id === equipoIdToDelete);
         if (eqEliminado?.centroId && eqEliminado?.sistemaId) {
             try {
                 const { deleteEquipoInstalado } = await import('./firebase');
