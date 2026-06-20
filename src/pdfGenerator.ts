@@ -52,11 +52,6 @@ export const generarActaExtintoresPDF = async (
 
   // ============ FIRST PAGE: INFO PAGE (REDISEÑO ELEGANTE) ============
   const drawInfoPage = async () => {
-    // ── Borde decorativo exterior ──
-    doc.setDrawColor(180, 180, 180);
-    doc.setLineWidth(0.3);
-    doc.roundedRect(8, 8, pageWidth - 16, 190, 4, 4, 'D');
-
     // ── Logo (esquina superior derecha) ──
     try {
       const logoBase64 = localStorage.getItem('firecheck_db_logo');
@@ -95,6 +90,10 @@ export const generarActaExtintoresPDF = async (
     doc.setFontSize(7.5);
     doc.setTextColor(120, 120, 120);
     doc.text(`N.º Acta: ${numeroMantenimiento || '—'}`, 14, 40);
+    
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9.5);
+    doc.setTextColor(0, 0, 0);
     doc.text(`Fecha: ${new Date().toLocaleDateString('es-ES')}`, pageWidth - 14, 40, { align: 'right' });
 
     // ── SECCIÓN: DATOS DEL CLIENTE Y CENTRO (dos columnas) ──
@@ -264,14 +263,12 @@ export const generarActaExtintoresPDF = async (
     doc.text(empLoc, col1X, y + 15);
     doc.text(`Tel: ${empTel}`, col1X, y + 20);
 
-    // Logo de la empresa mantenedora (esquina inferior derecha)
-    // Cargar logo de la empresa mantenedora (esquina inferior derecha)
+    // Cargar logo de la empresa mantenedora (a la derecha de los datos)
     try {
-      // Intentar primero desde localStorage (base64)
-      let logoData = localStorage.getItem('firecheck_db_logo');
+      let logoData: string | null = null;
       
-      // Si no hay en localStorage, intentar desde la URL de Firebase Storage
-      if (!logoData && empData?.logoUrl) {
+      // Intentar desde la URL de Firebase Storage (logotipo de la empresa seleccionada)
+      if (empData?.logoUrl) {
         try {
           const response = await fetch(empData.logoUrl);
           if (response.ok) {
@@ -354,7 +351,7 @@ export const generarActaExtintoresPDF = async (
 
     const headersBase = isBie ?
       ['Nº', 'Nivel planta y ubicación', 'Placa', 'Tipo', 'Longitud', 'Fabricante', 'Fecha\nFabricación', 'Prueba\nHidráulica'] :
-      ['Nº', 'Nivel planta y ubicación', 'Placa', 'Clase', 'Tipo', 'Fabricante', 'Fecha\nFabricación', 'Último\nRetimbre'];
+      ['Nº', 'Nivel planta y ubicación', 'Placa', 'Tipo', 'Fabricante', 'Fecha\nFabricación', 'Último\nRetimbre'];
 
     const checkItemsDeSistema = (checklistItemsPorSistema && sistemaId) ? checklistItemsPorSistema[sistemaId] : [];
 
@@ -422,23 +419,44 @@ export const generarActaExtintoresPDF = async (
         return eq[fixedKey] || '-';
     };
 
+    const formatMesAno = (val: any) => {
+        if (!val || val === '-') return '-';
+        const str = String(val).trim();
+        const parts = str.split('-');
+        if (parts.length === 3) return `${parts[1]}-${parts[0]}`;
+        if (parts.length === 2 && parts[0].length === 4) return `${parts[1]}-${parts[0]}`;
+        return str;
+    };
+
     const tableData = equipos.map(eq => {
-      return [
+      const baseRow = isBie ? [
         eq.codigo || '-',
         eq.ubicacion || '-',
         getVal(eq, itemPlaca, 'placa'),
-        isBie ? getVal(eq, itemClase, 'clase') : getVal(eq, itemClase, 'clase'),
-        isBie ? getVal(eq, itemLongitud, 'longitud') : getVal(eq, itemTipo, 'nombre'),
+        getVal(eq, itemTipo, 'nombre'),
+        getVal(eq, itemLongitud, 'longitud'),
         getVal(eq, itemFabricante, 'fabricante'),
-        getVal(eq, itemFechaFab, 'fechaFabricacion'),
-        isBie ? getVal(eq, itemPruebaH, 'pruebaHidraulica') : getVal(eq, itemRetimbre, 'ultimoRetimbre'),
+        formatMesAno(getVal(eq, itemFechaFab, 'fechaFabricacion')),
+        formatMesAno(getVal(eq, itemPruebaH, 'pruebaHidraulica'))
+      ] : [
+        eq.codigo || '-',
+        eq.ubicacion || '-',
+        getVal(eq, itemPlaca, 'placa'),
+        getVal(eq, itemTipo, 'nombre'),
+        getVal(eq, itemFabricante, 'fabricante'),
+        formatMesAno(getVal(eq, itemFechaFab, 'fechaFabricacion')),
+        formatMesAno(getVal(eq, itemRetimbre, 'ultimoRetimbre'))
+      ];
+
+      return [
+        ...baseRow,
         ...checkKeys.map(k => getMark(eq[k]))
       ];
     });
 
     const dynamicColumnStyles: any = { 0: { halign: 'left' }, 1: { halign: 'left' } };
     checkHeaders.forEach((_, i) => {
-      dynamicColumnStyles[8 + i] = { halign: 'center', cellWidth: 7.5 };
+      dynamicColumnStyles[headersBase.length + i] = { halign: 'center', cellWidth: 7.5 };
     });
 
     doc.setFont("helvetica", "normal");
@@ -454,13 +472,13 @@ export const generarActaExtintoresPDF = async (
     autoTable(doc, {
       startY: currentY + 4,
       margin: { top: 40 },
-      headStyles: { fillColor: [100, 100, 100], textColor: [255, 255, 255], fontSize: 7, halign: 'center', valign: 'middle', lineWidth: 0.1, lineColor: [0, 0, 0] },
+      headStyles: { fillColor: [156, 49, 28], textColor: [255, 255, 255], fontSize: 7, halign: 'center', valign: 'middle', lineWidth: 0.1, lineColor: [255, 255, 255] },
       bodyStyles: { fontSize: 7, halign: 'center', lineWidth: 0.1, lineColor: [200, 200, 200] },
 
       columnStyles: dynamicColumnStyles,
       head: [
         [
-          { content: '', colSpan: 8, styles: { fillColor: [255, 255, 255], lineWidth: 0.1, lineColor: [0,0,0], minCellHeight: calculatedHeaderHeight } },
+          { content: '', colSpan: headersBase.length, styles: { fillColor: [255, 255, 255], lineWidth: 0.1, lineColor: [255, 255, 255], minCellHeight: calculatedHeaderHeight } },
           ...checkHeaders.map(h => ({ content: h, rowSpan: 2 }))
         ],
         headersBase
@@ -474,15 +492,15 @@ export const generarActaExtintoresPDF = async (
       },
       didParseCell: function (data: any) {
         if (data.section === 'head') {
-          if (data.row.index === 1 && data.column.index < 8) {
+          if (data.row.index === 1 && data.column.index < headersBase.length) {
              data.cell.styles.minCellHeight = 10;
              data.cell.styles.valign = 'middle';
           }
-          if (data.column.index >= 8) {
+          if (data.column.index >= headersBase.length) {
              data.cell.text = [''];
           }
         }
-        if (data.section === 'body' && data.column.index >= 8) {
+        if (data.section === 'body' && data.column.index >= headersBase.length) {
           if (data.cell.raw === 'X') {
             data.cell.styles.textColor = anomalyTextColor;
             data.cell.styles.fontStyle = 'bold';
@@ -517,8 +535,8 @@ export const generarActaExtintoresPDF = async (
           doc.text('Las anotaciones en rojo o con una X indican anomalías que deben corregirse.', cellX + (iconoBase64 ? 16 : 2), centerY + 3.5);
         }
 
-        if (data.section === 'head' && data.column.index >= 8 && data.row.index === 0) {
-          const lbl = checkLabels[data.column.index - 8];
+        if (data.section === 'head' && data.column.index >= headersBase.length && data.row.index === 0) {
+          const lbl = checkLabels[data.column.index - headersBase.length];
           if (lbl) {
             const cleanLbl = lbl.replace(/^\d+\.\s*/, '');
             doc.setTextColor(255, 255, 255);
@@ -528,7 +546,7 @@ export const generarActaExtintoresPDF = async (
             doc.text(cleanLbl, x, y, { angle: 90 });
           }
         }
-        if (data.section === 'body' && data.column.index >= 8 && data.cell.raw === 'TICK') {
+        if (data.section === 'body' && data.column.index >= headersBase.length && data.cell.raw === 'TICK') {
           const { x, y, width, height } = data.cell;
           const cx = x + width / 2;
           const cy = y + height / 2;
@@ -779,70 +797,50 @@ export const generarActaExtintoresPDF = async (
     pageWidth / 2, sigY, { align: 'center' });
   sigY += 16;
 
-  // Bloques de firma (3 columnas)
+  // Bloques de firma (3 columnas) sin cuadros coloreados
   const blockW = 75;
-  const blockH = 55;
   const gap = 20;
   const totalBlocksWidth = blockW * 3 + gap * 2;
   const startBlocksX = (pageWidth - totalBlocksWidth) / 2;
 
-  const blockColors = [
-    [235, 245, 255],  // Azul claro - técnico titulado
-    [240, 253, 244],  // Verde claro - técnico habilitado
-    [255, 243, 235],  // Naranja claro - cliente
-  ];
-
-  const blockBorderColors = [
-    [59, 130, 246],
-    [34, 197, 94],
-    [249, 115, 22],
-  ];
+  // Subir la sección de firmas 15 puntos respecto al valor anterior
+  sigY -= 15;
 
   for (let i = 0; i < 3; i++) {
     const bx = startBlocksX + i * (blockW + gap);
     const by = sigY;
 
-    // Sombra/fondo del bloque
-    doc.setFillColor(blockColors[i][0], blockColors[i][1], blockColors[i][2]);
-    doc.setDrawColor(blockBorderColors[i][0], blockBorderColors[i][1], blockBorderColors[i][2]);
-    doc.setLineWidth(0.8);
-    doc.roundedRect(bx, by, blockW, blockH, 4, 4, 'FD');
-
-    // Título del bloque
+    // Título del bloque (Cargo)
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8.5);
-    doc.setTextColor(blockBorderColors[i][0], blockBorderColors[i][1], blockBorderColors[i][2]);
+    doc.setTextColor(80, 80, 80);
     const titles = ['TÉCNICO TITULADO', 'TÉCNICO HABILITADO', 'CLIENTE / TITULAR'];
     doc.text(titles[i], bx + blockW / 2, by + 8, { align: 'center' });
 
-    // Línea decorativa bajo el título
-    doc.setDrawColor(blockBorderColors[i][0], blockBorderColors[i][1], blockBorderColors[i][2]);
-    doc.setLineWidth(0.3);
-    doc.line(bx + 8, by + 11, bx + blockW - 8, by + 11);
-
-    // Espacio para firma (recuadro de puntos)
+    // Espacio para firma (solo una línea fina debajo de la firma)
     doc.setDrawColor(200, 200, 200);
-    doc.setLineWidth(0.2);
-    doc.setFillColor(255, 255, 255);
-    doc.roundedRect(bx + 10, by + 16, blockW - 20, 18, 2, 2, 'FD');
+    doc.setLineWidth(0.3);
+    doc.line(bx + 10, by + 26, bx + blockW - 10, by + 26);
+
+    // Texto descriptivo suave
     doc.setFont("helvetica", "italic");
     doc.setFontSize(6.5);
     doc.setTextColor(170, 170, 170);
-    doc.text('Firma', bx + blockW / 2, by + 26, { align: 'center' });
+    doc.text('Firma', bx + blockW / 2, by + 30, { align: 'center' });
 
     // Imagen de firma si existe
     if (i === 2 && firmaCliente) {
       try {
-        doc.addImage(firmaCliente, 'PNG', bx + 11, by + 17, blockW - 22, 16);
+        doc.addImage(firmaCliente, 'PNG', bx + 11, by + 10, blockW - 22, 16);
       } catch (_e) { }
     }
     if (i === 1 && firmaTecnico) {
       try {
-        doc.addImage(firmaTecnico, 'PNG', bx + 11, by + 17, blockW - 22, 16);
+        doc.addImage(firmaTecnico, 'PNG', bx + 11, by + 10, blockW - 22, 16);
       } catch (_e) { }
     }
 
-    // Nombre del firmante
+    // Nombre del firmante debajo de la firma
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8);
     doc.setTextColor(40, 40, 40);
@@ -851,7 +849,7 @@ export const generarActaExtintoresPDF = async (
     (tecnicoNombre || 'Técnico Habilitado'),
     (nombreFirmante || 'Cliente / Titular')
     ];
-    doc.text(names[i], bx + blockW / 2, by + blockH - 18, { align: 'center' });
+    doc.text(names[i], bx + blockW / 2, by + 36, { align: 'center' });
 
     // Cargo / cualificación
     doc.setFont("helvetica", "normal");
@@ -862,25 +860,16 @@ export const generarActaExtintoresPDF = async (
     'Técnico Habilitado',
       'Titular / Responsable del centro'
     ];
-    doc.text(cargos[i], bx + blockW / 2, by + blockH - 9, { align: 'center' });
+    doc.text(cargos[i], bx + blockW / 2, by + 40, { align: 'center' });
 
     // Fecha pequeña debajo
     doc.setFont("helvetica", "italic");
     doc.setFontSize(6);
     doc.setTextColor(130, 130, 130);
-    doc.text(`Fecha: ${new Date().toLocaleDateString()}`, bx + blockW / 2, by + blockH - 3, { align: 'center' });
+    doc.text(`Fecha: ${new Date().toLocaleDateString()}`, bx + blockW / 2, by + 44, { align: 'center' });
   }
 
-  sigY += blockH + 15;
-
-  // Nota legal al pie
-  doc.setFont("helvetica", "italic");
-  doc.setFontSize(6.5);
-  doc.setTextColor(130, 130, 130);
-  doc.text('Documento generado electrónicamente. La firma del presente acta implica la aceptación de los trabajos realizados y',
-    20, sigY);
-  doc.text('la conformidad con el estado reflejado de los equipos e instalaciones revisadas según normativa vigente (RIPCI).',
-    20, sigY + 5);
+  sigY += 55;
 
   // Footer en todas las páginas
   const totalPages = (doc.internal as any).getNumberOfPages();
