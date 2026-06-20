@@ -454,18 +454,21 @@ export const generarActaExtintoresPDF = async (
         if (data.section === 'head' && data.row.index === 0 && data.column.index === 0) {
           const cellX = data.cell.x;
           const cellY = data.cell.y;
+          const cellH = data.cell.height;
+          const centerY = cellY + (cellH / 2);
+
           if (iconoBase64) {
-            doc.addImage(iconoBase64, 'PNG', cellX + 2, cellY + 3, 8, 8);
+            doc.addImage(iconoBase64, 'PNG', cellX + 2, centerY - 6, 12, 12);
           }
           doc.setFont("helvetica", "bold");
           doc.setFontSize(12);
           doc.setTextColor(0, 0, 0);
-          doc.text(title, cellX + (iconoBase64 ? 12 : 2), cellY + 7.5);
+          doc.text(title, cellX + (iconoBase64 ? 16 : 2), centerY - 1);
           
           doc.setFont("helvetica", "normal");
           doc.setFontSize(8.5);
           doc.setTextColor(anomalyTextColor[0], anomalyTextColor[1], anomalyTextColor[2]);
-          doc.text('Las anotaciones en rojo o con una X indican anomalías que deben corregirse.', cellX + (iconoBase64 ? 12 : 2), cellY + 12);
+          doc.text('Las anotaciones en rojo o con una X indican anomalías que deben corregirse.', cellX + (iconoBase64 ? 16 : 2), centerY + 3.5);
         }
 
         if (data.section === 'head' && data.column.index >= 8 && data.row.index === 0) {

@@ -141,7 +141,6 @@ export default function Partes() {
     }
     
     try {
-      alert('Generando documentos PDF seleccionados... Por favor, espera.');
       // 1. Obtener Sistemas del centro
       const sistemasCol = collection(db, 'centros', centro.id, 'inventario');
       const sistemasSnap = await getDocs(sistemasCol);
