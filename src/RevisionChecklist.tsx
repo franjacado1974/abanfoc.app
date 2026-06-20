@@ -363,11 +363,21 @@ export default function RevisionChecklist() {
             return;
         }
 
-        const itemsToUse = getItemsToUse();
         const equiposInvalidos = equiposInstalados.filter((eq) => {
-            const algunCheckRojo = itemsToUse.some((item) => eq[item.key as keyof EquipoInstalado] === false);
-            const anomaliaVacia = !eq.anomalias || eq.anomalias.trim() === '';
-            return algunCheckRojo && anomaliaVacia;
+            const itemsDelSistema = checklistItemsPorSistema[eq.sistemaId] || [];
+            const algunCheckRojo = itemsDelSistema.some((item) => eq[item.key as keyof EquipoInstalado] === false);
+
+            const tieneAnomalia = itemsDelSistema.some(item => {
+                const lbl = (item.label || '').toLowerCase();
+                if (lbl.includes('notas') || lbl.includes('observaciones') || lbl.includes('anomal')) {
+                    const val = eq[item.key as keyof EquipoInstalado];
+                    if (typeof val === 'string' && val.trim() !== '') return true;
+                }
+                return false;
+            });
+            const textoAnomaliaDirecto = !!eq.anomalias && eq.anomalias.trim() !== '';
+
+            return algunCheckRojo && !tieneAnomalia && !textoAnomaliaDirecto;
         });
 
         if (equiposInvalidos.length > 0) {
