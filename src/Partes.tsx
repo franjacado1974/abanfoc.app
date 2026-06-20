@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileText, Building2, MapPin, CalendarDays, Search, Trash2, Download, Lock } from 'lucide-react';
+import { FileText, Building2, MapPin, CalendarDays, Search, Trash2, Download, Lock, X, Check } from 'lucide-react';
 import { subscribePartes, subscribeCentros, subscribeClientes, deleteParte, db } from './firebase';
 import { collection, getDocs } from 'firebase/firestore';
 import { generarActaExtintoresPDF, generarAlbaranPDF, generarCertificadoPDF } from './pdfGenerator';
@@ -43,6 +43,10 @@ export default function Partes() {
   const [centros, setCentros] = useState<Centro[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [search, setSearch] = useState('');
+
+  const [showDownloadModal, setShowDownloadModal] = useState(false);
+  const [selectedParteToDownload, setSelectedParteToDownload] = useState<ParteItem | null>(null);
+  const [downloadOptions, setDownloadOptions] = useState({ acta: true, certificado: true, albaran: true });
 
   useEffect(() => {
     const unsubPartes = subscribePartes((items) => {
@@ -118,7 +122,17 @@ export default function Partes() {
     }
   };
 
-  const descargarPDFs = async (parte: ParteItem) => {
+  const openDownloadModal = (parte: ParteItem) => {
+    setSelectedParteToDownload(parte);
+    setDownloadOptions({ acta: true, certificado: true, albaran: true });
+    setShowDownloadModal(true);
+  };
+
+  const confirmDownloadPDFs = async () => {
+    if (!selectedParteToDownload) return;
+    const parte = selectedParteToDownload;
+    setShowDownloadModal(false);
+
     const centro = getCentro(parte.centroId);
     const cliente = getCliente(parte.clienteId);
     if (!centro || !cliente) {
@@ -127,7 +141,7 @@ export default function Partes() {
     }
     
     try {
-      alert('Generando documentos PDF... Por favor, espera.');
+      alert('Generando documentos PDF seleccionados... Por favor, espera.');
       // 1. Obtener Sistemas del centro
       const sistemasCol = collection(db, 'centros', centro.id, 'inventario');
       const sistemasSnap = await getDocs(sistemasCol);
@@ -163,22 +177,28 @@ export default function Partes() {
       }
 
       // 1. Acta
-      await generarActaExtintoresPDF(
-        cliente, centro, sistemasDelCentro, equiposTodos, numeroMantenimiento,
-        tecnicoNombre, undefined, firmaCliente, firmaTecnico, nombreFirmante, checklistItemsTodos
-      );
+      if (downloadOptions.acta) {
+        await generarActaExtintoresPDF(
+          cliente, centro, sistemasDelCentro, equiposTodos, numeroMantenimiento,
+          tecnicoNombre, undefined, firmaCliente, firmaTecnico, nombreFirmante, checklistItemsTodos
+        );
+      }
 
       // 2. Certificado
-      await generarCertificadoPDF(
-        cliente, centro, parte, tecnicoNombre, undefined, sistemasDelCentro, equiposTodos,
-        firmaCliente, firmaTecnico, nombreFirmante, false
-      );
+      if (downloadOptions.certificado) {
+        await generarCertificadoPDF(
+          cliente, centro, parte, tecnicoNombre, undefined, sistemasDelCentro, equiposTodos,
+          firmaCliente, firmaTecnico, nombreFirmante, false
+        );
+      }
 
       // 3. Albarán
-      await generarAlbaranPDF(
-        cliente, centro, equiposTodos, numeroMantenimiento, tecnicoNombre,
-        firmaCliente, firmaTecnico, nombreFirmante, undefined, undefined, false, 'ALBARÁN DE REVISIÓN'
-      );
+      if (downloadOptions.albaran) {
+        await generarAlbaranPDF(
+          cliente, centro, equiposTodos, numeroMantenimiento, tecnicoNombre,
+          firmaCliente, firmaTecnico, nombreFirmante, undefined, undefined, false, 'ALBARÁN DE REVISIÓN'
+        );
+      }
 
     } catch (error) {
       console.error('Error generando PDFs:', error);
@@ -323,7 +343,7 @@ export default function Partes() {
                             
                             {(parte.estado === 'Pre-Cerrado' || parte.estado === 'Cerrado' || parte.estado === 'Descargado (Offline)' || (parte as any).firmaCliente) && (
                               <button
-                                onClick={() => descargarPDFs(parte)}
+                                onClick={() => openDownloadModal(parte)}
                                 className="p-2 rounded-lg hover:bg-amber-50 text-amber-600 transition-colors"
                                 title="Descargar PDFs"
                               >
@@ -353,6 +373,88 @@ export default function Partes() {
           <span>Total: {partesPlanificados.length} parte{partesPlanificados.length !== 1 ? 's' : ''} planificado{partesPlanificados.length !== 1 ? 's' : ''}</span>
         </div>
       </div>
+
+      {/* Modal de Opciones de Descarga PDF */}
+      {showDownloadModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between p-5 border-b border-zinc-100 bg-zinc-50/50">
+              <h3 className="font-bold text-zinc-800 text-lg flex items-center gap-2">
+                <FileText className="w-5 h-5 text-sky-500" />
+                Descargar Documentos
+              </h3>
+              <button 
+                onClick={() => setShowDownloadModal(false)}
+                className="p-2 -mr-2 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 rounded-full transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-6">
+              <p className="text-sm text-zinc-600 mb-5">Selecciona los documentos que deseas generar y descargar:</p>
+              
+              <div className="space-y-3">
+                <label className="flex items-center p-3 rounded-xl border border-zinc-200 hover:bg-zinc-50 cursor-pointer transition-colors">
+                  <div className={`w-5 h-5 rounded flex items-center justify-center mr-3 transition-colors ${downloadOptions.acta ? 'bg-sky-500 border-sky-500' : 'border-2 border-zinc-300'}`}>
+                    {downloadOptions.acta && <Check className="w-3.5 h-3.5 text-white" />}
+                  </div>
+                  <input 
+                    type="checkbox" 
+                    className="hidden"
+                    checked={downloadOptions.acta}
+                    onChange={(e) => setDownloadOptions(prev => ({ ...prev, acta: e.target.checked }))}
+                  />
+                  <span className="font-medium text-zinc-700">Acta de Revisión</span>
+                </label>
+                
+                <label className="flex items-center p-3 rounded-xl border border-zinc-200 hover:bg-zinc-50 cursor-pointer transition-colors">
+                  <div className={`w-5 h-5 rounded flex items-center justify-center mr-3 transition-colors ${downloadOptions.certificado ? 'bg-sky-500 border-sky-500' : 'border-2 border-zinc-300'}`}>
+                    {downloadOptions.certificado && <Check className="w-3.5 h-3.5 text-white" />}
+                  </div>
+                  <input 
+                    type="checkbox" 
+                    className="hidden"
+                    checked={downloadOptions.certificado}
+                    onChange={(e) => setDownloadOptions(prev => ({ ...prev, certificado: e.target.checked }))}
+                  />
+                  <span className="font-medium text-zinc-700">Certificado</span>
+                </label>
+                
+                <label className="flex items-center p-3 rounded-xl border border-zinc-200 hover:bg-zinc-50 cursor-pointer transition-colors">
+                  <div className={`w-5 h-5 rounded flex items-center justify-center mr-3 transition-colors ${downloadOptions.albaran ? 'bg-sky-500 border-sky-500' : 'border-2 border-zinc-300'}`}>
+                    {downloadOptions.albaran && <Check className="w-3.5 h-3.5 text-white" />}
+                  </div>
+                  <input 
+                    type="checkbox" 
+                    className="hidden"
+                    checked={downloadOptions.albaran}
+                    onChange={(e) => setDownloadOptions(prev => ({ ...prev, albaran: e.target.checked }))}
+                  />
+                  <span className="font-medium text-zinc-700">Albarán de Trabajo</span>
+                </label>
+              </div>
+
+              <div className="mt-6 pt-5 border-t border-zinc-100 flex gap-3">
+                <button
+                  onClick={() => setShowDownloadModal(false)}
+                  className="flex-1 py-2.5 px-4 rounded-xl font-medium text-zinc-600 hover:bg-zinc-100 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={confirmDownloadPDFs}
+                  disabled={!downloadOptions.acta && !downloadOptions.certificado && !downloadOptions.albaran}
+                  className="flex-1 py-2.5 px-4 rounded-xl font-medium bg-sky-600 text-white hover:bg-sky-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  <Download className="w-4 h-4" />
+                  Descargar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
