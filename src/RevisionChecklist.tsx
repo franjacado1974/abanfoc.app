@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Save, Building2, Layers, MapPin, FileText, ChevronDown, ChevronUp, Plus, X, CheckCircle2, XCircle, Trash2, AlertTriangle, Pencil, PenLine, RotateCcw, CheckCheck, Lock } from 'lucide-react';
-import { addEquipoInstalado, addAlbaran, updateEquipoInstalado, updateParte as updateParteFirestore, subscribePartes, subscribeCentros, subscribeClientes, subscribeCentroSistemas, subscribeEquiposInstalados, subscribeArticulos, subscribeSistemasCategorias, uploadFile, type Albaran, type ChecklistItem } from './firebase';
+import { addEquipoInstalado, addAlbaran, updateEquipoInstalado, updateParte as updateParteFirestore, subscribePartes, subscribeCentros, subscribeClientes, subscribeCentroSistemas, subscribeEquiposInstalados, subscribeArticulos, subscribeSistemasCategorias, uploadFile, generateNumeroMantenimiento, type Albaran, type ChecklistItem } from './firebase';
 import { subscribePlantillas, subscribeItemsDePlantilla, type ItemPlantilla } from './plantillas';
 import type { Centro, Parte, Cliente, CentroSistema, EquipoInstalado } from './Centros';
 import ConfirmationModal from './ConfirmationModal';
@@ -217,6 +217,15 @@ export default function RevisionChecklist() {
             unsubSst(); unsubArt();
         };
     }, [centroId, parteId, navigate]);
+
+    // Generar numeroMantenimiento si no existe
+    useEffect(() => {
+        if (parte && !parte.numeroMantenimiento) {
+            generateNumeroMantenimiento().then(num => {
+                handleParteChange({ numeroMantenimiento: num });
+            }).catch(console.error);
+        }
+    }, [parte?.id, parte?.numeroMantenimiento]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // 5. Cargar equipos de cada sistema en tiempo real
     useEffect(() => {
