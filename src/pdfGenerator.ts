@@ -371,6 +371,33 @@ export const generarActaExtintoresPDF = async (
       return !lbl.includes('notas') && !lbl.includes('observaciones') && !lbl.includes('anomal');
     });
 
+    const legendQuestions = checkItems.length > 0 
+      ? checkItems.map((item, idx) => `${idx + 1}. ${item.label || ''}`)
+      : (isBie ? [
+      '1. Acceso al BIE', '2. Altura de la válvula y maneta', '3. Señalización', '4. Estado general del armario',
+      '5. Estado maneta o cerradura', '6. Estado de la devanadera', '7. Tramo de manguera', '8. Dispone del Marcado CE',
+      '9. Etiquetas de uso y manejo', '10. Etiquetas de prueba hidráulica', '11. Estado de la lanza y posiciones',
+      '12. Distancia entre Bies es < 25 m.', '13. Válvula y manómetro', '14. Presión de la red (bar)'
+    ] : [
+      '1. Acceso al extintor', '2. Altura del extintor', '3. Soporte correcto', '4. Señalización',
+      '5. Difusor - manguera', '6. Peso total del aparato', '7. Presión manómetro', '8. Extintor con Marcado CE',
+      '9. Etiquetas de tipo y manejo', '10. Etiqueta último Retimbre', '11. Adecuado para su riesgo',
+      '12. Distancia < 15 m. al siguiente', '13. Anilla pasador y precinto', '14. Si es carro verificar movilidad'
+    ]);
+
+    doc.setFontSize(6.5);
+    doc.setTextColor(80, 80, 80);
+    legendQuestions.forEach((q, index) => {
+      const colIndex = Math.floor(index / 5);
+      const rowIndex = index % 5;
+      const columnX = 14 + (colIndex * 90);
+      const rowY = currentY + (rowIndex * 3.5);
+      doc.text(q, columnX, rowY);
+    });
+    doc.setTextColor(0, 0, 0);
+
+    currentY += 18;
+
     const checkKeys = checkItems.length > 0 
       ? checkItems.map(item => item.key)
       : ['checkAcceso', 'checkAltura', 'checkSoporte', 'checkSenalizacion',
@@ -541,34 +568,6 @@ export const generarActaExtintoresPDF = async (
       doc.setTextColor(0, 0, 0);
       finalY += 3;
     }
-
-    // Leyenda
-    finalY += 6;
-    const legendQuestions = isBie ? [
-      '1. Acceso al BIE', '2. Altura de la válvula y maneta', '3. Señalización', '4. Estado general del armario',
-      '5. Estado maneta o cerradura', '6. Estado de la devanadera', '7. Tramo de manguera', '8. Dispone del Marcado CE',
-      '9. Etiquetas de uso y manejo', '10. Etiquetas de prueba hidráulica', '11. Estado de la lanza y posiciones',
-      '12. Distancia entre Bies es < 25 m.', '13. Válvula y manómetro', '14. Presión de la red (bar)'
-    ] : [
-      '1. Acceso al extintor', '2. Altura del extintor', '3. Soporte correcto', '4. Señalización',
-      '5. Difusor - manguera', '6. Peso total del aparato', '7. Presión manómetro', '8. Extintor con Marcado CE',
-      '9. Etiquetas de tipo y manejo', '10. Etiqueta último Retimbre', '11. Adecuado para su riesgo',
-      '12. Distancia < 15 m. al siguiente', '13. Anilla pasador y precinto', '14. Si es carro verificar movilidad'
-    ];
-
-    doc.setFontSize(6.5);
-    doc.setTextColor(80, 80, 80);
-    const firstColumnX = pageWidth / 2 + 40;
-    const secondColumnX = firstColumnX + 52;
-    const legendStartY = finalY - 24;
-
-
-    legendQuestions.forEach((q, index) => {
-      const columnX = index < 7 ? firstColumnX : secondColumnX;
-      const rowY = legendStartY + (index % 7) * 4;
-      doc.text(q, columnX, rowY);
-    });
-    doc.setTextColor(0, 0, 0);
 
     return finalY + 5;
   };
