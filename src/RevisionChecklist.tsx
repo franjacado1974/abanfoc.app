@@ -1,12 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, Save, Building2, Layers, MapPin, FileText, ChevronDown, ChevronUp, Plus, X, CheckCircle2, XCircle, Trash2, AlertTriangle, Pencil, PenLine, RotateCcw, CheckCheck, Eye } from 'lucide-react';
-import { addEquipoInstalado, addAlbaran, updateEquipoInstalado, updateParte as updateParteFirestore, subscribePartes, subscribeCentros, subscribeClientes, subscribeCentroSistemas, subscribeEquiposInstalados, subscribeArticulos, subscribeSistemasCategorias, uploadFile, type Albaran, type Tecnico, type ChecklistItem } from './firebase';
+import { ArrowLeft, Save, Building2, Layers, MapPin, FileText, ChevronDown, ChevronUp, Plus, X, CheckCircle2, XCircle, Trash2, AlertTriangle, Pencil, PenLine, RotateCcw, CheckCheck, Lock } from 'lucide-react';
+import { addEquipoInstalado, addAlbaran, updateEquipoInstalado, updateParte as updateParteFirestore, subscribePartes, subscribeCentros, subscribeClientes, subscribeCentroSistemas, subscribeEquiposInstalados, subscribeArticulos, subscribeSistemasCategorias, uploadFile, type Albaran, type ChecklistItem } from './firebase';
 import { subscribePlantillas, subscribeItemsDePlantilla, type ItemPlantilla } from './plantillas';
 import type { Centro, Parte, Cliente, CentroSistema, EquipoInstalado } from './Centros';
 import ConfirmationModal from './ConfirmationModal';
 import { getIconForSistema } from './Sistemas';
-import { generarActaExtintoresPDFView } from './pdfGenerator';
 import EquipoFormulario from './components/EquipoFormulario';
 
 export default function RevisionChecklist() {
@@ -353,36 +352,6 @@ export default function RevisionChecklist() {
             return updatedEquipos;
         });
     };
-
-  const handlePreviewPDF = async () => {
-    try {
-      const cliente = clientes.find(cl => cl.id === centro?.clienteId);
-      const tecnicos: Tecnico[] = JSON.parse(localStorage.getItem('firecheck_db_tecnicos') || '[]');
-      const tecnico = tecnicos.find(t => t.id === parte?.tecnicoId);
-      const nombreTecnico = tecnico ? `${tecnico.nombre} ${tecnico.apellidos}` : 'Técnico';
-      
-      if (!centro || !cliente) return;
-
-      const pdfBlobUrl = await generarActaExtintoresPDFView(
-        cliente as Record<string, any>,
-        centro as Record<string, any>,
-        sistemasDelCentro as Record<string, any>[],
-        equiposInstalados
-          .filter(e => e.centroId === centroId)
-          .sort((a, b) => (a.codigo || '').localeCompare(b.codigo || '', undefined, { numeric: true })),
-        parte?.numeroMantenimiento || parte?.id,
-        nombreTecnico,
-        undefined,
-        undefined, // Sin firma cliente aún
-        undefined, // Sin firma técnico aún
-        '',
-        Object.values(checklistItemsPorSistema).flat() // Pasar los items del checklist dinámico
-      );
-      window.open(pdfBlobUrl, '_blank');
-    } catch (e) {
-      console.error(e);
-    }
-  };
 
     const handleSaveRevision = () => {
         if (!parteId) return;
@@ -1421,22 +1390,16 @@ export default function RevisionChecklist() {
                 {/* Bottom Actions */}
                 <div className="mt-10 pt-6 border-t border-slate-200 flex flex-col sm:flex-row justify-end gap-3">
                     <button
-                        onClick={handlePreviewPDF}
-                        className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition-all text-sm sm:w-auto"
-                    >
-                        <Eye className="w-4 h-4" /> Previsualizar Acta
-                    </button>
-                    <button
                         onClick={handlePauseRevision}
-                        className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-white bg-red-600 hover:bg-red-700 shadow-lg shadow-red-200 transition-all text-sm sm:w-auto"
+                        className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-white bg-slate-600 hover:bg-slate-700 shadow-lg shadow-slate-200 transition-all text-sm sm:w-auto"
                     >
-                        <Save className="w-4 h-4" /> Pausar Revisión
+                        <Save className="w-4 h-4" /> Guardar datos
                     </button>
                     <button
                         onClick={handleSaveRevision}
                         className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-white bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all text-sm sm:w-auto"
                     >
-                        <Save className="w-4 h-4" /> Finalizar Revisión
+                        <Lock className="w-4 h-4" /> Pre-cerrar
                     </button>
                 </div>
             </div>

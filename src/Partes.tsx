@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileText, Building2, MapPin, CalendarDays, Search, Trash2, Download } from 'lucide-react';
+import { FileText, Building2, MapPin, CalendarDays, Search, Trash2, Download, Lock } from 'lucide-react';
 import { subscribePartes, subscribeCentros, subscribeClientes, deleteParte, db } from './firebase';
 import { collection, getDocs } from 'firebase/firestore';
 import { generarActaExtintoresPDF, generarAlbaranPDF, generarCertificadoPDF } from './pdfGenerator';
@@ -316,9 +316,9 @@ export default function Partes() {
                             <button
                               onClick={() => irARevision(parte)}
                               className="p-2 rounded-lg hover:bg-sky-50 text-sky-600 transition-colors"
-                              title="Ir a Revisión"
+                              title={(parte.estado === 'Pre-Cerrado' || parte.estado === 'Cerrado') ? "Revisar Parte (Bloqueado)" : "Ir a Revisión"}
                             >
-                              <Search className="w-5 h-5" />
+                              {(parte.estado === 'Pre-Cerrado' || parte.estado === 'Cerrado') ? <Lock className="w-5 h-5" /> : <Search className="w-5 h-5" />}
                             </button>
                             
                             {(parte.estado === 'Pre-Cerrado' || parte.estado === 'Cerrado' || parte.estado === 'Descargado (Offline)' || (parte as any).firmaCliente) && (
