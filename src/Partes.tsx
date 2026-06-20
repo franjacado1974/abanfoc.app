@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileText, Building2, MapPin, CalendarDays, Search, MoreVertical, ExternalLink, Trash2 } from 'lucide-react';
-import { subscribePartes, subscribeCentros, subscribeClientes, deleteParte } from './firebase';
+import { FileText, Building2, MapPin, CalendarDays, Search, MoreVertical, ExternalLink, Trash2, Download } from 'lucide-react';
+import { subscribePartes, subscribeCentros, subscribeClientes, deleteParte, db } from './firebase';
+import { collection, getDocs } from 'firebase/firestore';
+import { generarActaExtintoresPDF, generarAlbaranPDF, generarCertificadoPDF } from './pdfGenerator';
 
 interface ParteItem {
   id: string;
@@ -120,6 +122,75 @@ export default function Partes() {
       await deleteParte(docId);
     } catch (err) {
       console.error('Error eliminando parte:', err);
+    }
+  };
+
+  const descargarPDFs = async (parte: ParteItem) => {
+    setMenuOpenId(null);
+    const centro = getCentro(parte.centroId);
+    const cliente = getCliente(parte.clienteId);
+    if (!centro || !cliente) {
+      alert('Falta información de centro o cliente.');
+      return;
+    }
+    
+    try {
+      alert('Generando documentos PDF... Por favor, espera.');
+      // 1. Obtener Sistemas del centro
+      const sistemasCol = collection(db, 'centros', centro.id, 'inventario');
+      const sistemasSnap = await getDocs(sistemasCol);
+      const sistemasDelCentro = sistemasSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+      // 2. Obtener Equipos instalados
+      let equiposTodos: any[] = [];
+      for (const sist of sistemasDelCentro) {
+          const equiposCol = collection(db, 'centros', centro.id, 'inventario', sist.id, 'equipos');
+          const equiposSnap = await getDocs(equiposCol);
+          equiposTodos = equiposTodos.concat(equiposSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      }
+
+      // Ordenar equiposTodos
+      equiposTodos.sort((a, b) => (a.codigo || '').localeCompare(b.codigo || '', undefined, { numeric: true }));
+
+      // Tecnico nombre
+      const tecnicos = JSON.parse(localStorage.getItem('firecheck_db_tecnicos') || '[]');
+      const tecnico = tecnicos.find((t: any) => t.id === parte.tecnicoId);
+      const tecnicoNombre = tecnico ? `${tecnico.nombre} ${tecnico.apellidos}` : 'Técnico';
+
+      const firmaCliente = (parte as any).firmaCliente || '';
+      const firmaTecnico = (parte as any).firmaTecnico || '';
+      const nombreFirmante = (parte as any).nombreFirmante || '';
+      const numeroMantenimiento = (parte as any).numeroMantenimiento || parte.id;
+
+      let checklistItemsTodos: any[] = [];
+      try {
+        const checkSnap = await getDocs(collection(db, 'checklist'));
+        checklistItemsTodos = checkSnap.docs.map(d => ({ key: d.id, ...d.data() }));
+      } catch (e) {
+        console.error('Checklist fetch error', e);
+      }
+
+      // 1. Acta
+      await generarActaExtintoresPDF(
+        cliente, centro, sistemasDelCentro, equiposTodos, numeroMantenimiento,
+        tecnicoNombre, undefined, firmaCliente, firmaTecnico, nombreFirmante, checklistItemsTodos
+      );
+
+      // 2. Certificado
+      await generarCertificadoPDF(
+        cliente, centro, parte, tecnicoNombre, undefined, sistemasDelCentro, equiposTodos,
+        firmaCliente, firmaTecnico, nombreFirmante, false
+      );
+
+      // 3. Albarán
+      await generarAlbaranPDF(
+        cliente, centro, equiposTodos, numeroMantenimiento, tecnicoNombre,
+        firmaCliente, firmaTecnico, nombreFirmante, undefined, undefined, false, 'ALBARÁN DE REVISIÓN'
+      );
+
+    } catch (error) {
+      console.error('Error generando PDFs:', error);
+      alert('Hubo un error al generar los documentos. Ver consola.');
     }
   };
 
@@ -270,6 +341,20 @@ export default function Partes() {
                                 <ExternalLink className="w-4 h-4 text-sky-500" />
                                 Ir a Revisión
                               </button>
+                              
+                              {(parte.estado === 'Pre-Cerrado' || parte.estado === 'Cerrado' || parte.estado === 'Descargado (Offline)' || (parte as any).firmaCliente) && (
+                                <>
+                                  <div className="border-t border-sky-50" />
+                                  <button
+                                    onClick={() => descargarPDFs(parte)}
+                                    className="w-full flex items-center gap-3 px-5 py-3.5 text-sm font-bold text-amber-700 hover:bg-amber-50 transition-colors text-left"
+                                  >
+                                    <Download className="w-4 h-4 text-amber-500" />
+                                    Descargar PDFs
+                                  </button>
+                                </>
+                              )}
+
                               <div className="border-t border-sky-50" />
                               <button
                                 onClick={() => eliminarParte(parte)}
