@@ -352,11 +352,32 @@ export const generarActaExtintoresPDF = async (
       ['Nº', 'Nivel planta y ubicación', 'Placa', 'Tipo', 'Longitud', 'Fabricante', 'Fecha\nFabricación', 'Prueba\nHidráulica'] :
       ['Nº', 'Nivel planta y ubicación', 'Placa', 'Clase', 'Tipo', 'Fabricante', 'Fecha\nFabricación', 'Último\nRetimbre'];
 
-    // Usar los items del checklist dinámico si están disponibles
     const checkItemsDeSistema = (checklistItemsPorSistema && sistemaId) ? checklistItemsPorSistema[sistemaId] : [];
+
+    const findItem = (keywords: string[]) => checkItemsDeSistema.find(item => {
+      const lbl = (item.label || '').toLowerCase();
+      return keywords.some(k => lbl.includes(k));
+    });
+
+    const itemPlaca = findItem(['placa', 'industria']);
+    const itemClase = findItem(['clase']);
+    const itemTipo = findItem(['tipo']);
+    const itemLongitud = findItem(['longitud']);
+    const itemFabricante = findItem(['fabricante', 'marca']);
+    const itemFechaFab = findItem(['fabricación', 'fabricacion', 'año', 'fecha fab']);
+    const itemRetimbre = findItem(['retimbre']);
+    const itemPruebaH = findItem(['prueba hidra', 'prueba hidráulica']);
+
+    const fixedItemsKeys = [
+        itemPlaca?.key, itemClase?.key, itemTipo?.key, itemLongitud?.key,
+        itemFabricante?.key, itemFechaFab?.key, itemRetimbre?.key, itemPruebaH?.key
+    ].filter(Boolean);
+
     const checkItems = (checkItemsDeSistema || []).filter(item => {
       const lbl = (item.label || '').toLowerCase();
-      return !lbl.includes('notas') && !lbl.includes('observaciones') && !lbl.includes('anomal');
+      const isNotas = lbl.includes('notas') || lbl.includes('observaciones') || lbl.includes('anomal');
+      const isFixed = fixedItemsKeys.includes(item.key);
+      return !isNotas && !isFixed;
     });
 
     const checkKeys = checkItems.length > 0 
@@ -385,16 +406,21 @@ export const generarActaExtintoresPDF = async (
           'Distancia < 15 m. al siguiente', 'Anilla pasador y precinto', 'Si es carro verificar movilidad'
         ]);
 
+    const getVal = (eq: any, item: any, fixedKey: string) => {
+        if (item && eq[item.key] !== undefined && eq[item.key] !== '') return eq[item.key];
+        return eq[fixedKey] || '-';
+    };
+
     const tableData = equipos.map(eq => {
       return [
         eq.codigo || '-',
         eq.ubicacion || '-',
-        eq.placa || '-',
-        isBie ? (eq.clase || '-') : (eq.clase || '-'),
-        isBie ? (eq.longitud || '-') : (eq.nombre || '-'),
-        eq.fabricante || '-',
-        eq.fechaFabricacion || '-',
-        isBie ? (eq.pruebaHidraulica || '-') : (eq.ultimoRetimbre || '-'),
+        getVal(eq, itemPlaca, 'placa'),
+        isBie ? getVal(eq, itemClase, 'clase') : getVal(eq, itemClase, 'clase'),
+        isBie ? getVal(eq, itemLongitud, 'longitud') : getVal(eq, itemTipo, 'nombre'),
+        getVal(eq, itemFabricante, 'fabricante'),
+        getVal(eq, itemFechaFab, 'fechaFabricacion'),
+        isBie ? getVal(eq, itemPruebaH, 'pruebaHidraulica') : getVal(eq, itemRetimbre, 'ultimoRetimbre'),
         ...checkKeys.map(k => getMark(eq[k]))
       ];
     });
