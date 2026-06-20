@@ -408,7 +408,7 @@ export const generarActaExtintoresPDF = async (
       columnStyles: dynamicColumnStyles,
       head: [
         [
-          { content: '', colSpan: 8, styles: { fillColor: [255, 255, 255], lineWidth: 0.1, lineColor: [0,0,0], minCellHeight: 14 } },
+          { content: '', colSpan: 8, styles: { fillColor: [255, 255, 255], lineWidth: 0.1, lineColor: [0,0,0], minCellHeight: 18 } },
           ...checkHeaders.map(h => ({ content: h, rowSpan: 2 }))
         ],
         headersBase
@@ -423,7 +423,7 @@ export const generarActaExtintoresPDF = async (
       didParseCell: function (data: any) {
         if (data.section === 'head') {
           if (data.row.index === 1 && data.column.index < 8) {
-             data.cell.styles.minCellHeight = 32;
+             data.cell.styles.minCellHeight = 10;
              data.cell.styles.valign = 'middle';
           }
           if (data.column.index >= 8) {
