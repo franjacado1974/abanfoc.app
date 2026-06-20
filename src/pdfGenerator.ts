@@ -419,11 +419,14 @@ export const generarActaExtintoresPDF = async (
     autoTable(doc, {
       startY: currentY,
       margin: { top: 40 },
-      headStyles: { fillColor: [100, 100, 100], textColor: [255, 255, 255], fontSize: 7, halign: 'center', lineWidth: 0.1, lineColor: [0, 0, 0], minCellHeight: 40 },
+      headStyles: { fillColor: [100, 100, 100], textColor: [255, 255, 255], fontSize: 7, halign: 'center', valign: 'middle', lineWidth: 0.1, lineColor: [0, 0, 0], minCellHeight: 20 },
       bodyStyles: { fontSize: 7, halign: 'center', lineWidth: 0.1, lineColor: [200, 200, 200] },
 
       columnStyles: dynamicColumnStyles,
-      head: [[...headersBase, ...checkHeaders]],
+      head: [
+        [...headersBase.map(() => ''), ...checkHeaders.map(h => ({ content: h, rowSpan: 2 }))],
+        headersBase
+      ],
       body: tableData,
       didDrawPage: function (data: any) {
         if (!drawnTablePages.has(data.pageNumber)) {
@@ -446,7 +449,7 @@ export const generarActaExtintoresPDF = async (
         }
       },
       didDrawCell: function (data: any) {
-        if (data.section === 'head' && data.column.index >= 8) {
+        if (data.section === 'head' && data.column.index >= 8 && data.row.index === 0) {
           const lbl = checkLabels[data.column.index - 8];
           if (lbl) {
             const cleanLbl = lbl.replace(/^\d+\.\s*/, '');
