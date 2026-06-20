@@ -167,10 +167,18 @@ export default function Partes() {
       const nombreFirmante = (parte as any).nombreFirmante || '';
       const numeroMantenimiento = (parte as any).numeroMantenimiento || parte.id;
 
-      let checklistItemsTodos: any[] = [];
+      let checklistItemsPorSistema: Record<string, any[]> = {};
       try {
-        const checkSnap = await getDocs(collection(db, 'checklist'));
-        checklistItemsTodos = checkSnap.docs.map(d => ({ key: d.id, ...d.data() }));
+        for (const sist of sistemasDelCentro) {
+          const plantillaId = (sist as any).plantillaId;
+          if (plantillaId) {
+            const itemsCol = collection(db, 'plantillas', plantillaId, 'items');
+            const itemsSnap = await getDocs(itemsCol);
+            let items = itemsSnap.docs.map(d => ({ key: d.id, ...d.data() }));
+            items.sort((a: any, b: any) => (a.order || 0) - (b.order || 0));
+            checklistItemsPorSistema[sist.id] = items;
+          }
+        }
       } catch (e) {
         console.error('Checklist fetch error', e);
       }
@@ -179,7 +187,7 @@ export default function Partes() {
       if (downloadOptions.acta) {
         await generarActaExtintoresPDF(
           cliente, centro, sistemasDelCentro, equiposTodos, numeroMantenimiento,
-          tecnicoNombre, undefined, firmaCliente, firmaTecnico, nombreFirmante, checklistItemsTodos
+          tecnicoNombre, undefined, firmaCliente, firmaTecnico, nombreFirmante, checklistItemsPorSistema
         );
       }
 

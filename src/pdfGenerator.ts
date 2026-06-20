@@ -44,7 +44,7 @@ export const generarActaExtintoresPDF = async (
   firmaCliente?: string,
   firmaTecnico?: string,
   nombreFirmante?: string,
-  checklistItems?: { key: string; label: string; tipoRespuesta?: string }[]
+  checklistItemsPorSistema?: Record<string, { key: string; label: string; tipoRespuesta?: string }[]>
 ) => {
   const doc = new jsPDF('landscape');
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -327,11 +327,15 @@ export const generarActaExtintoresPDF = async (
     doc.line(10, 26, pageWidth - 10, 26);
   };
 
-  const getMark = (isChecked: boolean) => isChecked ? 'TICK' : 'X';
+  const getMark = (val: any) => {
+    if (val === true) return 'TICK';
+    if (val === false) return 'X';
+    return '-';
+  };
 
   const drawnTablePages = new Set<number>();
 
-  const renderSection = async (title: string, equipos: any[], isBie: boolean, currentY: number, iconoBase64?: string) => {
+  const renderSection = async (title: string, equipos: any[], isBie: boolean, currentY: number, iconoBase64?: string, sistemaId?: string) => {
     if (equipos.length === 0) return currentY;
 
     if (currentY > 130) {
@@ -349,7 +353,8 @@ export const generarActaExtintoresPDF = async (
       ['Nº', 'Nivel planta y ubicación', 'Placa', 'Clase', 'Tipo', 'Fabricante', 'Fecha\nFabricación', 'Último\nRetimbre'];
 
     // Usar los items del checklist dinámico si están disponibles
-    const checkItems = (checklistItems || []).filter(item => {
+    const checkItemsDeSistema = (checklistItemsPorSistema && sistemaId) ? checklistItemsPorSistema[sistemaId] : [];
+    const checkItems = (checkItemsDeSistema || []).filter(item => {
       const lbl = (item.label || '').toLowerCase();
       return !lbl.includes('notas') && !lbl.includes('observaciones') && !lbl.includes('anomal');
     });
@@ -636,7 +641,7 @@ export const generarActaExtintoresPDF = async (
       tableStartY = 34;
     }
 
-    tableStartY = await renderSection(nombreSistema.toUpperCase(), equiposSistema, esBie, tableStartY, icono);
+    tableStartY = await renderSection(nombreSistema.toUpperCase(), equiposSistema, esBie, tableStartY, icono, sist.id);
   }
 
   // ============ SIGNATURE PAGE (PÁGINA FINAL DEDICADA) ============
@@ -868,10 +873,10 @@ export const generarActaExtintoresPDFView = async (
   firmaCliente?: string,
   firmaTecnico?: string,
   nombreFirmante?: string,
-  checklistItems?: { key: string; label: string; tipoRespuesta?: string }[]
+  checklistItemsPorSistema?: Record<string, { key: string; label: string; tipoRespuesta?: string }[]>
 ): Promise<string> => {
   const doc = new jsPDF('landscape');
-  await generarActaExtintoresPDF(cliente, centro, sistemas, equiposTodos, numeroMantenimiento, tecnicoNombre, anomalyTextColor, firmaCliente, firmaTecnico, nombreFirmante, checklistItems);
+  await generarActaExtintoresPDF(cliente, centro, sistemas, equiposTodos, numeroMantenimiento, tecnicoNombre, anomalyTextColor, firmaCliente, firmaTecnico, nombreFirmante, checklistItemsPorSistema);
   return doc.output('bloburl').toString();
 };
 
