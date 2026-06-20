@@ -414,7 +414,7 @@ export const generarActaExtintoresPDF = async (
     autoTable(doc, {
       startY: currentY,
       margin: { top: 40 },
-      headStyles: { fillColor: [100, 100, 100], textColor: [255, 255, 255], fontSize: 7, halign: 'center', lineWidth: 0.1, lineColor: [0, 0, 0], minCellHeight: 30 },
+      headStyles: { fillColor: [100, 100, 100], textColor: [255, 255, 255], fontSize: 7, halign: 'center', lineWidth: 0.1, lineColor: [0, 0, 0], minCellHeight: 40 },
       bodyStyles: { fontSize: 7, halign: 'center', lineWidth: 0.1, lineColor: [200, 200, 200] },
 
       columnStyles: { 0: { halign: 'left' }, 1: { halign: 'left' } },
@@ -443,13 +443,13 @@ export const generarActaExtintoresPDF = async (
       didDrawCell: function (data: any) {
         if (data.section === 'head' && data.column.index >= 8) {
           const lbl = checkLabels[data.column.index - 8];
-          const num = checkHeaders[data.column.index - 8];
           if (lbl) {
+            const cleanLbl = lbl.replace(/^\d+\.\s*/, '');
             doc.setTextColor(255, 255, 255);
-            doc.setFontSize(6);
-            const x = data.cell.x + (data.cell.width / 2) + 1.5;
+            doc.setFontSize(6.5);
+            const x = data.cell.x + (data.cell.width / 2) + 2;
             const y = data.cell.y + data.cell.height - 2;
-            doc.text(`${num}. ${lbl}`, x, y, { angle: 90 });
+            doc.text(cleanLbl, x, y, { angle: 90 });
           }
         }
         if (data.section === 'body' && data.column.index >= 8 && data.cell.raw === 'TICK') {
