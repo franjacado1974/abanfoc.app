@@ -399,6 +399,16 @@ export const generarActaExtintoresPDF = async (
       dynamicColumnStyles[8 + i] = { halign: 'center', cellWidth: 7.5 };
     });
 
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(6.5);
+    let maxLabelWidth = 0;
+    checkLabels.forEach(lbl => {
+      const cleanLbl = lbl.replace(/^\d+\.\s*/, '');
+      const w = doc.getTextWidth(cleanLbl);
+      if (w > maxLabelWidth) maxLabelWidth = w;
+    });
+    const calculatedHeaderHeight = Math.max(20, maxLabelWidth + 6);
+
     autoTable(doc, {
       startY: currentY + 4,
       margin: { top: 40 },
@@ -408,7 +418,7 @@ export const generarActaExtintoresPDF = async (
       columnStyles: dynamicColumnStyles,
       head: [
         [
-          { content: '', colSpan: 8, styles: { fillColor: [255, 255, 255], lineWidth: 0.1, lineColor: [0,0,0], minCellHeight: 45 } },
+          { content: '', colSpan: 8, styles: { fillColor: [255, 255, 255], lineWidth: 0.1, lineColor: [0,0,0], minCellHeight: calculatedHeaderHeight } },
           ...checkHeaders.map(h => ({ content: h, rowSpan: 2 }))
         ],
         headersBase
