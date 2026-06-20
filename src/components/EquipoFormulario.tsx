@@ -53,8 +53,25 @@ export default function EquipoFormulario({
     // Cargar tipos del sistema actual
     useEffect(() => {
         const unsub = subscribeSistemasCategorias((categorias) => {
-            const nombreSistemaBuscado = sistemaNombre.trim().toLowerCase();
-            const cat = categorias.find(c => c.nombre.trim().toLowerCase() === nombreSistemaBuscado);
+            const normalizarNombre = (nombre: string) =>
+                nombre
+                    .toLowerCase()
+                    .trim()
+                    .replace(/^sistema\s+/i, '')
+                    .replace(/\s+/g, ' ')
+                    .replace(/[áàäâ]/g, 'a')
+                    .replace(/[éèëê]/g, 'e')
+                    .replace(/[íìïî]/g, 'i')
+                    .replace(/[óòöô]/g, 'o')
+                    .replace(/[úùüû]/g, 'u');
+
+            const nombreSistemaNorm = normalizarNombre(sistemaNombre);
+            
+            const cat = categorias.find(c => {
+                const nombreCatNorm = normalizarNombre(c.nombre);
+                return nombreCatNorm === nombreSistemaNorm || nombreCatNorm.includes(nombreSistemaNorm) || nombreSistemaNorm.includes(nombreCatNorm);
+            });
+            
             if (cat && cat.tipos) {
                 setTiposSistema(cat.tipos);
             } else {
@@ -74,11 +91,33 @@ export default function EquipoFormulario({
 
                 const plantillas = await getPlantillas();
 
-                // Coincidencia EXACTA (ignorando mayúsculas/minúsculas y espacios)
-                const nombreSistema = sistemaNombre.trim().toLowerCase();
+                const normalizarNombre = (nombre: string) =>
+                    nombre
+                        .toLowerCase()
+                        .trim()
+                        .replace(/^sistema\s+/i, '')
+                        .replace(/^check\s*list\s+/i, '')
+                        .replace(/^checklist\s+/i, '')
+                        .replace(/\s+/g, ' ')
+                        .replace(/[áàäâ]/g, 'a')
+                        .replace(/[éèëê]/g, 'e')
+                        .replace(/[íìïî]/g, 'i')
+                        .replace(/[óòöô]/g, 'o')
+                        .replace(/[úùüû]/g, 'u');
+
+                const nombreSistemaNorm = normalizarNombre(sistemaNombre);
+
+                // Buscar la plantilla que coincida con el nombre del sistema
                 const plantillaEncontrada = plantillas.find(p => {
-                    const nombrePlantilla = (p.nombre || '').trim().toLowerCase();
-                    return nombrePlantilla === nombreSistema;
+                    const nombrePlantillaNorm = normalizarNombre(p.nombre || '');
+                    const coincideExacto = nombrePlantillaNorm === nombreSistemaNorm;
+                    const plantillaContieneSistema = nombrePlantillaNorm.includes(nombreSistemaNorm);
+                    const sistemaContienePlantilla = nombreSistemaNorm.includes(nombrePlantillaNorm);
+                    const palabrasSistema = nombreSistemaNorm.split(' ').filter(w => w.length > 3);
+                    const palabrasPlantilla = nombrePlantillaNorm.split(' ').filter(w => w.length > 3);
+                    const coincidePalabras = palabrasSistema.some(ps => palabrasPlantilla.some(pp => ps === pp || pp.includes(ps) || ps.includes(pp)));
+                    
+                    return coincideExacto || plantillaContieneSistema || sistemaContienePlantilla || coincidePalabras;
                 });
 
                 if (plantillaEncontrada) {
