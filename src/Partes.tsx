@@ -169,13 +169,51 @@ export default function Partes() {
 
       let checklistItemsPorSistema: Record<string, any[]> = {};
       try {
+        const categoriasSistema = JSON.parse(localStorage.getItem('firecheck_db_sistemas_categorias') || '[]');
+        const plantillasSnap = await getDocs(collection(db, 'plantillas'));
+        const plantillas = plantillasSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+        const normalizarNombre = (nombre: string) =>
+            nombre
+                .toLowerCase()
+                .trim()
+                .replace(/^sistema\s+/i, '')
+                .replace(/^check\s*list\s+/i, '')
+                .replace(/^checklist\s+/i, '')
+                .replace(/\s+/g, ' ')
+                .replace(/[áàäâ]/g, 'a')
+                .replace(/[éèëê]/g, 'e')
+                .replace(/[íìïî]/g, 'i')
+                .replace(/[óòöô]/g, 'o')
+                .replace(/[úùüû]/g, 'u');
+
         for (const sist of sistemasDelCentro) {
-          const plantillaId = (sist as any).plantillaId;
-          if (plantillaId) {
-            const itemsCol = collection(db, 'plantillas', plantillaId, 'items');
+            const sistemaCat = categoriasSistema.find((c: any) => {
+                const nombreSist = ((sist as any).tipo || (sist as any).familia || '').toLowerCase().trim();
+                const nombreCat = (c.nombre || '').toLowerCase().trim();
+                return nombreCat === nombreSist || nombreCat.includes(nombreSist) || nombreSist.includes(nombreCat);
+            });
+            const sistemaNombre = sistemaCat?.nombre || (sist as any).tipo || (sist as any).familia || '';
+            if (!sistemaNombre) continue;
+
+            const nombreSistemaNorm = normalizarNombre(sistemaNombre);
+            
+            const plantilla = plantillas.find((p: any) => {
+                const nombrePlantillaNorm = normalizarNombre(p.nombre || '');
+                const coincideExacto = nombrePlantillaNorm === nombreSistemaNorm;
+                const plantillaContieneSistema = nombrePlantillaNorm.includes(nombreSistemaNorm);
+                const sistemaContienePlantilla = nombreSistemaNorm.includes(nombrePlantillaNorm);
+                const palabrasSistema = nombreSistemaNorm.split(' ').filter((w: string) => w.length > 3);
+                const palabrasPlantilla = nombrePlantillaNorm.split(' ').filter((w: string) => w.length > 3);
+                const coincidePalabras = palabrasSistema.some((ps: string) => palabrasPlantilla.some((pp: string) => ps === pp || pp.includes(ps) || ps.includes(pp)));
+                return coincideExacto || plantillaContieneSistema || sistemaContienePlantilla || coincidePalabras;
+            });
+
+          if (plantilla) {
+            const itemsCol = collection(db, 'plantillas', plantilla.id, 'items');
             const itemsSnap = await getDocs(itemsCol);
             let items = itemsSnap.docs.map(d => ({ key: d.id, ...d.data() }));
-            items.sort((a: any, b: any) => (a.order || 0) - (b.order || 0));
+            items.sort((a: any, b: any) => (a.orden || a.order || 0) - (b.orden || b.order || 0));
             checklistItemsPorSistema[sist.id] = items;
           }
         }
