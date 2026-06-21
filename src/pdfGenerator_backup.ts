@@ -334,7 +334,7 @@ export const generarActaExtintoresPDF = (
     doc.setFont("helvetica", "bold");
     doc.setFontSize(10);
     doc.setTextColor(0, 0, 0);
-    doc.text(title.includes('OBSERV') ? 'OBSERVACIONES TÉCNICAS Y ANOMALÍAS:' : 'CONCLUSIONES Y OBSERVACIONES:', 14, finalY);
+    doc.text('Anomalías y anomalías:', 14, finalY);
     doc.setFont("helvetica", "normal");
     finalY += 7;
 
@@ -909,8 +909,28 @@ export const generarCertificadoPDF = (
   }
 
   // ── RESULTADO DE LA REVISIÓN ──
+  let tieneAlgunaAnomalia = false;
+  if (equiposTodos && equiposTodos.length > 0) {
+    tieneAlgunaAnomalia = equiposTodos.some(eq => {
+      // 1. Un check en rojo/falso
+      const hasChecksUnmarked = Object.keys(eq).some(k => k.toLowerCase().startsWith('check') && eq[k] === false);
+      // 2. Campo .anomalias con texto
+      const hasText = eq.anomalias && typeof eq.anomalias === 'string' && eq.anomalias.trim() !== '';
+      // 3. Cualquier campo de notas/observaciones/anomalía con texto
+      const hasNotesText = Object.keys(eq).some(k => {
+        const keyLower = k.toLowerCase();
+        if (keyLower.includes('nota') || keyLower.includes('observaci') || keyLower.includes('anomal')) {
+          const val = eq[k];
+          return typeof val === 'string' && val.trim() !== '';
+        }
+        return false;
+      });
+      return hasChecksUnmarked || hasText || hasNotesText;
+    });
+  }
+
   const rawEstado = (estadoCertificado || 'Favorable').toLowerCase();
-  const esNegativo = rawEstado.includes('negativo') || rawEstado.includes('no');
+  const esNegativo = rawEstado.includes('negativo') || rawEstado.includes('no') || tieneAlgunaAnomalia;
   const estadoLimpio = esNegativo ? 'NO favorable' : 'Favorable';
 
   // Texto de certificación formal

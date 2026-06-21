@@ -527,7 +527,7 @@ export default function Catalogo({ isTecnicoMode = false }: CatalogoProps) {
                       
                       <div className="flex items-start gap-3">
                         {a.fotoUrl ? (
-                          <img src={a.fotoUrl} alt={a.nombre} className="w-14 h-14 rounded-lg object-cover border border-zinc-200 shrink-0 bg-white" />
+                          <img src={a.fotoUrl} alt={a.nombre} className="w-14 h-14 rounded-lg object-cover border border-zinc-200 shrink-0 bg-white img-no-bg" />
                         ) : (
                           <div className="w-14 h-14 rounded-lg bg-zinc-100 border border-zinc-200 shrink-0 flex items-center justify-center">
                             <Package className="w-6 h-6 text-zinc-400" />
@@ -574,7 +574,7 @@ export default function Catalogo({ isTecnicoMode = false }: CatalogoProps) {
                       </div>
                       <div className="flex-1 min-w-0 pr-2 flex items-center gap-3">
                         {a.fotoUrl ? (
-                          <img src={a.fotoUrl} alt={a.nombre} className="w-8 h-8 rounded-lg object-cover border border-zinc-200 shrink-0 bg-white" />
+                          <img src={a.fotoUrl} alt={a.nombre} className="w-8 h-8 rounded-lg object-cover border border-zinc-200 shrink-0 bg-white img-no-bg" />
                         ) : (
                           <div className="w-8 h-8 rounded-lg bg-zinc-100 border border-zinc-200 shrink-0 flex items-center justify-center">
                             <Package className="w-4 h-4 text-zinc-400" />
@@ -630,7 +630,7 @@ export default function Catalogo({ isTecnicoMode = false }: CatalogoProps) {
                 <label className="text-sm font-medium text-blue-950 w-full">Foto del Artículo</label>
                 <div className="relative w-full h-40 bg-blue-50/50 border-2 border-dashed border-blue-200 rounded-xl flex items-center justify-center overflow-hidden hover:bg-blue-50 transition-colors group cursor-pointer">
                   {fotoPreview ? (
-                    <img src={fotoPreview} alt="Vista previa" className="w-full h-full object-contain p-2" />
+                    <img src={fotoPreview} alt="Vista previa" className="w-full h-full object-contain p-2 img-no-bg" />
                   ) : (
                     <div className="flex flex-col items-center text-blue-400 group-hover:text-blue-600 transition-colors">
                       <ImageIcon className="w-8 h-8 mb-2" />
@@ -778,7 +778,7 @@ export default function Catalogo({ isTecnicoMode = false }: CatalogoProps) {
               <div className="flex flex-col items-center gap-3">
                 {viewArticuloModal.fotoUrl ? (
                   <div className="w-full h-48 bg-zinc-50 border border-zinc-200 rounded-xl overflow-hidden flex items-center justify-center p-2">
-                    <img src={viewArticuloModal.fotoUrl} alt={viewArticuloModal.nombre} className="w-full h-full object-contain" />
+                    <img src={viewArticuloModal.fotoUrl} alt={viewArticuloModal.nombre} className="w-full h-full object-contain img-no-bg" />
                   </div>
                 ) : (
                   <div className="w-full h-48 bg-zinc-50 border border-zinc-200 rounded-xl flex flex-col items-center justify-center text-zinc-400">

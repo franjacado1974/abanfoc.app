@@ -33,6 +33,8 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
   });
 
   const [searchTerm, setSearchTerm] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
 
   // Suscripción en tiempo real a partes desde Firestore
   useEffect(() => {
@@ -96,17 +98,41 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
 
   // Filtrar por buscador (fecha o nombre de centro)
   const partesFiltrados = partesDelTecnico.filter(p => {
-    if (!searchTerm.trim()) return true;
-    const term = searchTerm.toLowerCase().trim();
-    const centro = centros.find(c => c.id === p.centroId);
-    const cliente = clientes.find(cl => cl.id === p.clienteId);
-    const fechaStr = (p.fechaProgramada || '').replace(/-/g, '/');
-    return (
-      (centro?.nombre || '').toLowerCase().includes(term) ||
-      (cliente?.nombre || '').toLowerCase().includes(term) ||
-      fechaStr.includes(term) ||
-      (p.fechaProgramada || '').includes(term)
-    );
+    let matchesSearch = true;
+    if (searchTerm.trim()) {
+      const term = searchTerm.toLowerCase().trim();
+      const centro = centros.find(c => c.id === p.centroId);
+      const cliente = clientes.find(cl => cl.id === p.clienteId);
+      const fechaStr = (p.fechaProgramada || '').replace(/-/g, '/');
+      matchesSearch = (
+        (centro?.nombre || '').toLowerCase().includes(term) ||
+        (cliente?.nombre || '').toLowerCase().includes(term) ||
+        fechaStr.includes(term) ||
+        (p.fechaProgramada || '').includes(term)
+      );
+    }
+    
+    if (!matchesSearch) return false;
+
+    // Date range match
+    if (!startDate && !endDate) return true;
+    if (!p.fechaProgramada) return false;
+    
+    const [d, m, y] = p.fechaProgramada.split('-').map(Number);
+    const dateNum = y * 10000 + m * 100 + d;
+    
+    if (startDate) {
+      const [sy, sm, sd] = startDate.split('-').map(Number);
+      const startNum = sy * 10000 + sm * 100 + sd;
+      if (dateNum < startNum) return false;
+    }
+    if (endDate) {
+      const [ey, em, ed] = endDate.split('-').map(Number);
+      const endNum = ey * 10000 + em * 100 + ed;
+      if (dateNum > endNum) return false;
+    }
+    
+    return true;
   });
 
   const getEstadoBadge = (estado: string) => {
@@ -169,8 +195,32 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
           </div>
         </div>
 
-        {/* Buscador */}
-        <div className="px-4 pb-3">
+        {/* Buscador y Rango de fechas */}
+        <div className="px-4 pb-3 flex flex-col gap-2">
+          <div className="flex items-center gap-2 bg-zinc-50 px-3 py-2 rounded-xl border border-zinc-200">
+            <Calendar className="w-4 h-4 text-zinc-400 shrink-0" />
+            <input 
+              type="date" 
+              value={startDate} 
+              onChange={e => setStartDate(e.target.value)} 
+              className="text-sm outline-none text-zinc-600 bg-transparent flex-1"
+            />
+            <span className="text-zinc-400 text-sm">a</span>
+            <input 
+              type="date" 
+              value={endDate} 
+              onChange={e => setEndDate(e.target.value)} 
+              className="text-sm outline-none text-zinc-600 bg-transparent flex-1"
+            />
+            {(startDate || endDate) && (
+              <button 
+                onClick={() => { setStartDate(''); setEndDate(''); }}
+                className="p-1 text-zinc-400 hover:text-red-500 rounded-md transition-colors shrink-0"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
             <input
@@ -193,7 +243,7 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
       </header>
 
       {/* Lista de partes */}
-      <div className="max-w-2xl mx-auto px-4 py-4">
+      <div className="w-full max-w-5xl mx-auto px-2 sm:px-4 py-4">
         {partesFiltrados.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-zinc-400">
             <Calendar className="w-16 h-16 mb-4 opacity-20" />
@@ -245,24 +295,27 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
                       </span>
                     </div>
 
-                    {/* Fecha programada y recuento de sistemas */}
-                    <div className="flex items-center gap-4 pt-2.5 border-t border-zinc-100">
+                    {/* Fecha programada, recuento de sistemas y periodicidad */}
+                    <div className="flex flex-wrap items-center gap-y-2 gap-x-4 pt-2.5 border-t border-zinc-100">
                       <span className="flex items-center gap-1.5 text-xs font-bold text-blue-600">
                         <Calendar className="w-3.5 h-3.5" />
                         {parte.fechaProgramada
                           ? parte.fechaProgramada.replace(/-/g, '/')
                           : 'Sin fecha'}
                       </span>
+                      <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-purple-600 bg-purple-50 px-2 py-0.5 rounded-md">
+                        {parte.periodicidad || 'Revisión'}
+                      </span>
                       <span className="flex items-center gap-1.5 text-xs text-zinc-500 font-medium">
                         <Layers className="w-3.5 h-3.5 text-zinc-400" />
-                        {sistCount} sistema{sistCount !== 1 ? 's' : ''}
+                        {sistCount} sist.
                       </span>
                       <ChevronRight className="w-4 h-4 text-zinc-400 ml-auto" />
                     </div>
                   </div>
 
                   {/* Vista desktop */}
-                  <div className="hidden sm:grid grid-cols-[1fr_auto_auto_auto] gap-3 items-center px-5 py-4">
+                  <div className="hidden sm:grid grid-cols-[1fr_auto_auto_auto_auto] gap-4 items-center px-5 py-4">
                     <div className="min-w-0">
                       <p className="text-xs font-semibold text-zinc-500 truncate">{cliente?.nombre || '—'}</p>
                       <p className="text-sm font-bold text-zinc-900 truncate">{centro?.nombre || 'Centro desconocido'}</p>
@@ -271,6 +324,11 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
                           <MapPin className="w-3 h-3" />{centro.poblacion}
                         </p>
                       )}
+                    </div>
+                    <div className="w-24 text-center">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-purple-600 bg-purple-50 px-2 py-1 rounded-md inline-block whitespace-nowrap">
+                        {parte.periodicidad || 'Revisión'}
+                      </span>
                     </div>
                     <div className="w-28 text-center">
                       <span className="text-xs font-bold text-blue-600 flex items-center justify-center gap-1">

@@ -50,6 +50,8 @@ export interface Tecnico {
   nombre: string;
   apellidos: string;
   _docId?: string;
+  habilitacion?: string;
+  [key: string]: any;
 }
 
 export interface Pedido {
@@ -84,6 +86,7 @@ export interface Albaran {
   parteId?: string;
   numeroPedido?: string;
   titulo?: string;
+  periodicidad?: string;
 }
 
 export interface TrabajoConfig {
@@ -112,6 +115,7 @@ export interface Centro {
   poblacion?: string;
   provincia?: string;
   telefono?: string;
+  empresaId?: string;
 }
 
 export interface Equipo {
@@ -121,6 +125,7 @@ export interface Equipo {
 
 export interface Empresa {
   _docId?: string;
+  id?: string;
   nombre: string;
   direccion?: string;
   localidad?: string;
@@ -183,6 +188,11 @@ enableIndexedDbPersistence(db).catch((err) => {
     console.warn('La persistencia falló: Múltiples pestañas abiertas.');
   } else if (err.code === 'unimplemented') {
     console.warn('El navegador no soporta persistencia offline.');
+  } else if (err.message?.includes('message channel closed')) {
+    // Error interno de Firebase al cerrar pestañas - no afecta al funcionamiento
+    console.debug('Persistencia offline: mensaje interno ignorado');
+  } else {
+    console.debug('Persistencia offline error:', err.code, err.message);
   }
 });
 
@@ -208,14 +218,15 @@ export function subscribeTecnicos(callback: (tecnicos: Tecnico[]) => void) {
     const col = collection(db, 'tecnicos');
     const unsub = onSnapshot(col, (snap) => {
       const items = snap.docs.map(d => {
-        const data = d.data() as Partial<Tecnico>;
+        const data = d.data();
         return {
           _docId: d.id,
           id: data?.id?.trim() || d.id,
           nombre: data?.nombre ?? '',
-          apellidos: data?.apellidos ?? ''
+          apellidos: data?.apellidos ?? '',
+          ...data
         };
-      }) as Tecnico[];
+      }) as any[];
       callback(items);
     }, (err) => {
       console.error('subscribeTecnicos error:', err);
@@ -234,6 +245,7 @@ export async function saveTecnico(tecnico: Tecnico) {
       id: tecnico.id || '',
       nombre: tecnico.nombre,
       apellidos: tecnico.apellidos,
+      habilitacion: tecnico.habilitacion || '',
       updatedAt: new Date().toISOString()
     };
 
@@ -929,15 +941,14 @@ export interface ParteFirestore {
 }
 
 export async function generateNumeroMantenimiento(): Promise<string> {
-  const yearStr = new Date().getFullYear().toString().slice(-2);
-  const monthStr = (new Date().getMonth() + 1).toString().padStart(2, '0');
+  const year = new Date().getFullYear();
   let maxCorr = 0;
   try {
     const partesSnap = await getDocs(collection(db, 'partes'));
     partesSnap.forEach(d => {
       const num = d.data().numeroMantenimiento;
-      if (num && typeof num === 'string' && num.startsWith(yearStr)) {
-        const corrStr = num.slice(4);
+      if (num && typeof num === 'string' && num.startsWith(`MANT-${year}-`)) {
+        const corrStr = num.split('-')[2];
         const corr = parseInt(corrStr, 10);
         if (!isNaN(corr) && corr > maxCorr) {
           maxCorr = corr;
@@ -947,8 +958,8 @@ export async function generateNumeroMantenimiento(): Promise<string> {
   } catch (e) {
     console.error('Error calculando correlativo', e);
   }
-  const nextCorr = (maxCorr + 1).toString().padStart(3, '0'); // Ejemplo 001, 130
-  return `${yearStr}${monthStr}${nextCorr}`;
+  const nextCorr = (maxCorr + 1).toString().padStart(4, '0');
+  return `MANT-${year}-${nextCorr}`;
 }
 
 export async function addParte(parte: ParteFirestore) {

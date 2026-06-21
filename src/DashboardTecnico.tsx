@@ -221,7 +221,7 @@ function DashboardHome({ loggedUser, onLogout, onNavigate }: DashboardTecnicoPro
       <main className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
         <div className="mb-8">
           <h1 className="text-2xl sm:text-3xl font-black text-zinc-900">
-            Hola, {loggedUser.nombre} 👋
+            Hola, {loggedUser.nombre}
           </h1>
           <p className="text-zinc-500 mt-1 text-sm">
             Aquí tienes un resumen de tu área de trabajo.

@@ -42,6 +42,31 @@ interface ItemLocal {
 
 // ─── COMPONENTE PRINCIPAL ────────────────────────────────────────────────────
 
+// Componente auxiliar para las opciones del desplegable
+const OpcionesInput = ({ opciones, onUpdate }: { opciones: string[], onUpdate: (opts: string[]) => void }) => {
+  const [val, setVal] = useState(opciones.join(', '));
+  
+  // Sincronizar si cambia desde fuera y no estamos editando
+  useEffect(() => {
+    setVal(opciones.join(', '));
+  }, [opciones.join(', ')]);
+
+  return (
+    <input
+      type="text"
+      value={val}
+      onChange={e => setVal(e.target.value)}
+      onBlur={() => {
+        const opts = val.split(',').map(s => s.trim()).filter(Boolean);
+        onUpdate(opts);
+        setVal(opts.join(', '));
+      }}
+      className="w-full px-3 py-1.5 bg-white border border-zinc-200 rounded-md text-xs outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500/20"
+      placeholder="Ej: Opción 1, Opción 2, Opción 3"
+    />
+  );
+};
+
 export default function FormBuilderPlantillas() {
   // ─── ESTADOS ──────────────────────────────────────────────────────────────
   const [plantillas, setPlantillas] = useState<Plantilla[]>([]);
@@ -734,15 +759,9 @@ export default function FormBuilderPlantillas() {
                           {item.tipoRespuesta === 'desplegable' && (
                             <div className="pl-14 pr-2">
                               <label className="text-[10px] font-semibold text-zinc-500 mb-1 block">Opciones del desplegable (separadas por comas)</label>
-                              <input
-                                type="text"
-                                value={(item.opciones || []).join(', ')}
-                                onChange={e => {
-                                  const opts = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
-                                  handleUpdateItem(item.id, { opciones: opts });
-                                }}
-                                className="w-full px-3 py-1.5 bg-white border border-zinc-200 rounded-md text-xs outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500/20"
-                                placeholder="Ej: Opción 1, Opción 2, Opción 3"
+                              <OpcionesInput 
+                                opciones={item.opciones || []} 
+                                onUpdate={(opts) => handleUpdateItem(item.id, { opciones: opts })} 
                               />
                             </div>
                           )}

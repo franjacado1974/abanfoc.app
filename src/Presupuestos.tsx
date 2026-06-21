@@ -401,6 +401,7 @@ export default function Presupuestos() {
       lineas: p.lineas.map(l => ({
         concepto: l.concepto,
         codigo: l.codigo,
+        fotoUrl: l.fotoUrl,
         cantidad: l.cantidad,
         precioUnidad: l.precioUnidad,
         subtotal: l.subtotal,
@@ -752,7 +753,7 @@ export default function Presupuestos() {
                           <tr key={l.id} className={i % 2 === 0 ? 'bg-white' : 'bg-zinc-50/30'}>
                             <td className="px-3 py-2">
                               {l.fotoUrl ? (
-                                <img src={l.fotoUrl} alt={l.concepto} className="w-8 h-8 rounded-md object-cover border border-zinc-200 shrink-0 bg-white" />
+                                <img src={l.fotoUrl} alt={l.concepto} className="w-8 h-8 rounded-md object-cover border border-zinc-200 shrink-0 bg-white img-no-bg" />
                               ) : (
                                 l.tipo === 'articulo' ? <Package className="w-3.5 h-3.5 text-orange-500" /> :
                                 l.tipo === 'servicio' ? <Wrench className="w-3.5 h-3.5 text-blue-500" /> :

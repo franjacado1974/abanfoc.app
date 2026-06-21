@@ -1,6 +1,10 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Reglas para la colección de usuarios (login)
+    match /usuarios/{document=**} {
+      allow read, write: if true;
+    }
     // Reglas para la colección de clientes
     match /clientes/{document=**} {
       allow read, write: if true; 

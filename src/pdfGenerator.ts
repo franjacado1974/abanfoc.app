@@ -75,7 +75,6 @@ const fetchImageToBase64 = async (urlOrBase64: string | null | undefined): Promi
   return urlOrBase64;
 };
 
-// ============ ACTA DE REVISIÓN ============
 export const generarActaExtintoresPDF = async (
   cliente: Record<string, any>,
   centro: Record<string, any>,
@@ -88,29 +87,28 @@ export const generarActaExtintoresPDF = async (
   firmaTecnico?: string,
   nombreFirmante?: string,
   checklistItemsPorSistema?: Record<string, { key: string; label: string; tipoRespuesta?: string }[]>,
-  empresa?: Record<string, any>
+  empresa?: Record<string, any>,
+  noSave?: boolean
 ) => {
   const doc = new jsPDF('landscape');
   const pageWidth = doc.internal.pageSize.getWidth();
   const empData = empresa || cargaDatosEmpresa() || {};
 
   const firmaIngenieroBase64 = await fetchImageToBase64(empData?.ingenieroFirmaUrl);
+  const logoData = await fetchImageToBase64(empData?.logoUrl) || await fetchImageToBase64(localStorage.getItem('firecheck_db_logo'));
 
   // ============ FIRST PAGE: INFO PAGE (REDISEÑO ELEGANTE) ============
   const drawInfoPage = async () => {
     // ── Logo (esquina superior derecha) ──
-    try {
-      const logoData = await fetchImageToBase64(empData?.logoUrl) || await fetchImageToBase64(localStorage.getItem('firecheck_db_logo'));
-      if (logoData) {
-        const logoProps = doc.getImageProperties(logoData);
-        const maxLogoWidth = 65;
-        const maxLogoHeight = 16;
-        const logoRatio = logoProps.width / logoProps.height;
-        const logoWidth = Math.min(maxLogoWidth, maxLogoHeight * logoRatio);
-        const logoHeight = logoWidth / logoRatio;
-        doc.addImage(logoData, 'PNG', pageWidth - 14 - logoWidth, 12, logoWidth, logoHeight);
-      }
-    } catch (e) { console.error("Error loading logo for Acta PDF:", e); }
+    if (logoData) {
+      const logoProps = doc.getImageProperties(logoData);
+      const maxLogoWidth = 65;
+      const maxLogoHeight = 16;
+      const logoRatio = logoProps.width / logoProps.height;
+      const logoWidth = Math.min(maxLogoWidth, maxLogoHeight * logoRatio);
+      const logoHeight = logoWidth / logoRatio;
+      doc.addImage(logoData, 'PNG', pageWidth - 14 - logoWidth, 12, logoWidth, logoHeight);
+    }
 
     // ── Título principal ──
     doc.setFont("helvetica", "bold");
@@ -119,31 +117,26 @@ export const generarActaExtintoresPDF = async (
     doc.text('ACTA DE REVISIÓN', pageWidth / 2, 22, { align: 'center' });
 
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
+    doc.setFontSize(7);
     doc.setTextColor(100, 100, 100);
-    doc.text('Sistemas de Protección Contra Incendios — RIPCI (RD 513/2017)', pageWidth / 2, 28, { align: 'center' });
+    doc.text('Mantenimientos realizados según tablas I y II del programa de mantenimiento preventivo establecido por la norma en el anexo II del reglamento de instalaciones contra incendios aprobado por el Real Decreto 513/2017 del 22 de mayo.', pageWidth / 2, 32, { align: 'center' });
 
     // ── Línea decorativa doble ──
-    doc.setDrawColor(50, 50, 50);
+    doc.setDrawColor(128, 0, 32);
     doc.setLineWidth(0.6);
-    doc.line(14, 32, pageWidth - 14, 32);
-    doc.setDrawColor(200, 200, 200);
+    doc.line(14, 36, pageWidth - 14, 36);
+    doc.setDrawColor(128, 0, 32);
     doc.setLineWidth(0.2);
-    doc.line(14, 33.5, pageWidth - 14, 33.5);
+    doc.line(14, 37.5, pageWidth - 14, 37.5);
 
-    // ── Número de acta y fecha (barra superior) ──
+    // ── Número de acta y fecha (barra superior centrada) ──
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(7.5);
-    doc.setTextColor(120, 120, 120);
-    doc.text(`N.º Acta: ${numeroMantenimiento || '—'}`, 14, 40);
-    
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(9.5);
-    doc.setTextColor(0, 0, 0);
-    doc.text(`Fecha: ${new Date().toLocaleDateString('es-ES')}`, pageWidth - 14, 40, { align: 'right' });
+    doc.setFontSize(8.5);
+    doc.setTextColor(80, 80, 80);
+    doc.text(`N.º Acta: ${numeroMantenimiento || '—'}  -  Fecha: ${new Date().toLocaleDateString('es-ES')}`, pageWidth / 2, 44, { align: 'center' });
 
     // ── SECCIÓN: DATOS DEL CLIENTE Y CENTRO (dos columnas) ──
-    let y = 48;
+    let y = 52;
     const col1X = 14;
     const col2X = pageWidth / 2 + 4;
 
@@ -151,11 +144,11 @@ export const generarActaExtintoresPDF = async (
     doc.setFont("helvetica", "bold");
     doc.setFontSize(9);
     doc.setTextColor(50, 50, 50);
-    doc.text('DATOS DEL CLIENTE Y CENTRO', pageWidth / 2, y, { align: 'center' });
+    doc.text('DATOS DEL CLIENTE Y CENTRO', 14, y + 3);
     y += 5;
 
     // Línea sutil bajo el título
-    doc.setDrawColor(210, 210, 210);
+    doc.setDrawColor(128, 0, 32);
     doc.setLineWidth(0.2);
     doc.line(14, y, pageWidth - 14, y);
     y += 5;
@@ -163,74 +156,119 @@ export const generarActaExtintoresPDF = async (
     // Columna izquierda: Cliente
     doc.setFont("helvetica", "bold");
     doc.setFontSize(7.5);
-    doc.setTextColor(80, 80, 80);
-    doc.text('CLIENTE', col1X, y);
-    y += 4;
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(7);
     doc.setTextColor(50, 50, 50);
-    const cliLines = [
-      cliente?.nombre || '—',
-      cliente?.direccion || '',
-      `${cliente?.poblacion || ''}${cliente?.provincia ? ', ' + cliente.provincia : ''}${cliente?.cp ? ' - ' + cliente.cp : ''}`,
-      `Tel: ${cliente?.telefono || '—'}  |  ${cliente?.correo || ''}`,
-      `Contacto: ${cliente?.contacto || '—'}`,
+    doc.text('DATOS CLIENTE', col1X, y);
+    const clientStartY = y;
+    y += 4.5;
+
+    const cliData = [
+      { label: 'Cliente:', value: cliente?.nombre || '—' },
+      { label: 'CIF:', value: cliente?.cif || '—' },
+      { label: 'Dirección:', value: cliente?.direccion || '—' },
+      { 
+        label: 'Población:', 
+        value: `${cliente?.poblacion || ''}${cliente?.provincia ? ', ' + cliente.provincia : ''}${cliente?.cp ? ' - ' + cliente.cp : ''}` || '—' 
+      },
+      { label: 'Teléfono:', value: cliente?.telefono || '—' },
+      { label: 'Email:', value: cliente?.correo || '—' },
+      { label: 'Contacto:', value: cliente?.contacto || '—' },
     ];
-    cliLines.forEach(line => {
-      if (line.trim()) { doc.text(line, col1X, y); y += 4.2; }
+
+    // Calcular el ancho máximo de las etiquetas para alinearlas a la misma columna
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7);
+    const maxLabelW = Math.max(...cliData.map(item => doc.getTextWidth(item.label)));
+
+    cliData.forEach(item => {
+      // 1. Dibujar Label en Bold
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7);
+      doc.setTextColor(50, 50, 50);
+      doc.text(item.label, col1X, y);
+      
+      // 2. Dibujar Value en Regular/Normal
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7);
+      doc.setTextColor(80, 80, 80);
+      doc.text(item.value, col1X + maxLabelW + 2, y);
+      
+      y += 4.2;
     });
 
     // Columna derecha: Centro
-    const cenY = 48 + 5 + 5; // misma posición Y que cliente
+    const cenY = clientStartY; // misma posición Y que cliente
     doc.setFont("helvetica", "bold");
     doc.setFontSize(7.5);
-    doc.setTextColor(80, 80, 80);
-    doc.text('CENTRO', col2X, cenY);
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(7);
     doc.setTextColor(50, 50, 50);
-    let cy = cenY + 4;
-    const cenLines = [
-      centro?.nombre || '—',
-      centro?.direccion || '',
-      `${centro?.poblacion || ''}${centro?.provincia ? ', ' + centro.provincia : ''}${centro?.cp ? ' - ' + centro.cp : ''}`,
-      `Tel: ${centro?.telefono || '—'}  |  ${centro?.correo || ''}`,
-      `Contacto: ${centro?.contacto || '—'}`,
+    doc.text('DATOS DEL CENTRO', col2X, cenY);
+    let cy = cenY + 4.5;
+
+    const cenData = [
+      { label: 'Centro:', value: centro?.nombre || '—' },
+      { label: 'Dirección:', value: centro?.direccion || '—' },
+      { 
+        label: 'Población:', 
+        value: `${centro?.poblacion || ''}${centro?.provincia ? ', ' + centro.provincia : ''}${centro?.cp ? ' - ' + centro.cp : ''}` || '—' 
+      },
+      { label: 'Teléfono:', value: centro?.telefono || '—' },
+      { label: 'Email:', value: centro?.correo || '—' },
+      { label: 'Contacto:', value: centro?.contacto || '—' },
     ];
-    cenLines.forEach(line => {
-      if (line.trim()) { doc.text(line, col2X, cy); cy += 4.2; }
+
+    // Calcular el ancho máximo de las etiquetas para alinearlas a la misma columna
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7);
+    const maxCenLabelW = Math.max(...cenData.map(item => doc.getTextWidth(item.label)));
+
+    cenData.forEach(item => {
+      // 1. Dibujar Label en Bold
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7);
+      doc.setTextColor(50, 50, 50);
+      doc.text(item.label, col2X, cy);
+      
+      // 2. Dibujar Value en Regular/Normal
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7);
+      doc.setTextColor(80, 80, 80);
+      doc.text(item.value, col2X + maxCenLabelW + 2, cy);
+      
+      cy += 4.2;
     });
 
     // ── SECCIÓN: INFORMACIÓN DEL MANTENIMIENTO ──
     y = Math.max(y, cy) + 6;
-    doc.setDrawColor(210, 210, 210);
-    doc.setLineWidth(0.2);
-    doc.line(14, y, pageWidth - 14, y);
-    y += 5;
-
     doc.setFont("helvetica", "bold");
     doc.setFontSize(9);
     doc.setTextColor(50, 50, 50);
-    doc.text('INFORMACIÓN DEL MANTENIMIENTO', pageWidth / 2, y, { align: 'center' });
+    doc.text('INFORMACIÓN DEL MANTENIMIENTO', 14, y + 3);
+    y += 5;
+
+    doc.setDrawColor(128, 0, 32);
+    doc.setLineWidth(0.2);
+    doc.line(14, y, pageWidth - 14, y);
     y += 5;
 
     const periodicidad: string[] = centro?.periodicidad || [];
     const mesRevision: string = (centro?.mesesRevision && centro.mesesRevision.length > 0) ? centro.mesesRevision[0] : '';
 
-    // Tabla de información en dos columnas
-    const infoLeft: [string, string][] = [
-      ['N.º de mantenimiento:', numeroMantenimiento || '—'],
-      ['Fecha del mantenimiento:', new Date().toLocaleDateString('es-ES')],
-      ['Técnico actuante:', tecnicoNombre || 'No asignado'],
-      ['N.I.F. Técnico:', empData?.nifTecnico || 'No especificado'],
-    ];
-    const infoRight: [string, string][] = [
-      ['RASIC:', empData?.rasic || 'No especificado'],
-      ['Periodicidad contratada:', periodicidad.length > 0 ? periodicidad.join(', ') : 'No definida'],
-      ['Revisiones programadas:', ''],
-    ];
+    // Buscar habilitación del técnico en localStorage
+    const habilitacionTecnico = (() => {
+      try {
+        const stored = localStorage.getItem('firecheck_db_tecnicos');
+        if (stored && tecnicoNombre) {
+          const list: any[] = JSON.parse(stored);
+          const match = list.find(t => {
+            const full = `${t.nombre ?? ''} ${t.apellidos ?? ''}`.trim();
+            return full.toLowerCase() === tecnicoNombre.trim().toLowerCase();
+          });
+          return match?.habilitacion || match?.numHabilitacion || match?.habilitacionNum || match?.carnet || '';
+        }
+      } catch (e) {
+        console.error("Error looking up technician habilitation:", e);
+      }
+      return '';
+    })();
 
     // Calcular revisiones programadas
     let revList = '';
@@ -249,26 +287,27 @@ export const generarActaExtintoresPDF = async (
       }
     }
     if (!revList) revList = periodicidad.join(', ') || 'No definidas';
-    infoRight[2] = ['Revisiones programadas:', revList];
+
+    // Tabla de información en dos columnas (3 filas x 2 columnas)
+    const infoFields: [string, string][] = [
+      ['N.º de mantenimiento:', numeroMantenimiento || '—'],
+      ['Técnico asignado:', tecnicoNombre || 'No asignado'],
+      ['Fecha del mantenimiento:', new Date().toLocaleDateString('es-ES')],
+      ['N.º Habilitación:', habilitacionTecnico || 'No especificado'],
+      ['Periodicidad contratada:', periodicidad.length > 0 ? periodicidad.join(', ') : 'No definida'],
+      ['Revisiones programadas:', revList],
+    ];
 
     doc.setFontSize(7.5);
     let iy = y + 2;
-    infoLeft.forEach(([label, value], i) => {
-      const colX = i < 2 ? col1X : col2X;
-      const rowY = iy + (i % 2) * 5.5;
+    infoFields.forEach(([label, value], i) => {
+      const colX = (i % 2 === 0) ? col1X : col2X;
+      const rowY = iy + Math.floor(i / 2) * 5.5;
+
       doc.setFont("helvetica", "bold");
       doc.setTextColor(80, 80, 80);
       doc.text(label, colX, rowY);
-      doc.setFont("helvetica", "normal");
-      doc.setTextColor(50, 50, 50);
-      doc.text(value, colX + 42, rowY);
-    });
-    infoRight.forEach(([label, value], i) => {
-      const colX = i < 2 ? col1X : col2X;
-      const rowY = iy + 11 + (i % 2) * 5.5;
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(80, 80, 80);
-      doc.text(label, colX, rowY);
+
       doc.setFont("helvetica", "normal");
       doc.setTextColor(50, 50, 50);
       doc.text(value, colX + 42, rowY);
@@ -276,52 +315,57 @@ export const generarActaExtintoresPDF = async (
 
     // ── SECCIÓN: EMPRESA MANTENEDORA ──
     y = iy + 24;
-    doc.setDrawColor(210, 210, 210);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(50, 50, 50);
+    doc.text('EMPRESA MANTENEDORA', 14, y + 3);
+    y += 5;
+
+    doc.setDrawColor(128, 0, 32);
     doc.setLineWidth(0.2);
     doc.line(14, y, pageWidth - 14, y);
     y += 5;
 
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(9);
-    doc.setTextColor(50, 50, 50);
-    doc.text('EMPRESA MANTENEDORA', pageWidth / 2, y, { align: 'center' });
-    y += 5;
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(7);
-    doc.setTextColor(50, 50, 50);
     const empNombre = empData?.nombre || 'ABANFOC S.L.';
     const empCif = empData?.cif || 'B16794679';
     const empRasic = empData?.rasic || '106001687';
     const empDir = empData?.direccion || 'C/ America 16B Ático';
-    const empLoc = `${empData?.poblacion || 'Sta. Coloma de Gramanet'}, ${empData?.provincia || 'Barcelona'} ${empData?.cp || '08921'}`;
+    const empLoc = `${empData?.poblacion || 'Sta. Coloma de Gramanet'}${empData?.provincia ? ', ' + empData.provincia : ''}${empData?.cp ? ' - ' + empData.cp : ''}`;
     const empTel = empData?.telefono || '651 019 229';
+    const empMail = empData?.correo || empData?.email || 'info@abanfoc.com';
 
+    const empLines = [
+      { label: 'Empresa:', value: empNombre },
+      { label: 'CIF:', value: empCif },
+      { label: 'RASIC:', value: empRasic },
+      { label: 'Dirección:', value: empDir },
+      { label: 'Población:', value: empLoc },
+      { label: 'Teléfono:', value: empTel },
+      { label: 'Email:', value: empMail }
+    ];
+
+    // Calcular el ancho máximo de las etiquetas para alinearlas a la misma columna
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(8);
-    doc.setTextColor(60, 60, 60);
-    doc.text(empNombre, col1X, y);
-    doc.setFont("helvetica", "normal");
     doc.setFontSize(7);
-    doc.setTextColor(80, 80, 80);
-    doc.text(`CIF: ${empCif}  |  RASIC: ${empRasic}`, col1X, y + 5);
-    doc.text(empDir, col1X, y + 10);
-    doc.text(empLoc, col1X, y + 15);
-    doc.text(`Tel: ${empTel}`, col1X, y + 20);
+    const maxEmpLabelW = Math.max(...empLines.map(item => doc.getTextWidth(item.label)));
 
-    // Cargar logo de la empresa mantenedora (a la derecha de los datos)
-    try {
-      const logoData = await fetchImageToBase64(empData?.logoUrl || localStorage.getItem('firecheck_db_logo'));
-      if (logoData) {
-        const logoProps = doc.getImageProperties(logoData);
-        const maxLogoWidth = 55;
-        const maxLogoHeight = 20;
-        const logoRatio = logoProps.width / logoProps.height;
-        const logoWidth = Math.min(maxLogoWidth, maxLogoHeight * logoRatio);
-        const logoHeight = logoWidth / logoRatio;
-        doc.addImage(logoData, 'PNG', pageWidth - 14 - logoWidth, y - 2, logoWidth, logoHeight);
-      }
-    } catch (e) { console.error("Error loading logo for Acta PDF:", e); }
+    empLines.forEach(item => {
+      // 1. Dibujar Label en Bold
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7);
+      doc.setTextColor(50, 50, 50);
+      doc.text(item.label, col1X, y);
+
+      // 2. Dibujar Value en Normal
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7);
+      doc.setTextColor(80, 80, 80);
+      doc.text(item.value, col1X + maxEmpLabelW + 2, y);
+
+      y += 4.2;
+    });
+
+    // Bottom logo removed from cover page
 
     // ── Sello / firma digital (esquina inferior derecha) ──
     doc.setFont("helvetica", "italic");
@@ -341,6 +385,17 @@ export const generarActaExtintoresPDF = async (
 
   const drawTableHeader = (pageNum: number) => {
     if (pageNum <= 1) return;
+
+    if (logoData) {
+      const logoProps = doc.getImageProperties(logoData);
+      const maxLogoWidth = 45;
+      const maxLogoHeight = 11;
+      const logoRatio = logoProps.width / logoProps.height;
+      const logoWidth = Math.min(maxLogoWidth, maxLogoHeight * logoRatio);
+      const logoHeight = logoWidth / logoRatio;
+      doc.addImage(logoData, 'PNG', pageWidth - 14 - logoWidth, 11, logoWidth, logoHeight);
+    }
+
     doc.setFont("helvetica", "bold");
     doc.setFontSize(12);
     doc.text('ACTA DE REVISIÓN - SISTEMAS DE PROTECCIÓN CONTRA INCENDIOS', pageWidth / 2, 14, { align: 'center' });
@@ -456,9 +511,16 @@ export const generarActaExtintoresPDF = async (
         return str;
     };
 
+    const padCodigo = (val: any) => {
+      if (!val || val === '-') return '-';
+      const num = parseInt(String(val), 10);
+      if (!isNaN(num)) return String(num).padStart(3, '0');
+      return String(val);
+    };
+
     const tableData = equipos.map(eq => {
       const baseRow = isBie ? [
-        eq.codigo || '-',
+        padCodigo(eq.codigo),
         eq.ubicacion || '-',
         getVal(eq, itemPlaca, 'placa'),
         getVal(eq, itemTipo, 'nombre'),
@@ -467,7 +529,7 @@ export const generarActaExtintoresPDF = async (
         formatMesAno(getVal(eq, itemFechaFab, 'fechaFabricacion')),
         formatMesAno(getVal(eq, itemPruebaH, 'pruebaHidraulica'))
       ] : [
-        eq.codigo || '-',
+        padCodigo(eq.codigo),
         eq.ubicacion || '-',
         getVal(eq, itemPlaca, 'placa'),
         getVal(eq, itemTipo, 'nombre'),
@@ -482,7 +544,10 @@ export const generarActaExtintoresPDF = async (
       ];
     });
 
-    const dynamicColumnStyles: any = { 0: { halign: 'left' }, 1: { halign: 'left' } };
+    const dynamicColumnStyles: any = { 
+      0: { halign: 'center', fillColor: [128, 0, 32], textColor: [255, 255, 255] }, 
+      1: { halign: 'left' } 
+    };
     checkHeaders.forEach((_, i) => {
       dynamicColumnStyles[headersBase.length + i] = { halign: 'center', cellWidth: 7.5 };
     });
@@ -500,7 +565,7 @@ export const generarActaExtintoresPDF = async (
     autoTable(doc, {
       startY: currentY + 4,
       margin: { top: 40 },
-      headStyles: { fillColor: [156, 49, 28], textColor: [255, 255, 255], fontSize: 7, halign: 'center', valign: 'middle', lineWidth: 0.1, lineColor: [255, 255, 255] },
+      headStyles: { fillColor: [128, 0, 32], textColor: [255, 255, 255], fontSize: 7, halign: 'center', valign: 'middle', lineWidth: 0.1, lineColor: [255, 255, 255] },
       bodyStyles: { fontSize: 7, halign: 'center', lineWidth: 0.1, lineColor: [200, 200, 200] },
 
       columnStyles: dynamicColumnStyles,
@@ -559,8 +624,26 @@ export const generarActaExtintoresPDF = async (
           
           doc.setFont("helvetica", "normal");
           doc.setFontSize(8.5);
+          doc.setTextColor(0, 0, 0);
+          const textoAnomalias = 'Las anotaciones en ';
+          const textoRojo = 'rojo';
+          const textoO = ' o con una ';
+          const textoX = 'X';
+          const textoFinal = ' indican anomalías que deben corregirse.';
+          const totalX = cellX + (iconoBase64 ? 16 : 2);
+          doc.text(textoAnomalias, totalX, centerY + 3.5);
+          const w1 = doc.getTextWidth(textoAnomalias);
           doc.setTextColor(anomalyTextColor[0], anomalyTextColor[1], anomalyTextColor[2]);
-          doc.text('Las anotaciones en rojo o con una X indican anomalías que deben corregirse.', cellX + (iconoBase64 ? 16 : 2), centerY + 3.5);
+          doc.text(textoRojo, totalX + w1, centerY + 3.5);
+          const w2 = doc.getTextWidth(textoRojo);
+          doc.setTextColor(0, 0, 0);
+          doc.text(textoO, totalX + w1 + w2, centerY + 3.5);
+          const w3 = doc.getTextWidth(textoO);
+          doc.setTextColor(anomalyTextColor[0], anomalyTextColor[1], anomalyTextColor[2]);
+          doc.text(textoX, totalX + w1 + w2 + w3, centerY + 3.5);
+          const w4 = doc.getTextWidth(textoX);
+          doc.setTextColor(0, 0, 0);
+          doc.text(textoFinal, totalX + w1 + w2 + w3 + w4, centerY + 3.5);
         }
 
         if (data.section === 'head' && data.column.index >= headersBase.length && data.row.index === 0) {
@@ -592,13 +675,21 @@ export const generarActaExtintoresPDF = async (
     const anomalias = equipos.filter(eq => {
       const hasChecksUnmarked = Object.keys(eq).some(k => k.startsWith('check') && eq[k] === false);
       const hasText = eq.anomalias && eq.anomalias.trim() !== '';
-      return hasChecksUnmarked || hasText;
+      
+      const notasItem = checkItemsDeSistema.find(item => {
+        const lbl = (item.label || '').toLowerCase();
+        return lbl.includes('notas') || lbl.includes('observaciones') || lbl.includes('anomal');
+      });
+      const notasValue = notasItem && eq[notasItem.key] ? String(eq[notasItem.key]).trim() : '';
+      const hasNotasText = notasValue !== '';
+      
+      return hasChecksUnmarked || hasText || hasNotasText;
     });
 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(10);
     doc.setTextColor(0, 0, 0);
-    doc.text(title.includes('OBSERV') ? 'OBSERVACIONES TÉCNICAS Y ANOMALÍAS:' : 'CONCLUSIONES Y OBSERVACIONES:', 14, finalY);
+    doc.text('Anomalías y anomalías:', 14, finalY);
     doc.setFont("helvetica", "normal");
     finalY += 7;
 
@@ -622,7 +713,7 @@ export const generarActaExtintoresPDF = async (
           doc.setFont("helvetica", "bold");
           doc.setFontSize(10);
           doc.setTextColor(0, 0, 0);
-          doc.text('OBSERVACIONES TÉCNICAS Y ANOMALÍAS (continuación):', 14, finalY);
+          doc.text('Anomalías y anomalías (continuación):', 14, finalY);
           doc.setFont("helvetica", "normal");
           finalY += 7;
           doc.setTextColor(anomalyTextColor[0], anomalyTextColor[1], anomalyTextColor[2]);
@@ -743,6 +834,16 @@ export const generarActaExtintoresPDF = async (
   doc.setPage(sigPageNum);
 
   // Encabezado de la página de firmas
+  if (logoData) {
+    const logoProps = doc.getImageProperties(logoData);
+    const maxLogoWidth = 45;
+    const maxLogoHeight = 11;
+    const logoRatio = logoProps.width / logoProps.height;
+    const logoWidth = Math.min(maxLogoWidth, maxLogoHeight * logoRatio);
+    const logoHeight = logoWidth / logoRatio;
+    doc.addImage(logoData, 'PNG', pageWidth - 14 - logoWidth, 11, logoWidth, logoHeight);
+  }
+
   doc.setFont("helvetica", "bold");
   doc.setFontSize(16);
   doc.setTextColor(0, 0, 0);
@@ -837,8 +938,8 @@ export const generarActaExtintoresPDF = async (
   const totalBlocksWidth = blockW * 3 + gap * 2;
   const startBlocksX = (pageWidth - totalBlocksWidth) / 2;
 
-  // Subir la sección de firmas 15 puntos respecto al valor anterior
-  sigY -= 15;
+  // Subir la sección de firmas 5 puntos respecto al valor anterior (bajado 10 puntos en total)
+  sigY -= 5;
 
   for (let i = 0; i < 3; i++) {
     const bx = startBlocksX + i * (blockW + gap);
@@ -916,7 +1017,8 @@ export const generarActaExtintoresPDF = async (
     doc.text(text, (pageWidth - textWidth) / 2, 200);
   }
 
-  doc.save(`Acta_Revision_${centro?.nombre || 'Centro'}_${new Date().toISOString().split('T')[0]}.pdf`);
+  if (!noSave) doc.save(`Acta_Revision_${centro?.nombre || 'Centro'}_${new Date().toISOString().split('T')[0]}.pdf`);
+  return doc;
 };
 
 /** 
@@ -933,10 +1035,24 @@ export const generarActaExtintoresPDFView = async (
   firmaCliente?: string,
   firmaTecnico?: string,
   nombreFirmante?: string,
-  checklistItemsPorSistema?: Record<string, { key: string; label: string; tipoRespuesta?: string }[]>
+  checklistItemsPorSistema?: Record<string, { key: string; label: string; tipoRespuesta?: string }[]>,
+  empresa?: Record<string, any>
 ): Promise<string> => {
-  const doc = new jsPDF('landscape');
-  await generarActaExtintoresPDF(cliente, centro, sistemas, equiposTodos, numeroMantenimiento, tecnicoNombre, anomalyTextColor, firmaCliente, firmaTecnico, nombreFirmante, checklistItemsPorSistema);
+  const doc = await generarActaExtintoresPDF(
+    cliente,
+    centro,
+    sistemas,
+    equiposTodos,
+    numeroMantenimiento,
+    tecnicoNombre,
+    anomalyTextColor,
+    firmaCliente,
+    firmaTecnico,
+    nombreFirmante,
+    checklistItemsPorSistema,
+    empresa,
+    true
+  );
   return doc.output('bloburl').toString();
 };
 
@@ -963,8 +1079,6 @@ export const generarAlbaranPDF = async (
   // Datos de empresa: usar la empresa pasada como parámetro, o cargar de localStorage
   const empData = empresa || cargaDatosEmpresa() || {};
 
-  const firmaIngenieroBase64 = await fetchImageToBase64(empData?.ingenieroFirmaUrl);
-
   // ── CABECERA: Logo + Datos empresa ──
   let headerY = 12;
 
@@ -973,8 +1087,8 @@ export const generarAlbaranPDF = async (
     const logoData = await fetchImageToBase64(empData?.logoUrl || localStorage.getItem('firecheck_db_logo'));
     if (logoData) {
       const logoProps = doc.getImageProperties(logoData);
-      const maxLogoWidth = 70;
-      const maxLogoHeight = 25;
+      const maxLogoWidth = 55;
+      const maxLogoHeight = 18;
       const logoRatio = logoProps.width / logoProps.height;
       const logoWidth = Math.min(maxLogoWidth, maxLogoHeight * logoRatio);
       const logoHeight = logoWidth / logoRatio;
@@ -1034,13 +1148,17 @@ export const generarAlbaranPDF = async (
   let subtotalTotal = 0;
 
   if (items && items.length > 0) {
-    tableData = items.map(item => [
-      String(item.cantidad),
-      item.concepto || '',
-      (item.descripcion ? item.descripcion.charAt(0).toUpperCase() + item.descripcion.slice(1) : ''),
-      formatM(item.precioUnidad),
-      formatM(item.subtotal)
-    ]);
+    tableData = items.map(item => {
+      const desc = (item.descripcion || '').trim();
+      const formattedDesc = desc ? desc.charAt(0).toUpperCase() + desc.slice(1).toLowerCase() : '';
+      return [
+        String(item.cantidad),
+        item.concepto || '',
+        formattedDesc,
+        formatM(item.precioUnidad),
+        formatM(item.subtotal)
+      ];
+    });
     subtotalTotal = items.reduce((acc, item) => acc + (item.subtotal || 0), 0);
   } else {
     const conteoPorSistema: Record<string, { cantidad: number, nombre: string }> = {};
@@ -1059,9 +1177,17 @@ export const generarAlbaranPDF = async (
     const per = periodicidad || 'Revisión';
     const conceptoStr = per.toLowerCase().includes('revisión') || per.toLowerCase().includes('revision') ? per : `Revisión ${per}`;
 
-    tableData = Object.values(conteoPorSistema).map((sys) => [
-      `${sys.cantidad} und.`, conceptoStr, sys.nombre, '', ''
-    ]);
+    tableData = Object.values(conteoPorSistema).map((sys) => {
+      const desc = (sys.nombre || '').trim();
+      const formattedDesc = desc ? desc.charAt(0).toUpperCase() + desc.slice(1).toLowerCase() : '';
+      return [
+        `${sys.cantidad} und.`,
+        conceptoStr,
+        formattedDesc,
+        '',
+        ''
+      ];
+    });
     subtotalTotal = equiposTodos.reduce((acc, eq) => acc + (parseFloat(eq.precioUnidad || eq.precio || 0) || 0), 0);
   }
 
@@ -1112,34 +1238,25 @@ export const generarAlbaranPDF = async (
   doc.setFont("helvetica", "bold");
   doc.setTextColor(60, 60, 60);
 
-  // Firma Ingeniero
-  doc.text('El Técnico Titulado', 14, finalY);
+  // Firma del Técnico
+  doc.text('Firma del Técnico:', 14, finalY);
   doc.setDrawColor(220, 220, 220);
   doc.setLineWidth(0.2);
   doc.roundedRect(14, finalY + 3, 56, 30, 2, 2);
-  if (firmaIngenieroBase64) {
-    doc.addImage(firmaIngenieroBase64, 'PNG', 15, finalY + 4, 54, 28);
-  }
-  const tecnicoTitulado = (empData?.ingenieroNombre && empData?.ingenieroApellidos) 
-      ? `${empData.ingenieroNombre} ${empData.ingenieroApellidos}`
-      : (empData?.tecnicoTitulado || 'N/A');
-  doc.text(`Nombre: ${tecnicoTitulado}`, 14, finalY + 37);
-
-  // Firma del Técnico
-  doc.text('Firma del Técnico:', 75, finalY);
-  doc.roundedRect(75, finalY + 3, 56, 30, 2, 2);
   if (firmaTecnico) {
-    doc.addImage(firmaTecnico, 'PNG', 76, finalY + 4, 54, 28);
+    doc.addImage(firmaTecnico, 'PNG', 15, finalY + 4, 54, 28);
   }
-  doc.text(`Nombre: ${tecnicoNombre || 'N/A'}`, 75, finalY + 37);
+  doc.text(`Nombre: ${tecnicoNombre || 'N/A'}`, 14, finalY + 37);
 
   // Conformidad Cliente
-  doc.text('Conformidad del Cliente:', 136, finalY);
-  doc.roundedRect(136, finalY + 3, 56, 30, 2, 2);
+  doc.text('Conformidad del Cliente:', 80, finalY);
+  doc.setDrawColor(220, 220, 220);
+  doc.setLineWidth(0.2);
+  doc.roundedRect(80, finalY + 3, 56, 30, 2, 2);
   if (firmaCliente) {
-    doc.addImage(firmaCliente, 'PNG', 137, finalY + 4, 54, 28);
+    doc.addImage(firmaCliente, 'PNG', 81, finalY + 4, 54, 28);
   }
-  doc.text(`Nombre: ${nombreFirmante || 'N/A'}`, 136, finalY + 37);
+  doc.text(`Nombre: ${nombreFirmante || 'N/A'}`, 80, finalY + 37);
 
   // ── PIE DE PÁGINA: Datos de la empresa (todas las páginas) ──
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -1172,6 +1289,7 @@ export const generarAlbaranPDF = async (
   }
 
   if (!noSave) doc.save(`Albaran_${centro?.nombre || 'Centro'}_${numeroMantenimiento}.pdf`);
+  return doc;
 };
 
 /**
@@ -1191,9 +1309,8 @@ export const generarAlbaranPDFView = async (
   titulo?: string,
   periodicidad?: string
 ): Promise<string> => {
-  const tempDoc = new jsPDF('p', 'mm', 'a4');
-  await generarAlbaranPDF(cliente, centro, equiposTodos, numeroMantenimiento, tecnicoNombre, firmaCliente, firmaTecnico, nombreFirmante, items, empresa, true, titulo, periodicidad);
-  return tempDoc.output('bloburl').toString();
+  const doc = await generarAlbaranPDF(cliente, centro, equiposTodos, numeroMantenimiento, tecnicoNombre, firmaCliente, firmaTecnico, nombreFirmante, items, empresa, true, titulo, periodicidad);
+  return doc.output('bloburl').toString();
 };
 
 // ============ CERTIFICADO ============
@@ -1214,12 +1331,7 @@ export const generarCertificadoPDF = async (
   const doc = new jsPDF('p', 'mm', 'a4');
   const pageWidth = doc.internal.pageSize.getWidth(); // 210 mm
   const empData = empresa || cargaDatosEmpresa() || {};
-  const margen = 20;
-
-  // ── FONDO: Borde decorativo sutil ──
-  doc.setDrawColor(200, 200, 200);
-  doc.setLineWidth(0.3);
-  doc.roundedRect(8, 8, pageWidth - 16, 281, 4, 4, 'D');
+  const margen = 14;
 
   // ── CABECERA: TÍTULO CENTRADO ──
   let y = 18;
@@ -1232,11 +1344,11 @@ export const generarCertificadoPDF = async (
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
   doc.setTextColor(100, 100, 100);
-  doc.text(`Sistemas de Protección Contra Incendios  —  Nº ${parte?.id || 'N/A'}`, pageWidth / 2, y + 9, { align: 'center' });
+  doc.text(`Revisión de instalaciones y sistemas de protección contra incendios - ${parte?.numeroMantenimiento || parte?.id || '—'}`, pageWidth / 2, y + 9, { align: 'center' });
 
   // Línea decorativa bajo la cabecera
   y += 16;
-  doc.setDrawColor(40, 40, 40);
+  doc.setDrawColor(128, 0, 32);
   doc.setLineWidth(0.8);
   doc.line(margen, y, pageWidth - margen, y);
   doc.setLineWidth(0.2);
@@ -1248,8 +1360,11 @@ export const generarCertificadoPDF = async (
   const empCif = empData?.cif || 'B16794679';
   const empDir = empData?.direccion || 'C/ America 16B Ático';
   const empLoc = `${empData?.poblacion || 'Sta. Coloma de Gramanet'}, ${empData?.provincia || 'Barcelona'} ${empData?.cp || '08921'}`;
+  const empTel = empData?.telefono || '651 019 229';
+  const empMail = empData?.correo || empData?.email || 'info@abanfoc.com';
+  const empRasic = empData?.rasic || '106001687';
 
-  const cardEmpH = 26;
+  const cardEmpH = 39;
   doc.setDrawColor(220, 220, 220);
   doc.setFillColor(250, 251, 252);
   doc.roundedRect(margen, y, pageWidth - margen * 2, cardEmpH, 3, 3, 'FD');
@@ -1259,12 +1374,37 @@ export const generarCertificadoPDF = async (
   doc.setTextColor(60, 60, 60);
   doc.text('EMPRESA MANTENEDORA', margen + 4, y + 6);
 
+  const empLines = [
+    { label: 'Empresa:', value: empNombre },
+    { label: 'CIF:', value: empCif },
+    { label: 'RASIC:', value: empRasic },
+    { label: 'Dirección:', value: empDir },
+    { label: 'Población:', value: empLoc },
+    { label: 'Teléfono:', value: empTel },
+    { label: 'Email:', value: empMail }
+  ];
+
+  // Calcular el ancho máximo de las etiquetas para alinearlas a la misma columna
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
-  doc.setTextColor(80, 80, 80);
-  doc.text(`${empNombre}  |  CIF: ${empCif}`, margen + 4, y + 11, { maxWidth: pageWidth - margen * 2 - 60 });
-  doc.text(`${empDir} — ${empLoc}`, margen + 4, y + 16, { maxWidth: pageWidth - margen * 2 - 60 });
-  doc.text(`Tel: ${empData?.telefono || '651 019 229'}  |  RASIC: ${empData?.rasic || '106001687'}`, margen + 4, y + 21, { maxWidth: pageWidth - margen * 2 - 60 });
+  const maxEmpLabelW = Math.max(...empLines.map(item => doc.getTextWidth(item.label)));
+
+  let ey = y + 11;
+  empLines.forEach(item => {
+    // 1. Dibujar Label en Regular/Normal
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(80, 80, 80);
+    doc.text(item.label, margen + 4, ey);
+
+    // 2. Dibujar Value en Bold alineado a la derecha
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(40, 40, 40);
+    doc.text(item.value, margen + 4 + maxEmpLabelW + 2, ey, { maxWidth: pageWidth - margen * 2 - 80 });
+
+    ey += 4;
+  });
 
   // Logo a la derecha dentro de la tarjeta
   try {
@@ -1319,7 +1459,7 @@ export const generarCertificadoPDF = async (
     doc.setFontSize(7);
     doc.setTextColor(100, 100, 100);
     doc.text(label, col, ry);
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('helvetica', i === 6 ? 'bold' : 'normal');
     doc.setTextColor(50, 50, 50);
     doc.text(value, col + 28, ry, { maxWidth: i < 4 ? 60 : 50 });
   });
@@ -1393,8 +1533,28 @@ export const generarCertificadoPDF = async (
   }
 
   // ── RESULTADO DE LA REVISIÓN ──
+  let tieneAlgunaAnomalia = false;
+  if (equiposTodos && equiposTodos.length > 0) {
+    tieneAlgunaAnomalia = equiposTodos.some(eq => {
+      // 1. Un check en rojo/falso
+      const hasChecksUnmarked = Object.keys(eq).some(k => k.toLowerCase().startsWith('check') && eq[k] === false);
+      // 2. Campo .anomalias con texto
+      const hasText = eq.anomalias && typeof eq.anomalias === 'string' && eq.anomalias.trim() !== '';
+      // 3. Cualquier campo de notas/observaciones/anomalía con texto
+      const hasNotesText = Object.keys(eq).some(k => {
+        const keyLower = k.toLowerCase();
+        if (keyLower.includes('nota') || keyLower.includes('observaci') || keyLower.includes('anomal')) {
+          const val = eq[k];
+          return typeof val === 'string' && val.trim() !== '';
+        }
+        return false;
+      });
+      return hasChecksUnmarked || hasText || hasNotesText;
+    });
+  }
+
   const rawEstado = (estadoCertificado || 'Favorable').toLowerCase();
-  const esNegativo = rawEstado.includes('negativo') || rawEstado.includes('no');
+  const esNegativo = rawEstado.includes('negativo') || rawEstado.includes('no') || tieneAlgunaAnomalia;
   const estadoLimpio = esNegativo ? 'NO favorable' : 'Favorable';
 
   // Texto de certificación formal
@@ -1412,10 +1572,16 @@ export const generarCertificadoPDF = async (
     `CERTIFICA que se ha efectuado la revisión de los equipos y sistemas contra incendios en "${nombreCentro}" ` +
     `según REAL DECRETO 513/2017 del Reglamento de Instalaciones de Protección Contra Incendios.`;
 
-  // Usar splitTextToSize para un word-wrap más robusto
-  const textLines = doc.splitTextToSize(textoCertificacion, pageWidth - margen * 2 - 8);
+  // Establecer el formato de la fuente antes de medir con splitTextToSize para que el wrap sea correcto
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
 
-  const cardResultH = 14 + (textLines.length * 4.5) + 14;
+  // Usar splitTextToSize para un word-wrap más robusto
+  // Dejamos un margen interno de 5 mm a cada lado del texto dentro de la tarjeta
+  const textLines = doc.splitTextToSize(textoCertificacion, pageWidth - margen * 2 - 10);
+
+  const lineSpacing = 4.2;
+  const cardResultH = 11 + (textLines.length * lineSpacing) + 7;
   doc.setDrawColor(220, 220, 220);
   doc.setFillColor(250, 251, 252);
   doc.roundedRect(margen, y, pageWidth - margen * 2, cardResultH, 3, 3, 'FD');
@@ -1423,23 +1589,23 @@ export const generarCertificadoPDF = async (
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);
   doc.setTextColor(60, 60, 60);
-  doc.text('RESULTADO DE LA REVISIÓN', margen + 4, y + 6);
+  doc.text('RESULTADO DE LA REVISIÓN', margen + 5, y + 6);
 
-  let ly = y + 12;
+  let ly = y + 11;
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(60, 60, 60);
   textLines.forEach((line: string) => {
-    doc.text(line, margen + 4, ly);
-    ly += 4.5;
+    doc.text(line, margen + 5, ly);
+    ly += lineSpacing;
   });
 
   // Estado del resultado
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);
-  const colorRes: [number, number, number] = esNegativo ? [180, 40, 40] : [30, 120, 70];
+  const colorRes: [number, number, number] = esNegativo ? [220, 38, 38] : [22, 163, 74];
   doc.setTextColor(colorRes[0], colorRes[1], colorRes[2]);
-  doc.text(`Resultado: ${estadoLimpio}`, margen + 4, ly + 4);
+  doc.text(`Resultado: ${estadoLimpio}`, margen + 5, ly + 1);
 
   y += cardResultH + 8;
 
@@ -1450,6 +1616,24 @@ export const generarCertificadoPDF = async (
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8);
     doc.setTextColor(60, 60, 60);
+
+    // Buscar habilitación del técnico en localStorage
+    const habilitacionTecnico = (() => {
+      try {
+        const stored = localStorage.getItem('firecheck_db_tecnicos');
+        if (stored && tecnicoNombre) {
+          const list: any[] = JSON.parse(stored);
+          const match = list.find(t => {
+            const full = `${t.nombre ?? ''} ${t.apellidos ?? ''}`.trim();
+            return full.toLowerCase() === tecnicoNombre.trim().toLowerCase();
+          });
+          return match?.habilitacion || match?.numHabilitacion || match?.habilitacionNum || match?.carnet || '';
+        }
+      } catch (e) {
+        console.error("Error looking up technician habilitation:", e);
+      }
+      return '';
+    })();
     
     // Firma Ingeniero
     doc.text('El Técnico Titulado', 20, firmasY);
@@ -1460,7 +1644,7 @@ export const generarCertificadoPDF = async (
     }
     
     // Firma Técnico
-    doc.text('Técnico Revisor', 80, firmasY);
+    doc.text('Técnico mantenedor', 80, firmasY);
     doc.roundedRect(80, firmasY + 3, 50, 25, 2, 2);
     if (_firmaTecnico) {
       doc.addImage(_firmaTecnico, 'PNG', 82, firmasY + 4, 46, 23);
@@ -1472,37 +1656,93 @@ export const generarCertificadoPDF = async (
     if (_firmaCliente) {
       doc.addImage(_firmaCliente, 'PNG', 142, firmasY + 4, 46, 23);
     }
+
+    // Nombres y cargos debajo de las firmas
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(40, 40, 40);
+
+    // Nombre Ingeniero
+    const nombreIngeniero = (empData?.ingenieroNombre && empData?.ingenieroApellidos) 
+      ? `${empData.ingenieroNombre} ${empData.ingenieroApellidos}`
+      : (empData?.tecnicoTitulado || 'Técnico Titulado');
+    doc.text(nombreIngeniero, 20, firmasY + 32);
+
+    // Nombre Técnico
+    doc.text(tecnicoNombre || 'Técnico mantenedor', 80, firmasY + 32);
+
+    // Nombre Cliente
+    doc.text(_nombreFirmante || 'Cliente / Titular', 140, firmasY + 32);
+
+    // Cargos y números
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(6.5);
+    doc.setTextColor(100, 100, 100);
+
+    // Cargo e Ingeniero nº
+    const numColegiado = empData?.ingenieroColegiado || empData?.numTecnicoTitulado || '—';
+    doc.text(`Ingeniero nº: ${numColegiado}`, 20, firmasY + 36);
+
+    // Cargo Técnico
+    const numHab = habilitacionTecnico || '—';
+    doc.text(`Habilitación nº: ${numHab}`, 80, firmasY + 36);
+
+    // Cargo Cliente
+    doc.text('Titular del centro', 140, firmasY + 36);
   }
 
-  // Footer
+  // Footer (solo número de página alineado a la derecha)
   const totalPages = (doc.internal as any).getNumberOfPages();
   for (let i = 1; i <= totalPages; i++) {
     doc.setPage(i);
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(6.5);
-    doc.setTextColor(170, 170, 170);
-    const text = `Certificado de revisión — ${new Date().toLocaleDateString()} — Página ${i} de ${totalPages}`;
-    const textWidth = doc.getTextWidth(text);
-    doc.text(text, (pageWidth - textWidth) / 2, 287);
+    doc.setFontSize(7.5);
+    doc.setTextColor(120, 120, 120);
+    doc.text(`Página ${i} de ${totalPages}`, pageWidth - 14, 287, { align: 'right' });
   }
 
   if (!noSave) doc.save(`Certificado_${centro?.nombre || 'Centro'}_${parte?.numeroMantenimiento || parte?.id || 'N-A'}.pdf`);
+  return doc;
 };
 
 /**
  * Versión para visualizar el PDF del Certificado en el navegador sin descargar
  */
-export const generarCertificadoPDFView = async (...args: any[]): Promise<string> => {
-  const tempDoc = new jsPDF('p', 'mm', 'a4');
-  // @ts-ignore
-  await generarCertificadoPDF(...args, true);
-  return tempDoc.output('bloburl').toString();
+export const generarCertificadoPDFView = async (
+  cliente: Record<string, any>,
+  centro: Record<string, any>,
+  parte: Record<string, any>,
+  tecnicoNombre?: string,
+  estadoCertificado?: string,
+  sistemas?: Record<string, any>[],
+  equiposTodos?: Record<string, any>[],
+  _firmaCliente?: string,
+  _firmaTecnico?: string,
+  _nombreFirmante?: string,
+  _noSave?: boolean,
+  empresa?: Record<string, any>
+): Promise<string> => {
+  const doc = await generarCertificadoPDF(
+    cliente,
+    centro,
+    parte,
+    tecnicoNombre,
+    estadoCertificado,
+    sistemas,
+    equiposTodos,
+    _firmaCliente,
+    _firmaTecnico,
+    _nombreFirmante,
+    true, // Force noSave to true for viewing in browser
+    empresa
+  );
+  return doc.output('bloburl').toString();
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PRESUPUESTO PDF
 // ─────────────────────────────────────────────────────────────────────────────
-export const generarPresupuestoPDF = (
+export const generarPresupuestoPDF = async (
   presupuesto: {
     titulo: string;
     numeroPresupuesto?: string;
@@ -1510,7 +1750,7 @@ export const generarPresupuestoPDF = (
     fechaCreacion: string;
     fechaValidez?: string;
     estado: string;
-    lineas: { concepto: string; codigo?: string; cantidad: number; precioUnidad: number; subtotal: number }[];
+    lineas: { concepto: string; codigo?: string; fotoUrl?: string; cantidad: number; precioUnidad: number; subtotal: number }[];
     subtotal: number;
     iva: number;
     total: number;
@@ -1527,20 +1767,6 @@ export const generarPresupuestoPDF = (
   doc.roundedRect(8, 8, pageWidth - 16, 281, 4, 4, 'D');
 
   let y = 18;
-
-  try {
-    const logoBase64 = localStorage.getItem('firecheck_db_logo');
-    if (logoBase64) doc.addImage(logoBase64, 'PNG', margen, y, 50, 12);
-    if (logoBase64) {
-      const logoProps = doc.getImageProperties(logoBase64);
-      const maxLogoWidth = 70;
-      const maxLogoHeight = 18;
-      const logoRatio = logoProps.width / logoProps.height;
-      const logoWidth = Math.min(maxLogoWidth, maxLogoHeight * logoRatio);
-      const logoHeight = logoWidth / logoRatio;
-      doc.addImage(logoBase64, 'PNG', margen, y, logoWidth, logoHeight);
-    }
-  } catch (e) {}
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(18);
@@ -1563,9 +1789,39 @@ export const generarPresupuestoPDF = (
   const empLoc = `${empData?.poblacion || 'Sta. Coloma de Gramanet'}, ${empData?.provincia || 'Barcelona'} ${empData?.cp || '08921'}`;
   const empTel = empData?.telefono || '651 019 229';
 
+  // Tarjeta de empresa más grande con logo incluido
+  const cardEmpH = 32;
   doc.setDrawColor(220, 220, 220);
   doc.setFillColor(248, 250, 252);
-  doc.roundedRect(margen, y, pageWidth - margen * 2, 22, 3, 3, 'FD');
+  doc.roundedRect(margen, y, pageWidth - margen * 2, cardEmpH, 3, 3, 'FD');
+  
+  // Logo dentro de la tarjeta (esquina superior derecha)
+  try {
+    // Intentar obtener el logo de varias fuentes
+    let logoData: string | null = null;
+    
+    // 1º Intentar desde localStorage directamente (suele ser base64)
+    const storedLogo = localStorage.getItem('firecheck_db_logo');
+    if (storedLogo) {
+      logoData = storedLogo;
+    }
+    
+    // 2º Intentar desde datos de empresa
+    if (!logoData && empData?.logoUrl) {
+      logoData = await fetchImageToBase64(empData.logoUrl);
+    }
+    
+    if (logoData) {
+      const logoProps = doc.getImageProperties(logoData);
+      const maxLogoWidth = 55;
+      const maxLogoHeight = 14;
+      const logoRatio = logoProps.width / logoProps.height;
+      const logoWidth = Math.min(maxLogoWidth, maxLogoHeight * logoRatio);
+      const logoHeight = logoWidth / logoRatio;
+      doc.addImage(logoData, 'PNG', pageWidth - margen - 4 - logoWidth, y + 3, logoWidth, logoHeight);
+    }
+  } catch (e) { console.error('Error cargando logo en presupuesto:', e); }
+
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
   doc.setTextColor(60, 60, 60);
@@ -1573,10 +1829,10 @@ export const generarPresupuestoPDF = (
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7);
   doc.setTextColor(80, 80, 80);
-  doc.text(`${empNombre}  |  CIF: ${empCif}`, margen + 4, y + 12);
-  doc.text(`${empDir}  |  ${empLoc}`, margen + 4, y + 17);
-  doc.text(`Tel: ${empTel}`, margen + 4, y + 22);
-  y += 28;
+  doc.text(`${empNombre}  |  CIF: ${empCif}`, margen + 4, y + 13);
+  doc.text(`${empDir}  |  ${empLoc}`, margen + 4, y + 19);
+  doc.text(`Tel: ${empTel}  |  RASIC: ${empData?.rasic || '106001687'}`, margen + 4, y + 25);
+  y += cardEmpH + 8;
 
   doc.setDrawColor(220, 220, 220);
   doc.setFillColor(248, 250, 252);
@@ -1606,7 +1862,24 @@ export const generarPresupuestoPDF = (
   doc.text(presupuesto.fechaValidez ? new Date(presupuesto.fechaValidez).toLocaleDateString('es-ES') : '—', col4x, y + 19);
   y += infoH + 8;
 
+  // Cargar imágenes de las líneas que tengan fotoUrl (de forma asíncrona para no bloquear)
+  const lineasConFoto = (presupuesto.lineas || []).filter(l => l.fotoUrl);
+  const imagenesCargadas: Record<number, string> = {};
+  if (lineasConFoto.length > 0) {
+    for (const l of lineasConFoto) {
+      if (l.fotoUrl) {
+        try {
+          const base64 = await fetchImageToBase64(l.fotoUrl);
+          if (base64) {
+            imagenesCargadas[(presupuesto.lineas || []).indexOf(l)] = base64;
+          }
+        } catch (e) {}
+      }
+    }
+  }
+
   const tableBody = (presupuesto.lineas || []).map(l => [
+    '', // Columna para imagen (se dibujará con didDrawCell)
     l.concepto + (l.codigo ? ` (${l.codigo})` : ''),
     String(l.cantidad),
     formatM(l.precioUnidad || 0),
@@ -1615,7 +1888,7 @@ export const generarPresupuestoPDF = (
 
   autoTable(doc, {
     startY: y,
-    head: [['Concepto', 'Cant.', 'Precio Ud.', 'Subtotal']],
+    head: [['', 'Concepto', 'Cant.', 'Precio Ud.', 'Subtotal']],
     body: tableBody,
     theme: 'grid',
     headStyles: { fillColor: [60, 60, 60], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
@@ -1624,7 +1897,24 @@ export const generarPresupuestoPDF = (
     margin: { left: margen, right: margen },
     tableLineColor: [200, 200, 200],
     tableLineWidth: 0.15,
-    columnStyles: { 0: { cellWidth: 'auto' }, 1: { cellWidth: 20, halign: 'center' }, 2: { cellWidth: 25, halign: 'right' }, 3: { cellWidth: 25, halign: 'right' } },
+    columnStyles: { 0: { cellWidth: 12, halign: 'center' }, 1: { cellWidth: 'auto' }, 2: { cellWidth: 20, halign: 'center' }, 3: { cellWidth: 25, halign: 'right' }, 4: { cellWidth: 25, halign: 'right' } },
+    didDrawCell: (data: any) => {
+      // Dibujar imagen en la primera columna si existe para esta fila
+      if (data.section === 'body' && data.column.index === 0) {
+        const rowIndex = data.row.index;
+        const imgBase64 = imagenesCargadas[rowIndex];
+        if (imgBase64) {
+          try {
+            const cellW = data.cell.width;
+            const cellH = data.cell.height;
+            const padding = 1;
+            const imgW = cellW - padding * 2;
+            const imgH = cellH - padding * 2;
+            doc.addImage(imgBase64, 'PNG', data.cell.x + padding, data.cell.y + padding, imgW, imgH);
+          } catch (e) {}
+        }
+      }
+    }
   });
 
   const finalY = (doc as any).lastAutoTable?.finalY || y + 10;

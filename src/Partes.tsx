@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FileText, Building2, MapPin, CalendarDays, Search, Trash2, Download, Lock, X, Check } from 'lucide-react';
-import { subscribePartes, subscribeCentros, subscribeClientes, deleteParte, db } from './firebase';
-import { collection, getDocs } from 'firebase/firestore';
+import { subscribePartes, subscribeCentros, subscribeClientes, subscribeTecnicos, deleteParte, db } from './firebase';
+import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
 import { generarActaExtintoresPDF, generarAlbaranPDF, generarCertificadoPDF } from './pdfGenerator';
 
 interface ParteItem {
@@ -35,6 +35,7 @@ interface Centro {
   direccion?: string;
   poblacion?: string;
   provincia?: string;
+  empresaId?: string;
 }
 
 export default function Partes() {
@@ -42,7 +43,10 @@ export default function Partes() {
   const [partes, setPartes] = useState<ParteItem[]>([]);
   const [centros, setCentros] = useState<Centro[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [tecnicos, setTecnicos] = useState<any[]>([]);
   const [search, setSearch] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
 
   const [showDownloadModal, setShowDownloadModal] = useState(false);
   const [selectedParteToDownload, setSelectedParteToDownload] = useState<ParteItem | null>(null);
@@ -61,10 +65,15 @@ export default function Partes() {
     const unsubClientes = subscribeClientes((items) => {
       setClientes(items);
     });
+    const unsubTecnicos = subscribeTecnicos((items) => {
+      setTecnicos(items);
+      localStorage.setItem('firecheck_db_tecnicos', JSON.stringify(items));
+    });
     return () => {
       unsubPartes();
       unsubCentros();
       unsubClientes();
+      unsubTecnicos();
     };
   }, []);
 
@@ -161,8 +170,8 @@ export default function Partes() {
       equiposTodos.sort((a, b) => (a.codigo || '').localeCompare(b.codigo || '', undefined, { numeric: true }));
 
       // Tecnico nombre
-      const tecnicos = JSON.parse(localStorage.getItem('firecheck_db_tecnicos') || '[]');
-      const tecnico = tecnicos.find((t: any) => t.id === parte.tecnicoId);
+      const storedTecnicos = tecnicos.length ? tecnicos : JSON.parse(localStorage.getItem('firecheck_db_tecnicos') || '[]');
+      const tecnico = storedTecnicos.find((t: any) => t.id === parte.tecnicoId);
       const tecnicoNombre = tecnico ? `${tecnico.nombre} ${tecnico.apellidos}` : 'Técnico';
 
       const firmaCliente = (parte as any).firmaCliente || '';
@@ -224,11 +233,30 @@ export default function Partes() {
         console.error('Checklist fetch error', e);
       }
 
+      // Obtener empresa
+      let empresaSeleccionada: any = undefined;
+      const empId = parte.empresaId || centro?.empresaId;
+      if (empId) {
+        const empresas = JSON.parse(localStorage.getItem('firecheck_db_empresas') || '[]');
+        empresaSeleccionada = empresas.find((e: any) => e._docId === empId || e.id === empId);
+        if (!empresaSeleccionada) {
+            try {
+                const docRef = doc(db, 'empresa', empId);
+                const docSnap = await getDoc(docRef);
+                if (docSnap.exists()) {
+                    empresaSeleccionada = { _docId: docSnap.id, ...docSnap.data() };
+                }
+            } catch (e) {
+                console.error("Error fetching empresa from Firestore", e);
+            }
+        }
+      }
+
       // 1. Acta
       if (downloadOptions.acta) {
         await generarActaExtintoresPDF(
           cliente, centro, sistemasDelCentro, equiposTodos, numeroMantenimiento,
-          tecnicoNombre, undefined, firmaCliente, firmaTecnico, nombreFirmante, checklistItemsPorSistema
+          tecnicoNombre, undefined, firmaCliente, firmaTecnico, nombreFirmante, checklistItemsPorSistema, empresaSeleccionada
         );
       }
 
@@ -236,7 +264,7 @@ export default function Partes() {
       if (downloadOptions.certificado) {
         await generarCertificadoPDF(
           cliente, centro, parte, tecnicoNombre, undefined, sistemasDelCentro, equiposTodos,
-          firmaCliente, firmaTecnico, nombreFirmante, false
+          firmaCliente, firmaTecnico, nombreFirmante, false, empresaSeleccionada
         );
       }
 
@@ -244,7 +272,7 @@ export default function Partes() {
       if (downloadOptions.albaran) {
         await generarAlbaranPDF(
           cliente, centro, equiposTodos, numeroMantenimiento, tecnicoNombre,
-          firmaCliente, firmaTecnico, nombreFirmante, undefined, undefined, false, 'ALBARÁN DE REVISIÓN'
+          firmaCliente, firmaTecnico, nombreFirmante, undefined, empresaSeleccionada, false, 'ALBARÁN DE REVISIÓN', parte.periodicidad, sistemasDelCentro
         );
       }
 
@@ -266,7 +294,26 @@ export default function Partes() {
   // Only show parts that have a fechaProgramada (planified)
   const partesPlanificados = partesFiltrados.filter(
     p => p.fechaProgramada && p.fechaProgramada.trim() !== ''
-  ).sort((a, b) => {
+  ).filter(p => {
+    if (!startDate && !endDate) return true;
+    if (!p.fechaProgramada) return false;
+    
+    const [d, m, y] = p.fechaProgramada.split('-').map(Number);
+    const dateNum = y * 10000 + m * 100 + d;
+    
+    let pass = true;
+    if (startDate) {
+      const [sy, sm, sd] = startDate.split('-').map(Number);
+      const startNum = sy * 10000 + sm * 100 + sd;
+      if (dateNum < startNum) pass = false;
+    }
+    if (endDate) {
+      const [ey, em, ed] = endDate.split('-').map(Number);
+      const endNum = ey * 10000 + em * 100 + ed;
+      if (dateNum > endNum) pass = false;
+    }
+    return pass;
+  }).sort((a, b) => {
     if (!a.fechaProgramada) return 1;
     if (!b.fechaProgramada) return -1;
     const [da, ma, ya] = a.fechaProgramada.split('-').map(Number);
@@ -277,11 +324,40 @@ export default function Partes() {
   return (
     <div className="min-h-screen bg-amber-50/40 p-4 md:p-8">
       <div className="max-w-[1600px] mx-auto">
-        <div className="flex items-center gap-4 mb-8">
-          <h1 className="text-2xl md:text-3xl font-bold text-sky-950 flex items-center gap-3">
+        <div className="flex flex-col md:flex-row md:items-center gap-4 mb-8">
+          <h1 className="text-2xl md:text-3xl font-bold text-sky-950 flex items-center gap-3 mr-auto">
             <FileText className="w-8 h-8 text-sky-500" /> Partes de Trabajo
           </h1>
-          <div className="ml-auto relative w-64">
+
+          <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-xl border border-zinc-200 shadow-sm shrink-0">
+            <CalendarDays className="w-4 h-4 text-zinc-400" />
+            <input 
+              type="date" 
+              value={startDate} 
+              onChange={e => setStartDate(e.target.value)} 
+              className="text-sm outline-none text-zinc-600 bg-transparent"
+              title="Fecha inicial"
+            />
+            <span className="text-zinc-400 text-sm">a</span>
+            <input 
+              type="date" 
+              value={endDate} 
+              onChange={e => setEndDate(e.target.value)} 
+              className="text-sm outline-none text-zinc-600 bg-transparent"
+              title="Fecha final"
+            />
+            {(startDate || endDate) && (
+              <button 
+                onClick={() => { setStartDate(''); setEndDate(''); }}
+                className="ml-1 p-1 text-zinc-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors"
+                title="Limpiar fechas"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          <div className="relative w-full md:w-64 shrink-0">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
             <input
               type="text"
@@ -350,9 +426,6 @@ export default function Partes() {
                       <tr key={parte.id} className="hover:bg-amber-50/40 transition-colors group">
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-2">
-                            {parte.estado === 'En revisión' && (
-                              <div className="w-2.5 h-2.5 rounded-full bg-green-500 shrink-0" title="En revisión"></div>
-                            )}
                             <div>
                               <p className="font-bold text-zinc-900 text-sm">
                                 {cliente?.nombre || '—'}
@@ -388,10 +461,28 @@ export default function Partes() {
                         </td>
                         <td className="px-4 py-4">
                           <div className="flex items-center justify-end gap-2">
+                            {(parte.tecnicoId || parte.estado === 'En revisión' || parte.estado === 'Pre-Cerrado' || parte.estado === 'Cerrado') && (
+                              <div 
+                                className={`w-2.5 h-2.5 rounded-full mr-2 shrink-0 ${
+                                  (parte.estado === 'Pre-Cerrado' || parte.estado === 'Cerrado')
+                                    ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.8)]'
+                                    : parte.estado === 'En revisión' 
+                                      ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.8)]' 
+                                      : 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.8)]'
+                                }`} 
+                                title={
+                                  (parte.estado === 'Pre-Cerrado' || parte.estado === 'Cerrado') 
+                                    ? "Revisión Finalizada" 
+                                    : parte.estado === 'En revisión' 
+                                      ? "Revisión Empezada" 
+                                      : "Técnico Asignado"
+                                }
+                              ></div>
+                            )}
                             <button
                               onClick={() => irARevision(parte)}
                               className="p-2 rounded-lg hover:bg-sky-50 text-sky-600 transition-colors"
-                              title={(parte.estado === 'Pre-Cerrado' || parte.estado === 'Cerrado') ? "Revisar Parte (Bloqueado)" : "Ir a Revisión"}
+                              title={(parte.estado === 'Pre-Cerrado' || parte.estado === 'Cerrado') ? "Revisar parte finalizado" : "Ir a Revisión"}
                             >
                               {(parte.estado === 'Pre-Cerrado' || parte.estado === 'Cerrado') ? <Lock className="w-5 h-5" /> : <Search className="w-5 h-5" />}
                             </button>

@@ -112,7 +112,7 @@ function AccessDenied() {
           onClick={() => navigate('/')} 
           className="w-full bg-black hover:bg-zinc-800 text-white py-4 rounded-2xl font-bold shadow-lg transition-all active:scale-95"
         >
-          Volver al Home
+          Volver a Inicio
         </button>
       </div>
     </div>
@@ -209,7 +209,7 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
         <div className="sticky top-0 z-40 bg-[#f8f6f3]/80 backdrop-blur-md border-b border-zinc-200/60">
           <div className="flex items-center justify-center px-6 py-4">
             <div className="text-center">
-              <h1 className="text-xl font-bold text-zinc-900">Home</h1>
+              <h1 className="text-xl font-bold text-zinc-900">Inicio</h1>
               <p className="text-xs text-zinc-500 mt-0.5">Bienvenido, {loggedUser.nombre}</p>
             </div>
           </div>
@@ -361,7 +361,7 @@ function PlaceholderPage({ title, bgColor = "bg-zinc-50" }: { title: string, bgC
       <div className={`flex-1 overflow-y-auto ${bgColor}`}>
         <div className="p-6">
           <button onClick={() => navigate('/')} className="text-sm font-medium text-zinc-500 hover:text-black mb-6 flex items-center gap-2 transition-colors">
-            <ArrowLeft className="w-4 h-4" /> Volver al Home
+            <ArrowLeft className="w-4 h-4" /> Volver a Inicio
           </button>
           <h1 className="text-2xl font-bold text-zinc-900">{title}</h1>
           <p className="text-zinc-500 mt-2">Esta seccion esta en construccion y se implementara proximamente.</p>

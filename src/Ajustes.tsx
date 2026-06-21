@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Building2, Users, ShieldCheck, FireExtinguisher, Plus, Trash2, ArrowLeft, Image as ImageIcon, X, Loader, Edit, Percent, ClipboardList, ChevronDown, ChevronUp
 } from 'lucide-react';
-import { addUserToFirestore, subscribeSistemasCategorias, addSistemaCategoria, deleteSistemaCategoria, updateSistemaCategoria, uploadFile, subscribeImpuestos, saveImpuestoConfig } from './firebase';
+import { addUserToFirestore, subscribeSistemasCategorias, addSistemaCategoria, deleteSistemaCategoria, updateSistemaCategoria, uploadFile, subscribeImpuestos, saveImpuestoConfig, subscribeTecnicos, saveTecnico, deleteTecnico } from './firebase';
 import FormBuilderPlantillas from './FormBuilderPlantillas';
 import ConfirmationModal from './ConfirmationModal';
 
@@ -39,14 +39,15 @@ export default function Ajustes() {
   const navigate = useNavigate();
   const [view, setView] = useState<'menu' | 'tecnicos' | 'usuarios' | 'sistemas' | 'impuestos' | 'plantillas'>('menu');
 
-  const [tecnicos, setTecnicos] = useState<{ id: string; nombre: string; apellidos: string }[]>(() => {
+  const [tecnicos, setTecnicos] = useState<{ id: string; nombre: string; apellidos: string; habilitacion?: string; _docId?: string }[]>(() => {
     try {
       const stored = localStorage.getItem('firecheck_db_tecnicos');
       return stored ? JSON.parse(stored) : [];
     } catch { return []; }
   });
 
-  const [nuevoTecnico, setNuevoTecnico] = useState({ nombre: '', apellidos: '' });
+  const [nuevoTecnico, setNuevoTecnico] = useState({ nombre: '', apellidos: '', habilitacion: '' });
+  const [editTecnicoId, setEditTecnicoId] = useState<string | null>(null);
 
   const [usuarios, setUsuarios] = useState<Usuario[]>(() => {
     try {
@@ -145,6 +146,15 @@ export default function Ajustes() {
         setSistemas(cats); 
         localStorage.setItem('firecheck_db_sistemas_categorias', JSON.stringify(cats));
       }
+    });
+    return () => unsub();
+  }, []);
+
+  // Cargar técnicos desde Firestore en tiempo real
+  useEffect(() => {
+    const unsub = subscribeTecnicos((items) => {
+      setTecnicos(items);
+      localStorage.setItem('firecheck_db_tecnicos', JSON.stringify(items));
     });
     return () => unsub();
   }, []);
@@ -286,14 +296,39 @@ export default function Ajustes() {
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<{ type: 'tecnico' | 'usuario' | 'sistema'; id: string } | null>(null);
 
-  const handleAddTecnico = (e: React.FormEvent) => {
+  const handleAddTecnico = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nuevoTecnico.nombre.trim() || !nuevoTecnico.apellidos.trim()) return;
-    const newTec = { id: generateId(), nombre: nuevoTecnico.nombre.trim(), apellidos: nuevoTecnico.apellidos.trim() };
-    const updated = [...tecnicos, newTec];
-    setTecnicos(updated);
-    localStorage.setItem('firecheck_db_tecnicos', JSON.stringify(updated));
-    setNuevoTecnico({ nombre: '', apellidos: '' });
+    try {
+      const tecExistente = editTecnicoId ? tecnicos.find(t => t.id === editTecnicoId) : null;
+      const newTec = {
+        id: editTecnicoId || generateId(),
+        _docId: tecExistente?._docId,
+        nombre: nuevoTecnico.nombre.trim(),
+        apellidos: nuevoTecnico.apellidos.trim(),
+        habilitacion: nuevoTecnico.habilitacion.trim()
+      };
+      await saveTecnico(newTec as any);
+      setNuevoTecnico({ nombre: '', apellidos: '', habilitacion: '' });
+      setEditTecnicoId(null);
+    } catch (err) {
+      console.error('Error guardando técnico:', err);
+      alert('Error al guardar el técnico.');
+    }
+  };
+
+  const handleEditTecnico = (tec: any) => {
+    setEditTecnicoId(tec.id);
+    setNuevoTecnico({
+      nombre: tec.nombre,
+      apellidos: tec.apellidos,
+      habilitacion: tec.habilitacion || ''
+    });
+  };
+
+  const handleCancelEditTecnico = () => {
+    setEditTecnicoId(null);
+    setNuevoTecnico({ nombre: '', apellidos: '', habilitacion: '' });
   };
 
   const handleDeleteTecnico = (id: string) => {
@@ -301,12 +336,17 @@ export default function Ajustes() {
     setIsConfirmModalOpen(true);
   };
 
-  const confirmDeleteTecnico = () => {
+  const confirmDeleteTecnico = async () => {
     if (!itemToDelete || itemToDelete.type !== 'tecnico') return;
     setIsConfirmModalOpen(false);
-    const updated = tecnicos.filter(t => t.id !== itemToDelete.id);
-    setTecnicos(updated);
-    localStorage.setItem('firecheck_db_tecnicos', JSON.stringify(updated));
+    const tec = tecnicos.find(t => t.id === itemToDelete.id);
+    const docId = tec?._docId || itemToDelete.id;
+    try {
+      await deleteTecnico(docId);
+    } catch (err) {
+      console.error('Error eliminando técnico:', err);
+      alert('Error al eliminar el técnico.');
+    }
     setItemToDelete(null);
   };
 
@@ -496,7 +536,9 @@ export default function Ajustes() {
         {view === 'tecnicos' && (
           <section className="space-y-6">
             <form onSubmit={handleAddTecnico} className="bg-white rounded-2xl border border-zinc-200 p-4 flex flex-col gap-3">
-              <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Nuevo Tecnico</p>
+              <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
+                {editTecnicoId ? 'Editar Técnico' : 'Nuevo Tecnico'}
+              </p>
               <input
                 type="text" required placeholder="Nombre"
                 value={nuevoTecnico.nombre}
@@ -509,9 +551,34 @@ export default function Ajustes() {
                 onChange={e => setNuevoTecnico({ ...nuevoTecnico, apellidos: e.target.value })}
                 className="w-full px-4 py-2.5 border border-zinc-200 rounded-xl text-sm outline-none focus:border-black"
               />
-              <button type="submit" className="bg-black hover:bg-zinc-800 text-white px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 transition-colors font-medium">
-                <Plus className="w-4 h-4" /> Anadir Tecnico
-              </button>
+              <input
+                type="text" placeholder="Nº Habilitación (opcional)"
+                value={nuevoTecnico.habilitacion}
+                onChange={e => setNuevoTecnico({ ...nuevoTecnico, habilitacion: e.target.value })}
+                className="w-full px-4 py-2.5 border border-zinc-200 rounded-xl text-sm outline-none focus:border-black"
+              />
+              <div className="flex gap-2">
+                <button type="submit" className="bg-black hover:bg-zinc-800 text-white px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 transition-colors font-medium flex-1">
+                  {editTecnicoId ? (
+                    <>
+                      <Edit className="w-4 h-4" /> Guardar Cambios
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-4 h-4" /> Anadir Tecnico
+                    </>
+                  )}
+                </button>
+                {editTecnicoId && (
+                  <button 
+                    type="button" 
+                    onClick={handleCancelEditTecnico} 
+                    className="border border-zinc-200 hover:bg-zinc-50 text-zinc-700 px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 transition-colors font-medium"
+                  >
+                    Cancelar
+                  </button>
+                )}
+              </div>
             </form>
 
             <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden">
@@ -524,10 +591,20 @@ export default function Ajustes() {
                 <ul className="divide-y divide-zinc-100">
                   {tecnicos.map(t => (
                     <li key={t.id} className="p-4 flex items-center justify-between hover:bg-zinc-50 transition-colors">
-                      <span className="font-medium text-zinc-900 text-sm">{t.nombre} {t.apellidos}</span>
-                      <button onClick={() => handleDeleteTecnico(t.id)} className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <div className="flex flex-col">
+                        <span className="font-medium text-zinc-900 text-sm">{t.nombre} {t.apellidos}</span>
+                        {t.habilitacion && (
+                          <span className="text-xs text-zinc-400 font-semibold mt-0.5">Habilitación nº: {t.habilitacion}</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => handleEditTecnico(t)} className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg">
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => handleDeleteTecnico(t.id)} className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </li>
                   ))}
                 </ul>

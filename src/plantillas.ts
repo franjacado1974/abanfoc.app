@@ -252,6 +252,7 @@ export async function getItemsDePlantilla(plantillaId: string): Promise<ItemPlan
         orden: data.orden || 0,
         tipoRespuesta: data.tipoRespuesta || 'check',
         requerido: data.requerido !== false,
+        opciones: data.opciones || [],
         createdAt: data.createdAt || '',
         updatedAt: data.updatedAt || '',
       } as ItemPlantilla;
@@ -338,6 +339,7 @@ export function subscribeItemsDePlantilla(
             orden: data.orden || 0,
             tipoRespuesta: data.tipoRespuesta || 'check',
             requerido: data.requerido !== false,
+            opciones: data.opciones || [],
             createdAt: data.createdAt || '',
             updatedAt: data.updatedAt || '',
           } as ItemPlantilla;

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { ArrowLeft, FileDigit, Download, Search, CheckCircle2, Circle, Clock, Trash2, Plus, Building2, MapPin, Save, Trash, Edit, Copy, Maximize2, X } from 'lucide-react';
-import { addAlbaran, updateAlbaran, deleteAlbaran, subscribeAlbaranes, subscribeEmpresas, subscribeTecnicos, subscribeCentros, subscribeClientes, subscribeTrabajos, type Albaran, type Cliente, type Centro, type Equipo, type Tecnico, type Empresa, type TrabajoConfig } from './firebase';
+import { addAlbaran, updateAlbaran, deleteAlbaran, subscribeAlbaranes, subscribeEmpresas, subscribeTecnicos, subscribeCentros, subscribeClientes, subscribeTrabajos, db, type Albaran, type Cliente, type Centro, type Equipo, type Tecnico, type Empresa, type TrabajoConfig } from './firebase';
+import { doc, getDoc } from 'firebase/firestore';
 import { generarAlbaranPDF } from './pdfGenerator';
 import ConfirmationModal from './ConfirmationModal';
 
@@ -468,10 +469,17 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                       <div className="flex items-center gap-1">
                         <button onClick={async () => {
                           const eqsDelCentro = equipos.filter(e => e.centroId === alb.centroId);
-                          const empresa = empresas.find(e => e._docId === alb.empresaId);
+                          const empId = alb.empresaId || centro?.empresaId;
+                          let empresa = empresas.find(e => e._docId === empId || e.id === empId);
+                          if (!empresa && empId) {
+                            try {
+                                const docSnap = await getDoc(doc(db, 'empresa', empId));
+                                if (docSnap.exists()) empresa = { _docId: docSnap.id, ...(docSnap.data() as any) };
+                            } catch(e){}
+                          }
                           const tecnico = tecnicos.find(t => t.id === alb.tecnicoId);
                           const tecnicoNombre = tecnico ? `${tecnico.nombre} ${tecnico.apellidos}` : '';
-                          await generarAlbaranPDF(cliente as any || null, centro as any || null, eqsDelCentro as any[], alb.numeroMantenimiento || alb.id, tecnicoNombre, alb.firmaCliente, alb.firmaTecnico, alb.nombreFirmante, alb.items, empresa as any, false, alb.titulo);
+                          await generarAlbaranPDF(cliente as any || null, centro as any || null, eqsDelCentro as any[], alb.numeroMantenimiento || alb.id, tecnicoNombre, alb.firmaCliente, alb.firmaTecnico, alb.nombreFirmante, alb.items, empresa as any, false, alb.titulo, alb.periodicidad);
                         }} className="p-1.5 text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100 rounded-lg transition-colors" title="Descargar PDF"><Download className="w-4 h-4" /></button>
                         <button onClick={() => handleEditAlbaran(alb)} className="p-1.5 text-zinc-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"><Edit className="w-4 h-4" /></button>
                       </div>
@@ -502,10 +510,17 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                       <div className="flex items-center justify-center gap-1" style={{ width: colWidths.acciones }}>
                         <button onClick={async () => {
                           const eqsDelCentro = equipos.filter(e => e.centroId === alb.centroId);
-                          const empresa = empresas.find(e => e._docId === alb.empresaId);
+                          const empId = alb.empresaId || centro?.empresaId;
+                          let empresa = empresas.find(e => e._docId === empId || e.id === empId);
+                          if (!empresa && empId) {
+                            try {
+                                const docSnap = await getDoc(doc(db, 'empresa', empId));
+                                if (docSnap.exists()) empresa = { _docId: docSnap.id, ...(docSnap.data() as any) };
+                            } catch(e){}
+                          }
                           const tecnico = tecnicos.find(t => t.id === alb.tecnicoId);
                           const tecnicoNombre = tecnico ? `${tecnico.nombre} ${tecnico.apellidos}` : '';
-                          await generarAlbaranPDF(cliente as any || null, centro as any || null, eqsDelCentro as any[], alb.numeroMantenimiento || alb.id, tecnicoNombre, alb.firmaCliente, alb.firmaTecnico, alb.nombreFirmante, alb.items, empresa as any, false, alb.titulo);
+                          await generarAlbaranPDF(cliente as any || null, centro as any || null, eqsDelCentro as any[], alb.numeroMantenimiento || alb.id, tecnicoNombre, alb.firmaCliente, alb.firmaTecnico, alb.nombreFirmante, alb.items, empresa as any, false, alb.titulo, alb.periodicidad);
                         }} className="p-1.5 text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100 rounded-lg transition-colors" title="Descargar PDF"><Download className="w-4 h-4" /></button>
                         {!isVisualizador && <button onClick={() => handleEditAlbaran(alb)} className="p-1.5 text-zinc-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors" title="Editar"><Edit className="w-4 h-4" /></button>}
                         {!isVisualizador && !isTecnicoMode && <button onClick={() => handleDuplicateAlbaran(alb)} className="p-1.5 text-zinc-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-colors" title="Duplicar"><Copy className="w-4 h-4" /></button>}

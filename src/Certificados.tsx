@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { FileCheck, Download, Search, CheckCircle2, CircleX, Clock, Trash2, Eye, Building2, MapPin, User, CalendarDays, AlertTriangle } from 'lucide-react';
 import ConfirmationModal from './ConfirmationModal';
 import { generarCertificadoPDF, generarCertificadoPDFView } from './pdfGenerator';
+import { db } from './firebase';
+import { doc, getDoc } from 'firebase/firestore';
 import DetailModal from './components/DetailModal';
 
 export default function Certificados() {
@@ -77,6 +79,16 @@ export default function Certificados() {
       
       const albaranes = JSON.parse(localStorage.getItem('firecheck_db_albaranes') || '[]');
       const albaranData = albaranes.find((a: any) => a.parteId === cert.parteId);
+      
+      const empresas = JSON.parse(localStorage.getItem('firecheck_db_empresas') || '[]');
+      const empId = cert.empresaId || centro?.empresaId;
+      let empresaSeleccionada = empresas.find((e: any) => e._docId === empId || e.id === empId);
+      if (!empresaSeleccionada && empId) {
+          try {
+              const docSnap = await getDoc(doc(db, 'empresa', empId));
+              if (docSnap.exists()) empresaSeleccionada = { _docId: docSnap.id, ...docSnap.data() };
+          } catch(e){}
+      }
 
       const nombreTecnico = tecnico ? `${tecnico.nombre} ${tecnico.apellidos}` : 'No asignado';
       await generarCertificadoPDF(
@@ -89,7 +101,9 @@ export default function Certificados() {
         equiposDelCentro,
         albaranData?.firmaCliente,
         albaranData?.firmaTecnico,
-        albaranData?.nombreFirmante
+        albaranData?.nombreFirmante,
+        false,
+        empresaSeleccionada
       );
     } catch (e) {
       console.error(e);
@@ -107,6 +121,17 @@ export default function Certificados() {
       const equiposDelCentro = equipos.filter((e: any) => e.centroId === centro.id);
       const albaranes = JSON.parse(localStorage.getItem('firecheck_db_albaranes') || '[]');
       const albaranData = albaranes.find((a: any) => a.parteId === cert.parteId);
+      
+      const empresas = JSON.parse(localStorage.getItem('firecheck_db_empresas') || '[]');
+      const empId = cert.empresaId || centro?.empresaId;
+      let empresaSeleccionada = empresas.find((e: any) => e._docId === empId || e.id === empId);
+      if (!empresaSeleccionada && empId) {
+          try {
+              const docSnap = await getDoc(doc(db, 'empresa', empId));
+              if (docSnap.exists()) empresaSeleccionada = { _docId: docSnap.id, ...docSnap.data() };
+          } catch(e){}
+      }
+      
       const nombreTecnico = tecnico ? `${tecnico.nombre} ${tecnico.apellidos}` : 'No asignado';
       
       const pdfBlobUrl = await generarCertificadoPDFView(
@@ -119,7 +144,9 @@ export default function Certificados() {
         equiposDelCentro,
         albaranData?.firmaCliente,
         albaranData?.firmaTecnico,
-        albaranData?.nombreFirmante
+        albaranData?.nombreFirmante,
+        false,
+        empresaSeleccionada
       );
       window.open(pdfBlobUrl, '_blank');
     } catch (e) {

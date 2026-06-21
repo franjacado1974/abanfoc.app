@@ -63,6 +63,12 @@ body {
   border-bottom: 2px solid #e5e0d5;
 }
 
+/* Remove background from product images */
+.img-no-bg {
+  mix-blend-mode: multiply;
+  background: transparent !important;
+}
+
 /* Card metric */
 .metric-card {
   background: white;

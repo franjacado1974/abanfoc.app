@@ -517,7 +517,7 @@ export default function RevisionChecklist() {
         }
         const nextId = `${prefix}${nextNum.toString().padStart(3, '0')}`;
 
-        const numMantenimiento = `MANT-${new Date().getFullYear()}-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`;
+        const numMantenimiento = parte?.numeroMantenimiento || await generateNumeroMantenimiento();
 
         const nuevoAlbaran: Albaran = {
             id: nextId,
@@ -1484,6 +1484,21 @@ export default function RevisionChecklist() {
                                                 );
                                             })()}
                                         </div>
+
+                                        {equiposInstalados.some(eq => eq.sistemaId === sist.id) && (
+                                            <div className="mt-4 flex flex-wrap gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setAddEquipo(prev => ({ ...prev, isOpen: true, sistemaId: sist.id }));
+                                                    }}
+                                                    className="inline-flex items-center gap-2 px-4 py-2.5 bg-black hover:bg-slate-800 text-white rounded-xl text-sm font-semibold transition-all shadow-sm"
+                                                >
+                                                    <Plus className="w-4 h-4" /> Añadir equipo
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </div>
