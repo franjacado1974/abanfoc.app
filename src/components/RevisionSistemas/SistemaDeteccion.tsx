@@ -36,6 +36,14 @@ export default function SistemaDeteccion({
     handleCheckChange,
     getCheckStats
 }: Props) {
+    const getResponseColorClass = (value: any, isSelected: boolean) => {
+        if (typeof value !== 'string' || !value) return 'text-slate-500';
+        const valUpper = value.toUpperCase();
+        if (valUpper.includes('NO CORRECTO')) return 'text-red-600 font-bold';
+        if (valUpper.includes('CORRECTO')) return 'text-green-600 font-bold';
+        return isSelected ? 'font-bold text-slate-800' : 'text-slate-500';
+    };
+
     return (
         <>
             {                                                    filteredEqs.map((eq, i) => {
@@ -191,7 +199,7 @@ export default function SistemaDeteccion({
                                                                    <textarea
                                                                        value={typeof val === 'string' ? val : ''}
                                                                        onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value)}
-                                                                       className={`w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 resize-none ${typeof val === 'string' && val.trim() !== '' ? 'font-bold' : ''}`}
+                                                                       className={`w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 resize-none ${getResponseColorClass(val, typeof val === 'string' && val.trim() !== '')}`}
                                                                        rows={2}
                                                                        placeholder="..."
                                                                    />
@@ -202,7 +210,7 @@ export default function SistemaDeteccion({
                                                                            <select
                                                                                value={typeof val === 'string' ? val : ''}
                                                                                onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value)}
-                                                                               className={`w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${val ? 'font-bold text-slate-800' : 'text-slate-500'}`}
+                                                                               className={`w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${getResponseColorClass(val, !!val)}`}
                                                                            >
                                                                                <option value="">Selecciona...</option>
                                                                                {opciones.map((opt: string, idx: number) => (
@@ -227,7 +235,7 @@ export default function SistemaDeteccion({
                                                                                        handleCheckChange(eq.id, item.key, e.target.value);
                                                                                    }
                                                                                }}
-                                                                               className={`w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${esNumeroOrden ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''} ${!esNumeroOrden && typeof val === 'string' && val.trim() !== '' ? 'font-bold' : ''}`}
+                                                                               className={`w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${esNumeroOrden ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''} ${esNumeroOrden ? '' : getResponseColorClass(val, typeof val === 'string' && val.trim() !== '')}`}
                                                                                placeholder={placeholderTexto}
                                                                                readOnly={esNumeroOrden}
                                                                            />
@@ -321,7 +329,7 @@ export default function SistemaDeteccion({
                                                                                                      handleCheckChange(eq.id, item.key, e.target.value);
                                                                                                  }
                                                                                              }}
-                                                                                             className={`w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${esNumeroOrden ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''} ${tieneValorTexto ? 'font-bold' : ''}`}
+                                                                                             className={`w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${esNumeroOrden ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''} ${esNumeroOrden ? '' : getResponseColorClass(val, tieneValorTexto)}`}
                                                                                              placeholder={placeholderTexto}
                                                                                              readOnly={esNumeroOrden}
                                                                                          />
@@ -338,7 +346,7 @@ export default function SistemaDeteccion({
                                                                                          <textarea
                                                                                              value={typeof val === 'string' ? val : ''}
                                                                                              onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value)}
-                                                                                             className={`w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 resize-none ${tieneValorTextoLargo ? 'font-bold' : ''}`}
+                                                                                             className={`w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 resize-none ${getResponseColorClass(val, tieneValorTextoLargo)}`}
                                                                                              rows={3}
                                                                                              placeholder="..."
                                                                                          />
@@ -352,7 +360,7 @@ export default function SistemaDeteccion({
                                                                                          <select
                                                                                              value={typeof val === 'string' ? val : ''}
                                                                                              onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value)}
-                                                                                             className={`w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${val ? 'font-bold' : 'text-slate-500'}`}
+                                                                                             className={`w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${getResponseColorClass(val, !!val)}`}
                                                                                          >
                                                                                              <option value="">Selecciona...</option>
                                                                                              {opciones.map((opt: string, idx: number) => (
