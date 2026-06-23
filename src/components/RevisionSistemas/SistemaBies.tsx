@@ -167,7 +167,7 @@ export default function SistemaBies({
                                                                        type="number"
                                                                        value={typeof val === 'number' ? val : ''}
                                                                        onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value ? Number(e.target.value) : '')}
-                                                                       className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                                                                       className={`w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${typeof val === 'number' ? 'font-bold' : ''}`}
                                                                        placeholder="0"
                                                                    />
                                                                ) : isFecha ? (
@@ -182,7 +182,7 @@ export default function SistemaBies({
                                                                                className={`w-full px-2 py-1.5 border rounded-lg text-xs outline-none focus:ring-2 transition-colors ${
                                                                                    isErrorDate
                                                                                    ? 'bg-red-50 border-red-400 text-red-700 focus:border-red-500 focus:ring-red-500/20'
-                                                                                   : 'bg-white border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20'
+                                                                                   : `bg-white border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20 ${fechaVal ? 'font-bold' : ''}`
                                                                                }`}
                                                                            />
                                                                        );
@@ -191,7 +191,7 @@ export default function SistemaBies({
                                                                    <textarea
                                                                        value={typeof val === 'string' ? val : ''}
                                                                        onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value)}
-                                                                       className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 resize-none"
+                                                                       className={`w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 resize-none ${typeof val === 'string' && val.trim() !== '' ? 'font-bold' : ''}`}
                                                                        rows={2}
                                                                        placeholder="..."
                                                                    />
@@ -202,7 +202,7 @@ export default function SistemaBies({
                                                                            <select
                                                                                value={typeof val === 'string' ? val : ''}
                                                                                onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value)}
-                                                                               className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-slate-500"
+                                                                               className={`w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${val ? 'font-bold text-slate-800' : 'text-slate-500'}`}
                                                                            >
                                                                                <option value="">Selecciona...</option>
                                                                                {opciones.map((opt: string, idx: number) => (
@@ -227,7 +227,7 @@ export default function SistemaBies({
                                                                                        handleCheckChange(eq.id, item.key, e.target.value);
                                                                                    }
                                                                                }}
-                                                                               className={`w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${esNumeroOrden ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''}`}
+                                                                               className={`w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${esNumeroOrden ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''} ${!esNumeroOrden && typeof val === 'string' && val.trim() !== '' ? 'font-bold' : ''}`}
                                                                                placeholder={placeholderTexto}
                                                                                readOnly={esNumeroOrden}
                                                                            />
@@ -296,7 +296,7 @@ export default function SistemaBies({
                                                                                             onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value ? e.target.value + '-01' : '')}
                                                                                             className={`w-full px-2 py-1.5 border rounded-lg text-xs outline-none focus:ring-2 transition-colors ${
                                                                                                 isErrorDate
-                                                                                                ? 'bg-red-50 border-red-400 text-red-700 focus:border-red-500 focus:ring-red-500/20'
+                                                                                                ? 'bg-red-50 border-red-400 text-red-700 focus:border-red-500 focus:ring-red-500/20 font-bold'
                                                                                                 : `bg-white border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20 ${fechaVal ? 'font-bold' : ''}`
                                                                                             }`}
                                                                                         />
