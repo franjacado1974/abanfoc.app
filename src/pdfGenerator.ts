@@ -484,6 +484,8 @@ export const generarActaExtintoresPDF = async (
                          lbl.includes('ubicacion') || 
                          lbl.includes('sin uso') || 
                          lbl.includes('imagen') ||
+                         lbl.includes('fecha de revisi') || // Exclude from PDF
+                         lbl.includes('fecha revisi') ||    // Exclude from PDF
                          item.tipoRespuesta === 'imagen' ||
                          item.tipoRespuesta === 'seccion'; // Excluir campos de imagen y secciones explícitamente
 
