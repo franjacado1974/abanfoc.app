@@ -54,6 +54,11 @@ export default function RevisionChecklist() {
     useEffect(() => {
         if (sistemasDelCentro.length === 0 || plantillas.length === 0 || categoriasSistema.length === 0) return;
 
+        console.log("=== RevisionChecklist: loading templates ===");
+        console.log("sistemasDelCentro:", sistemasDelCentro);
+        console.log("plantillas:", plantillas.map(p => p.nombre));
+        console.log("categoriasSistema:", categoriasSistema.map(c => c.nombre));
+
         const normalizarNombre = (nombre: string) =>
             nombre
                 .toLowerCase()
@@ -78,7 +83,10 @@ export default function RevisionChecklist() {
                 return nombreCat === nombreSist || nombreCat.includes(nombreSist) || nombreSist.includes(nombreCat);
             });
             const sistemaNombre = sistemaCat?.nombre || sist.tipo || sist.familia || '';
-            if (!sistemaNombre) return;
+            if (!sistemaNombre) {
+                console.warn(`⚠️ Sistema sin nombre para sist.id: ${sist.id}`);
+                return;
+            }
 
             const nombreSistemaNorm = normalizarNombre(sistemaNombre);
 
@@ -95,11 +103,14 @@ export default function RevisionChecklist() {
             });
 
             if (!plantilla) {
-                console.warn(`❌ No se encontró plantilla para sistema: "${sistemaNombre}"`);
+                console.warn(`❌ No se encontró plantilla para sistema: "${sistemaNombre}" (sist.id: ${sist.id})`);
                 return;
             }
 
+            console.log(`✅ Coincidencia: sistema "${sistemaNombre}" (sist.id: ${sist.id}) -> Plantilla "${plantilla.nombre}" (plantilla.id: ${plantilla.id})`);
+
             const unsub = subscribeItemsDePlantilla(plantilla.id, (items: ItemPlantilla[]) => {
+                console.log(`📋 Cargados ${items.length} items de plantilla "${plantilla.nombre}" para sist.id: ${sist.id}`);
                 const checklistItems: ChecklistItem[] = items.map(item => ({
                     id: item.id,
                     key: item.key,
@@ -110,7 +121,10 @@ export default function RevisionChecklist() {
                     sistemaNombre: sistemaNombre,
                     orden: item.orden,
                 }));
-                setChecklistItemsPorSistema(prev => ({ ...prev, [sist.id]: checklistItems }));
+                setChecklistItemsPorSistema(prev => {
+                    console.log(`💾 Actualizando checklistItemsPorSistema para ${sist.id}:`, checklistItems);
+                    return { ...prev, [sist.id]: checklistItems };
+                });
             });
             unsubs.push(unsub);
         });
@@ -708,8 +722,8 @@ export default function RevisionChecklist() {
     };
 
     const getItemsToUse = (sistemaId?: string): ChecklistItem[] => {
-        if (sistemaId && checklistItemsPorSistema[sistemaId]?.length > 0) {
-            return checklistItemsPorSistema[sistemaId];
+        if (sistemaId) {
+            return checklistItemsPorSistema[sistemaId] || [];
         }
         // Si no hay sistemaId, buscar en cualquier sistema cargado
         const allItems = Object.values(checklistItemsPorSistema).flat();
