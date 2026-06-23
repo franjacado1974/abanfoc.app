@@ -136,8 +136,8 @@ export default function SistemaDeteccion({
                                                    
                                                    return (
                                                         <div key={item.key} className="col-span-full border-b border-slate-300 py-1.5 flex items-center justify-between gap-4 min-h-[38px]">
-                                                           <span className="text-xs font-semibold text-slate-700">{item.label}</span>
-                                                           <div className="w-48 shrink-0">
+                                                           <span className="text-xs font-normal text-slate-600">{item.label}</span>
+                                                           <div className="w-48 shrink-0 flex justify-end">
                                                                {isCheck ? (
                                                                    (() => {
                                                                        const isChecked = val === true || (typeof val === 'string' && val.toLowerCase() === 'true');
@@ -210,7 +210,7 @@ export default function SistemaDeteccion({
                                                                            <select
                                                                                value={typeof val === 'string' ? val : ''}
                                                                                onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value)}
-                                                                               className={`w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${getResponseColorClass(val, !!val)}`}
+                                                                               className={`w-auto min-w-[110px] px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${getResponseColorClass(val, !!val)}`}
                                                                            >
                                                                                <option value="">Selecciona...</option>
                                                                                {opciones.map((opt: string, idx: number) => (
@@ -282,7 +282,7 @@ export default function SistemaDeteccion({
                                                                                  const tieneValor = typeof val === 'number';
                                                                                  return (
                                                                                      <div key={item.key} className="flex flex-col gap-0.5">
-                                                                                         <label className="text-[10px] font-semibold text-slate-500">{item.label}</label>
+                                                                                         <label className="text-[10px] font-normal text-slate-500">{item.label}</label>
                                                                                          <input
                                                                                              type="number"
                                                                                              value={tieneValor ? val : ''}
@@ -297,7 +297,7 @@ export default function SistemaDeteccion({
                                                                                 const isErrorDate = (caducado || necesitaRetimbre || seAproxima) && (item.key === fabItemKey || item.key === retItemKey);
                                                                                 return (
                                                                                     <div key={item.key} className="flex flex-col gap-0.5">
-                                                                                        <label className="text-[10px] font-semibold text-slate-500">{item.label}</label>
+                                                                                        <label className="text-[10px] font-normal text-slate-500">{item.label}</label>
                                                                                         <input
                                                                                             type="month"
                                                                                             value={fechaVal}
@@ -320,7 +320,7 @@ export default function SistemaDeteccion({
                                                                                  const tieneValorTexto = !esNumeroOrden && typeof val === 'string' && val.trim() !== '';
                                                                                  return (
                                                                                      <div key={item.key} className="flex flex-col gap-0.5">
-                                                                                         <label className="text-[10px] font-semibold text-slate-500">{item.label}</label>
+                                                                                         <label className="text-[10px] font-normal text-slate-500">{item.label}</label>
                                                                                          <input
                                                                                              type="text"
                                                                                              value={esNumeroOrden ? (eq.codigo || '') : (typeof val === 'string' ? val : '')}
@@ -342,7 +342,7 @@ export default function SistemaDeteccion({
                                                                                  const tieneValorTextoLargo = typeof val === 'string' && val.trim() !== '';
                                                                                  return (
                                                                                      <div key={item.key} className="flex flex-col gap-0.5 col-span-2">
-                                                                                         <label className="text-[10px] font-semibold text-slate-500">{item.label}</label>
+                                                                                         <label className="text-[10px] font-normal text-slate-500">{item.label}</label>
                                                                                          <textarea
                                                                                              value={typeof val === 'string' ? val : ''}
                                                                                              onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value)}
@@ -356,7 +356,7 @@ export default function SistemaDeteccion({
                                                                                  const opciones = (item as any).opciones || [];
                                                                                  return (
                                                                                      <div key={item.key} className="flex flex-col gap-0.5">
-                                                                                         <label className="text-[10px] font-semibold text-slate-500">{item.label}</label>
+                                                                                         <label className="text-[10px] font-normal text-slate-500">{item.label}</label>
                                                                                          <select
                                                                                              value={typeof val === 'string' ? val : ''}
                                                                                              onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value)}
@@ -385,7 +385,7 @@ export default function SistemaDeteccion({
                                                                      const isErrorNotas = esNoEncontrado || algunCheckRojo || esAvisoAutoMsg;
                                                                      return (
                                                                          <div key={item.key} className="px-4 pb-3 mt-4">
-                                                                             <label className={`text-xs font-semibold mb-1 block ${isErrorNotas ? 'text-red-700' : 'text-slate-600'}`}>Observaciones y anomalías del equipo:</label>
+                                                                             <label className={`text-xs font-normal mb-1 block ${isErrorNotas ? 'text-red-700' : 'text-slate-600'}`}>Observaciones y anomalías del equipo:</label>
                                                                              <textarea
                                                                                  value={typeof val === 'string' ? val : ''}
                                                                                  onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value)}
