@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle2, XCircle, X, Pencil, Trash2, Plus } from 'lucide-react';
+import { CheckCircle2, XCircle, X, Pencil, Trash2 } from 'lucide-react';
 import type { CentroSistema, EquipoInstalado, Parte } from '../../Centros';
 import { updateEquipoInstalado, updateParte as updateParteFirestore, uploadFile, type ChecklistItem } from '../../firebase';
 
@@ -17,7 +17,7 @@ interface Props {
     setEditEquipo: (equipoId: string) => void;
     handleDeleteEquipo: (equipoId: string) => void;
     handleCheckChange: (equipoId: string, itemKey: string, value: any, itemName?: string) => void;
-    getCheckStats: (eq: EquipoInstalado) => { total: number; checked: number; pending: number; ok: number; fail: number };
+    getCheckStats: (eq: EquipoInstalado) => { ok: number; fail: number; pending: number };
 }
 
 export default function SistemaGenerico({
@@ -104,7 +104,7 @@ export default function SistemaGenerico({
                                                                             return true;
                                                                         }).map(item => {
                                                                              const val = eq[item.key as keyof EquipoInstalado];
-                                                                             const tipo = (item as ChecklistItem).tipoRespuesta || 'check';
+                                                                             const tipo = (item as ChecklistItem).tipoRespuesta as string || 'check';
                                                                              const lbl = (item.label || '').toLowerCase();
                                                                              const esCampoNotas = lbl.includes('notas') || lbl.includes('observaciones') || lbl.includes('anomal');
                                                                              

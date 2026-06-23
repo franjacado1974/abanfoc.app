@@ -4,8 +4,8 @@ import SistemaDeteccion from './components/RevisionSistemas/SistemaDeteccion';
 import SistemaGenerico from './components/RevisionSistemas/SistemaGenerico';
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, Save, Layers, ChevronDown, ChevronUp, Plus, X, CheckCircle2, XCircle, Trash2, AlertTriangle, Pencil, PenLine, RotateCcw, CheckCheck, Lock } from 'lucide-react';
-import { addEquipoInstalado, addAlbaran, updateEquipoInstalado, updateParte as updateParteFirestore, subscribePartes, subscribeCentros, subscribeClientes, subscribeCentroSistemas, subscribeEquiposInstalados, subscribeArticulos, subscribeSistemasCategorias, uploadFile, generateNumeroMantenimiento, type Albaran, type ChecklistItem } from './firebase';
+import { ArrowLeft, Save, Layers, ChevronDown, ChevronUp, Plus, X, CheckCircle2, AlertTriangle, PenLine, RotateCcw, CheckCheck, Lock } from 'lucide-react';
+import { addEquipoInstalado, addAlbaran, updateEquipoInstalado, updateParte as updateParteFirestore, subscribePartes, subscribeCentros, subscribeClientes, subscribeCentroSistemas, subscribeEquiposInstalados, subscribeArticulos, subscribeSistemasCategorias, generateNumeroMantenimiento, type Albaran, type ChecklistItem } from './firebase';
 import { subscribePlantillas, subscribeItemsDePlantilla, type ItemPlantilla } from './plantillas';
 import type { Centro, Parte, Cliente, CentroSistema, EquipoInstalado } from './Centros';
 import ConfirmationModal from './ConfirmationModal';
@@ -90,17 +90,30 @@ export default function RevisionChecklist() {
 
             const nombreSistemaNorm = normalizarNombre(sistemaNombre);
 
-            // Buscar la plantilla que coincida con el nombre del sistema
-            const plantilla = plantillas.find(p => {
-                const nombrePlantillaNorm = normalizarNombre(p.nombre);
-                const coincideExacto = nombrePlantillaNorm === nombreSistemaNorm;
-                const plantillaContieneSistema = nombrePlantillaNorm.includes(nombreSistemaNorm);
-                const sistemaContienePlantilla = nombreSistemaNorm.includes(nombrePlantillaNorm);
-                const palabrasSistema = nombreSistemaNorm.split(' ').filter(w => w.length > 3);
-                const palabrasPlantilla = nombrePlantillaNorm.split(' ').filter(w => w.length > 3);
-                const coincidePalabras = palabrasSistema.some(ps => palabrasPlantilla.some(pp => ps === pp || pp.includes(ps) || ps.includes(pp)));
-                return coincideExacto || plantillaContieneSistema || sistemaContienePlantilla || coincidePalabras;
+            // Buscar la plantilla que coincida con el nombre del sistema con orden de prioridad
+            // 1. Coincidencia exacta
+            let plantilla = plantillas.find(p => {
+                const nombrePlantillaNorm = normalizarNombre(p.nombre || '');
+                return nombrePlantillaNorm === nombreSistemaNorm;
             });
+
+            // 2. Coincidencia por inclusión (si una contiene a la otra)
+            if (!plantilla) {
+                plantilla = plantillas.find(p => {
+                    const nombrePlantillaNorm = normalizarNombre(p.nombre || '');
+                    return nombrePlantillaNorm.includes(nombreSistemaNorm) || nombreSistemaNorm.includes(nombrePlantillaNorm);
+                });
+            }
+
+            // 3. Coincidencia por palabras compartidas
+            if (!plantilla) {
+                plantilla = plantillas.find(p => {
+                    const nombrePlantillaNorm = normalizarNombre(p.nombre || '');
+                    const palabrasSistema = nombreSistemaNorm.split(' ').filter(w => w.length > 3);
+                    const palabrasPlantilla = nombrePlantillaNorm.split(' ').filter(w => w.length > 3);
+                    return palabrasSistema.some(ps => palabrasPlantilla.some(pp => ps === pp || pp.includes(ps) || ps.includes(pp)));
+                });
+            }
 
             if (!plantilla) {
                 console.warn(`❌ No se encontró plantilla para sistema: "${sistemaNombre}" (sist.id: ${sist.id})`);
