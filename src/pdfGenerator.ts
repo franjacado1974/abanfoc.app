@@ -373,8 +373,8 @@ export const generarActaExtintoresPDF = async (
     if (selloEmpresaBase64) {
       try {
         const selloProps = doc.getImageProperties(selloEmpresaBase64);
-        const maxSelloWidth = 32;
-        const maxSelloHeight = 25;
+        const maxSelloWidth = 55;
+        const maxSelloHeight = 40;
         const selloRatio = selloProps.width / selloProps.height;
         const selloWidth = Math.min(maxSelloWidth, maxSelloHeight * selloRatio);
         const selloHeight = selloWidth / selloRatio;
