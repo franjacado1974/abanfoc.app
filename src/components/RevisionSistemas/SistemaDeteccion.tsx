@@ -127,7 +127,7 @@ export default function SistemaDeteccion({
                                                    const isDesplegable = tipo === 'desplegable';
                                                    
                                                    return (
-                                                       <div key={item.key} className="col-span-full border-b border-slate-100 pb-2 pt-2 flex items-center justify-between gap-4">
+                                                        <div key={item.key} className="col-span-full border-b border-slate-200 py-2.5 flex items-center justify-between gap-4 min-h-[48px]">
                                                            <span className="text-xs font-semibold text-slate-700">{item.label}</span>
                                                            <div className="w-48 shrink-0">
                                                                {isCheck ? (

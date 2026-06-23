@@ -379,7 +379,7 @@ export default function EquipoFormulario({
             const isDesplegable = tipo === 'desplegable';
 
             return (
-                <div key={item.key} className="col-span-full border-b border-slate-100 pb-3 flex items-center justify-between gap-4">
+                <div key={item.key} className="col-span-full border-b border-slate-200 py-2.5 flex items-center justify-between gap-4 min-h-[48px]">
                     <span className="text-sm font-semibold text-slate-700">{item.label}</span>
                     <div className="w-64 shrink-0">
                         {isCheck ? (
@@ -419,7 +419,7 @@ export default function EquipoFormulario({
                                 type="number"
                                 value={typeof value === 'number' ? value : ''}
                                 onChange={(e) => handleChange(item.key, e.target.value ? Number(e.target.value) : '')}
-                                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                                className={`w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${typeof value === 'number' ? 'font-bold' : ''}`}
                                 placeholder="0"
                             />
                         ) : isFecha ? (
@@ -432,8 +432,8 @@ export default function EquipoFormulario({
                                         onChange={(e) => handleChange(item.key, e.target.value ? e.target.value + '-01' : '')}
                                         className={`w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 transition-colors ${
                                             isErrorDate 
-                                            ? 'bg-red-50 border-red-400 text-red-700 focus:border-red-500 focus:ring-red-500/20' 
-                                            : 'bg-white border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20'
+                                            ? 'bg-red-50 border-red-400 text-red-700 focus:border-red-500 focus:ring-red-500/20 font-bold' 
+                                            : `bg-white border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20 ${fechaVal ? 'font-bold' : ''}`
                                         }`}
                                     />
                                 );
@@ -444,8 +444,8 @@ export default function EquipoFormulario({
                                 onChange={(e) => handleChange(item.key, e.target.value)}
                                 className={`w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 resize-none transition-colors ${
                                     isAnoFieldWithMsg
-                                    ? 'bg-red-50 border-red-400 text-red-700 focus:border-red-500 focus:ring-red-500/20'
-                                    : 'bg-white border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20'
+                                    ? 'bg-red-50 border-red-400 text-red-700 focus:border-red-500 focus:ring-red-500/20 font-bold'
+                                    : `bg-white border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20 ${typeof value === 'string' && value.trim() !== '' ? 'font-bold' : ''}`
                                 }`}
                                 rows={2}
                                 placeholder="..."
@@ -457,7 +457,7 @@ export default function EquipoFormulario({
                                     <select
                                         value={typeof value === 'string' ? value : ''}
                                         onChange={(e) => handleChange(item.key, e.target.value)}
-                                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                                        className={`w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${value ? 'font-bold text-slate-800' : 'text-slate-500'}`}
                                     >
                                         <option value="">Selecciona...</option>
                                         {opciones.map((opt: string, idx: number) => (
@@ -475,7 +475,7 @@ export default function EquipoFormulario({
                                         <select
                                             value={typeof value === 'string' ? value : ''}
                                             onChange={(e) => handleChange(item.key, e.target.value)}
-                                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                                            className={`w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${value ? 'font-bold text-slate-800' : 'text-slate-500'}`}
                                         >
                                             <option value="">Selecciona un tipo...</option>
                                             {tiposSistema.map(ts => (
@@ -491,8 +491,8 @@ export default function EquipoFormulario({
                                         onChange={(e) => handleChange(item.key, e.target.value)}
                                         className={`w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 transition-colors ${
                                             isErrorDate || isAnoFieldWithMsg
-                                            ? 'bg-red-50 border-red-400 text-red-700 focus:border-red-500 focus:ring-red-500/20' 
-                                            : 'bg-white border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20'
+                                            ? 'bg-red-50 border-red-400 text-red-700 focus:border-red-500 focus:ring-red-500/20 font-bold' 
+                                            : `bg-white border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20 ${typeof value === 'string' && value.trim() !== '' ? 'font-bold' : ''}`
                                         }`}
                                         placeholder="..."
                                     />
@@ -556,7 +556,7 @@ export default function EquipoFormulario({
                             type="number"
                             value={typeof value === 'number' ? value : ''}
                             onChange={(e) => handleChange(item.key, e.target.value ? Number(e.target.value) : '')}
-                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                            className={`w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${typeof value === 'number' ? 'font-bold' : ''}`}
                             placeholder="0"
                         />
                     </div>
@@ -573,8 +573,8 @@ export default function EquipoFormulario({
                             onChange={(e) => handleChange(item.key, e.target.value ? e.target.value + '-01' : '')}
                             className={`w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 transition-colors ${
                                 isErrorDate 
-                                ? 'bg-red-50 border-red-400 text-red-700 focus:border-red-500 focus:ring-red-500/20' 
-                                : 'bg-white border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20'
+                                ? 'bg-red-50 border-red-400 text-red-700 focus:border-red-500 focus:ring-red-500/20 font-bold' 
+                                : `bg-white border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20 ${fechaVal ? 'font-bold' : ''}`
                             }`}
                         />
                     </div>
@@ -661,8 +661,8 @@ export default function EquipoFormulario({
                             onChange={(e) => handleChange(item.key, e.target.value)}
                             className={`w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 resize-none transition-colors ${
                                 isAnoFieldWithMsg
-                                ? 'bg-red-50 border-red-400 text-red-700 focus:border-red-500 focus:ring-red-500/20'
-                                : 'bg-white border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20'
+                                ? 'bg-red-50 border-red-400 text-red-700 focus:border-red-500 focus:ring-red-500/20 font-bold'
+                                : `bg-white border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20 ${typeof value === 'string' && value.trim() !== '' ? 'font-bold' : ''}`
                             }`}
                             rows={4}
                             placeholder="..."
@@ -678,7 +678,7 @@ export default function EquipoFormulario({
                         <select
                             value={typeof value === 'string' ? value : ''}
                             onChange={(e) => handleChange(item.key, e.target.value)}
-                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                            className={`w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${value ? 'font-bold text-slate-800' : 'text-slate-500'}`}
                         >
                             <option value="">Selecciona...</option>
                             {opciones.map((opt: string, idx: number) => (
@@ -701,7 +701,7 @@ export default function EquipoFormulario({
                             <select
                                 value={typeof value === 'string' ? value : ''}
                                 onChange={(e) => handleChange(item.key, e.target.value)}
-                                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                                className={`w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${value ? 'font-bold text-slate-800' : 'text-slate-500'}`}
                             >
                                 <option value="">Selecciona un tipo...</option>
                                 {tiposSistema.map(ts => (
@@ -721,8 +721,8 @@ export default function EquipoFormulario({
                             onChange={(e) => handleChange(item.key, e.target.value)}
                             className={`w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 transition-colors ${
                                 isErrorDate || isAnoFieldWithMsg
-                                ? 'bg-red-50 border-red-400 text-red-700 focus:border-red-500 focus:ring-red-500/20' 
-                                : 'bg-white border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20'
+                                ? 'bg-red-50 border-red-400 text-red-700 focus:border-red-500 focus:ring-red-500/20 font-bold' 
+                                : `bg-white border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20 ${typeof value === 'string' && value.trim() !== '' ? 'font-bold' : ''}`
                             }`}
                             placeholder="..."
                         />

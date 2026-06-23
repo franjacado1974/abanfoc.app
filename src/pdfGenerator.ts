@@ -614,17 +614,26 @@ export const generarActaExtintoresPDF = async (
              data.cell.text = [''];
           }
         }
-        if (data.section === 'body' && data.column.index >= headersBase.length) {
-          if (data.cell.raw === 'X') {
-            data.cell.styles.textColor = anomalyTextColor;
-            data.cell.styles.fontStyle = 'bold';
-            data.cell.styles.fontSize = 9;
-          } else if (data.cell.raw === 'TICK') {
-            data.cell.text = [''];
-          } else if (data.cell.raw !== '-') {
-            // Es un número o texto (ej. presión 15, peso 12.5), lo imprimimos tal cual
-            data.cell.styles.textColor = [0,0,0];
-            data.cell.styles.fontStyle = 'normal';
+        if (data.section === 'body') {
+          const rawVal = data.cell.raw;
+          if (data.column.index >= headersBase.length) {
+            if (rawVal === 'X') {
+              data.cell.styles.textColor = anomalyTextColor;
+              data.cell.styles.fontStyle = 'bold';
+              data.cell.styles.fontSize = 9;
+            } else if (rawVal === 'TICK') {
+              data.cell.text = [''];
+            } else if (rawVal !== '-') {
+              // Es un número o texto (ej. presión 15, peso 12.5), lo imprimimos en negrita
+              data.cell.styles.textColor = [0, 0, 0];
+              data.cell.styles.fontStyle = 'bold';
+            }
+          } else {
+            // También ponemos en negrita las celdas del cuerpo con contenido (ej. Placa, Tipo, Fabricante, etc.)
+            // excepto el código (columna 0) y el guion '-'
+            if (data.column.index > 0 && rawVal !== '-' && rawVal !== '') {
+              data.cell.styles.fontStyle = 'bold';
+            }
           }
         }
       },
@@ -747,7 +756,9 @@ export const generarActaExtintoresPDF = async (
     });
     const notasValue = notasItem && eq[notasItem.key] ? String(eq[notasItem.key]).trim() : '';
     const textAnomalia = eq.anomalias ? eq.anomalias : (notasValue || 'No supera las comprobaciones visuales.');
+        doc.setFont("helvetica", "bold");
         doc.text(`Nº ${eq.codigo} ${eq.placa ? `(${eq.placa})` : ''} — Anomalías: ${textAnomalia}`, 14, finalY);
+        doc.setFont("helvetica", "normal");
         finalY += 5.5;
 
         // Si hay foto, añadirla
