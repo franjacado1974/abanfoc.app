@@ -33,6 +33,7 @@ interface EmpresaData {
 }
 
 export interface Centro {
+  _docId?: string;
   id: string;
   clienteId: string;
   customIdPart: string;
@@ -265,7 +266,7 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
 
   useEffect(() => {
     if (centros.length > 0 && location.state?.action === 'abrir-centro' && location.state?.centroId) {
-      const targetCentro = centros.find(c => c.id === location.state.centroId);
+      const targetCentro = centros.find(c => c._docId === location.state.centroId || c.id === location.state.centroId);
       if (targetCentro) { setCentroSeleccionado(targetCentro); setView('sistemas'); navigate(location.pathname, { replace: true, state: { ...location.state, action: undefined } }); }
     }
   }, [centros, location.state, navigate, location.pathname]);
@@ -302,31 +303,31 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
 
   // Suscripción en tiempo real a los sistemas del centro seleccionado
   useEffect(() => {
-    if (!centroSeleccionado?.id) return;
-    const centroId = centroSeleccionado.id;
-    const unsub = subscribeCentroSistemas(centroId, (items: CentroSistema[]) => {
+    const centroDocId = centroSeleccionado?._docId || centroSeleccionado?.id;
+    if (!centroDocId) return;
+    const unsub = subscribeCentroSistemas(centroDocId, (items: CentroSistema[]) => {
       // Actualizar solo los sistemas de este centro
       setCentroSistemas(prev => {
-        const otrosCentros = prev.filter(s => s.centroId !== centroId);
+        const otrosCentros = prev.filter(s => s.centroId !== centroDocId);
         const merged = [...otrosCentros, ...items];
         localStorage.setItem('firecheck_db_centro_sistemas', JSON.stringify(merged));
         return merged;
       });
     });
     return () => unsub();
-  }, [centroSeleccionado?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [centroSeleccionado?._docId, centroSeleccionado?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Suscripción en tiempo real a los equipos de los sistemas del centro seleccionado
   // Se re-ejecuta cuando cambia el centro O cuando cambia la lista de sistemas de ese centro
   useEffect(() => {
-    if (!centroSeleccionado?.id) return;
-    const centroId = centroSeleccionado.id;
-    const sistDelCentro = centroSistemas.filter(s => s.centroId === centroId);
+    const centroDocId = centroSeleccionado?._docId || centroSeleccionado?.id;
+    if (!centroDocId) return;
+    const sistDelCentro = centroSistemas.filter(s => s.centroId === centroDocId);
     if (sistDelCentro.length === 0) return;
 
     const unsubs = sistDelCentro.map(sist => {
       const sistemaId = sist.id;
-      return subscribeEquiposInstalados(centroId, sistemaId, (items: EquipoInstalado[]) => {
+      return subscribeEquiposInstalados(centroDocId, sistemaId, (items: EquipoInstalado[]) => {
         setEquiposInstalados(prev => {
           const otrosSistemas = prev.filter(e => e.sistemaId !== sistemaId);
           const merged = [...otrosSistemas, ...items];
@@ -336,7 +337,7 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
       });
     });
     return () => unsubs.forEach(u => u());
-  }, [centroSeleccionado?.id, centroSistemas.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [centroSeleccionado?._docId, centroSeleccionado?.id, centroSistemas]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     setIsArticulosLoading(true);
@@ -363,7 +364,7 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
     const newCentro: any = { ...form, id: finalId, nombre: form.nombre.toUpperCase(), periodicidad: normalizeSelectedValues(form.periodicidad), mesesRevision: normalizeSelectedValues(form.mesesRevision) };
     try {
       if ((form as any)._docId) { await updateCentro((form as any)._docId, newCentro); const updated = centros.map(c => c.id === form.id ? { ...newCentro, _docId: (form as any)._docId } : c); saveToDB(updated); }
-      else { const created = await addCentro(newCentro); const withDoc = { ...newCentro, _docId: created.id }; const updated = form.id ? centros.map(c => c.id === form.id ? withDoc : c) : [...centros, withDoc]; saveToDB(updated); }
+      else { const created = await addCentro(newCentro); const withDoc = { ...newCentro, _docId: created._docId }; const updated = form.id ? centros.map(c => c.id === form.id ? withDoc : c) : [...centros, withDoc]; saveToDB(updated); }
     } catch (err) { console.error('Error guardando centro en Firestore:', err); alert('Error al guardar en Firestore'); return; }
     setView('list');
     setForm(emptyCentro);
@@ -440,7 +441,7 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
     try { if (target && target._docId) { await deleteCentro(target._docId); } } catch (err) { console.error('Error borrando centro en Firestore:', err); alert('Error al borrar en Firestore'); }
     const remaining = centros.filter(c => c.id !== itemToDelete.id);
     saveToDB(remaining);
-    const dbSist = centroSistemas.filter(s => s.centroId !== itemToDelete.id);
+    const dbSist = centroSistemas.filter(s => s.centroId !== target?.id && s.centroId !== target?._docId);
     setCentroSistemas(dbSist);
     localStorage.setItem('firecheck_db_centro_sistemas', JSON.stringify(dbSist));
     setItemToDelete(null);
@@ -453,7 +454,7 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
     if (!centroSeleccionado) return;
     let familiaReal = formSistema.familia;
     if (!familiaReal && formSistema.tipo) { const cat = categoriasSistema.find(c => c.nombre === formSistema.tipo); if (cat) familiaReal = cat.nombre; }
-    const sistemaData: CentroSistema = { ...formSistema, familia: familiaReal, centroId: centroSeleccionado.id };
+    const sistemaData: CentroSistema = { ...formSistema, familia: familiaReal, centroId: centroSeleccionado._docId || centroSeleccionado.id };
     if (!sistemaData.id) sistemaData.id = generateId();
     // Guardar en Firestore
     try { await addCentroSistema(sistemaData); } catch (err) { console.error('Error guardando sistema en Firestore:', err); }
@@ -468,7 +469,7 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
     // El slug se genera en addCentroSistema a partir del tipo/familia
     // Usamos el slug como id para que coincida con el documento en Firestore
     const slug = sistemaToSlug(sistemaCategoria.nombre);
-    const newSistema: CentroSistema = { id: slug, centroId: centroForNewSistema.id, tipo: sistemaCategoria.nombre, familia: sistemaCategoria.nombre, descripcion: '' };
+    const newSistema: CentroSistema = { id: slug, centroId: centroForNewSistema._docId || centroForNewSistema.id, tipo: sistemaCategoria.nombre, familia: sistemaCategoria.nombre, descripcion: '' };
     // Guardar en Firestore → centros/{centroId}/inventario/{slug}
     try { await addCentroSistema(newSistema); } catch (err) { console.error('Error guardando sistema en Firestore:', err); }
     setIsAddCatModalOpen(false);
@@ -589,7 +590,7 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
             <div className="divide-y divide-zinc-200">
               {filteredCentros.map((c) => {
                 const client = clientes.find(cl => cl.id === c.clienteId);
-                const sistCount = centroSistemas.filter(s => s.centroId === c.id).length;
+                const sistCount = centroSistemas.filter(s => s.centroId === c._docId || s.centroId === c.id).length;
                 return (
                   <div key={c.id} className="flex flex-col md:flex-row md:items-center px-4 py-3.5 hover:bg-zinc-50/80 transition-colors cursor-pointer group" onClick={() => { setSelectedCentro(c); setIsDetailOpen(true); }}>
                     <div className="flex md:hidden items-center justify-between mb-2">
@@ -630,7 +631,7 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
             const client = clientes.find(cl => cl.id === selectedCentro.clienteId);
             const tecnicoAsignado = tecnicos.find(t => t.id === selectedCentro.tecnicoId || t._docId === selectedCentro.tecnicoId);
             const empresaAsignada = empresas.find(emp => emp._docId === selectedCentro.empresaId);
-            const sistCount = centroSistemas.filter(s => s.centroId === selectedCentro.id).length;
+            const sistCount = centroSistemas.filter(s => s.centroId === selectedCentro._docId || s.centroId === selectedCentro.id).length;
             return (
               <div className="space-y-6">
                 <div className="flex items-center gap-3 pb-4 border-b border-zinc-200">
@@ -792,7 +793,7 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
   }
 
   if (view === 'sistemas' && centroSeleccionado) {
-    const sistDelCentro = centroSistemas.filter(s => s.centroId === centroSeleccionado.id);
+    const sistDelCentro = centroSistemas.filter(s => s.centroId === (centroSeleccionado._docId || centroSeleccionado.id));
     const clientInfo = clientes.find(cl => cl.id === centroSeleccionado.clienteId);
     return (
       <div className="px-4 md:px-8 py-6">
@@ -938,7 +939,7 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
               equipo={formEquipo.id ? formEquipo : null}
               sistemaId={sistemaSeleccionado.id}
               sistemaNombre={sistemaSeleccionado.tipo || sistemaSeleccionado.familia || ''}
-              centroId={centroSeleccionado.id}
+              centroId={centroSeleccionado._docId || centroSeleccionado.id}
               plantillaId={sistemaSeleccionado.tipo || sistemaSeleccionado.familia || ''}
               equiposExistentes={equiposInstalados.filter(e => e.sistemaId === sistemaSeleccionado.id)}
               onSave={async (equipo) => {

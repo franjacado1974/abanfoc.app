@@ -25,7 +25,7 @@ export default function PeriodicidadPage() {
   useEffect(() => {
     const centroId = location.state?.centroId;
     if (centroId) {
-      const foundCentro = centros.find(c => c.id === centroId);
+      const foundCentro = centros.find(c => c._docId === centroId || c.id === centroId);
       if (foundCentro) {
         setCentro(foundCentro);
         setFormPeriodicidad({

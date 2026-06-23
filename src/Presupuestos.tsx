@@ -482,7 +482,7 @@ export default function Presupuestos() {
                 {filteredPresupuestos.map(p => {
                   const estadoInfo = getEstadoInfo(p.estado);
                   const EstadoIcono = estadoInfo.icono;
-                  const nombreCentro = centros.find(c => c.id === p.centroId)?.nombre || '';
+                  const nombreCentro = centros.find(c => c._docId === p.centroId || c.id === p.centroId)?.nombre || '';
                   return (
                     <tr key={p.id} className="hover:bg-zinc-50/50 transition-colors">
                       <td className="px-4 py-3">
@@ -695,7 +695,7 @@ export default function Presupuestos() {
                   >
                     <option value="">Selecciona un centro...</option>
                     {centrosFiltrados.map(c => (
-                      <option key={c.id} value={c.id}>{c.nombre}</option>
+                      <option key={c._docId || c.id} value={c._docId || c.id}>{c.nombre}</option>
                     ))}
                   </select>
                 </div>

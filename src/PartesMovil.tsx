@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Building2, Calendar, User as UserIcon, ArrowLeft, Briefcase } from 'lucide-react';
+import { subscribePartes, subscribeCentros, subscribeClientes, subscribeTecnicos } from './firebase';
 
 export default function PartesMovil() {
   const navigate = useNavigate();
@@ -11,6 +12,7 @@ export default function PartesMovil() {
   const [appLogo, setAppLogo] = useState('/logo.png');
 
   useEffect(() => {
+    // 1. Carga inicial rápida de caché local
     try {
       const storedPartes = localStorage.getItem('firecheck_db_partes');
       if (storedPartes) setPartes(JSON.parse(storedPartes));
@@ -26,7 +28,32 @@ export default function PartesMovil() {
 
       const storedLogo = localStorage.getItem('firecheck_db_logo');
       if (storedLogo) setAppLogo(storedLogo);
-    } catch (e) { console.error("Error loading data:", e); }
+    } catch (e) { console.error("Error loading cached data:", e); }
+
+    // 2. Suscripciones en tiempo real con Firestore
+    const unsubPartes = subscribePartes((items) => {
+      setPartes(items);
+      localStorage.setItem('firecheck_db_partes', JSON.stringify(items));
+    });
+    const unsubCentros = subscribeCentros((items) => {
+      setCentros(items);
+      localStorage.setItem('firecheck_db_centros', JSON.stringify(items));
+    });
+    const unsubClientes = subscribeClientes((items) => {
+      setClientes(items);
+      localStorage.setItem('firecheck_db_clientes', JSON.stringify(items));
+    });
+    const unsubTecnicos = subscribeTecnicos((items) => {
+      setTecnicos(items);
+      localStorage.setItem('firecheck_db_tecnicos', JSON.stringify(items));
+    });
+
+    return () => {
+      unsubPartes();
+      unsubCentros();
+      unsubClientes();
+      unsubTecnicos();
+    };
   }, []);
 
   return (
@@ -51,7 +78,7 @@ export default function PartesMovil() {
           </div>
         ) : (
           partes.map(parte => {
-            const centro = centros.find(c => c.id === parte.centroId);
+            const centro = centros.find(c => c._docId === parte.centroId || c.id === parte.centroId);
             const cliente = clientes.find(c => c.id === parte.clienteId);
             const tecnico = tecnicos.find(t => t.id === parte.tecnicoId);
             

@@ -45,7 +45,7 @@ export default function Certificados() {
   const sortedAndFilteredCertificados = useMemo(() => {
     const filtered = certificados.filter(cert => {
       const cliente = clientes.find(c => c.id === cert.clienteId);
-      const centro = centros.find(c => c.id === cert.centroId);
+      const centro = centros.find(c => c._docId === cert.centroId || c.id === cert.centroId);
       const term = searchTerm.toLowerCase();
 
       return (
@@ -60,7 +60,7 @@ export default function Certificados() {
 
   const handleGenerarPDF = async (cert: any) => {
     try {
-      const centro = centros.find(c => c.id === cert.centroId);
+      const centro = centros.find(c => c._docId === cert.centroId || c.id === cert.centroId);
       const cliente = clientes.find(cl => cl.id === cert.clienteId);
       const tecnico = tecnicos.find(t => t.id === cert.tecnicoId);
       
@@ -69,8 +69,8 @@ export default function Certificados() {
         return;
       }
       
-      const sistemasDelCentro = sistemas.filter((s: any) => s.centroId === centro.id);
-      const equiposDelCentro = equipos.filter((e: any) => e.centroId === centro.id);
+      const sistemasDelCentro = sistemas.filter((s: any) => s.centroId === centro._docId || s.centroId === centro.id);
+      const equiposDelCentro = equipos.filter((e: any) => e.centroId === centro._docId || e.centroId === centro.id);
       
       if (sistemasDelCentro.length === 0 || equiposDelCentro.length === 0) {
         alert("No hay sistemas o equipos revisados en este centro para generar el PDF.");
@@ -113,12 +113,12 @@ export default function Certificados() {
 
   const handleViewPDF = async (cert: any) => {
     try {
-      const centro = centros.find(c => c.id === cert.centroId);
+      const centro = centros.find(c => c._docId === cert.centroId || c.id === cert.centroId);
       const cliente = clientes.find(cl => cl.id === cert.clienteId);
       const tecnico = tecnicos.find(t => t.id === cert.tecnicoId);
       if (!centro || !cliente) return;
-      const sistemasDelCentro = sistemas.filter((s: any) => s.centroId === centro.id);
-      const equiposDelCentro = equipos.filter((e: any) => e.centroId === centro.id);
+      const sistemasDelCentro = sistemas.filter((s: any) => s.centroId === centro._docId || s.centroId === centro.id);
+      const equiposDelCentro = equipos.filter((e: any) => e.centroId === centro._docId || e.centroId === centro.id);
       const albaranes = JSON.parse(localStorage.getItem('firecheck_db_albaranes') || '[]');
       const albaranData = albaranes.find((a: any) => a.parteId === cert.parteId);
       
@@ -201,7 +201,7 @@ export default function Certificados() {
             <div className="divide-y divide-zinc-100">
               {sortedAndFilteredCertificados.map((cert) => {
                 const cliente = clientes.find(c => c.id === cert.clienteId);
-                const centro = centros.find(c => c.id === cert.centroId);
+                const centro = centros.find(c => c._docId === cert.centroId || c.id === cert.centroId);
                 const isPositivo = cert.estado === 'Favorable' || cert.estado === 'Positivo (Favorable)';
 
                 return (
@@ -345,10 +345,10 @@ export default function Certificados() {
       >
         {selectedCert && (() => {
           const cliente = clientes.find(c => c.id === selectedCert.clienteId);
-          const centro = centros.find(c => c.id === selectedCert.centroId);
+          const centro = centros.find(c => c._docId === selectedCert.centroId || c.id === selectedCert.centroId);
           const tecnico = tecnicos.find(t => t.id === selectedCert.tecnicoId);
           const isPositivo = selectedCert.estado === 'Favorable' || selectedCert.estado === 'Positivo (Favorable)';
-          const sistemasDelCentro = sistemas.filter((s: any) => s.centroId === selectedCert.centroId);
+          const sistemasDelCentro = sistemas.filter((s: any) => s.centroId === selectedCert.centroId || (centro && s.centroId === centro.id));
 
           return (
             <div className="space-y-6">

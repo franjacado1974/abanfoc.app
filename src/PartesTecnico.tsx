@@ -101,7 +101,7 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
     let matchesSearch = true;
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase().trim();
-      const centro = centros.find(c => c.id === p.centroId);
+      const centro = centros.find(c => c._docId === p.centroId || c.id === p.centroId);
       const cliente = clientes.find(cl => cl.id === p.clienteId);
       const fechaStr = (p.fechaProgramada || '').replace(/-/g, '/');
       matchesSearch = (
@@ -257,9 +257,9 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
         ) : (
           <div className="space-y-3">
             {partesFiltrados.map(parte => {
-              const centro = centros.find(c => c.id === parte.centroId);
+              const centro = centros.find(c => c._docId === parte.centroId || c.id === parte.centroId);
               const cliente = clientes.find(cl => cl.id === parte.clienteId);
-              const sistCount = centroSistemas.filter(s => s.centroId === parte.centroId).length;
+              const sistCount = centroSistemas.filter(s => s.centroId === parte.centroId || (centro && s.centroId === centro.id)).length;
               const isPlanificado = parte.estado === 'Planificado';
 
               return (

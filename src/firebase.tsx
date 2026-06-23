@@ -1,6 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
-import { getFirestore, collection, getDocs, query, where, orderBy, addDoc, doc, updateDoc, setDoc, deleteDoc, onSnapshot, enableIndexedDbPersistence } from "firebase/firestore";
+import { getFirestore, collection, getDocs, query, where, orderBy, addDoc, doc, updateDoc, setDoc, deleteDoc, onSnapshot, enableMultiTabIndexedDbPersistence } from "firebase/firestore";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 const firebaseConfig = {
@@ -108,6 +108,7 @@ export interface Cliente {
 }
 
 export interface Centro {
+  _docId?: string;
   id: string;
   clienteId: string;
   nombre: string;
@@ -131,6 +132,7 @@ export interface Empresa {
   localidad?: string;
   cif?: string;
   logoUrl?: string;
+  selloUrl?: string;
 }
 
 // ─── PRESUPUESTO Interfaces ──────────────────────────────────────────────
@@ -183,7 +185,7 @@ try {
 const storage = getStorage(app);
 const db = getFirestore(app);
 
-enableIndexedDbPersistence(db).catch((err) => {
+enableMultiTabIndexedDbPersistence(db).catch((err) => {
   if (err.code === 'failed-precondition') {
     console.warn('La persistencia falló: Múltiples pestañas abiertas.');
   } else if (err.code === 'unimplemented') {
@@ -429,18 +431,9 @@ export function subscribeClientes(callback: (clientes: Cliente[]) => void) {
 export async function addCentro(centro: Centro) {
   try {
     const col = collection(db, 'centros');
-    if (centro && centro.id) {
-      const ref = doc(db, 'centros', centro.id);
-      console.info('addCentro: writing document with id', centro.id, 'data:', centro);
-      await setDoc(ref, { ...centro, updatedAt: new Date().toISOString() });
-      const centroId = centro.id ?? ref.id;
-      return { _docId: ref.id, ...centro, id: centroId };
-    } else {
-      const ref = await addDoc(col, { ...centro, updatedAt: new Date().toISOString() });
-      console.info('addCentro: added new document', ref.id, 'data:', centro);
-      const centroId = centro.id ?? ref.id;
-      return { _docId: ref.id, ...centro, id: centroId };
-    }
+    const ref = await addDoc(col, { ...centro, updatedAt: new Date().toISOString() });
+    console.info('addCentro: added new document', ref.id, 'data:', centro);
+    return { _docId: ref.id, ...centro };
   } catch (e) {
     console.error('addCentro error:', e);
     throw e;
@@ -1408,7 +1401,7 @@ export async function saveImpuestoConfig(config: { iva: number; exento: boolean 
 // CHECKLIST - Firestore CRUD
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type TipoRespuestaChecklist = 'check' | 'texto' | 'texto-largo' | 'numero' | 'fecha' | 'imagen' | 'desplegable';
+export type TipoRespuestaChecklist = 'check' | 'texto' | 'texto-largo' | 'numero' | 'fecha' | 'imagen' | 'desplegable' | 'seccion';
 
 export interface ChecklistItem {
   id: string;
@@ -1418,6 +1411,7 @@ export interface ChecklistItem {
   key: string;             // Clave única para el check (ej: checkAcceso, checkAltura)
   orden: number;           // Orden de aparición
   tipoRespuesta: TipoRespuestaChecklist;  // Tipo de respuesta: 'check' | 'texto' | 'numero' | 'fecha'
+  horizontal?: boolean;    // Si se muestra en disposición horizontal (pregunta a la izq, respuesta a la der)
   opciones?: string[];     // Opciones si es desplegable
 }
 

@@ -115,7 +115,7 @@ export default function Planificacion() {
     ? centros
         .filter(c => {
           const info = getCentroRevisionInfo(c, searchMonth);
-          return info && info.tieneRevision && !usedCentroIds.includes(c.id);
+          return info && info.tieneRevision && !usedCentroIds.includes(c._docId || c.id);
         })
         .map(c => {
           const info = getCentroRevisionInfo(c, searchMonth)!;
@@ -165,11 +165,11 @@ export default function Planificacion() {
     if (dragType === 'centro') {
       const centroId = e.dataTransfer.getData('centroId');
       const revisionType = e.dataTransfer.getData('revisionType');
-      const centro = centros.find(c => c.id === centroId);
+      const centro = centros.find(c => c._docId === centroId || c.id === centroId);
       if (!centro) return;
       const newParte = {
         id: `PARTE-${generateId().slice(0, 8).toUpperCase()}`,
-        centroId: centro.id,
+        centroId: centro._docId || centro.id,
         nombreCentro: centro.nombre || '',
         clienteId: centro.clienteId || '',
         fechaCreacion: new Date().toISOString(),
@@ -182,7 +182,7 @@ export default function Planificacion() {
       };
       // Guardar en Firestore (la suscripción actualizará el estado local)
       try { await addParte(newParte as any); } catch (err) { console.error('Error creando parte en Firestore:', err); }
-      setUsedCentroIds(prev => [...prev, centroId]);
+      setUsedCentroIds(prev => [...prev, centro._docId || centro.id]);
     } else {
       // Cambio de fecha: actualizar en Firestore
       const parteId = e.dataTransfer.getData('parteId');
@@ -257,7 +257,7 @@ export default function Planificacion() {
                       const badge = getRevisionBadge(revisionType);
                       const BadgeIcon = badge.icon;
                       return (
-                        <div key={centro.id} draggable onDragStart={(e) => onDragStartCentro(e, centro.id, revisionType)} className="p-3.5 bg-white border-2 border-sky-300 rounded-2xl shadow-md hover:shadow-xl transition-all cursor-grab active:cursor-grabbing">
+                        <div key={centro._docId || centro.id} draggable onDragStart={(e) => onDragStartCentro(e, centro._docId || centro.id, revisionType)} className="p-3.5 bg-white border-2 border-sky-300 rounded-2xl shadow-md hover:shadow-xl transition-all cursor-grab active:cursor-grabbing">
                           <div className="flex flex-col gap-2 mb-3">
                             <span className={`w-fit px-2 py-1 text-[10px] font-bold rounded-full border ${badge.color} flex items-center gap-1`}>
                               <BadgeIcon className="w-3 h-3" /> {badge.label}
@@ -315,7 +315,7 @@ export default function Planificacion() {
                     <span className="text-xs font-bold text-zinc-400 mb-1">{date.getDate()}</span>
                     <div className="flex-1 space-y-1">
                       {partes.filter(p => p.fechaProgramada === dateStr).map(p => {
-                        const centro = centros.find(c => c.id === p.centroId);
+                        const centro = centros.find(c => c._docId === p.centroId || c.id === p.centroId);
                         return (
                           <div key={p.id} className="group relative">
                             <div draggable onDragStart={(e) => onDragStart(e, p.id)} className="p-1 bg-sky-100 rounded text-[9px] text-sky-800 font-bold truncate cursor-grab active:cursor-grabbing shadow-sm hover:bg-sky-200 transition-colors">

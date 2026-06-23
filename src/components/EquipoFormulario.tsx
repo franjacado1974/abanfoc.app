@@ -107,18 +107,30 @@ export default function EquipoFormulario({
 
                 const nombreSistemaNorm = normalizarNombre(sistemaNombre);
 
-                // Buscar la plantilla que coincida con el nombre del sistema
-                const plantillaEncontrada = plantillas.find(p => {
+                // Buscar la plantilla que coincida con el nombre del sistema con orden de prioridad
+                // 1. Coincidencia exacta
+                let plantillaEncontrada = plantillas.find(p => {
                     const nombrePlantillaNorm = normalizarNombre(p.nombre || '');
-                    const coincideExacto = nombrePlantillaNorm === nombreSistemaNorm;
-                    const plantillaContieneSistema = nombrePlantillaNorm.includes(nombreSistemaNorm);
-                    const sistemaContienePlantilla = nombreSistemaNorm.includes(nombrePlantillaNorm);
-                    const palabrasSistema = nombreSistemaNorm.split(' ').filter(w => w.length > 3);
-                    const palabrasPlantilla = nombrePlantillaNorm.split(' ').filter(w => w.length > 3);
-                    const coincidePalabras = palabrasSistema.some(ps => palabrasPlantilla.some(pp => ps === pp || pp.includes(ps) || ps.includes(pp)));
-                    
-                    return coincideExacto || plantillaContieneSistema || sistemaContienePlantilla || coincidePalabras;
+                    return nombrePlantillaNorm === nombreSistemaNorm;
                 });
+
+                // 2. Coincidencia por inclusión (si una contiene a la otra)
+                if (!plantillaEncontrada) {
+                    plantillaEncontrada = plantillas.find(p => {
+                        const nombrePlantillaNorm = normalizarNombre(p.nombre || '');
+                        return nombrePlantillaNorm.includes(nombreSistemaNorm) || nombreSistemaNorm.includes(nombrePlantillaNorm);
+                    });
+                }
+
+                // 3. Coincidencia por palabras compartidas
+                if (!plantillaEncontrada) {
+                    plantillaEncontrada = plantillas.find(p => {
+                        const nombrePlantillaNorm = normalizarNombre(p.nombre || '');
+                        const palabrasSistema = nombreSistemaNorm.split(' ').filter(w => w.length > 3);
+                        const palabrasPlantilla = nombrePlantillaNorm.split(' ').filter(w => w.length > 3);
+                        return palabrasSistema.some(ps => palabrasPlantilla.some(pp => ps === pp || pp.includes(ps) || ps.includes(pp)));
+                    });
+                }
 
                 if (plantillaEncontrada) {
                     console.log(`✅ Plantilla encontrada: "${plantillaEncontrada.nombre}" (ID: ${plantillaEncontrada.id})`);
@@ -396,6 +408,13 @@ export default function EquipoFormulario({
 
         // Campos normales (texto, número, fecha, texto-largo, imagen)
         switch (tipo) {
+            case 'seccion':
+                return (
+                    <div key={item.key} className="col-span-full border-b border-slate-200 pb-1.5 pt-4 mb-2 flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">{item.label}</span>
+                    </div>
+                );
+
             case 'numero':
                 return (
                     <div key={item.key} className="flex flex-col gap-1">

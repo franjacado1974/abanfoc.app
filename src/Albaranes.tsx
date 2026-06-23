@@ -461,7 +461,7 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
             <div className="divide-y divide-zinc-100">
               {filtered.map((alb) => {
                 const cliente = clientes.find(c => c.id === alb.clienteId);
-                const centro = centros.find(c => c.id === alb.centroId);
+                const centro = centros.find(c => c._docId === alb.centroId || c.id === alb.centroId);
                 return (
                   <div key={alb.id} className="flex flex-col md:flex-row md:items-center px-4 py-3.5 hover:bg-zinc-50/80 transition-colors group">
                     <div className="flex md:hidden items-center justify-between mb-2">
@@ -543,7 +543,7 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
 
   const selectedEmpresa = empresas.find(e => e._docId === form.empresaId); // Removed type assertion
   const selectedCliente = clientes.find(c => c.id === form.clienteId); // Removed type assertion
-  const selectedCentro = centros.find(c => c.id === form.centroId); // Removed type assertion
+  const selectedCentro = centros.find(c => c._docId === form.centroId || c.id === form.centroId); // Removed type assertion
   const filteredCentros = centros.filter(c => c.clienteId === form.clienteId);
 
   return (
@@ -642,7 +642,7 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                       disabled={!form.clienteId}
                     >
                       <option value="">Sin centro (Usar datos cliente)</option>
-                      {filteredCentros.map(cen => <option key={cen.id} value={cen.id}>{cen.nombre}</option>)}
+                      {filteredCentros.map(cen => <option key={cen._docId || cen.id} value={cen._docId || cen.id}>{cen.nombre}</option>)}
                     </select>
                   </div>
                 </div>

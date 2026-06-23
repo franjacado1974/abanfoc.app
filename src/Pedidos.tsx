@@ -316,7 +316,7 @@ export default function Pedidos() {
                 <label className="text-xs font-bold text-zinc-500 uppercase">Centro</label>
                 <select value={form.centroId} onChange={e => setForm({ ...form, centroId: e.target.value })} className="w-full px-4 py-2.5 bg-white border border-zinc-200 rounded-xl text-sm outline-none" disabled={!form.clienteId}>
                   <option value="">Sin centro</option>
-                  {filteredCentros.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                  {filteredCentros.map(c => <option key={c._docId || c.id} value={c._docId || c.id}>{c.nombre}</option>)}
                 </select>
               </div>
               <div className="space-y-2">

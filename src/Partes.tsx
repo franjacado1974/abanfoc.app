@@ -29,6 +29,7 @@ interface Cliente {
 }
 
 interface Centro {
+  _docId?: string;
   id: string;
   clienteId: string;
   nombre: string;
@@ -86,7 +87,7 @@ export default function Partes() {
   }, []);
 
   const getCliente = (clienteId: string) => clientes.find(c => c.id === clienteId);
-  const getCentro = (centroId: string) => centros.find(c => c.id === centroId);
+  const getCentro = (centroId: string) => centros.find(c => c._docId === centroId || c.id === centroId);
 
   const getTipoRevision = (periodicidad: string): string => {
     if (periodicidad.toLowerCase().includes('trimestral')) return 'Revisión Trimestral';
@@ -154,16 +155,16 @@ export default function Partes() {
     
     try {
       // 1. Obtener Sistemas del centro
-      const sistemasCol = collection(db, 'centros', centro.id, 'inventario');
+      const sistemasCol = collection(db, 'centros', centro._docId || centro.id, 'inventario');
       const sistemasSnap = await getDocs(sistemasCol);
       const sistemasDelCentro = sistemasSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
       // 2. Obtener Equipos instalados
       let equiposTodos: any[] = [];
       for (const sist of sistemasDelCentro) {
-          const equiposCol = collection(db, 'centros', centro.id, 'inventario', sist.id, 'equipos');
+          const equiposCol = collection(db, 'centros', centro._docId || centro.id, 'inventario', sist.id, 'equipos');
           const equiposSnap = await getDocs(equiposCol);
-          equiposTodos = equiposTodos.concat(equiposSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+          equiposTodos = equiposTodos.concat(equiposSnap.docs.map(d => ({ id: d.id, sistemaId: sist.id, ...d.data() })));
       }
 
       // Ordenar equiposTodos
@@ -209,17 +210,30 @@ export default function Partes() {
             if (!sistemaNombre) continue;
 
             const nombreSistemaNorm = normalizarNombre(sistemaNombre);
-            
-            const plantilla = plantillas.find((p: any) => {
+            // Buscar la plantilla que coincida con el nombre del sistema con orden de prioridad
+            // 1. Coincidencia exacta
+            let plantilla = plantillas.find((p: any) => {
                 const nombrePlantillaNorm = normalizarNombre(p.nombre || '');
-                const coincideExacto = nombrePlantillaNorm === nombreSistemaNorm;
-                const plantillaContieneSistema = nombrePlantillaNorm.includes(nombreSistemaNorm);
-                const sistemaContienePlantilla = nombreSistemaNorm.includes(nombrePlantillaNorm);
-                const palabrasSistema = nombreSistemaNorm.split(' ').filter((w: string) => w.length > 3);
-                const palabrasPlantilla = nombrePlantillaNorm.split(' ').filter((w: string) => w.length > 3);
-                const coincidePalabras = palabrasSistema.some((ps: string) => palabrasPlantilla.some((pp: string) => ps === pp || pp.includes(ps) || ps.includes(pp)));
-                return coincideExacto || plantillaContieneSistema || sistemaContienePlantilla || coincidePalabras;
+                return nombrePlantillaNorm === nombreSistemaNorm;
             });
+
+            // 2. Coincidencia por inclusión (si una contiene a la otra)
+            if (!plantilla) {
+                plantilla = plantillas.find((p: any) => {
+                    const nombrePlantillaNorm = normalizarNombre(p.nombre || '');
+                    return nombrePlantillaNorm.includes(nombreSistemaNorm) || nombreSistemaNorm.includes(nombrePlantillaNorm);
+                });
+            }
+
+            // 3. Coincidencia por palabras compartidas
+            if (!plantilla) {
+                plantilla = plantillas.find((p: any) => {
+                    const nombrePlantillaNorm = normalizarNombre(p.nombre || '');
+                    const palabrasSistema = nombreSistemaNorm.split(' ').filter((w: string) => w.length > 3);
+                    const palabrasPlantilla = nombrePlantillaNorm.split(' ').filter((w: string) => w.length > 3);
+                    return palabrasSistema.some((ps: string) => palabrasPlantilla.some((pp: string) => ps === pp || pp.includes(ps) || ps.includes(pp)));
+                });
+            }
 
           if (plantilla) {
             const itemsCol = collection(db, 'plantillas', plantilla.id, 'items');
@@ -291,12 +305,10 @@ export default function Partes() {
       })
     : partes;
 
-  // Only show parts that have a fechaProgramada (planified)
-  const partesPlanificados = partesFiltrados.filter(
-    p => p.fechaProgramada && p.fechaProgramada.trim() !== ''
-  ).filter(p => {
+  // Show all parts, including those without a fechaProgramada
+  const partesPlanificados = partesFiltrados.filter(p => {
     if (!startDate && !endDate) return true;
-    if (!p.fechaProgramada) return false;
+    if (!p.fechaProgramada || p.fechaProgramada.trim() === '') return false;
     
     const [d, m, y] = p.fechaProgramada.split('-').map(Number);
     const dateNum = y * 10000 + m * 100 + d;
@@ -314,10 +326,15 @@ export default function Partes() {
     }
     return pass;
   }).sort((a, b) => {
-    if (!a.fechaProgramada) return 1;
-    if (!b.fechaProgramada) return -1;
-    const [da, ma, ya] = a.fechaProgramada.split('-').map(Number);
-    const [db, mb, yb] = b.fechaProgramada.split('-').map(Number);
+    const hasA = a.fechaProgramada && a.fechaProgramada.trim() !== '';
+    const hasB = b.fechaProgramada && b.fechaProgramada.trim() !== '';
+    if (!hasA && !hasB) {
+      return (b.fechaCreacion || '').localeCompare(a.fechaCreacion || '');
+    }
+    if (!hasA) return 1;
+    if (!hasB) return -1;
+    const [da, ma, ya] = (a.fechaProgramada as string).split('-').map(Number);
+    const [db, mb, yb] = (b.fechaProgramada as string).split('-').map(Number);
     return (ya * 10000 + ma * 100 + da) - (yb * 10000 + mb * 100 + db);
   });
 

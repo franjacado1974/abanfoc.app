@@ -8,6 +8,7 @@
  * - Sidebar con lista de plantillas desde Firestore
  * - Editor visual con vista previa en tiempo real
  * - Cada fila: texto editable, tipo de respuesta (check/texto/numero), orden
+ * - Checkbox "Horizontal" para mostrar label a la izquierda y campo a la derecha
  * - Botones: Añadir fila, Eliminar fila, Subir/Bajar
  * - Guardado y sincronización directa con Firestore
  * ─────────────────────────────────────────────────────────────────────────────
@@ -37,6 +38,7 @@ interface ItemLocal {
   tipoRespuesta: TipoRespuestaChecklist;
   requerido: boolean;
   opciones?: string[];  // Opciones para desplegable
+  horizontal?: boolean; // true = label a la izquierda, campo a la derecha
   esNuevo?: boolean;    // true si aún no se ha guardado en Firestore
 }
 
@@ -120,6 +122,7 @@ export default function FormBuilderPlantillas() {
         tipoRespuesta: it.tipoRespuesta,
         requerido: it.requerido,
         opciones: it.opciones || [],
+        horizontal: it.horizontal === true,
         esNuevo: false,
       })));
     });
@@ -264,6 +267,8 @@ export default function FormBuilderPlantillas() {
         orden: i + 1,
         tipoRespuesta: item.tipoRespuesta,
         requerido: item.requerido,
+        opciones: item.opciones || [],
+        horizontal: item.horizontal === true,
       });
       // Si es el item que estamos copiando, insertamos la copia justo después
       if (i === index) {
@@ -274,6 +279,8 @@ export default function FormBuilderPlantillas() {
           orden: i + 2, // Se reasignará al final
           tipoRespuesta: item.tipoRespuesta,
           requerido: item.requerido,
+          opciones: item.opciones || [],
+          horizontal: item.horizontal === true,
         });
       }
     }
@@ -312,6 +319,8 @@ export default function FormBuilderPlantillas() {
       orden: i + 1,
       tipoRespuesta: item.tipoRespuesta,
       requerido: item.requerido,
+      opciones: item.opciones || [],
+      horizontal: item.horizontal === true,
     }));
 
     try {
@@ -357,6 +366,7 @@ export default function FormBuilderPlantillas() {
       fecha: 'bg-purple-100 text-purple-700 border-purple-200',
       imagen: 'bg-pink-100 text-pink-700 border-pink-200',
       desplegable: 'bg-orange-100 text-orange-700 border-orange-200',
+      seccion: 'bg-zinc-200 text-zinc-800 border-zinc-300',
     };
     const labels: Record<string, string> = {
       check: 'Check',
@@ -366,6 +376,7 @@ export default function FormBuilderPlantillas() {
       fecha: 'Fecha',
       imagen: 'Imagen',
       desplegable: 'Desplegable',
+      seccion: 'Sección',
     };
     return (
       <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${estilos[tipo] || 'bg-zinc-100 text-zinc-600 border-zinc-200'}`}>
@@ -376,7 +387,7 @@ export default function FormBuilderPlantillas() {
 
   // ─── RENDER: VISTA PREVIA DEL CAMPO ───────────────────────────────────────
 
-  const VistaPreviaCampo = ({ item }: { item: ItemLocal }) => {
+  const renderInputPreview = (item: ItemLocal) => {
     switch (item.tipoRespuesta) {
       case 'check':
         return (
@@ -457,7 +468,93 @@ export default function FormBuilderPlantillas() {
             </select>
           </div>
         );
+      case 'seccion':
+        return (
+          <div className="border-b border-zinc-200 pb-1 pt-1 mb-1">
+            <span className="text-xs font-bold text-zinc-700 uppercase tracking-wide">{item.label || 'Separador de Sección'}</span>
+          </div>
+        );
     }
+  };
+
+  const VistaPreviaCampo = ({ item }: { item: ItemLocal }) => {
+    // Si es sección, siempre se renderiza igual
+    if (item.tipoRespuesta === 'seccion') {
+      return (
+        <div className="border-b border-zinc-200 pb-1 pt-1 mb-1">
+          <span className="text-xs font-bold text-zinc-700 uppercase tracking-wide">{item.label || 'Separador de Sección'}</span>
+        </div>
+      );
+    }
+
+    // Si tiene horizontal activado, se renderiza en línea horizontal
+    if (item.horizontal) {
+      const innerType = item.tipoRespuesta;
+      return (
+        <div className="flex items-center justify-between gap-4 pb-2 border-b border-zinc-100">
+          <span className="text-xs font-semibold text-zinc-700">{item.label || 'Pregunta'}</span>
+          <div className="w-48 shrink-0">
+            {innerType === 'check' && (
+              <label className="flex items-center gap-2 cursor-pointer text-xs px-3 py-1.5 rounded-lg bg-white border border-zinc-200 hover:border-zinc-300 transition-all select-none text-zinc-700 font-medium">
+                <input type="checkbox" className="w-4 h-4 rounded cursor-pointer text-teal-600 border-zinc-300 focus:ring-teal-500" disabled />
+                OK
+              </label>
+            )}
+            {innerType === 'texto' && (
+              <input
+                type="text"
+                className="w-full px-3 py-1.5 bg-white border border-zinc-200 rounded-lg text-xs outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20"
+                placeholder="..."
+                disabled
+              />
+            )}
+            {innerType === 'numero' && (
+              <input
+                type="number"
+                className="w-full px-3 py-1.5 bg-white border border-zinc-200 rounded-lg text-xs outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20"
+                placeholder="0"
+                disabled
+              />
+            )}
+            {innerType === 'fecha' && (
+              <input
+                type="date"
+                className="w-full px-3 py-1.5 bg-white border border-zinc-200 rounded-lg text-xs outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20"
+                disabled
+              />
+            )}
+            {innerType === 'texto-largo' && (
+              <textarea
+                className="w-full px-3 py-1.5 bg-white border border-zinc-200 rounded-lg text-xs outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 resize-none"
+                rows={2}
+                placeholder="..."
+                disabled
+              />
+            )}
+            {innerType === 'imagen' && (
+              <div className="flex items-center gap-2 p-2 bg-white border border-dashed border-zinc-300 rounded-lg">
+                <Image className="w-4 h-4 text-zinc-400" />
+                <span className="text-[9px] text-zinc-400">Añadir foto</span>
+              </div>
+            )}
+            {innerType === 'desplegable' && (
+              <select
+                className="w-full px-3 py-1.5 bg-white border border-zinc-200 rounded-lg text-xs outline-none text-zinc-500"
+                disabled
+              >
+                <option value="">Selecciona...</option>
+                {(item.opciones || []).map((opt, i) => (
+                  <option key={i} value={opt}>{opt}</option>
+                ))}
+              </select>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // Renderizado normal (vertical)
+    return <>{renderInputPreview(item)}</>;
   };
 
   // ─── RENDER PRINCIPAL ─────────────────────────────────────────────────────
@@ -720,10 +817,22 @@ export default function FormBuilderPlantillas() {
                             <option value="fecha">📅 Fecha</option>
                             <option value="imagen">🖼️ Imagen</option>
                             <option value="desplegable">🔽 Desplegable</option>
+                            <option value="seccion">📁 Sección / Separador</option>
                           </select>
 
                           {/* ── Badge del tipo ─────────────────────────────── */}
                           <TipoBadge tipo={item.tipoRespuesta} />
+
+                          {/* ── Checkbox horizontal ──────────────────────────── */}
+                          <label className="flex items-center gap-1 text-[9px] text-zinc-500 cursor-pointer shrink-0 hover:text-zinc-700 transition-colors" title="Horizontal: pregunta a la izquierda, campo a la derecha">
+                            <input
+                              type="checkbox"
+                              checked={item.horizontal === true}
+                              onChange={e => handleUpdateItem(item.id, { horizontal: e.target.checked })}
+                              className="w-3.5 h-3.5 rounded cursor-pointer text-indigo-600 border-zinc-300 focus:ring-indigo-500"
+                            />
+                            <span className="hidden sm:inline">↔️</span>
+                          </label>
 
                           {/* ── Checkbox requerido ──────────────────────────── */}
                           <label className="flex items-center gap-1 text-[9px] text-zinc-500 cursor-pointer shrink-0 hover:text-zinc-700 transition-colors" title="Requerido">
@@ -780,7 +889,8 @@ export default function FormBuilderPlantillas() {
                       {' '}{items.filter(i => i.tipoRespuesta === 'texto-largo').length} texto largo ·
                       {' '}{items.filter(i => i.tipoRespuesta === 'numero').length} número ·
                       {' '}{items.filter(i => i.tipoRespuesta === 'fecha').length} fecha ·
-                      {' '}{items.filter(i => i.tipoRespuesta === 'imagen').length} imagen
+                      {' '}{items.filter(i => i.tipoRespuesta === 'imagen').length} imagen ·
+                      {' '}{items.filter(i => i.horizontal).length} horizontal
                     </p>
                     <p className="text-[10px] text-zinc-400 italic">
                       {items.filter(i => i.requerido).length} requeridos · Total: {items.length}
@@ -788,6 +898,31 @@ export default function FormBuilderPlantillas() {
                   </div>
                 )}
               </div>
+
+              {/* ── BOTÓN GUARDAR INFERIOR (ENTRE EDITOR Y VISTA PREVIA) ── */}
+              {items.length > 0 && (
+                <div className="flex items-center justify-end gap-3 pr-2">
+                  {mensaje && (
+                    <span className={`text-xs font-bold px-3 py-1.5 rounded-lg animate-in fade-in slide-in-from-top-2 ${
+                      mensaje.tipo === 'ok' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
+                    }`}>
+                      {mensaje.texto}
+                    </span>
+                  )}
+                  <button
+                    onClick={handleGuardarTodo}
+                    disabled={guardando}
+                    className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white px-5 py-2.5 rounded-xl text-xs font-bold transition-all shadow-sm"
+                  >
+                    {guardando ? (
+                      <Loader className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Save className="w-3.5 h-3.5" />
+                    )}
+                    {guardando ? 'Guardando...' : 'Guardar Plantilla'}
+                  </button>
+                </div>
+              )}
 
               {/* ── VISTA PREVIA EN TIEMPO REAL ────────────────────────────── */}
               {items.length > 0 && (
@@ -807,14 +942,21 @@ export default function FormBuilderPlantillas() {
                       )}
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
-                      {items.map((item, idx) => (
-                        <div key={item.id} className="flex items-start gap-2">
-                          <span className="text-[9px] font-bold text-zinc-400 mt-1.5 w-4 shrink-0">{idx + 1}.</span>
-                          <div className="flex-1 min-w-0">
-                            <VistaPreviaCampo item={item} />
+                      {items.map((item, idx) => {
+                        const isSeccion = item.tipoRespuesta === 'seccion';
+                        const isHorizontal = item.horizontal === true;
+                        const isFullWidth = isSeccion || isHorizontal;
+                        return (
+                          <div key={item.id} className={`flex items-start gap-2 ${isFullWidth ? 'col-span-full mt-2' : ''}`}>
+                            {!isFullWidth && (
+                              <span className="text-[9px] font-bold text-zinc-400 mt-1.5 w-4 shrink-0">{idx + 1}.</span>
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <VistaPreviaCampo item={item} />
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                   <div className="px-5 py-2.5 bg-zinc-50 border-t border-zinc-100">

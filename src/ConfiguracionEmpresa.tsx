@@ -19,6 +19,7 @@ interface EmpresaData {
   email: string;
   web: string;
   logoUrl?: string;
+  selloUrl?: string;
   ingenieroNombre: string;
   ingenieroApellidos: string;
   ingenieroNif: string;
@@ -49,6 +50,7 @@ function EmpresaForm({ empresa, onSave, onCancel }: {
 }) {
   const [form, setForm] = useState<EmpresaData>(empresa);
   const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [selloFile, setSelloFile] = useState<File | null>(null);
   const [firmaFile, setFirmaFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -65,6 +67,15 @@ function EmpresaForm({ empresa, onSave, onCancel }: {
         fields.logoUrl = form.logoUrl;
       } else {
         delete fields.logoUrl;
+      }
+
+      if (selloFile) {
+        const selloPath = `empresa/sello_${Date.now()}`;
+        fields.selloUrl = await uploadFile(selloFile, selloPath);
+      } else if (form.selloUrl) {
+        fields.selloUrl = form.selloUrl;
+      } else {
+        delete fields.selloUrl;
       }
 
       if (firmaFile) {
@@ -208,6 +219,33 @@ function EmpresaForm({ empresa, onSave, onCancel }: {
             <label htmlFor="logo-upload-form"
               className="w-full text-center px-3 py-2 bg-white border border-zinc-200 text-zinc-700 rounded-xl text-[11px] font-bold cursor-pointer hover:bg-zinc-50 transition-colors shadow-sm">
               {form.logoUrl || logoFile ? 'Cambiar' : 'Seleccionar'}
+            </label>
+          </div>
+        </div>
+
+        {/* Sello de empresa */}
+        <div className="w-full lg:w-64 flex-shrink-0 space-y-3">
+          <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider ml-1">Sello de empresa</label>
+          <div className="flex flex-col items-center gap-3 p-5 bg-zinc-50 border-2 border-dashed border-zinc-200 rounded-2xl">
+            {(form.selloUrl || selloFile) ? (
+              <div className="relative group">
+                <img src={selloFile ? URL.createObjectURL(selloFile) : form.selloUrl} alt="Sello" 
+                  className="h-24 w-24 object-contain bg-white p-1 rounded-xl border border-zinc-200 shadow-sm" />
+                <button type="button" onClick={() => { setSelloFile(null); setForm({...form, selloUrl: ''}); }}
+                  className="absolute -top-2 -right-2 p-1 bg-red-100 text-red-600 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm">
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              </div>
+            ) : (
+              <div className="h-24 w-24 bg-white rounded-xl border-2 border-dashed border-zinc-300 flex items-center justify-center text-zinc-300">
+                <ImageIcon className="w-7 h-7" />
+              </div>
+            )}
+            <input type="file" accept="image/*" className="hidden" id="sello-upload-form"
+              onChange={(e) => setSelloFile(e.target.files?.[0] || null)} />
+            <label htmlFor="sello-upload-form"
+              className="w-full text-center px-3 py-2 bg-white border border-zinc-200 text-zinc-700 rounded-xl text-[11px] font-bold cursor-pointer hover:bg-zinc-50 transition-colors shadow-sm">
+              {form.selloUrl || selloFile ? 'Cambiar' : 'Seleccionar'}
             </label>
           </div>
         </div>

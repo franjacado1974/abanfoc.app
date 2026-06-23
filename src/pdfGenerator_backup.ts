@@ -210,13 +210,14 @@ export const generarActaExtintoresPDF = (
 
   const drawTableHeader = (pageNum: number) => {
     if (pageNum <= 1) return;
+    doc.setTextColor(0, 0, 0);
+    doc.setDrawColor(0, 0, 0);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(12);
     doc.text('ACTA DE REVISIÓN - SISTEMAS DE PROTECCIÓN CONTRA INCENDIOS', pageWidth / 2, 14, { align: 'center' });
     doc.setFont("helvetica", "italic");
     doc.setFontSize(9);
     doc.text(`${cliente?.nombre || ''} | ${centro?.nombre || ''}`, pageWidth / 2, 22, { align: 'center' });
-    doc.setDrawColor(0, 0, 0);
     doc.setLineWidth(0.3);
     doc.line(10, 26, pageWidth - 10, 26);
   };

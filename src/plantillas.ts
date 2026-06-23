@@ -21,6 +21,7 @@
  *               ├── orden: number      ← Orden de aparición
  *               ├── tipoRespuesta: 'check' | 'texto' | 'numero' | 'fecha'
  *               ├── requerido: boolean ← Si es obligatorio
+ *               ├── horizontal: boolean ← Si se muestra en línea horizontal
  *               ├── createdAt: string
  *               └── updatedAt: string
  *
@@ -44,7 +45,7 @@ import { db } from './firebase';
 
 // ─── TIPOS ───────────────────────────────────────────────────────────────────
 
-export type TipoRespuestaChecklist = 'check' | 'texto' | 'texto-largo' | 'numero' | 'fecha' | 'imagen' | 'desplegable';
+export type TipoRespuestaChecklist = 'check' | 'texto' | 'texto-largo' | 'numero' | 'fecha' | 'imagen' | 'desplegable' | 'seccion';
 
 /** Ítem individual dentro de una plantilla de checklist */
 export interface ItemPlantilla {
@@ -56,6 +57,7 @@ export interface ItemPlantilla {
   tipoRespuesta: TipoRespuestaChecklist;
   requerido: boolean;
   opciones?: string[]; // Para tipo 'desplegable'
+  horizontal?: boolean; // Si es true, se muestra en línea horizontal (label + campo)
   createdAt?: string;
   updatedAt?: string;
 }
@@ -253,6 +255,7 @@ export async function getItemsDePlantilla(plantillaId: string): Promise<ItemPlan
         tipoRespuesta: data.tipoRespuesta || 'check',
         requerido: data.requerido !== false,
         opciones: data.opciones || [],
+        horizontal: data.horizontal === true,
         createdAt: data.createdAt || '',
         updatedAt: data.updatedAt || '',
       } as ItemPlantilla;
@@ -340,6 +343,7 @@ export function subscribeItemsDePlantilla(
             tipoRespuesta: data.tipoRespuesta || 'check',
             requerido: data.requerido !== false,
             opciones: data.opciones || [],
+            horizontal: data.horizontal === true,
             createdAt: data.createdAt || '',
             updatedAt: data.updatedAt || '',
           } as ItemPlantilla;
@@ -453,7 +457,7 @@ export async function reemplazarItemsDePlantilla(
     const createdItems: ItemPlantilla[] = [];
     for (let i = 0; i < nuevosItems.length; i++) {
       const item = nuevosItems[i];
-      const itemRef = doc(itemsCol); // Genera un ID automático
+      const itemRef = doc(itemsCol);
       const itemData = {
         label: item.label,
         key: item.key,
@@ -461,6 +465,8 @@ export async function reemplazarItemsDePlantilla(
         orden: item.orden ?? i + 1,
         tipoRespuesta: item.tipoRespuesta || 'check',
         requerido: item.requerido !== false,
+        opciones: item.opciones || [],
+        horizontal: item.horizontal === true,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -615,6 +621,8 @@ export async function duplicarPlantilla(plantillaId: string): Promise<Plantilla>
           orden: item.orden,
           tipoRespuesta: item.tipoRespuesta,
           requerido: item.requerido,
+          opciones: item.opciones || [],
+          horizontal: item.horizontal === true,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         });

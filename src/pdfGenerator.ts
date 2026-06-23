@@ -96,6 +96,7 @@ export const generarActaExtintoresPDF = async (
 
   const firmaIngenieroBase64 = await fetchImageToBase64(empData?.ingenieroFirmaUrl);
   const logoData = await fetchImageToBase64(empData?.logoUrl) || await fetchImageToBase64(localStorage.getItem('firecheck_db_logo'));
+  const selloEmpresaBase64 = await fetchImageToBase64(empData?.selloUrl);
 
   // ============ FIRST PAGE: INFO PAGE (REDISEÑO ELEGANTE) ============
   const drawInfoPage = async () => {
@@ -117,9 +118,10 @@ export const generarActaExtintoresPDF = async (
     doc.text('ACTA DE REVISIÓN', pageWidth / 2, 22, { align: 'center' });
 
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(7);
+    doc.setFontSize(8.0);
     doc.setTextColor(100, 100, 100);
-    doc.text('Mantenimientos realizados según tablas I y II del programa de mantenimiento preventivo establecido por la norma en el anexo II del reglamento de instalaciones contra incendios aprobado por el Real Decreto 513/2017 del 22 de mayo.', pageWidth / 2, 32, { align: 'center' });
+    const subtitleText = 'Mantenimientos realizados según el programa de mantenimiento preventivo establecido por la norma en el reglamento de instalaciones contra incendios aprobado por el Real Decreto 513/2017 del 22 de mayo.';
+    doc.text(subtitleText, pageWidth / 2, 32, { align: 'center' });
 
     // ── Línea decorativa doble ──
     doc.setDrawColor(128, 0, 32);
@@ -131,7 +133,7 @@ export const generarActaExtintoresPDF = async (
 
     // ── Número de acta y fecha (barra superior centrada) ──
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(8.5);
+    doc.setFontSize(9.5);
     doc.setTextColor(80, 80, 80);
     doc.text(`N.º Acta: ${numeroMantenimiento || '—'}  -  Fecha: ${new Date().toLocaleDateString('es-ES')}`, pageWidth / 2, 44, { align: 'center' });
 
@@ -142,7 +144,7 @@ export const generarActaExtintoresPDF = async (
 
     // Título de sección
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(9);
+    doc.setFontSize(10.5);
     doc.setTextColor(50, 50, 50);
     doc.text('DATOS DEL CLIENTE Y CENTRO', 14, y + 3);
     y += 5;
@@ -155,11 +157,11 @@ export const generarActaExtintoresPDF = async (
 
     // Columna izquierda: Cliente
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(7.5);
+    doc.setFontSize(9.0);
     doc.setTextColor(50, 50, 50);
     doc.text('DATOS CLIENTE', col1X, y);
     const clientStartY = y;
-    y += 4.5;
+    y += 5.0;
 
     const cliData = [
       { label: 'Cliente:', value: cliente?.nombre || '—' },
@@ -176,32 +178,32 @@ export const generarActaExtintoresPDF = async (
 
     // Calcular el ancho máximo de las etiquetas para alinearlas a la misma columna
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(7);
+    doc.setFontSize(8.2);
     const maxLabelW = Math.max(...cliData.map(item => doc.getTextWidth(item.label)));
 
     cliData.forEach(item => {
       // 1. Dibujar Label en Bold
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(7);
+      doc.setFontSize(8.2);
       doc.setTextColor(50, 50, 50);
       doc.text(item.label, col1X, y);
       
       // 2. Dibujar Value en Regular/Normal
       doc.setFont("helvetica", "normal");
-      doc.setFontSize(7);
+      doc.setFontSize(8.2);
       doc.setTextColor(80, 80, 80);
       doc.text(item.value, col1X + maxLabelW + 2, y);
       
-      y += 4.2;
+      y += 4.4;
     });
 
     // Columna derecha: Centro
     const cenY = clientStartY; // misma posición Y que cliente
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(7.5);
+    doc.setFontSize(9.0);
     doc.setTextColor(50, 50, 50);
     doc.text('DATOS DEL CENTRO', col2X, cenY);
-    let cy = cenY + 4.5;
+    let cy = cenY + 5.0;
 
     const cenData = [
       { label: 'Centro:', value: centro?.nombre || '—' },
@@ -217,29 +219,29 @@ export const generarActaExtintoresPDF = async (
 
     // Calcular el ancho máximo de las etiquetas para alinearlas a la misma columna
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(7);
+    doc.setFontSize(8.2);
     const maxCenLabelW = Math.max(...cenData.map(item => doc.getTextWidth(item.label)));
 
     cenData.forEach(item => {
       // 1. Dibujar Label en Bold
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(7);
+      doc.setFontSize(8.2);
       doc.setTextColor(50, 50, 50);
       doc.text(item.label, col2X, cy);
       
       // 2. Dibujar Value en Regular/Normal
       doc.setFont("helvetica", "normal");
-      doc.setFontSize(7);
+      doc.setFontSize(8.2);
       doc.setTextColor(80, 80, 80);
       doc.text(item.value, col2X + maxCenLabelW + 2, cy);
       
-      cy += 4.2;
+      cy += 4.4;
     });
 
     // ── SECCIÓN: INFORMACIÓN DEL MANTENIMIENTO ──
-    y = Math.max(y, cy) + 6;
+    y = Math.max(y, cy) + 5;
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(9);
+    doc.setFontSize(10.5);
     doc.setTextColor(50, 50, 50);
     doc.text('INFORMACIÓN DEL MANTENIMIENTO', 14, y + 3);
     y += 5;
@@ -298,11 +300,11 @@ export const generarActaExtintoresPDF = async (
       ['Revisiones programadas:', revList],
     ];
 
-    doc.setFontSize(7.5);
+    doc.setFontSize(8.2);
     let iy = y + 2;
     infoFields.forEach(([label, value], i) => {
       const colX = (i % 2 === 0) ? col1X : col2X;
-      const rowY = iy + Math.floor(i / 2) * 5.5;
+      const rowY = iy + Math.floor(i / 2) * 6.0;
 
       doc.setFont("helvetica", "bold");
       doc.setTextColor(80, 80, 80);
@@ -314,9 +316,9 @@ export const generarActaExtintoresPDF = async (
     });
 
     // ── SECCIÓN: EMPRESA MANTENEDORA ──
-    y = iy + 24;
+    y = iy + 20;
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(9);
+    doc.setFontSize(10.5);
     doc.setTextColor(50, 50, 50);
     doc.text('EMPRESA MANTENEDORA', 14, y + 3);
     y += 5;
@@ -346,30 +348,45 @@ export const generarActaExtintoresPDF = async (
 
     // Calcular el ancho máximo de las etiquetas para alinearlas a la misma columna
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(7);
+    doc.setFontSize(8.2);
     const maxEmpLabelW = Math.max(...empLines.map(item => doc.getTextWidth(item.label)));
 
     empLines.forEach(item => {
       // 1. Dibujar Label en Bold
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(7);
+      doc.setFontSize(8.2);
       doc.setTextColor(50, 50, 50);
       doc.text(item.label, col1X, y);
 
       // 2. Dibujar Value en Normal
       doc.setFont("helvetica", "normal");
-      doc.setFontSize(7);
+      doc.setFontSize(8.2);
       doc.setTextColor(80, 80, 80);
       doc.text(item.value, col1X + maxEmpLabelW + 2, y);
 
-      y += 4.2;
+      y += 4.3;
     });
 
     // Bottom logo removed from cover page
 
+    // ── Sello de empresa (esquina inferior derecha, encima del pie de página) ──
+    if (selloEmpresaBase64) {
+      try {
+        const selloProps = doc.getImageProperties(selloEmpresaBase64);
+        const maxSelloWidth = 32;
+        const maxSelloHeight = 25;
+        const selloRatio = selloProps.width / selloProps.height;
+        const selloWidth = Math.min(maxSelloWidth, maxSelloHeight * selloRatio);
+        const selloHeight = selloWidth / selloRatio;
+        doc.addImage(selloEmpresaBase64, 'PNG', pageWidth - 14 - selloWidth, 182 - selloHeight, selloWidth, selloHeight);
+      } catch (err) {
+        console.error("Error adding company stamp to PDF:", err);
+      }
+    }
+
     // ── Sello / firma digital (esquina inferior derecha) ──
     doc.setFont("helvetica", "italic");
-    doc.setFontSize(6.5);
+    doc.setFontSize(7.5);
     doc.setTextColor(150, 150, 150);
     doc.text('Documento generado electrónicamente', pageWidth - 14, 185, { align: 'right' });
     doc.text(`Fecha de emisión: ${new Date().toLocaleDateString('es-ES')}`, pageWidth - 14, 189, { align: 'right' });
@@ -396,13 +413,14 @@ export const generarActaExtintoresPDF = async (
       doc.addImage(logoData, 'PNG', pageWidth - 14 - logoWidth, 11, logoWidth, logoHeight);
     }
 
+    doc.setTextColor(0, 0, 0);
+    doc.setDrawColor(0, 0, 0);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(12);
     doc.text('ACTA DE REVISIÓN - SISTEMAS DE PROTECCIÓN CONTRA INCENDIOS', pageWidth / 2, 14, { align: 'center' });
     doc.setFont("helvetica", "italic");
     doc.setFontSize(9);
     doc.text(`${cliente?.nombre || ''} | ${centro?.nombre || ''}`, pageWidth / 2, 22, { align: 'center' });
-    doc.setDrawColor(0, 0, 0);
     doc.setLineWidth(0.3);
     doc.line(10, 26, pageWidth - 10, 26);
   };
@@ -466,7 +484,8 @@ export const generarActaExtintoresPDF = async (
                          lbl.includes('ubicacion') || 
                          lbl.includes('sin uso') || 
                          lbl.includes('imagen') ||
-                         item.tipoRespuesta === 'imagen'; // Excluir campos de imagen explícitamente
+                         item.tipoRespuesta === 'imagen' ||
+                         item.tipoRespuesta === 'seccion'; // Excluir campos de imagen y secciones explícitamente
 
       return !isNotas && !isFixed && !isExcluded;
     });
