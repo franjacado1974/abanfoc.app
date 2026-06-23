@@ -133,6 +133,7 @@ export default function RevisionChecklist() {
                     sistemaId: sist.id,
                     sistemaNombre: sistemaNombre,
                     orden: item.orden,
+                    horizontal: item.horizontal === true,
                 }));
                 setChecklistItemsPorSistema(prev => {
                     console.log(`💾 Actualizando checklistItemsPorSistema para ${sist.id}:`, checklistItems);
