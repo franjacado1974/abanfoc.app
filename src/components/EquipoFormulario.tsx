@@ -367,9 +367,142 @@ export default function EquipoFormulario({
 
     const renderField = (item: ItemPlantilla) => {
         const value = formData[item.key as keyof EquipoInstalado];
-        const tipo = item.tipoRespuesta || 'texto';
+        const tipo = (item.tipoRespuesta as string) || 'texto';
         const isErrorDate = (caducado || necesitaRetimbre || seAproxima) && (item.key === fabItem?.key || item.key === retItem?.key);
         const isAnoFieldWithMsg = isExtintor && item.key === anoItem?.key && typeof value === 'string' && value.trim() !== '';
+
+        if (item.horizontal || tipo === 'pregunta-horizontal') {
+            const isCheck = tipo === 'check';
+            const isNumero = tipo === 'numero';
+            const isFecha = tipo === 'fecha';
+            const isTextoLargo = tipo === 'texto-largo';
+            const isDesplegable = tipo === 'desplegable';
+
+            return (
+                <div key={item.key} className="col-span-full border-b border-slate-100 pb-3 flex items-center justify-between gap-4">
+                    <span className="text-sm font-semibold text-slate-700">{item.label}</span>
+                    <div className="w-64 shrink-0">
+                        {isCheck ? (
+                            (() => {
+                                const isChecked = value === true;
+                                const isUnchecked = value === false;
+                                return (
+                                    <label
+                                        className={`flex items-center gap-2 cursor-pointer text-sm px-3 py-2 rounded-lg transition-all select-none ${
+                                            isUnchecked
+                                                ? 'text-red-600 font-semibold bg-red-50 hover:bg-red-100'
+                                                : isChecked
+                                                ? 'text-green-700 font-medium bg-green-50 hover:bg-green-100'
+                                                : 'text-slate-600 font-medium bg-white hover:bg-slate-50 border border-slate-200'
+                                        }`}
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            checked={isChecked}
+                                            onChange={(e) => handleChange(item.key, e.target.checked)}
+                                            className={`w-4 h-4 rounded cursor-pointer ${
+                                                isUnchecked
+                                                    ? 'text-red-500 border-red-300 focus:ring-red-400'
+                                                    : isChecked
+                                                    ? 'text-green-500 border-green-300 focus:ring-green-400'
+                                                    : 'text-slate-400 border-slate-300 focus:ring-slate-400'
+                                            }`}
+                                        />
+                                        <span>OK</span>
+                                        {isChecked && <CheckCircle2 className="w-4 h-4 text-green-500 ml-auto" />}
+                                        {isUnchecked && <XCircle className="w-4 h-4 text-red-400 ml-auto" />}
+                                    </label>
+                                );
+                            })()
+                        ) : isNumero ? (
+                            <input
+                                type="number"
+                                value={typeof value === 'number' ? value : ''}
+                                onChange={(e) => handleChange(item.key, e.target.value ? Number(e.target.value) : '')}
+                                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                                placeholder="0"
+                            />
+                        ) : isFecha ? (
+                            (() => {
+                                const fechaVal = typeof value === 'string' && value ? value.substring(0, 7) : '';
+                                return (
+                                    <input
+                                        type="month"
+                                        value={fechaVal}
+                                        onChange={(e) => handleChange(item.key, e.target.value ? e.target.value + '-01' : '')}
+                                        className={`w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 transition-colors ${
+                                            isErrorDate 
+                                            ? 'bg-red-50 border-red-400 text-red-700 focus:border-red-500 focus:ring-red-500/20' 
+                                            : 'bg-white border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20'
+                                        }`}
+                                    />
+                                );
+                            })()
+                        ) : isTextoLargo ? (
+                            <textarea
+                                value={typeof value === 'string' ? value : ''}
+                                onChange={(e) => handleChange(item.key, e.target.value)}
+                                className={`w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 resize-none transition-colors ${
+                                    isAnoFieldWithMsg
+                                    ? 'bg-red-50 border-red-400 text-red-700 focus:border-red-500 focus:ring-red-500/20'
+                                    : 'bg-white border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20'
+                                }`}
+                                rows={2}
+                                placeholder="..."
+                            />
+                        ) : isDesplegable ? (
+                            (() => {
+                                const opciones = (item as any).opciones || [];
+                                return (
+                                    <select
+                                        value={typeof value === 'string' ? value : ''}
+                                        onChange={(e) => handleChange(item.key, e.target.value)}
+                                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                                    >
+                                        <option value="">Selecciona...</option>
+                                        {opciones.map((opt: string, idx: number) => (
+                                            <option key={idx} value={opt}>{opt}</option>
+                                        ))}
+                                    </select>
+                                );
+                            })()
+                        ) : (
+                            (() => {
+                                const labelLower = (item.label || '').toLowerCase().trim();
+                                const isTipoField = labelLower === 'tipo' || labelLower === 'tipo de equipo';
+                                if (isTipoField && tiposSistema.length > 0) {
+                                    return (
+                                        <select
+                                            value={typeof value === 'string' ? value : ''}
+                                            onChange={(e) => handleChange(item.key, e.target.value)}
+                                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                                        >
+                                            <option value="">Selecciona un tipo...</option>
+                                            {tiposSistema.map(ts => (
+                                                <option key={ts.id} value={ts.nombre}>{ts.nombre}</option>
+                                            ))}
+                                        </select>
+                                    );
+                                }
+                                return (
+                                    <input
+                                        type="text"
+                                        value={typeof value === 'string' ? value : ''}
+                                        onChange={(e) => handleChange(item.key, e.target.value)}
+                                        className={`w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 transition-colors ${
+                                            isErrorDate || isAnoFieldWithMsg
+                                            ? 'bg-red-50 border-red-400 text-red-700 focus:border-red-500 focus:ring-red-500/20' 
+                                            : 'bg-white border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20'
+                                        }`}
+                                        placeholder="..."
+                                    />
+                                );
+                            })()
+                        )}
+                    </div>
+                </div>
+            );
+        }
 
         // Campos tipo "check" se muestran como checkboxes
         if (tipo === 'check') {
