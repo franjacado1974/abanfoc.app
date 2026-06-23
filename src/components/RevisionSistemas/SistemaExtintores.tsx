@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle2, XCircle, X, CheckCheck, RotateCcw, AlertTriangle, Pencil, Trash2, Plus } from 'lucide-react';
+import { CheckCircle2, XCircle, X, Pencil, Trash2, Plus } from 'lucide-react';
 import type { CentroSistema, EquipoInstalado, Parte } from '../../Centros';
 import { updateEquipoInstalado, updateParte as updateParteFirestore, uploadFile, type ChecklistItem } from '../../firebase';
 
@@ -8,7 +8,7 @@ interface Props {
     filteredEqs: EquipoInstalado[];
     equiposInstalados: EquipoInstalado[];
     setEquiposInstalados: React.Dispatch<React.SetStateAction<EquipoInstalado[]>>;
-    saveEquiposProgress: (currentEquipos?: EquipoInstalado[]) => Promise<void>;
+    saveEquiposProgress: (currentEquipos?: EquipoInstalado[]) => Promise<any[]>;
     getItemsToUse: (sistemaId: string) => ChecklistItem[];
     parte: Parte | null;
     parteId: string | undefined;
@@ -180,23 +180,43 @@ export default function SistemaExtintores({
                                                                                      </div>
                                                                                  );
                                                                                 } else if (tipo === 'fecha') {
-                                                                                const fechaVal = typeof val === 'string' && val ? val.substring(0, 7) : '';
-                                                                                const isErrorDate = (caducado || necesitaRetimbre || seAproxima) && (item.key === fabItemKey || item.key === retItemKey);
-                                                                                return (
-                                                                                    <div key={item.key} className="flex flex-col gap-0.5">
-                                                                                        <label className="text-[10px] font-semibold text-slate-500">{item.label}</label>
-                                                                                        <input
-                                                                                            type="month"
-                                                                                            value={fechaVal}
-                                                                                            onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value ? e.target.value + '-01' : '')}
-                                                                                            className={`w-full px-2 py-1.5 border rounded-lg text-xs outline-none focus:ring-2 transition-colors ${
-                                                                                                isErrorDate
-                                                                                                ? 'bg-red-50 border-red-400 text-red-700 focus:border-red-500 focus:ring-red-500/20'
-                                                                                                : `bg-white border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20 ${fechaVal ? 'font-bold' : ''}`
-                                                                                            }`}
-                                                                                        />
-                                                                                    </div>
-                                                                                );
+                                                                                 const lblLower = (item.label || '').toLowerCase();
+                                                                                 const isFechaRevision = lblLower.includes('fecha de revisi');
+                                                                                 const isErrorDate = (caducado || necesitaRetimbre || seAproxima) && (item.key === fabItemKey || item.key === retItemKey);
+
+                                                                                 if (isFechaRevision) {
+                                                                                     const fechaValFull = typeof val === 'string' ? val : '';
+                                                                                     const hoyStr = new Date().toISOString().split('T')[0];
+                                                                                     const noEsHoy = fechaValFull !== hoyStr;
+                                                                                     return (
+                                                                                         <div key={item.key} className="flex flex-col gap-0.5">
+                                                                                             <label className="text-[10px] font-semibold text-slate-500">{item.label}</label>
+                                                                                             <input
+                                                                                                 type="date"
+                                                                                                 value={fechaValFull}
+                                                                                                 onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value)}
+                                                                                                 className={`w-full px-2 py-1.5 border rounded-lg text-xs font-bold outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${noEsHoy ? 'border-orange-400 bg-orange-50 text-orange-800' : 'border-slate-200 bg-white'}`}
+                                                                                             />
+                                                                                         </div>
+                                                                                     );
+                                                                                 }
+
+                                                                                 const fechaVal = typeof val === 'string' && val ? val.substring(0, 7) : '';
+                                                                                 return (
+                                                                                     <div key={item.key} className="flex flex-col gap-0.5">
+                                                                                         <label className="text-[10px] font-semibold text-slate-500">{item.label}</label>
+                                                                                         <input
+                                                                                             type="month"
+                                                                                             value={fechaVal}
+                                                                                             onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value ? e.target.value + '-01' : '')}
+                                                                                             className={`w-full px-2 py-1.5 border rounded-lg text-xs outline-none focus:ring-2 transition-colors ${
+                                                                                                 isErrorDate
+                                                                                                 ? 'bg-red-50 border-red-400 text-red-700 focus:border-red-500 focus:ring-red-500/20'
+                                                                                                 : `bg-white border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20 ${fechaVal ? 'font-bold' : ''}`
+                                                                                             }`}
+                                                                                         />
+                                                                                     </div>
+                                                                                 );
                                                                              } else if (tipo === 'texto') {
                                                                                  const labelLower = (item.label || '').toLowerCase().replace(/[áéíóú]/g, (c) => ({'á':'a','é':'e','í':'i','ó':'o','ú':'u'})[c] || c);
                                                                                  const esNumeroOrden = labelLower.includes('orden');

@@ -416,6 +416,21 @@ export default function RevisionChecklist() {
             return;
         }
 
+        // 3. Validar que la "Fecha de revisión" (si existe) coincide con HOY
+        const hoy = new Date().toISOString().split('T')[0];
+        const equiposFechaInvalida = equiposInstalados.filter(eq => {
+            const itemsDelSistema = checklistItemsPorSistema[eq.sistemaId] || [];
+            const itemFechaRev = itemsDelSistema.find(item => (item.label || '').toLowerCase().includes('fecha de revisi'));
+            if (!itemFechaRev) return false;
+            const val = eq[itemFechaRev.key as keyof EquipoInstalado];
+            return val !== hoy;
+        });
+
+        if (equiposFechaInvalida.length > 0) {
+            alert(`Atención: Hay ${equiposFechaInvalida.length} equipos donde la "Fecha de revisión" no coincide con "Hoy" (${hoy}). Asegúrate de pulsar "Hoy" o "Revisar todo como ok" para actualizar las fechas de hoy.`);
+            return;
+        }
+
         // Mostrar modal de pre-cierre
         setShowPreCierreModal(true);
     };
@@ -594,6 +609,7 @@ export default function RevisionChecklist() {
 
         const itemsToUse = getItemsToUse(sistId);
         let updatedCount = 0;
+        const hoy = new Date().toISOString().split('T')[0];
         const updatedEquipos = equiposInstalados.map(eq => {
             if (eq.sistemaId === sistId) {
                 updatedCount++;
@@ -601,6 +617,11 @@ export default function RevisionChecklist() {
                 itemsToUse.forEach(item => {
                     if (item.tipoRespuesta === 'check') {
                         allChecked[item.key] = true;
+                    } else if (item.tipoRespuesta === 'fecha') {
+                        const lblLower = (item.label || '').toLowerCase();
+                        if (lblLower.includes('fecha de revisi')) {
+                            allChecked[item.key] = hoy;
+                        }
                     }
                 });
                 return {

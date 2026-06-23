@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle2, XCircle, X, CheckCheck, RotateCcw, AlertTriangle, Pencil, Trash2, Plus } from 'lucide-react';
+import { CheckCircle2, XCircle, X, Pencil, Trash2, Plus } from 'lucide-react';
 import type { CentroSistema, EquipoInstalado, Parte } from '../../Centros';
 import { updateEquipoInstalado, updateParte as updateParteFirestore, uploadFile, type ChecklistItem } from '../../firebase';
 
@@ -8,7 +8,7 @@ interface Props {
     filteredEqs: EquipoInstalado[];
     equiposInstalados: EquipoInstalado[];
     setEquiposInstalados: React.Dispatch<React.SetStateAction<EquipoInstalado[]>>;
-    saveEquiposProgress: (currentEquipos?: EquipoInstalado[]) => Promise<void>;
+    saveEquiposProgress: (currentEquipos?: EquipoInstalado[]) => Promise<any[]>;
     getItemsToUse: (sistemaId: string) => ChecklistItem[];
     parte: Parte | null;
     parteId: string | undefined;
