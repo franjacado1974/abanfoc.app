@@ -2,6 +2,7 @@ import React from 'react';
 import { CheckCircle2, XCircle, X, Pencil, Trash2 } from 'lucide-react';
 import type { CentroSistema, EquipoInstalado, Parte } from '../../Centros';
 import { updateEquipoInstalado, updateParte as updateParteFirestore, uploadFile, type ChecklistItem } from '../../firebase';
+import TableInput from '../TableInput';
 
 interface Props {
     sist: CentroSistema;
@@ -82,6 +83,50 @@ export default function SistemaBies({
                                                             }
                                                         }
 
+                                                        // Lógica de BIES para cálculo de caducidad (20 años) y prueba hidráulica (5 años)
+                                                        const fabItemBie = itemsToUse.find(i => (i.label||'').toLowerCase().includes('fabricaci'));
+                                                        const hidraulicaItemBie = itemsToUse.find(i => {
+                                                            const lbl = (i.label||'').toLowerCase();
+                                                            return lbl.includes('hidra') || lbl.includes('prueba');
+                                                        });
+                                                        
+                                                        let caducadoBie = false;
+                                                        let necesitaPruebaBie = false;
+                                                        
+                                                        if (fabItemBie) {
+                                                            const valFab = eq[fabItemBie.key as keyof EquipoInstalado] as string;
+                                                            if (valFab) {
+                                                                const today = new Date();
+                                                                const dateFab = new Date(valFab);
+                                                                if (!isNaN(dateFab.getTime())) {
+                                                                    let diffYears = today.getFullYear() - dateFab.getFullYear();
+                                                                    if (today.getMonth() < dateFab.getMonth() || (today.getMonth() === dateFab.getMonth() && today.getDate() < dateFab.getDate())) {
+                                                                        diffYears--;
+                                                                    }
+                                                                    if (diffYears >= 20) {
+                                                                        caducadoBie = true;
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                        
+                                                        if (hidraulicaItemBie) {
+                                                            const valHidra = eq[hidraulicaItemBie.key as keyof EquipoInstalado] as string;
+                                                            if (valHidra) {
+                                                                const today = new Date();
+                                                                const dateHidra = new Date(valHidra);
+                                                                if (!isNaN(dateHidra.getTime())) {
+                                                                    let diffYears = today.getFullYear() - dateHidra.getFullYear();
+                                                                    if (today.getMonth() < dateHidra.getMonth() || (today.getMonth() === dateHidra.getMonth() && today.getDate() < dateHidra.getDate())) {
+                                                                        diffYears--;
+                                                                    }
+                                                                    if (diffYears >= 5) {
+                                                                        necesitaPruebaBie = true;
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+
                                                         return (
                                                             <div key={eq.id} className={`rounded-xl border transition-all ${algunCheckRojo ? 'bg-red-50/30 border-red-200' : 'bg-slate-50 border-slate-150'}`}>
                                                                 <div className="px-4 py-3 flex flex-wrap items-center justify-between gap-2">
@@ -116,6 +161,19 @@ export default function SistemaBies({
                                                                                      <div key={item.key} className="col-span-full border-b border-slate-200 pb-1.5 pt-4 mb-2 flex items-center justify-between">
                                                                                          <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">{item.label}</span>
                                                                                      </div>
+                                                                                 );
+                                                                             }
+
+                                                                             if (tipo === 'tabla') {
+                                                                                 return (
+                                                                                     <TableInput
+                                                                                         key={item.key}
+                                                                                         label={item.label}
+                                                                                         opciones={item.opciones || []}
+                                                                                         filasInicio={item.filasInicio}
+                                                                                         value={String(val || '')}
+                                                                                         onChange={(newVal) => handleCheckChange(eq.id, item.key, newVal)}
+                                                                                     />
                                                                                  );
                                                                              }
 
@@ -173,7 +231,10 @@ export default function SistemaBies({
                                                                ) : isFecha ? (
                                                                    (() => {
                                                                        const fechaVal = typeof val === 'string' && val ? val.substring(0, 7) : '';
-                                                                       const isErrorDate = (caducado || necesitaRetimbre || seAproxima) && (item.key === fabItemKey || item.key === retItemKey);
+                                                                       const isErrorDate = 
+                                                                            ((caducado || necesitaRetimbre || seAproxima) && (item.key === fabItemKey || item.key === retItemKey)) ||
+                                                                            (fabItemBie && item.key === fabItemBie.key && caducadoBie) ||
+                                                                            (hidraulicaItemBie && item.key === hidraulicaItemBie.key && necesitaPruebaBie);
                                                                        return (
                                                                            <input
                                                                                type="month"
@@ -286,7 +347,10 @@ export default function SistemaBies({
                                                                                  );
                                                                                 } else if (tipo === 'fecha') {
                                                                                 const fechaVal = typeof val === 'string' && val ? val.substring(0, 7) : '';
-                                                                                const isErrorDate = (caducado || necesitaRetimbre || seAproxima) && (item.key === fabItemKey || item.key === retItemKey);
+                                                                                const isErrorDate = 
+                                                                                    ((caducado || necesitaRetimbre || seAproxima) && (item.key === fabItemKey || item.key === retItemKey)) ||
+                                                                                    (fabItemBie && item.key === fabItemBie.key && caducadoBie) ||
+                                                                                    (hidraulicaItemBie && item.key === hidraulicaItemBie.key && necesitaPruebaBie);
                                                                                 return (
                                                                                     <div key={item.key} className="flex flex-col gap-0.5">
                                                                                         <label className="text-[10px] font-semibold text-slate-500">{item.label}</label>
@@ -373,8 +437,9 @@ export default function SistemaBies({
                                                                      const val = eq[item.key as keyof EquipoInstalado];
                                                                      const esNoEncontrado = typeof val === 'string' && val.includes('no localizarse');
                                                                      const esAvisoAutoMsg = typeof val === 'string' && (val.includes('Extintor caducado') || val.includes('Extintor necesita retimbre') || val.includes('Se aproxima caducidad o retimbrado'));
+                                                                     const esAvisoAutoMsgBie = typeof val === 'string' && (val.includes('Equipo caducado + de 20 años') || val.includes('Se necesita realizar prueba hidráulica obligatoria'));
                                                                      const tieneValorNotas = typeof val === 'string' && val.trim() !== '' && !esNoEncontrado;
-                                                                     const isErrorNotas = esNoEncontrado || algunCheckRojo || esAvisoAutoMsg;
+                                                                     const isErrorNotas = esNoEncontrado || algunCheckRojo || esAvisoAutoMsg || esAvisoAutoMsgBie;
                                                                      return (
                                                                          <div key={item.key} className="px-4 pb-3 mt-4">
                                                                              <label className={`text-xs font-semibold mb-1 block ${isErrorNotas ? 'text-red-700' : 'text-slate-600'}`}>Observaciones y anomalías del equipo:</label>

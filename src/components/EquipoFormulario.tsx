@@ -215,18 +215,25 @@ export default function EquipoFormulario({
                 sistemaId,
             };
 
-            // Mapear campos dinámicos conocidos a propiedades fijas para que se vean en el listado
+            // Mapear campos dinámicos conocidos a propiedades fijas para que se vean en el listado y se sincronicen en BD
             plantillaItems.forEach(item => {
                 const label = (item.label || '').toLowerCase().trim();
                 const value = (formData as any)[item.key];
                 
-                if (value !== undefined && value !== null && value !== '') {
+                if (value !== undefined && value !== null) {
+                    const strVal = String(value);
                     if (label === 'orden de lista' || label === 'orden') {
-                        equipoToSave.codigo = String(value);
+                        equipoToSave.codigo = strVal;
                     } else if (label.includes('nombre') || label.includes('tipo')) {
-                        equipoToSave.nombre = String(value);
+                        equipoToSave.nombre = strVal;
                     } else if (label.includes('ubicación') || label.includes('ubicacion')) {
-                        equipoToSave.ubicacion = String(value);
+                        equipoToSave.ubicacion = strVal;
+                    } else if (label.includes('fabricaci')) {
+                        equipoToSave.fechaFabricacion = strVal;
+                    } else if (label.includes('retimbre')) {
+                        equipoToSave.ultimoRetimbre = strVal;
+                    } else if (label.includes('hidra') || label.includes('prueba')) {
+                        equipoToSave.pruebaHidraulica = strVal;
                     }
                 }
             });
@@ -289,6 +296,12 @@ export default function EquipoFormulario({
     const fabItem = isExtintor ? plantillaItems.find(i => i.label.toLowerCase().includes('fabricaci')) : null;
     const retItem = isExtintor ? plantillaItems.find(i => i.label.toLowerCase().includes('retimbre')) : null;
     const anoItem = isExtintor ? plantillaItems.find(i => i.label.toLowerCase().includes('anomal') || i.label.toLowerCase().includes('observacion')) : null;
+
+    // ── Logica Avisos BIEs ──────────────────────────────────────────────────
+    const isBie = sistemaNombre.toLowerCase().includes('bie') || sistemaNombre.toLowerCase().includes('boca');
+    const fabItemBie = isBie ? plantillaItems.find(i => i.label.toLowerCase().includes('fabricaci')) : null;
+    const hidraulicaItemBie = isBie ? plantillaItems.find(i => i.label.toLowerCase().includes('hidra') || i.label.toLowerCase().includes('prueba')) : null;
+    const anoItemBie = isBie ? plantillaItems.find(i => i.label.toLowerCase().includes('anomal') || i.label.toLowerCase().includes('observacion') || i.label.toLowerCase().includes('notas')) : null;
 
     let caducado = false;
     let necesitaRetimbre = false;
@@ -362,14 +375,95 @@ export default function EquipoFormulario({
         });
     }, [formData[fabItem?.key || ''], formData[retItem?.key || ''], autoMsg, isExtintor, anoItem?.key]);
 
+    let caducadoBie = false;
+    let necesitaPruebaBie = false;
+    let autoMsgCaducadoBie = "";
+    let autoMsgHidraBie = "";
+
+    if (isBie) {
+        if (fabItemBie) {
+            const valFab = formData[fabItemBie.key as keyof EquipoInstalado] as string;
+            if (valFab) {
+                const today = new Date();
+                const dateFab = new Date(valFab);
+                if (!isNaN(dateFab.getTime())) {
+                    let diffYears = today.getFullYear() - dateFab.getFullYear();
+                    if (today.getMonth() < dateFab.getMonth() || (today.getMonth() === dateFab.getMonth() && today.getDate() < dateFab.getDate())) {
+                        diffYears--;
+                    }
+                    if (diffYears >= 20) {
+                        caducadoBie = true;
+                        autoMsgCaducadoBie = "Equipo caducado + de 20 años se debe sustituir tramo de manguera según normativa.";
+                    }
+                }
+            }
+        }
+
+        if (hidraulicaItemBie) {
+            const valHidra = formData[hidraulicaItemBie.key as keyof EquipoInstalado] as string;
+            if (valHidra) {
+                const today = new Date();
+                const dateHidra = new Date(valHidra);
+                if (!isNaN(dateHidra.getTime())) {
+                    let diffYears = today.getFullYear() - dateHidra.getFullYear();
+                    if (today.getMonth() < dateHidra.getMonth() || (today.getMonth() === dateHidra.getMonth() && today.getDate() < dateHidra.getDate())) {
+                        diffYears--;
+                    }
+                    if (diffYears >= 5) {
+                        necesitaPruebaBie = true;
+                        autoMsgHidraBie = "Se necesita realizar prueba hidráulica obligatoria cada 5 años.";
+                    }
+                }
+            }
+        }
+    }
+
+    // Efecto para autocompletar anomalias de BIE
+    useEffect(() => {
+        if (!isBie || !anoItemBie) return;
+        
+        setFormData(prev => {
+            const currentAno = (prev[anoItemBie.key as keyof EquipoInstalado] as string) || "";
+            const msgCaducado = "Equipo caducado + de 20 años se debe sustituir tramo de manguera según normativa.";
+            const msgHidra = "Se necesita realizar prueba hidráulica obligatoria cada 5 años.";
+            
+            let newVal = currentAno;
+            newVal = newVal.replace(msgCaducado, '').trim();
+            newVal = newVal.replace(msgHidra, '').trim();
+            newVal = newVal.replace(/\n\n+/g, '\n').trim();
+
+            if (autoMsgCaducadoBie) {
+                newVal = (newVal + (newVal ? "\n" : "") + autoMsgCaducadoBie).trim();
+            }
+            if (autoMsgHidraBie) {
+                newVal = (newVal + (newVal ? "\n" : "") + autoMsgHidraBie).trim();
+            }
+
+            if (newVal === currentAno) return prev; // Sin cambios
+            
+            return { ...prev, [anoItemBie.key]: newVal };
+        });
+    }, [
+        formData[fabItemBie?.key || ''], 
+        formData[hidraulicaItemBie?.key || ''], 
+        autoMsgCaducadoBie, 
+        autoMsgHidraBie, 
+        isBie, 
+        anoItemBie?.key
+    ]);
+
 
     // ── Render de cada campo según tipoRespuesta ──────────────────────────
 
     const renderField = (item: ItemPlantilla) => {
         const value = formData[item.key as keyof EquipoInstalado];
         const tipo = (item.tipoRespuesta as string) || 'texto';
-        const isErrorDate = (caducado || necesitaRetimbre || seAproxima) && (item.key === fabItem?.key || item.key === retItem?.key);
-        const isAnoFieldWithMsg = isExtintor && item.key === anoItem?.key && typeof value === 'string' && value.trim() !== '';
+        const isErrorDate = 
+            ((caducado || necesitaRetimbre || seAproxima) && (item.key === fabItem?.key || item.key === retItem?.key)) ||
+            (isBie && ((caducadoBie && item.key === fabItemBie?.key) || (necesitaPruebaBie && item.key === hidraulicaItemBie?.key)));
+        const isAnoFieldWithMsg = 
+            (isExtintor && item.key === anoItem?.key && typeof value === 'string' && value.trim() !== '') ||
+            (isBie && item.key === anoItemBie?.key && typeof value === 'string' && (value.includes("Equipo caducado + de 20 años") || value.includes("Se necesita realizar prueba hidráulica")));
 
         if (item.horizontal || tipo === 'pregunta-horizontal') {
             const isCheck = tipo === 'check';

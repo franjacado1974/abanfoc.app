@@ -456,9 +456,21 @@ export const generarActaExtintoresPDF = async (
 
     const checkItemsDeSistema = (checklistItemsPorSistema && sistemaId) ? checklistItemsPorSistema[sistemaId] : [];
 
+    const normalize = (str: string) => {
+      return (str || '')
+        .toLowerCase()
+        .replace(/[áäàâ]/g, 'a')
+        .replace(/[éëèê]/g, 'e')
+        .replace(/[íïìî]/g, 'i')
+        .replace(/[óöòô]/g, 'o')
+        .replace(/[úüùû]/g, 'u')
+        .replace(/ñ/g, 'n')
+        .trim();
+    };
+
     const findItem = (keywords: string[]) => checkItemsDeSistema.find(item => {
-      const lbl = (item.label || '').toLowerCase();
-      return keywords.some(k => lbl.includes(k));
+      const lbl = normalize(item.label || '');
+      return keywords.some(k => lbl.includes(normalize(k)));
     });
 
     const itemPlaca = findItem(['placa', 'industria']);
@@ -466,9 +478,9 @@ export const generarActaExtintoresPDF = async (
     const itemTipo = findItem(['tipo']);
     const itemLongitud = findItem(['longitud']);
     const itemFabricante = findItem(['fabricante', 'marca']);
-    const itemFechaFab = findItem(['fabricación', 'fabricacion', 'año', 'fecha fab']);
+    const itemFechaFab = findItem(['fabricacion', 'ano', 'fecha fab']);
     const itemRetimbre = findItem(['retimbre']);
-    const itemPruebaH = findItem(['prueba hidra', 'prueba hidráulica']);
+    const itemPruebaH = findItem(['prueba hidra', 'prueba hidraulica', 'hidraulica']);
 
     const fixedItemsKeys = [
         itemPlaca?.key, itemClase?.key, itemTipo?.key, itemLongitud?.key,
@@ -476,16 +488,15 @@ export const generarActaExtintoresPDF = async (
     ].filter(Boolean);
 
     const checkItems = (checkItemsDeSistema || []).filter(item => {
-      const lbl = (item.label || '').toLowerCase();
+      const lbl = normalize(item.label || '');
       const isNotas = lbl.includes('notas') || lbl.includes('observaciones') || lbl.includes('anomal');
       const isFixed = fixedItemsKeys.includes(item.key);
       const isExcluded = lbl.includes('orden de lista') || 
-                         lbl.includes('ubicación') || 
                          lbl.includes('ubicacion') || 
                          lbl.includes('sin uso') || 
                          lbl.includes('imagen') ||
-                         lbl.includes('fecha de revisi') || // Exclude from PDF
-                         lbl.includes('fecha revisi') ||    // Exclude from PDF
+                         lbl.includes('fecha de revision') || // Exclude from PDF
+                         lbl.includes('fecha revision') ||    // Exclude from PDF
                          item.tipoRespuesta === 'imagen' ||
                          item.tipoRespuesta === 'seccion'; // Excluir campos de imagen y secciones explícitamente
 

@@ -2,6 +2,7 @@ import React from 'react';
 import { CheckCircle2, XCircle, X, Pencil, Trash2 } from 'lucide-react';
 import type { CentroSistema, EquipoInstalado, Parte } from '../../Centros';
 import { updateEquipoInstalado, updateParte as updateParteFirestore, uploadFile, type ChecklistItem } from '../../firebase';
+import TableInput from '../TableInput';
 
 interface Props {
     sist: CentroSistema;
@@ -126,6 +127,19 @@ export default function SistemaDeteccion({
                                                                                      </div>
                                                                                  );
                                                                              }
+
+                                                                             if (tipo === 'tabla') {
+                                                                                return (
+                                                                                    <TableInput
+                                                                                        key={item.key}
+                                                                                        label={item.label}
+                                                                                        opciones={item.opciones || []}
+                                                                                        filasInicio={item.filasInicio}
+                                                                                        value={String(val || '')}
+                                                                                        onChange={(newVal) => handleCheckChange(eq.id, item.key, newVal)}
+                                                                                    />
+                                                                                );
+                                                                            }
 
                                                                             if (item.horizontal || tipo === 'pregunta-horizontal') {
                                                    const isCheck = tipo === 'check';

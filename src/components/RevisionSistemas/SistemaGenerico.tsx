@@ -2,6 +2,7 @@ import React from 'react';
 import { CheckCircle2, XCircle, X, Pencil, Trash2 } from 'lucide-react';
 import type { CentroSistema, EquipoInstalado, Parte } from '../../Centros';
 import { updateEquipoInstalado, updateParte as updateParteFirestore, uploadFile, type ChecklistItem } from '../../firebase';
+import TableInput from '../TableInput';
 
 interface Props {
     sist: CentroSistema;
@@ -116,6 +117,19 @@ export default function SistemaGenerico({
                                                                                      <div key={item.key} className="col-span-full border-b border-slate-200 pb-1.5 pt-4 mb-2 flex items-center justify-between">
                                                                                          <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">{item.label}</span>
                                                                                      </div>
+                                                                                 );
+                                                                             }
+
+                                                                             if (tipo === 'tabla') {
+                                                                                 return (
+                                                                                     <TableInput
+                                                                                         key={item.key}
+                                                                                         label={item.label}
+                                                                                         opciones={item.opciones || []}
+                                                                                         filasInicio={item.filasInicio}
+                                                                                         value={String(val || '')}
+                                                                                         onChange={(newVal) => handleCheckChange(eq.id, item.key, newVal)}
+                                                                                     />
                                                                                  );
                                                                              }
 

@@ -130,6 +130,7 @@ export default function RevisionChecklist() {
                     label: item.label,
                     tipoRespuesta: item.tipoRespuesta,
                     opciones: item.opciones || [],
+                    filasInicio: item.filasInicio,
                     sistemaId: sist.id,
                     sistemaNombre: sistemaNombre,
                     orden: item.orden,
@@ -330,6 +331,13 @@ export default function RevisionChecklist() {
                     const retItem = itemsToUse.find(i => (i.label||'').toLowerCase().includes('retimbre'));
                     const anoItem = itemsToUse.find(i => (i.label||'').toLowerCase().includes('anomal') || (i.label||'').toLowerCase().includes('observacion'));
 
+                    if (fabItem && checkKey === fabItem.key) {
+                        updated.fechaFabricacion = value ? String(value) : '';
+                    }
+                    if (retItem && checkKey === retItem.key) {
+                        updated.ultimoRetimbre = value ? String(value) : '';
+                    }
+
                     if (anoItem && fabItem) {
                         const valFab = updated[fabItem.key as keyof EquipoInstalado] as string;
                         const valRet = retItem ? updated[retItem.key as keyof EquipoInstalado] as string : null;
@@ -367,6 +375,77 @@ export default function RevisionChecklist() {
                         (updated as any)[anoItem.key] = currentAno;
                     }
                 }
+
+                // Lógica de BIES
+                const isBie = (sistema?.tipo || sistema?.familia || '').toLowerCase().includes('bie') || (sistema?.tipo || sistema?.familia || '').toLowerCase().includes('boca');
+                if (isBie) {
+                    const itemsToUse = checklistItemsPorSistema[eq.sistemaId] || [];
+                    const fabItem = itemsToUse.find(i => (i.label||'').toLowerCase().includes('fabricaci'));
+                    const hidraulicaItem = itemsToUse.find(i => {
+                        const lbl = (i.label||'').toLowerCase();
+                        return lbl.includes('hidra') || lbl.includes('prueba');
+                    });
+                    const anoItem = itemsToUse.find(i => (i.label||'').toLowerCase().includes('anomal') || (i.label||'').toLowerCase().includes('observacion') || (i.label||'').toLowerCase().includes('notas'));
+
+                    if (fabItem && checkKey === fabItem.key) {
+                        updated.fechaFabricacion = value ? String(value) : '';
+                    }
+                    if (hidraulicaItem && checkKey === hidraulicaItem.key) {
+                        updated.pruebaHidraulica = value ? String(value) : '';
+                    }
+
+                    if (anoItem && (fabItem || hidraulicaItem)) {
+                        const valFab = fabItem ? updated[fabItem.key as keyof EquipoInstalado] as string : null;
+                        const valHidra = hidraulicaItem ? updated[hidraulicaItem.key as keyof EquipoInstalado] as string : null;
+                        let autoMsgCaducado = "";
+                        let autoMsgHidra = "";
+
+                        const today = new Date();
+
+                        if (valFab) {
+                            const dateFab = new Date(valFab);
+                            if (!isNaN(dateFab.getTime())) {
+                                let diffYears = today.getFullYear() - dateFab.getFullYear();
+                                if (today.getMonth() < dateFab.getMonth() || (today.getMonth() === dateFab.getMonth() && today.getDate() < dateFab.getDate())) {
+                                    diffYears--;
+                                }
+                                if (diffYears >= 20) {
+                                    autoMsgCaducado = "Equipo caducado + de 20 años se debe sustituir tramo de manguera según normativa.";
+                                }
+                            }
+                        }
+
+                        if (valHidra) {
+                            const dateHidra = new Date(valHidra);
+                            if (!isNaN(dateHidra.getTime())) {
+                                let diffYears = today.getFullYear() - dateHidra.getFullYear();
+                                if (today.getMonth() < dateHidra.getMonth() || (today.getMonth() === dateHidra.getMonth() && today.getDate() < dateHidra.getDate())) {
+                                    diffYears--;
+                                }
+                                if (diffYears >= 5) {
+                                    autoMsgHidra = "Se necesita realizar prueba hidráulica obligatoria cada 5 años.";
+                                }
+                            }
+                        }
+
+                        let currentAno = (updated[anoItem.key as keyof EquipoInstalado] as string) || "";
+                        const msgCaducado = "Equipo caducado + de 20 años se debe sustituir tramo de manguera según normativa.";
+                        const msgHidra = "Se necesita realizar prueba hidráulica obligatoria cada 5 años.";
+                        
+                        currentAno = currentAno.replace(msgCaducado, '').trim();
+                        currentAno = currentAno.replace(msgHidra, '').trim();
+                        currentAno = currentAno.replace(/\n\n+/g, '\n').trim();
+
+                        if (autoMsgCaducado) {
+                            currentAno = (currentAno + (currentAno ? "\n" : "") + autoMsgCaducado).trim();
+                        }
+                        if (autoMsgHidra) {
+                            currentAno = (currentAno + (currentAno ? "\n" : "") + autoMsgHidra).trim();
+                        }
+                        (updated as any)[anoItem.key] = currentAno;
+                    }
+                }
+
                 
                 // Si es un check booleano y tenemos el label, auto-gestionar anomalías
                 if (typeof value === 'boolean' && checkLabel) {
@@ -1044,7 +1123,7 @@ export default function RevisionChecklist() {
                                                     (() => {
                                                         const sistLower = (sist.tipo || sist.familia || '').toLowerCase();
                                                         const isExtintor = sistLower.includes('extintor');
-                                                        const isBie = sistLower.includes('bie');
+                                                        const isBie = sistLower.includes('bie') || sistLower.includes('boca');
                                                         const isDeteccion = sistLower.includes('detecci');
 
                                                         const commonProps = {

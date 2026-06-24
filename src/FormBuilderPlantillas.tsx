@@ -18,7 +18,8 @@ import { useState, useEffect } from 'react';
 import {
   Plus, Trash2, Save, ChevronUp, ChevronDown,
   GripVertical, AlertCircle,
-  ClipboardList, Edit3, X, Loader, Copy, Image
+  ClipboardList, Edit3, X, Loader, Copy, Image,
+  Table
 } from 'lucide-react';
 import {
   subscribePlantillas, subscribeItemsDePlantilla,
@@ -37,7 +38,8 @@ interface ItemLocal {
   orden: number;
   tipoRespuesta: TipoRespuestaChecklist;
   requerido: boolean;
-  opciones?: string[];  // Opciones para desplegable
+  opciones?: string[];  // Opciones para desplegable y tabla (cabeceras)
+  filasInicio?: number; // Filas iniciales para tabla
   horizontal?: boolean; // true = label a la izquierda, campo a la derecha
   esNuevo?: boolean;    // true si aún no se ha guardado en Firestore
 }
@@ -80,6 +82,12 @@ export default function FormBuilderPlantillas() {
   const [guardando, setGuardando] = useState(false);
   const [mensaje, setMensaje] = useState<{ tipo: 'ok' | 'error'; texto: string } | null>(null);
   const [inicializado, setInicializado] = useState(false);
+
+  // Estados para modal "Crear tabla"
+  const [modalTablaOpen, setModalTablaOpen] = useState(false);
+  const [tablaNombre, setTablaNombre] = useState('Tabla');
+  const [tablaColumnas, setTablaColumnas] = useState(3);
+  const [tablaFilas, setTablaFilas] = useState(4);
 
   // ─── SUSCRIPCIONES ────────────────────────────────────────────────────────
 
@@ -232,6 +240,42 @@ export default function FormBuilderPlantillas() {
     }
   };
 
+  const handleCrearTabla = () => {
+    if (!plantillaSeleccionada) return;
+    setTablaNombre('Tabla de Equipos');
+    setTablaColumnas(3);
+    setTablaFilas(4);
+    setModalTablaOpen(true);
+  };
+
+  const handleCrearTablaConfirm = async () => {
+    if (!plantillaSeleccionada) return;
+    
+    // Crear cabeceras por defecto
+    const opcionesCabeceras = Array.from({ length: tablaColumnas }, (_, i) => `Columna ${i + 1}`);
+    
+    const nuevoOrden = items.length + 1;
+    const nuevoItem = {
+      plantillaId: plantillaSeleccionada,
+      label: tablaNombre.trim() || 'Tabla',
+      key: `table_${Date.now()}`,
+      orden: nuevoOrden,
+      tipoRespuesta: 'tabla',
+      requerido: false,
+      opciones: opcionesCabeceras,
+      filasInicio: tablaFilas,
+    } as any;
+    
+    try {
+      await addItemAPlantilla(nuevoItem);
+      setModalTablaOpen(false);
+      mostrarMensaje('ok', 'Tabla añadida al checklist');
+    } catch (e) {
+      console.error(e);
+      mostrarMensaje('error', 'Error al crear la tabla');
+    }
+  };
+
   const handleUpdateItem = async (itemId: string, cambios: Partial<ItemPlantillaInput>) => {
     if (!plantillaSeleccionada) return;
     try {
@@ -268,6 +312,7 @@ export default function FormBuilderPlantillas() {
         tipoRespuesta: item.tipoRespuesta,
         requerido: item.requerido,
         opciones: item.opciones || [],
+        filasInicio: item.filasInicio,
         horizontal: item.horizontal === true,
       });
       // Si es el item que estamos copiando, insertamos la copia justo después
@@ -280,6 +325,7 @@ export default function FormBuilderPlantillas() {
           tipoRespuesta: item.tipoRespuesta,
           requerido: item.requerido,
           opciones: item.opciones || [],
+          filasInicio: item.filasInicio,
           horizontal: item.horizontal === true,
         });
       }
@@ -320,6 +366,7 @@ export default function FormBuilderPlantillas() {
       tipoRespuesta: item.tipoRespuesta,
       requerido: item.requerido,
       opciones: item.opciones || [],
+      filasInicio: item.filasInicio,
       horizontal: item.horizontal === true,
     }));
 
@@ -367,6 +414,7 @@ export default function FormBuilderPlantillas() {
       imagen: 'bg-pink-100 text-pink-700 border-pink-200',
       desplegable: 'bg-orange-100 text-orange-700 border-orange-200',
       seccion: 'bg-zinc-200 text-zinc-800 border-zinc-300',
+      tabla: 'bg-indigo-100 text-indigo-700 border-indigo-200',
     };
     const labels: Record<string, string> = {
       check: 'Check',
@@ -377,6 +425,7 @@ export default function FormBuilderPlantillas() {
       imagen: 'Imagen',
       desplegable: 'Desplegable',
       seccion: 'Sección',
+      tabla: 'Tabla',
     };
     return (
       <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${estilos[tipo] || 'bg-zinc-100 text-zinc-600 border-zinc-200'}`}>
@@ -474,6 +523,37 @@ export default function FormBuilderPlantillas() {
             <span className="text-xs font-bold text-zinc-700 uppercase tracking-wide">{item.label || 'Separador de Sección'}</span>
           </div>
         );
+      case 'tabla':
+        const headers = item.opciones || [];
+        const rowsCount = item.filasInicio || 3;
+        return (
+          <div className="flex flex-col gap-1 w-full col-span-full">
+            <label className="text-[10px] font-semibold text-zinc-500">{item.label}</label>
+            <div className="border border-zinc-200 rounded-lg overflow-hidden w-full bg-white">
+              <table className="w-full text-[10px] text-left border-collapse">
+                <thead>
+                  <tr className="bg-black text-white">
+                    {headers.map((h, i) => (
+                      <th key={i} className="px-2 py-1 font-bold border-r border-zinc-800 last:border-r-0 uppercase text-[8px]">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {Array.from({ length: rowsCount }).map((_, rIdx) => (
+                    <tr key={rIdx} className="border-b border-zinc-100 last:border-b-0">
+                      {headers.map((_, cIdx) => (
+                        <td key={cIdx} className="px-2 py-1 border-r border-zinc-100 last:border-r-0 text-zinc-400">...</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="px-2 py-1 bg-zinc-50 border-t border-zinc-100 flex justify-end">
+                <span className="text-[8px] bg-white border border-zinc-200 text-indigo-600 px-1.5 py-0.5 rounded font-bold shadow-sm">+ Añadir fila</span>
+              </div>
+            </div>
+          </div>
+        );
     }
   };
 
@@ -485,6 +565,10 @@ export default function FormBuilderPlantillas() {
           <span className="text-xs font-bold text-zinc-700 uppercase tracking-wide">{item.label || 'Separador de Sección'}</span>
         </div>
       );
+    }
+
+    if (item.tipoRespuesta === 'tabla') {
+      return renderInputPreview(item);
     }
 
     // Si tiene horizontal activado, se renderiza en línea horizontal
@@ -710,6 +794,13 @@ export default function FormBuilderPlantillas() {
                   <Plus className="w-3.5 h-3.5" /> Añadir pregunta
                 </button>
 
+                <button
+                  onClick={handleCrearTabla}
+                  className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm"
+                >
+                  <Table className="w-3.5 h-3.5" /> Crear tabla
+                </button>
+
                 <div className="flex-1" />
 
                 <button
@@ -817,6 +908,7 @@ export default function FormBuilderPlantillas() {
                             <option value="fecha">📅 Fecha</option>
                             <option value="imagen">🖼️ Imagen</option>
                             <option value="desplegable">🔽 Desplegable</option>
+                            <option value="tabla">📊 Tabla</option>
                             <option value="seccion">📁 Sección / Separador</option>
                           </select>
 
@@ -872,6 +964,29 @@ export default function FormBuilderPlantillas() {
                                 opciones={item.opciones || []} 
                                 onUpdate={(opts) => handleUpdateItem(item.id, { opciones: opts })} 
                               />
+                            </div>
+                          )}
+
+                          {item.tipoRespuesta === 'tabla' && (
+                            <div className="pl-14 pr-2 space-y-2">
+                              <div>
+                                <label className="text-[10px] font-semibold text-zinc-500 mb-1 block">Cabeceras de la tabla (separadas por comas)</label>
+                                <OpcionesInput 
+                                  opciones={item.opciones || []} 
+                                  onUpdate={(opts) => handleUpdateItem(item.id, { opciones: opts })} 
+                                />
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <label className="text-[10px] font-semibold text-zinc-500">Filas Iniciales:</label>
+                                <input
+                                  type="number"
+                                  min={1}
+                                  max={50}
+                                  value={item.filasInicio || 4}
+                                  onChange={(e) => handleUpdateItem(item.id, { filasInicio: Math.max(1, parseInt(e.target.value) || 1) })}
+                                  className="w-16 px-2 py-1 bg-white border border-zinc-200 rounded-md text-xs outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500/20"
+                                />
+                              </div>
                             </div>
                           )}
                         </div>
@@ -945,7 +1060,7 @@ export default function FormBuilderPlantillas() {
                       {items.map((item, idx) => {
                         const isSeccion = item.tipoRespuesta === 'seccion';
                         const isHorizontal = item.horizontal === true;
-                        const isFullWidth = isSeccion || isHorizontal;
+                        const isFullWidth = isSeccion || isHorizontal || item.tipoRespuesta === 'tabla';
                         return (
                           <div key={item.id} className={`flex items-start gap-2 ${isFullWidth ? 'col-span-full mt-2' : ''}`}>
                             {!isFullWidth && (
@@ -970,6 +1085,73 @@ export default function FormBuilderPlantillas() {
           )}
         </main>
       </div>
+
+      {/* ── MODAL: CONFIGURAR TABLA ────────────────────────────────────────── */}
+      {modalTablaOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl border border-zinc-200 shadow-xl max-w-sm w-full overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="px-5 py-4 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white flex items-center justify-between">
+              <h3 className="text-sm font-bold uppercase tracking-wider">Configurar Nueva Tabla</h3>
+              <button onClick={() => setModalTablaOpen(false)} className="p-1 hover:bg-white/20 rounded-lg transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">Nombre de la tabla</label>
+                <input
+                  type="text"
+                  value={tablaNombre}
+                  onChange={(e) => setTablaNombre(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-zinc-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20"
+                  placeholder="Ej: Equipos del Sistema"
+                />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">Columnas</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={15}
+                    value={tablaColumnas}
+                    onChange={(e) => setTablaColumnas(Math.max(1, parseInt(e.target.value) || 1))}
+                    className="w-full px-3 py-2 bg-white border border-zinc-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">Filas Iniciales</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={50}
+                    value={tablaFilas}
+                    onChange={(e) => setTablaFilas(Math.max(1, parseInt(e.target.value) || 1))}
+                    className="w-full px-3 py-2 bg-white border border-zinc-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20"
+                  />
+                </div>
+              </div>
+            </div>
+            
+            <div className="px-5 py-3.5 bg-zinc-50 border-t border-zinc-100 flex items-center justify-end gap-2">
+              <button
+                onClick={() => setModalTablaOpen(false)}
+                className="px-3.5 py-2 bg-white hover:bg-zinc-50 text-zinc-600 border border-zinc-200 rounded-xl text-xs font-bold transition-all shadow-sm"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleCrearTablaConfirm}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm"
+              >
+                Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

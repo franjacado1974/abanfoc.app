@@ -45,7 +45,7 @@ import { db } from './firebase';
 
 // ─── TIPOS ───────────────────────────────────────────────────────────────────
 
-export type TipoRespuestaChecklist = 'check' | 'texto' | 'texto-largo' | 'numero' | 'fecha' | 'imagen' | 'desplegable' | 'seccion';
+export type TipoRespuestaChecklist = 'check' | 'texto' | 'texto-largo' | 'numero' | 'fecha' | 'imagen' | 'desplegable' | 'seccion' | 'tabla';
 
 /** Ítem individual dentro de una plantilla de checklist */
 export interface ItemPlantilla {
@@ -56,7 +56,8 @@ export interface ItemPlantilla {
   orden: number;
   tipoRespuesta: TipoRespuestaChecklist;
   requerido: boolean;
-  opciones?: string[]; // Para tipo 'desplegable'
+  opciones?: string[]; // Para tipo 'desplegable' y 'tabla' (cabeceras de columna)
+  filasInicio?: number; // Cantidad inicial de filas para 'tabla'
   horizontal?: boolean; // Si es true, se muestra en línea horizontal (label + campo)
   createdAt?: string;
   updatedAt?: string;
@@ -255,6 +256,7 @@ export async function getItemsDePlantilla(plantillaId: string): Promise<ItemPlan
         tipoRespuesta: data.tipoRespuesta || 'check',
         requerido: data.requerido !== false,
         opciones: data.opciones || [],
+        filasInicio: data.filasInicio,
         horizontal: data.horizontal === true,
         createdAt: data.createdAt || '',
         updatedAt: data.updatedAt || '',
@@ -266,18 +268,28 @@ export async function getItemsDePlantilla(plantillaId: string): Promise<ItemPlan
   }
 }
 
+function cleanUndefined<T extends object>(obj: T): T {
+  const newObj = { ...obj } as any;
+  Object.keys(newObj).forEach((key) => {
+    if (newObj[key] === undefined) {
+      delete newObj[key];
+    }
+  });
+  return newObj;
+}
+
 /**
  * Añade un ítem a una plantilla.
  */
 export async function addItemAPlantilla(input: ItemPlantillaInput): Promise<ItemPlantilla> {
   try {
     const col = collection(db, COLECCION_PLANTILLAS, input.plantillaId, SUBCOLECCION_ITEMS);
-    const data = {
+    const data = cleanUndefined({
       ...input,
       requerido: input.requerido !== false,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-    };
+    });
     const ref = await addDoc(col, data);
     return { id: ref.id, ...data };
   } catch (e) {
@@ -296,10 +308,10 @@ export async function updateItemDePlantilla(
 ): Promise<void> {
   try {
     const ref = doc(db, COLECCION_PLANTILLAS, plantillaId, SUBCOLECCION_ITEMS, itemId);
-    await updateDoc(ref, {
+    await updateDoc(ref, cleanUndefined({
       ...input,
       updatedAt: new Date().toISOString(),
-    });
+    }));
   } catch (e) {
     console.error('updateItemDePlantilla error:', e);
     throw e;
@@ -343,6 +355,7 @@ export function subscribeItemsDePlantilla(
             tipoRespuesta: data.tipoRespuesta || 'check',
             requerido: data.requerido !== false,
             opciones: data.opciones || [],
+            filasInicio: data.filasInicio,
             horizontal: data.horizontal === true,
             createdAt: data.createdAt || '',
             updatedAt: data.updatedAt || '',
@@ -458,7 +471,7 @@ export async function reemplazarItemsDePlantilla(
     for (let i = 0; i < nuevosItems.length; i++) {
       const item = nuevosItems[i];
       const itemRef = doc(itemsCol);
-      const itemData = {
+      const itemData = cleanUndefined({
         label: item.label,
         key: item.key,
         plantillaId,
@@ -466,10 +479,11 @@ export async function reemplazarItemsDePlantilla(
         tipoRespuesta: item.tipoRespuesta || 'check',
         requerido: item.requerido !== false,
         opciones: item.opciones || [],
+        filasInicio: item.filasInicio,
         horizontal: item.horizontal === true,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-      };
+      });
       batch.set(itemRef, itemData);
       createdItems.push({ id: itemRef.id, ...itemData });
     }
@@ -614,7 +628,7 @@ export async function duplicarPlantilla(plantillaId: string): Promise<Plantilla>
       const itemsCol = collection(db, COLECCION_PLANTILLAS, nuevaPlantillaId, SUBCOLECCION_ITEMS);
       itemsOriginales.forEach((item) => {
         const itemRef = doc(itemsCol);
-        batch.set(itemRef, {
+        batch.set(itemRef, cleanUndefined({
           plantillaId: nuevaPlantillaId,
           label: item.label,
           key: item.key,
@@ -622,10 +636,11 @@ export async function duplicarPlantilla(plantillaId: string): Promise<Plantilla>
           tipoRespuesta: item.tipoRespuesta,
           requerido: item.requerido,
           opciones: item.opciones || [],
+          filasInicio: item.filasInicio,
           horizontal: item.horizontal === true,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
-        });
+        }));
       });
       await batch.commit();
     }
