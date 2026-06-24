@@ -45,7 +45,7 @@ import { db } from './firebase';
 
 // ─── TIPOS ───────────────────────────────────────────────────────────────────
 
-export type TipoRespuestaChecklist = 'check' | 'texto' | 'texto-largo' | 'numero' | 'fecha' | 'imagen' | 'desplegable' | 'seccion' | 'tabla';
+export type TipoRespuestaChecklist = 'check' | 'texto' | 'texto-largo' | 'numero' | 'fecha' | 'imagen' | 'desplegable' | 'seccion' | 'tabla' | 'seleccion';
 
 /** Ítem individual dentro de una plantilla de checklist */
 export interface ItemPlantilla {

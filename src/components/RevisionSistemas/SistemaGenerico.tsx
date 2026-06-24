@@ -139,11 +139,12 @@ export default function SistemaGenerico({
                                                                                   const isFecha = tipo === 'fecha';
                                                                                   const isTextoLargo = tipo === 'texto-largo';
                                                                                   const isDesplegable = tipo === 'desplegable';
+                                                                                  const isSeleccion = tipo === 'seleccion';
                                                                                   
                                                                                   return (
                                                                                       <div key={item.key} className="col-span-full border-b border-slate-100 pb-2 pt-2 flex items-center justify-between gap-4">
                                                                                           <span className="text-xs font-semibold text-slate-700">{item.label}</span>
-                                                                                          <div className="w-48 shrink-0">
+                                                                                          <div className={`${isSeleccion ? 'w-auto' : 'w-48'} shrink-0 flex justify-end`}>
                                                                                               {isCheck ? (
                                                                                                   (() => {
                                                                                                       const isChecked = val === true || (typeof val === 'string' && val.toLowerCase() === 'true');
@@ -223,6 +224,31 @@ export default function SistemaGenerico({
                                                                                                                   <option key={idx} value={opt}>{opt}</option>
                                                                                                               ))}
                                                                                                           </select>
+                                                                                                      );
+                                                                                                  })()
+                                                                                              ) : isSeleccion ? (
+                                                                                                  (() => {
+                                                                                                      const opciones = (item as any).opciones || ['Sí', 'No', 'N/A'];
+                                                                                                      return (
+                                                                                                          <div className="flex gap-1.5 flex-wrap justify-end">
+                                                                                                              {opciones.map((opt: string, idx: number) => {
+                                                                                                                  const isSelected = val === opt;
+                                                                                                                  return (
+                                                                                                                      <button
+                                                                                                                          key={idx}
+                                                                                                                          type="button"
+                                                                                                                          onClick={() => handleCheckChange(eq.id, item.key, isSelected ? '' : opt, item.label)}
+                                                                                                                          className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer select-none shadow-sm ${
+                                                                                                                              isSelected
+                                                                                                                                  ? 'bg-indigo-600 text-white border-indigo-600 font-bold scale-105'
+                                                                                                                                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                                                                                                                          }`}
+                                                                                                                      >
+                                                                                                                          {opt}
+                                                                                                                      </button>
+                                                                                                                  );
+                                                                                                              })}
+                                                                                                          </div>
                                                                                                       );
                                                                                                   })()
                                                                                               ) : (
@@ -373,6 +399,32 @@ export default function SistemaGenerico({
                                                                                                  <option key={idx} value={opt}>{opt}</option>
                                                                                              ))}
                                                                                          </select>
+                                                                                     </div>
+                                                                                 );
+                                                                             } else if (tipo === 'seleccion') {
+                                                                                 const opciones = (item as any).opciones || ['Sí', 'No', 'N/A'];
+                                                                                 return (
+                                                                                     <div key={item.key} className="flex flex-col gap-1 col-span-2">
+                                                                                         <label className="text-[10px] font-semibold text-slate-500">{item.label}</label>
+                                                                                         <div className="flex gap-1.5 flex-wrap">
+                                                                                             {opciones.map((opt: string, idx: number) => {
+                                                                                                 const isSelected = val === opt;
+                                                                                                 return (
+                                                                                                     <button
+                                                                                                         key={idx}
+                                                                                                         type="button"
+                                                                                                         onClick={() => handleCheckChange(eq.id, item.key, isSelected ? '' : opt, item.label)}
+                                                                                                         className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer select-none shadow-sm ${
+                                                                                                             isSelected
+                                                                                                                 ? 'bg-indigo-600 text-white border-indigo-600 font-bold scale-105'
+                                                                                                                 : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                                                                                                         }`}
+                                                                                                     >
+                                                                                                         {opt}
+                                                                                                     </button>
+                                                                                                 );
+                                                                                             })}
+                                                                                         </div>
                                                                                      </div>
                                                                                  );
                                                                              }

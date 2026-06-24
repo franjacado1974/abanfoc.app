@@ -415,6 +415,7 @@ export default function FormBuilderPlantillas() {
       desplegable: 'bg-orange-100 text-orange-700 border-orange-200',
       seccion: 'bg-zinc-200 text-zinc-800 border-zinc-300',
       tabla: 'bg-indigo-100 text-indigo-700 border-indigo-200',
+      seleccion: 'bg-violet-100 text-violet-700 border-violet-200',
     };
     const labels: Record<string, string> = {
       check: 'Check',
@@ -426,6 +427,7 @@ export default function FormBuilderPlantillas() {
       desplegable: 'Desplegable',
       seccion: 'Sección',
       tabla: 'Tabla',
+      seleccion: 'Selección',
     };
     return (
       <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${estilos[tipo] || 'bg-zinc-100 text-zinc-600 border-zinc-200'}`}>
@@ -515,6 +517,27 @@ export default function FormBuilderPlantillas() {
                 <option key={i} value={opt}>{opt}</option>
               ))}
             </select>
+          </div>
+        );
+      case 'seleccion':
+        const opcionesSel = item.opciones && item.opciones.length > 0 ? item.opciones : ['Sí', 'No', 'N/A'];
+        return (
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] font-semibold text-zinc-500">{item.label}</label>
+            <div className="flex gap-1.5 flex-wrap">
+              {opcionesSel.map((opt, i) => (
+                <span
+                  key={i}
+                  className={`px-3 py-1.5 text-xs rounded-lg border text-center font-semibold shadow-sm transition-all select-none ${
+                    i === 0 
+                      ? 'bg-indigo-600 text-white border-indigo-600 font-bold' 
+                      : 'bg-white text-zinc-600 border-zinc-200'
+                  }`}
+                >
+                  {opt}
+                </span>
+              ))}
+            </div>
           </div>
         );
       case 'seccion':
@@ -631,6 +654,22 @@ export default function FormBuilderPlantillas() {
                   <option key={i} value={opt}>{opt}</option>
                 ))}
               </select>
+            )}
+            {innerType === 'seleccion' && (
+              <div className="flex gap-1 flex-wrap justify-end">
+                {(item.opciones && item.opciones.length > 0 ? item.opciones : ['Sí', 'No', 'N/A']).map((opt, i) => (
+                  <span
+                    key={i}
+                    className={`px-2.5 py-1 text-[10px] rounded-lg border text-center font-semibold shadow-sm transition-all select-none ${
+                      i === 0 
+                        ? 'bg-indigo-600 text-white border-indigo-600 font-bold' 
+                        : 'bg-white text-zinc-600 border-zinc-200'
+                    }`}
+                  >
+                    {opt}
+                  </span>
+                ))}
+              </div>
             )}
           </div>
         </div>
@@ -898,7 +937,14 @@ export default function FormBuilderPlantillas() {
                           {/* ── Selector de tipo de respuesta ──────────────── */}
                           <select
                             value={item.tipoRespuesta}
-                            onChange={e => handleUpdateItem(item.id, { tipoRespuesta: e.target.value as TipoRespuestaChecklist })}
+                            onChange={e => {
+                              const nuevoTipo = e.target.value as TipoRespuestaChecklist;
+                              const cambios: any = { tipoRespuesta: nuevoTipo };
+                              if (nuevoTipo === 'seleccion' && (!item.opciones || item.opciones.length === 0)) {
+                                cambios.opciones = ['Sí', 'No', 'N/A'];
+                              }
+                              handleUpdateItem(item.id, cambios);
+                            }}
                             className="text-[10px] bg-white border border-zinc-200 rounded-lg px-2 py-2 outline-none focus:border-teal-500 text-zinc-600 font-medium cursor-pointer hover:border-zinc-300 transition-colors"
                           >
                             <option value="check">✓ Check</option>
@@ -908,6 +954,7 @@ export default function FormBuilderPlantillas() {
                             <option value="fecha">📅 Fecha</option>
                             <option value="imagen">🖼️ Imagen</option>
                             <option value="desplegable">🔽 Desplegable</option>
+                            <option value="seleccion">🔘 Selección (Botones)</option>
                             <option value="tabla">📊 Tabla</option>
                             <option value="seccion">📁 Sección / Separador</option>
                           </select>
@@ -956,10 +1003,12 @@ export default function FormBuilderPlantillas() {
                           </button>
                           </div>
                           
-                          {/* ── Editor de opciones para desplegable ───────── */}
-                          {item.tipoRespuesta === 'desplegable' && (
+                          {/* ── Editor de opciones para desplegable y selección ── */}
+                          {(item.tipoRespuesta === 'desplegable' || item.tipoRespuesta === 'seleccion') && (
                             <div className="pl-14 pr-2">
-                              <label className="text-[10px] font-semibold text-zinc-500 mb-1 block">Opciones del desplegable (separadas por comas)</label>
+                              <label className="text-[10px] font-semibold text-zinc-500 mb-1 block">
+                                {item.tipoRespuesta === 'seleccion' ? 'Opciones de selección (separadas por comas)' : 'Opciones del desplegable (separadas por comas)'}
+                              </label>
                               <OpcionesInput 
                                 opciones={item.opciones || []} 
                                 onUpdate={(opts) => handleUpdateItem(item.id, { opciones: opts })} 
