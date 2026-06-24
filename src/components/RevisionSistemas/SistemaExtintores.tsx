@@ -144,7 +144,7 @@ export default function SistemaExtintores({
                                                    return (
                                                        <div key={item.key} className="col-span-full border-b border-slate-100 pb-2 pt-2 flex items-center justify-between gap-4">
                                                            <span className="text-xs font-semibold text-slate-700">{item.label}</span>
-                                                           <div className={`${isSeleccion ? 'w-auto' : 'w-48'} shrink-0 flex justify-end`}>
+                                                            <div className={`${(isSeleccion || isDesplegable) ? 'w-auto' : 'w-48'} shrink-0 flex justify-end`}>
                                                                {isCheck ? (
                                                                    (() => {
                                                                        const isChecked = val === true || (typeof val === 'string' && val.toLowerCase() === 'true');
@@ -217,7 +217,7 @@ export default function SistemaExtintores({
                                                                            <select
                                                                                value={typeof val === 'string' ? val : ''}
                                                                                onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value)}
-                                                                               className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-slate-500"
+                                                                               className="w-auto min-w-[110px] px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-slate-500"
                                                                            >
                                                                                <option value="">Selecciona...</option>
                                                                                {opciones.map((opt: string, idx: number) => (

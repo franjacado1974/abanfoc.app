@@ -152,7 +152,7 @@ export default function SistemaDeteccion({
                                                    return (
                                                         <div key={item.key} className="col-span-full border-b border-slate-300 py-1.5 flex items-center justify-between gap-4 min-h-[38px]">
                                                            <span className="text-xs font-normal text-slate-600">{item.label}</span>
-                                                           <div className={`${isSeleccion ? 'w-auto' : 'w-48'} shrink-0 flex justify-end`}>
+                                                            <div className={`${(isSeleccion || isDesplegable) ? 'w-auto' : 'w-48'} shrink-0 flex justify-end`}>
                                                                {isCheck ? (
                                                                    (() => {
                                                                        const isChecked = val === true || (typeof val === 'string' && val.toLowerCase() === 'true');
