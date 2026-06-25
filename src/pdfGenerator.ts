@@ -2,6 +2,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { extintorBase64 } from './icono_extintor';
 import { biesBase64 } from './icono_bies';
+import { getSistemasCategorias } from './firebase';
 
 const MESES = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -34,14 +35,27 @@ export const obtenerDatosEmpresa = () => cargaDatosEmpresa();
 
 const fetchImageToBase64 = async (urlOrBase64: string | null | undefined): Promise<string | null> => {
   if (!urlOrBase64) return null;
+  if (urlOrBase64.startsWith('data:')) {
+    return urlOrBase64;
+  }
   if (urlOrBase64.startsWith('http')) {
     try {
-      const response = await fetch(urlOrBase64);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      const response = await fetch(urlOrBase64, { signal: controller.signal });
+      clearTimeout(timeoutId);
       if (response.ok) {
         const blob = await response.blob();
-        return await new Promise<string>((resolve) => {
+        return await new Promise<string | null>((resolve) => {
           const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
+          reader.onloadend = () => {
+            if (typeof reader.result === 'string') {
+              resolve(reader.result);
+            } else {
+              resolve(null);
+            }
+          };
+          reader.onerror = () => resolve(null);
           reader.readAsDataURL(blob);
         });
       }
@@ -49,30 +63,52 @@ const fetchImageToBase64 = async (urlOrBase64: string | null | undefined): Promi
       console.error("Error fetching image via fetch():", e);
     }
     // Fallback si falla el fetch (ej. CORS)
-    return await new Promise<string | null>((resolve) => {
-      const img = new Image();
-      img.crossOrigin = 'Anonymous';
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.width;
-        canvas.height = img.height;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(img, 0, 0);
-          try {
-            resolve(canvas.toDataURL('image/png'));
-          } catch(err) {
-            resolve(urlOrBase64);
-          }
-        } else {
+    try {
+      return await new Promise<string | null>((resolve) => {
+        const img = new Image();
+        img.crossOrigin = 'Anonymous';
+        const timeoutId = setTimeout(() => {
+          img.src = '';
           resolve(null);
-        }
-      };
-      img.onerror = () => resolve(urlOrBase64);
-      img.src = urlOrBase64;
-    });
+        }, 4000);
+        img.onload = () => {
+          clearTimeout(timeoutId);
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width;
+          canvas.height = img.height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0);
+            try {
+              resolve(canvas.toDataURL('image/jpeg', 0.8));
+            } catch (err) {
+              console.error("Error converting canvas to base64:", err);
+              resolve(null);
+            }
+          } else {
+            resolve(null);
+          }
+        };
+        img.onerror = () => {
+          clearTimeout(timeoutId);
+          resolve(null);
+        };
+        img.src = urlOrBase64;
+      });
+    } catch (fallbackErr) {
+      console.error("Error in fallback image loading:", fallbackErr);
+      return null;
+    }
   }
   return urlOrBase64;
+};
+
+const getImageFormat = (base64: string | null | undefined): string => {
+  if (!base64) return 'PNG';
+  if (base64.startsWith('data:image/png')) return 'PNG';
+  if (base64.startsWith('data:image/jpeg') || base64.startsWith('data:image/jpg')) return 'JPEG';
+  if (base64.startsWith('data:image/webp')) return 'WEBP';
+  return 'PNG';
 };
 
 export const generarActaExtintoresPDF = async (
@@ -98,17 +134,43 @@ export const generarActaExtintoresPDF = async (
   const logoData = await fetchImageToBase64(empData?.logoUrl) || await fetchImageToBase64(localStorage.getItem('firecheck_db_logo'));
   const selloEmpresaBase64 = await fetchImageToBase64(empData?.selloUrl);
 
+  // Cargar categorías de sistemas para obtener iconos correctos
+  let categoriasSistema: any[] = [];
+  try {
+    const dbCats = await getSistemasCategorias();
+    if (dbCats && dbCats.length > 0) {
+      categoriasSistema = dbCats;
+    }
+  } catch (err) {
+    console.error("Error fetching system categories from Firestore in pdfGenerator:", err);
+  }
+  if (categoriasSistema.length === 0) {
+    try {
+      const savedCats = typeof localStorage !== 'undefined' ? localStorage.getItem('firecheck_db_sistemas_categorias') : null;
+      if (savedCats) {
+        categoriasSistema = JSON.parse(savedCats);
+      }
+    } catch (err) {
+      console.error("Error loading system categories from localStorage in pdfGenerator:", err);
+    }
+  }
+
   // ============ FIRST PAGE: INFO PAGE (REDISEÑO ELEGANTE) ============
   const drawInfoPage = async () => {
     // ── Logo (esquina superior derecha) ──
     if (logoData) {
-      const logoProps = doc.getImageProperties(logoData);
-      const maxLogoWidth = 65;
-      const maxLogoHeight = 16;
-      const logoRatio = logoProps.width / logoProps.height;
-      const logoWidth = Math.min(maxLogoWidth, maxLogoHeight * logoRatio);
-      const logoHeight = logoWidth / logoRatio;
-      doc.addImage(logoData, 'PNG', pageWidth - 14 - logoWidth, 12, logoWidth, logoHeight);
+      try {
+        const logoProps = doc.getImageProperties(logoData);
+        const maxLogoWidth = 65;
+        const maxLogoHeight = 16;
+        const logoRatio = logoProps.width / logoProps.height;
+        const logoWidth = Math.min(maxLogoWidth, maxLogoHeight * logoRatio);
+        const logoHeight = logoWidth / logoRatio;
+        const format = getImageFormat(logoData);
+        doc.addImage(logoData, format, pageWidth - 14 - logoWidth, 12, logoWidth, logoHeight);
+      } catch (err) {
+        console.error("Error drawing logo on cover page:", err);
+      }
     }
 
     // ── Título principal ──
@@ -378,7 +440,8 @@ export const generarActaExtintoresPDF = async (
         const selloRatio = selloProps.width / selloProps.height;
         const selloWidth = Math.min(maxSelloWidth, maxSelloHeight * selloRatio);
         const selloHeight = selloWidth / selloRatio;
-        doc.addImage(selloEmpresaBase64, 'PNG', pageWidth - 14 - selloWidth, 182 - selloHeight, selloWidth, selloHeight);
+        const format = getImageFormat(selloEmpresaBase64);
+        doc.addImage(selloEmpresaBase64, format, pageWidth - 14 - selloWidth, 182 - selloHeight, selloWidth, selloHeight);
       } catch (err) {
         console.error("Error adding company stamp to PDF:", err);
       }
@@ -403,14 +466,22 @@ export const generarActaExtintoresPDF = async (
   const drawTableHeader = (pageNum: number) => {
     if (pageNum <= 1) return;
 
+    const originalPage = (doc.internal as any).getCurrentPageInfo().pageNumber;
+    doc.setPage(pageNum);
+
     if (logoData) {
-      const logoProps = doc.getImageProperties(logoData);
-      const maxLogoWidth = 45;
-      const maxLogoHeight = 11;
-      const logoRatio = logoProps.width / logoProps.height;
-      const logoWidth = Math.min(maxLogoWidth, maxLogoHeight * logoRatio);
-      const logoHeight = logoWidth / logoRatio;
-      doc.addImage(logoData, 'PNG', pageWidth - 14 - logoWidth, 11, logoWidth, logoHeight);
+      try {
+        const logoProps = doc.getImageProperties(logoData);
+        const maxLogoWidth = 45;
+        const maxLogoHeight = 11;
+        const logoRatio = logoProps.width / logoProps.height;
+        const logoWidth = Math.min(maxLogoWidth, maxLogoHeight * logoRatio);
+        const logoHeight = logoWidth / logoRatio;
+        const format = getImageFormat(logoData);
+        doc.addImage(logoData, format, pageWidth - 14 - logoWidth, 11, logoWidth, logoHeight);
+      } catch (err) {
+        console.error("Error drawing logo in header:", err);
+      }
     }
 
     doc.setTextColor(0, 0, 0);
@@ -422,7 +493,9 @@ export const generarActaExtintoresPDF = async (
     doc.setFontSize(9);
     doc.text(`${cliente?.nombre || ''} | ${centro?.nombre || ''}`, pageWidth / 2, 22, { align: 'center' });
     doc.setLineWidth(0.3);
-    doc.line(10, 26, pageWidth - 10, 26);
+    doc.line(14, 26, pageWidth - 14, 26);
+
+    doc.setPage(originalPage);
   };
 
   const getMark = (val: any) => {
@@ -454,7 +527,7 @@ export const generarActaExtintoresPDF = async (
       ['Nº', 'Nivel planta y ubicación', 'Placa', 'Tipo', 'Longitud', 'Fabricante', 'Fecha\nFabricación', 'Prueba\nHidráulica'] :
       ['Nº', 'Nivel planta y ubicación', 'Placa', 'Tipo', 'Fabricante', 'Fecha\nFabricación', 'Último\nRetimbre'];
 
-    const checkItemsDeSistema = (checklistItemsPorSistema && sistemaId) ? checklistItemsPorSistema[sistemaId] : [];
+    const checkItemsDeSistema = (checklistItemsPorSistema && sistemaId && checklistItemsPorSistema[sistemaId]) ? checklistItemsPorSistema[sistemaId] : [];
 
     const normalize = (str: string) => {
       return (str || '')
@@ -576,136 +649,448 @@ export const generarActaExtintoresPDF = async (
       ];
     });
 
-    const dynamicColumnStyles: any = { 
-      0: { halign: 'center', fillColor: [128, 0, 32], textColor: [255, 255, 255] }, 
-      1: { halign: 'left' } 
-    };
-    checkHeaders.forEach((_, i) => {
-      dynamicColumnStyles[headersBase.length + i] = { halign: 'center', cellWidth: 7.5 };
-    });
+    const nombreSistema = title.toUpperCase();
+    const esExtintor = nombreSistema.includes('EXTINTOR');
+    const esBie = nombreSistema.includes('BIE') || nombreSistema.includes('BOCA');
+    const usarLayoutVertical = (!esExtintor && !esBie) || checkKeys.length > 22;
 
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(6.5);
-    let maxLabelWidth = 0;
-    checkLabels.forEach(lbl => {
-      const cleanLbl = lbl.replace(/^\d+\.\s*/, '');
-      const w = doc.getTextWidth(cleanLbl);
-      if (w > maxLabelWidth) maxLabelWidth = w;
-    });
-    const calculatedHeaderHeight = Math.max(20, maxLabelWidth + 1); // 5 puntos más corta
+    let finalY = currentY;
 
-    autoTable(doc, {
-      startY: currentY + 4,
-      margin: { top: 40 },
-      headStyles: { fillColor: [128, 0, 32], textColor: [255, 255, 255], fontSize: 7, halign: 'center', valign: 'middle', lineWidth: 0.1, lineColor: [255, 255, 255] },
-      bodyStyles: { fontSize: 7, halign: 'center', lineWidth: 0.1, lineColor: [200, 200, 200] },
+    if (usarLayoutVertical) {
+      // 1. Cabecera de la sección con título e icono
+      if (currentY > 140) {
+        doc.addPage();
+        const newPageNum = (doc.internal as any).getNumberOfPages();
+        if (!drawnTablePages.has(newPageNum)) {
+          drawTableHeader(newPageNum);
+          drawnTablePages.add(newPageNum);
+        }
+        currentY = 34;
+      }
 
-      columnStyles: dynamicColumnStyles,
-      head: [
-        [
-          { content: '', colSpan: headersBase.length, styles: { fillColor: [255, 255, 255], lineWidth: 0.1, lineColor: [255, 255, 255], minCellHeight: calculatedHeaderHeight } },
-          ...checkHeaders.map(h => ({ content: h, rowSpan: 2 }))
-        ],
-        headersBase
-      ],
-      body: tableData,
-      didDrawPage: function (data: any) {
-        if (!drawnTablePages.has(data.pageNumber)) {
-          drawTableHeader(data.pageNumber);
-          drawnTablePages.add(data.pageNumber);
-        }
-      },
-      didParseCell: function (data: any) {
-        if (data.section === 'head') {
-          if (data.row.index === 1 && data.column.index < headersBase.length) {
-             data.cell.styles.minCellHeight = 10;
-             data.cell.styles.valign = 'middle';
-          }
-          if (data.column.index >= headersBase.length) {
-             data.cell.text = [''];
-          }
-        }
-        if (data.section === 'body' && data.column.index >= headersBase.length) {
-          if (data.cell.raw === 'X') {
-            data.cell.styles.textColor = anomalyTextColor;
-            data.cell.styles.fontStyle = 'bold';
-            data.cell.styles.fontSize = 9;
-          } else if (data.cell.raw === 'TICK') {
-            data.cell.text = [''];
-          } else if (data.cell.raw !== '-') {
-            // Es un número o texto (ej. presión 15, peso 12.5), lo imprimimos tal cual
-            data.cell.styles.textColor = [0,0,0];
-            data.cell.styles.fontStyle = 'normal';
-          }
-        }
-      },
-      didDrawCell: function (data: any) {
-        if (data.section === 'head' && data.row.index === 0 && data.column.index === 0) {
-          const cellX = data.cell.x;
-          const cellY = data.cell.y;
-          const cellH = data.cell.height;
-          const centerY = cellY + (cellH / 2);
-
-          if (iconoBase64) {
-            doc.addImage(iconoBase64, 'PNG', cellX + 2, centerY - 6, 12, 12);
-          }
-          doc.setFont("helvetica", "bold");
-          doc.setFontSize(12);
-          doc.setTextColor(0, 0, 0);
-          doc.text(title, cellX + (iconoBase64 ? 16 : 2), centerY - 1);
-          
-          doc.setFont("helvetica", "normal");
-          doc.setFontSize(8.5);
-          doc.setTextColor(0, 0, 0);
-          const textoAnomalias = 'Las anotaciones en ';
-          const textoRojo = 'rojo';
-          const textoO = ' o con una ';
-          const textoX = 'X';
-          const textoFinal = ' indican anomalías que deben corregirse.';
-          const totalX = cellX + (iconoBase64 ? 16 : 2);
-          doc.text(textoAnomalias, totalX, centerY + 3.5);
-          const w1 = doc.getTextWidth(textoAnomalias);
-          doc.setTextColor(anomalyTextColor[0], anomalyTextColor[1], anomalyTextColor[2]);
-          doc.text(textoRojo, totalX + w1, centerY + 3.5);
-          const w2 = doc.getTextWidth(textoRojo);
-          doc.setTextColor(0, 0, 0);
-          doc.text(textoO, totalX + w1 + w2, centerY + 3.5);
-          const w3 = doc.getTextWidth(textoO);
-          doc.setTextColor(anomalyTextColor[0], anomalyTextColor[1], anomalyTextColor[2]);
-          doc.text(textoX, totalX + w1 + w2 + w3, centerY + 3.5);
-          const w4 = doc.getTextWidth(textoX);
-          doc.setTextColor(0, 0, 0);
-          doc.text(textoFinal, totalX + w1 + w2 + w3 + w4, centerY + 3.5);
-        }
-
-        if (data.section === 'head' && data.column.index >= headersBase.length && data.row.index === 0) {
-          const lbl = checkLabels[data.column.index - headersBase.length];
-          if (lbl) {
-            const cleanLbl = lbl.replace(/^\d+\.\s*/, '');
-            doc.setTextColor(255, 255, 255);
-            doc.setFontSize(6.5);
-            const x = data.cell.x + (data.cell.width / 2) + 0.8;
-            const y = data.cell.y + data.cell.height - 3;
-            doc.text(cleanLbl, x, y, { angle: 90 });
-          }
-        }
-        if (data.section === 'body' && data.column.index >= headersBase.length && data.cell.raw === 'TICK') {
-          const { x, y, width, height } = data.cell;
-          const cx = x + width / 2;
-          const cy = y + height / 2;
-          doc.setDrawColor(34, 197, 94);
-          doc.setLineWidth(0.6);
-          doc.line(cx - 1, cy + 0.2, cx - 0.2, cy + 1);
-          doc.line(cx - 0.2, cy + 1, cx + 1.2, cy - 1.2);
+      if (iconoBase64) {
+        try {
+          doc.addImage(iconoBase64, 'PNG', 14, currentY + 2, 12, 12);
+        } catch (err) {
+          console.error("Error rendering section icon:", err);
         }
       }
-    });
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.setTextColor(0, 0, 0);
+      doc.text(title, iconoBase64 ? 30 : 14, currentY + 7);
 
-    let finalY = (doc as any).lastAutoTable.finalY || currentY;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8.5);
+      doc.setTextColor(0, 0, 0);
+      const textoAnomalias = 'Las anotaciones en ';
+      const textoRojo = 'rojo';
+      const textoO = ' o con una ';
+      const textoX = 'X';
+      const textoFinal = ' indican anomalías que deben corregirse.';
+      const subX = iconoBase64 ? 30 : 14;
+      const subY = currentY + 12;
+      doc.text(textoAnomalias, subX, subY);
+      const w1 = doc.getTextWidth(textoAnomalias);
+      doc.setTextColor(anomalyTextColor[0], anomalyTextColor[1], anomalyTextColor[2]);
+      doc.text(textoRojo, subX + w1, subY);
+      const w2 = doc.getTextWidth(textoRojo);
+      doc.setTextColor(0, 0, 0);
+      doc.text(textoO, subX + w1 + w2, subY);
+      const w3 = doc.getTextWidth(textoO);
+      doc.setTextColor(anomalyTextColor[0], anomalyTextColor[1], anomalyTextColor[2]);
+      doc.text(textoX, subX + w1 + w2 + w3, subY);
+      const w4 = doc.getTextWidth(textoX);
+      doc.setTextColor(0, 0, 0);
+      doc.text(textoFinal, subX + w1 + w2 + w3 + w4, subY);
+
+      currentY += 16;
+
+      // Paso 1: Agrupar checkItemsDeSistema en secciones
+      interface SectionData {
+        title: string;
+        items: any[];
+        key: string;
+      }
+
+      const sectionsList: SectionData[] = [];
+      let currentSection: SectionData | null = null;
+
+      for (const item of checkItemsDeSistema) {
+        if (item.tipoRespuesta === 'seccion') {
+          currentSection = {
+            title: item.label || 'Sección',
+            items: [],
+            key: item.key
+          };
+          sectionsList.push(currentSection);
+        } else {
+          if (!currentSection) {
+            currentSection = {
+              title: 'General',
+              items: [],
+              key: 'default_sec'
+            };
+            sectionsList.push(currentSection);
+          }
+          currentSection.items.push(item);
+        }
+      }
+
+      // Definir valor de visualización genérico
+      const getDisplayValue = (val: any) => {
+        if (val === true || val === 'true') return 'SÍ';
+        if (val === false || val === 'false') return 'NO';
+        if (val === undefined || val === null || val === '') return '-';
+        return String(val);
+      };
+
+      // 2. Tablas por cada equipo
+      for (const eq of equipos) {
+        if (currentY > 150) {
+          doc.addPage();
+          const newPageNum = (doc.internal as any).getNumberOfPages();
+          if (!drawnTablePages.has(newPageNum)) {
+            drawTableHeader(newPageNum);
+            drawnTablePages.add(newPageNum);
+          }
+          currentY = 34;
+        }
+
+        // Renderizar las secciones de este equipo
+        for (const sec of sectionsList) {
+          // Filtrar items fijos y excluidos de esta sección
+          const filteredSecItems = sec.items.filter(item => {
+            const lbl = normalize(item.label || '');
+            const isNotas = lbl.includes('notas') || lbl.includes('observaciones') || lbl.includes('anomal');
+            const isFixed = fixedItemsKeys.includes(item.key);
+            const isExcluded = lbl.includes('orden de lista') || 
+                               lbl.includes('ubicacion') || 
+                               lbl.includes('sin uso') || 
+                               lbl.includes('imagen') ||
+                               lbl.includes('fecha de revision') ||
+                               lbl.includes('fecha revision') ||
+                               item.tipoRespuesta === 'imagen';
+            return !isNotas && !isFixed && !isExcluded;
+          });
+
+          if (filteredSecItems.length === 0) continue;
+
+          // Verificar si hay espacio suficiente para la sección, si no, salto de página
+          if (currentY > 175) {
+            doc.addPage();
+            const newPageNum = (doc.internal as any).getNumberOfPages();
+            if (!drawnTablePages.has(newPageNum)) {
+              drawTableHeader(newPageNum);
+              drawnTablePages.add(newPageNum);
+            }
+            currentY = 34;
+          }
+
+          const secTitleNorm = sec.title.toUpperCase();
+
+          if (secTitleNorm.includes('DATOS INSTALACIÓN') || secTitleNorm.includes('DATOS INSTALACION')) {
+            // Renderizar Sección 1: Datos de instalación en 4 columnas
+            const datosRows: any[] = [];
+            for (let i = 0; i < filteredSecItems.length; i += 2) {
+              const item1 = filteredSecItems[i];
+              const val1 = getDisplayValue(eq[item1.key]);
+              let label2 = '';
+              let val2 = '';
+              if (i + 1 < filteredSecItems.length) {
+                const item2 = filteredSecItems[i + 1];
+                label2 = item2.label || '';
+                val2 = getDisplayValue(eq[item2.key]);
+              }
+              datosRows.push([
+                item1.label || '',
+                val1,
+                label2,
+                val2
+              ]);
+            }
+
+            autoTable(doc, {
+              startY: currentY,
+              margin: { top: 40, left: 14, right: 14 },
+              headStyles: { fillColor: [128, 0, 32], textColor: [255, 255, 255], fontSize: 7.5, halign: 'center', valign: 'middle', lineWidth: 0.1, lineColor: [255, 255, 255] },
+              bodyStyles: { fontSize: 7, halign: 'left', valign: 'middle', lineWidth: 0.1, lineColor: [200, 200, 200] },
+              columnStyles: {
+                0: { halign: 'left', cellWidth: 89.5 },
+                1: { halign: 'center', cellWidth: 45 },
+                2: { halign: 'left', cellWidth: 89.5 },
+                3: { halign: 'center', cellWidth: 45 }
+              },
+                head: [
+                  [{ content: sec.title, colSpan: 4, styles: { fillColor: [128, 0, 32], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5, halign: 'left' } }]
+                ],
+              body: datosRows,
+              didDrawPage: function (_data: any) {
+                const absolutePageNum = (doc.internal as any).getCurrentPageInfo().pageNumber;
+                if (!drawnTablePages.has(absolutePageNum)) {
+                  drawTableHeader(absolutePageNum);
+                  drawnTablePages.add(absolutePageNum);
+                }
+              },
+              didParseCell: function (data: any) {
+                if (data.section === 'body') {
+                  if (data.column.index === 0 || data.column.index === 2) {
+                    data.cell.styles.fontStyle = 'bold';
+                    data.cell.styles.fillColor = [245, 247, 250];
+                  }
+                }
+              }
+            });
+            currentY = (doc as any).lastAutoTable.finalY || currentY;
+
+          } else {
+            // Verificar si contiene tabla (tipo tabla) - Sección 10
+            const tableItem = filteredSecItems.find(item => item.tipoRespuesta === 'tabla');
+            if (tableItem) {
+              const tableVal = eq[tableItem.key];
+              let tableHeaders: string[] = tableItem.opciones || [];
+              let tableRows: string[][] = [];
+              try {
+                if (tableVal && typeof tableVal === 'string') {
+                  const parsed = JSON.parse(tableVal);
+                  if (Array.isArray(parsed)) {
+                    tableRows = parsed;
+                  }
+                }
+              } catch (err) {
+                console.error("Error parsing table input value:", err);
+              }
+
+              if (tableHeaders.length === 0) {
+                tableHeaders = ['Detalle'];
+              }
+              if (tableRows.length === 0) {
+                tableRows = [Array(tableHeaders.length).fill('-')];
+              }
+
+              autoTable(doc, {
+                startY: currentY,
+                margin: { top: 40, left: 14, right: 14 },
+                headStyles: { fillColor: [70, 80, 95], textColor: [255, 255, 255], fontSize: 7.5, halign: 'center', valign: 'middle', lineWidth: 0.1, lineColor: [255, 255, 255] },
+                bodyStyles: { fontSize: 7, halign: 'center', valign: 'middle', lineWidth: 0.1, lineColor: [200, 200, 200] },
+                head: [
+                  [{ content: sec.title, colSpan: tableHeaders.length, styles: { fillColor: [128, 0, 32], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5, halign: 'left' } }],
+                  tableHeaders
+                ],
+                body: tableRows,
+                didDrawPage: function (_data: any) {
+                  const absolutePageNum = (doc.internal as any).getCurrentPageInfo().pageNumber;
+                  if (!drawnTablePages.has(absolutePageNum)) {
+                    drawTableHeader(absolutePageNum);
+                    drawnTablePages.add(absolutePageNum);
+                  }
+                }
+              });
+              currentY = (doc as any).lastAutoTable.finalY || currentY;
+
+            } else {
+              // Cuestionarios normales (Secciones 2 a 9, 11, etc.): Tabla de 2 columnas por filas
+              const checkRows: any[] = [];
+              for (const item of filteredSecItems) {
+                const val = getMark(eq[item.key]);
+                checkRows.push([
+                  item.label || '',
+                  val
+                ]);
+              }
+
+              autoTable(doc, {
+                startY: currentY,
+                margin: { top: 40, left: 14, right: 14 },
+                headStyles: { fillColor: [128, 0, 32], textColor: [255, 255, 255], fontSize: 7.5, halign: 'center', valign: 'middle', lineWidth: 0.1, lineColor: [255, 255, 255] },
+                bodyStyles: { fontSize: 7.5, halign: 'left', valign: 'middle', lineWidth: 0.1, lineColor: [200, 200, 200] },
+                columnStyles: {
+                  0: { halign: 'left', cellWidth: 229 },
+                  1: { halign: 'center', cellWidth: 40 }
+                },
+                head: [[
+                  { content: sec.title, styles: { halign: 'left', fontStyle: 'bold', fontSize: 8.5 } },
+                  { content: 'ESTADO', styles: { halign: 'center', fontStyle: 'bold', fontSize: 8.5 } }
+                ]],
+                body: checkRows,
+                didDrawPage: function (_data: any) {
+                  const absolutePageNum = (doc.internal as any).getCurrentPageInfo().pageNumber;
+                  if (!drawnTablePages.has(absolutePageNum)) {
+                    drawTableHeader(absolutePageNum);
+                    drawnTablePages.add(absolutePageNum);
+                  }
+                },
+                didParseCell: function (data: any) {
+                  if (data.section === 'body' && data.column.index === 1) {
+                    if (data.cell.raw === 'X') {
+                      data.cell.styles.textColor = anomalyTextColor;
+                      data.cell.styles.fontStyle = 'bold';
+                      data.cell.styles.fontSize = 8.5;
+                    } else if (data.cell.raw === 'TICK') {
+                      data.cell.text = [''];
+                    } else if (data.cell.raw !== '-') {
+                      data.cell.styles.textColor = [0, 0, 0];
+                      data.cell.styles.fontStyle = 'normal';
+                    }
+                  }
+                },
+                didDrawCell: function (data: any) {
+                  if (data.section === 'body' && data.column.index === 1 && data.cell.raw === 'TICK') {
+                    const { x, y, width, height } = data.cell;
+                    const cx = x + width / 2;
+                    const cy = y + height / 2;
+                    doc.setDrawColor(34, 197, 94);
+                    doc.setLineWidth(0.6);
+                    doc.line(cx - 1, cy + 0.2, cx - 0.2, cy + 1);
+                    doc.line(cx - 0.2, cy + 1, cx + 1.2, cy - 1.2);
+                  }
+                }
+              });
+              currentY = (doc as any).lastAutoTable.finalY || currentY;
+            }
+          }
+        }
+        currentY += 6;
+      }
+      finalY = currentY;
+
+    } else {
+      // Layout Horizontal Clásico
+      const dynamicColumnStyles: any = { 
+        0: { halign: 'center', fillColor: [128, 0, 32], textColor: [255, 255, 255] }, 
+        1: { halign: 'left' } 
+      };
+      checkHeaders.forEach((_, i) => {
+        dynamicColumnStyles[headersBase.length + i] = { halign: 'center', cellWidth: 7.5 };
+      });
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(6.5);
+      let maxLabelWidth = 0;
+      checkLabels.forEach(lbl => {
+        const cleanLbl = lbl.replace(/^\d+\.\s*/, '');
+        const w = doc.getTextWidth(cleanLbl);
+        if (w > maxLabelWidth) maxLabelWidth = w;
+      });
+      const calculatedHeaderHeight = Math.max(20, maxLabelWidth + 1); // 5 puntos más corta
+
+      autoTable(doc, {
+        startY: currentY + 4,
+        margin: { top: 40, left: 14, right: 14 },
+        headStyles: { fillColor: [128, 0, 32], textColor: [255, 255, 255], fontSize: 7, halign: 'center', valign: 'middle', lineWidth: 0.1, lineColor: [255, 255, 255] },
+        bodyStyles: { fontSize: 7, halign: 'center', lineWidth: 0.1, lineColor: [200, 200, 200] },
+
+        columnStyles: dynamicColumnStyles,
+        head: [
+          [
+            { content: '', colSpan: headersBase.length, styles: { fillColor: [255, 255, 255], lineWidth: 0.1, lineColor: [255, 255, 255], minCellHeight: calculatedHeaderHeight } },
+            ...checkHeaders.map(h => ({ content: h, rowSpan: 2 }))
+          ],
+          headersBase
+        ],
+        body: tableData,
+        didDrawPage: function (_data: any) {
+          const absolutePageNum = (doc.internal as any).getCurrentPageInfo().pageNumber;
+          if (!drawnTablePages.has(absolutePageNum)) {
+            drawTableHeader(absolutePageNum);
+            drawnTablePages.add(absolutePageNum);
+          }
+        },
+        didParseCell: function (data: any) {
+          if (data.section === 'head') {
+            if (data.row.index === 1 && data.column.index < headersBase.length) {
+               data.cell.styles.minCellHeight = 10;
+               data.cell.styles.valign = 'middle';
+            }
+            if (data.column.index >= headersBase.length) {
+               data.cell.text = [''];
+            }
+          }
+          if (data.section === 'body' && data.column.index >= headersBase.length) {
+            if (data.cell.raw === 'X') {
+              data.cell.styles.textColor = anomalyTextColor;
+              data.cell.styles.fontStyle = 'bold';
+              data.cell.styles.fontSize = 9;
+            } else if (data.cell.raw === 'TICK') {
+              data.cell.text = [''];
+            } else if (data.cell.raw !== '-') {
+              data.cell.styles.textColor = [0,0,0];
+              data.cell.styles.fontStyle = 'normal';
+            }
+          }
+        },
+        didDrawCell: function (data: any) {
+          if (data.section === 'head' && data.row.index === 0 && data.column.index === 0) {
+            const cellX = data.cell.x;
+            const cellY = data.cell.y;
+            const cellH = data.cell.height;
+            const centerY = cellY + (cellH / 2);
+
+            if (iconoBase64) {
+              doc.addImage(iconoBase64, 'PNG', cellX + 2, centerY - 6, 12, 12);
+            }
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(12);
+            doc.setTextColor(0, 0, 0);
+            doc.text(title, cellX + (iconoBase64 ? 16 : 2), centerY - 1);
+            
+            doc.setFont("helvetica", "normal");
+            doc.setFontSize(8.5);
+            doc.setTextColor(0, 0, 0);
+            const textoAnomalias = 'Las anotaciones en ';
+            const textoRojo = 'rojo';
+            const textoO = ' o con una ';
+            const textoX = 'X';
+            const textoFinal = ' indican anomalías que deben corregirse.';
+            const totalX = cellX + (iconoBase64 ? 16 : 2);
+            doc.text(textoAnomalias, totalX, centerY + 3.5);
+            const w1 = doc.getTextWidth(textoAnomalias);
+            doc.setTextColor(anomalyTextColor[0], anomalyTextColor[1], anomalyTextColor[2]);
+            doc.text(textoRojo, totalX + w1, centerY + 3.5);
+            const w2 = doc.getTextWidth(textoRojo);
+            doc.setTextColor(0, 0, 0);
+            doc.text(textoO, totalX + w1 + w2, centerY + 3.5);
+            const w3 = doc.getTextWidth(textoO);
+            doc.setTextColor(anomalyTextColor[0], anomalyTextColor[1], anomalyTextColor[2]);
+            doc.text(textoX, totalX + w1 + w2 + w3, centerY + 3.5);
+            const w4 = doc.getTextWidth(textoX);
+            doc.setTextColor(0, 0, 0);
+            doc.text(textoFinal, totalX + w1 + w2 + w3 + w4, centerY + 3.5);
+          }
+
+          if (data.section === 'head' && data.column.index >= headersBase.length && data.row.index === 0) {
+            const lbl = checkLabels[data.column.index - headersBase.length];
+            if (lbl) {
+              const cleanLbl = lbl.replace(/^\d+\.\s*/, '');
+              doc.setTextColor(255, 255, 255);
+              doc.setFontSize(6.5);
+              const x = data.cell.x + (data.cell.width / 2) + 0.8;
+              const y = data.cell.y + data.cell.height - 3;
+              doc.text(cleanLbl, x, y, { angle: 90 });
+            }
+          }
+          if (data.section === 'body' && data.column.index >= headersBase.length && data.cell.raw === 'TICK') {
+            const { x, y, width, height } = data.cell;
+            const cx = x + width / 2;
+            const cy = y + height / 2;
+            doc.setDrawColor(34, 197, 94);
+            doc.setLineWidth(0.6);
+            doc.line(cx - 1, cy + 0.2, cx - 0.2, cy + 1);
+            doc.line(cx - 0.2, cy + 1, cx + 1.2, cy - 1.2);
+          }
+        }
+      });
+
+      finalY = (doc as any).lastAutoTable.finalY || currentY;
+    }
 
     finalY += 8;
     const anomalias = equipos.filter(eq => {
-      const hasChecksUnmarked = Object.keys(eq).some(k => k.startsWith('check') && eq[k] === false);
+      // 1. Chequear si alguna de las checkKeys de este checklist tiene valor falso (anomalía)
+      const hasCheckKeysUnmarked = checkKeys.some(k => eq[k] === false || eq[k] === 'false');
+      // 2. Chequear si alguna propiedad de eq que empiece con 'check' es false (por compatibilidad)
+      const hasChecksUnmarked = Object.keys(eq).some(k => k.startsWith('check') && (eq[k] === false || eq[k] === 'false'));
+      // 3. Chequear si tiene texto en eq.anomalias
       const hasText = eq.anomalias && eq.anomalias.trim() !== '';
       
       const notasItem = checkItemsDeSistema.find(item => {
@@ -715,13 +1100,13 @@ export const generarActaExtintoresPDF = async (
       const notasValue = notasItem && eq[notasItem.key] ? String(eq[notasItem.key]).trim() : '';
       const hasNotasText = notasValue !== '';
       
-      return hasChecksUnmarked || hasText || hasNotasText;
+      return hasCheckKeysUnmarked || hasChecksUnmarked || hasText || hasNotasText;
     });
 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(10);
     doc.setTextColor(0, 0, 0);
-    doc.text('Anomalías y anomalías:', 14, finalY);
+    doc.text('Anomalías y observaciones:', 14, finalY);
     doc.setFont("helvetica", "normal");
     finalY += 7;
 
@@ -745,19 +1130,36 @@ export const generarActaExtintoresPDF = async (
           doc.setFont("helvetica", "bold");
           doc.setFontSize(10);
           doc.setTextColor(0, 0, 0);
-          doc.text('Anomalías y anomalías (continuación):', 14, finalY);
+          doc.text('Anomalías y observaciones (continuación):', 14, finalY);
           doc.setFont("helvetica", "normal");
           finalY += 7;
           doc.setTextColor(anomalyTextColor[0], anomalyTextColor[1], anomalyTextColor[2]);
         }
 
-    // Buscar el valor del campo "Observaciones y anomalías del equipo" en los items del checklist
-    const notasItem = checkItemsDeSistema.find(item => {
-      const lbl = (item.label || '').toLowerCase();
-      return lbl.includes('notas') || lbl.includes('observaciones') || lbl.includes('anomal');
-    });
-    const notasValue = notasItem && eq[notasItem.key] ? String(eq[notasItem.key]).trim() : '';
-    const textAnomalia = eq.anomalias ? eq.anomalias : (notasValue || 'No supera las comprobaciones visuales.');
+        // Buscar el valor del campo "Observaciones y anomalías del equipo" en los items del checklist
+        const notasItem = checkItemsDeSistema.find(item => {
+          const lbl = (item.label || '').toLowerCase();
+          return lbl.includes('notas') || lbl.includes('observaciones') || lbl.includes('anomal');
+        });
+        const notasValue = notasItem && eq[notasItem.key] ? String(eq[notasItem.key]).trim() : '';
+        
+        // Identificar qué comprobaciones específicas fallaron
+        const checksFallados = checkItems
+          .filter(item => eq[item.key] === false || eq[item.key] === 'false')
+          .map(item => item.label || '');
+        
+        let textAnomalia = '';
+        if (eq.anomalias && eq.anomalias.trim() !== '') {
+          textAnomalia = eq.anomalias;
+        } else {
+          const fallosStr = checksFallados.length > 0 ? `Falló en: ${checksFallados.join(', ')}.` : '';
+          if (notasValue) {
+            textAnomalia = fallosStr ? `${fallosStr} Observaciones: ${notasValue}` : notasValue;
+          } else {
+            textAnomalia = fallosStr || 'No supera las comprobaciones visuales.';
+          }
+        }
+
         doc.text(`Nº ${eq.codigo} ${eq.placa ? `(${eq.placa})` : ''} — Anomalías: ${textAnomalia}`, 14, finalY);
         finalY += 5.5;
 
@@ -775,25 +1177,13 @@ export const generarActaExtintoresPDF = async (
               finalY = 34;
             }
 
-            // Cargar la imagen
-            let imageData = eq.foto;
+            // Cargar la imagen usando el helper robusto
+            const imageData = await fetchImageToBase64(eq.foto);
             
-            // Si es una URL de Firebase Storage, convertirla a base64
-            if (imageData.startsWith('http')) {
-              try {
-                const response = await fetch(imageData);
-                if (response.ok) {
-                  const blob = await response.blob();
-                  imageData = await new Promise<string>((resolve) => {
-                    const reader = new FileReader();
-                    reader.onloadend = () => resolve(reader.result as string);
-                    reader.readAsDataURL(blob);
-                  });
-                }
-              } catch (fetchErr) {
-                console.error("Error fetching image from URL:", fetchErr);
-                continue;
-              }
+            // Si no pudimos obtener un base64 válido, no intentamos añadirlo a jsPDF
+            if (!imageData || !imageData.startsWith('data:')) {
+              console.warn("Skipping equipment photo because it could not be converted to base64:", eq.foto);
+              continue;
             }
 
             // Añadir la imagen al PDF
@@ -825,9 +1215,7 @@ export const generarActaExtintoresPDF = async (
   };
 
   let tableStartY = 34;
-
-  // Dibujar cabecera en la primera página de tablas
-  drawTableHeader(2);
+  let hasRenderedAnySystem = false;
 
   // Ordenar: sistemas con "EXTINTOR" primero, luego el resto
   const sistemasOrdenados = [...sistemas].sort((a, b) => {
@@ -846,10 +1234,68 @@ export const generarActaExtintoresPDF = async (
 
     const nombreSistema = sist.familia || sist.tipo || 'Sistema';
     const esBie = nombreSistema.toUpperCase().includes('BIE') || nombreSistema.toUpperCase().includes('BOCA');
-    const icono = esBie ? biesBase64 : extintorBase64;
+    
+    // Buscar si hay una imagen personalizada guardada en localStorage o en el sistema
+    let customIconUrl: string | null = sist.imagenUrl || sist.imagen || null;
+    if (!customIconUrl && categoriasSistema && categoriasSistema.length > 0) {
+      try {
+        const normalizarParaIcono = (nombre: string) => {
+          return (nombre || '')
+            .toLowerCase()
+            .trim()
+            .replace(/[áàäâ]/g, 'a')
+            .replace(/[éèëê]/g, 'e')
+            .replace(/[íìïî]/g, 'i')
+            .replace(/[óòöô]/g, 'o')
+            .replace(/[úùüû]/g, 'u')
+            .replace(/ñ/g, 'n');
+        };
 
-    // Si no es el primer sistema, añadir nueva página
-    if (index > 0) {
+        const coincidenSistemas = (nombreA: string, nombreB: string) => {
+          const a = normalizarParaIcono(nombreA);
+          const b = normalizarParaIcono(nombreB);
+          if (a === b) return true;
+          if (a.includes(b) || b.includes(a)) return true;
+          if (a.includes('deteccion') && b.includes('deteccion')) return true;
+          if (a.includes('extintor') && b.includes('extintor')) return true;
+          if ((a.includes('bie') || a.includes('boca de incendio') || a.includes('boca de equipamiento')) && 
+              (b.includes('bie') || b.includes('boca de incendio') || b.includes('boca de equipamiento'))) return true;
+          
+          const stopWords = ['incendio', 'incendios', 'sistema', 'sistemas', 'proteccion', 'equipo', 'equipos', 'automatica', 'automatico', 'manual', 'manuales'];
+          const palabrasA = a.split(/\s+/).filter(w => w.length > 3 && !stopWords.includes(w));
+          const palabrasB = b.split(/\s+/).filter(w => w.length > 3 && !stopWords.includes(w));
+          return palabrasA.some(wa => palabrasB.some(wb => wa === wb));
+        };
+
+        const cat = categoriasSistema.find((c: any) => coincidenSistemas(c.nombre, nombreSistema));
+        if (cat && cat.imagenUrl) {
+          customIconUrl = cat.imagenUrl;
+        }
+      } catch (err) {
+        console.error("Error matching custom system image:", err);
+      }
+    }
+
+    let icono = esBie ? biesBase64 : extintorBase64;
+    if (customIconUrl) {
+      try {
+        const base64Icon = await fetchImageToBase64(customIconUrl);
+        if (base64Icon && base64Icon.startsWith('data:')) {
+          icono = base64Icon;
+        }
+      } catch (err) {
+        console.error("Error loading custom system icon to base64:", err);
+      }
+    }
+
+    if (!hasRenderedAnySystem) {
+      // First system with equipment: use page 2
+      drawTableHeader(2);
+      drawnTablePages.add(2);
+      tableStartY = 34;
+      hasRenderedAnySystem = true;
+    } else {
+      // Subsequent systems: add a new page
       doc.addPage();
       const newPageNum = (doc.internal as any).getNumberOfPages();
       drawnTablePages.add(newPageNum);
@@ -865,30 +1311,13 @@ export const generarActaExtintoresPDF = async (
   const sigPageNum = (doc.internal as any).getNumberOfPages();
   doc.setPage(sigPageNum);
 
-  // Encabezado de la página de firmas
-  if (logoData) {
-    const logoProps = doc.getImageProperties(logoData);
-    const maxLogoWidth = 45;
-    const maxLogoHeight = 11;
-    const logoRatio = logoProps.width / logoProps.height;
-    const logoWidth = Math.min(maxLogoWidth, maxLogoHeight * logoRatio);
-    const logoHeight = logoWidth / logoRatio;
-    doc.addImage(logoData, 'PNG', pageWidth - 14 - logoWidth, 11, logoWidth, logoHeight);
-  }
+  // Dibujar cabecera estándar en la página de firmas
+  drawTableHeader(sigPageNum);
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(16);
+  doc.setFontSize(14);
   doc.setTextColor(0, 0, 0);
-  doc.text('FIRMAS', pageWidth / 2, 20, { align: 'center' });
-
-  doc.setDrawColor(0, 0, 0);
-  doc.setLineWidth(0.5);
-  doc.line(10, 26, pageWidth - 10, 26);
-
-  doc.setFont("helvetica", "italic");
-  doc.setFontSize(9);
-  doc.setTextColor(80, 80, 80);
-  doc.text('Acta de revisión de sistemas de protección contra incendios', pageWidth / 2, 33, { align: 'center' });
+  doc.text('FIRMAS', pageWidth / 2, 34, { align: 'center' });
 
   // Información del acta
   let sigY = 44;
