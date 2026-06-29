@@ -33,7 +33,300 @@ export const guardarDatosEmpresa = (data: any) => {
 
 export const obtenerDatosEmpresa = () => cargaDatosEmpresa();
 
-const fetchImageToBase64 = async (urlOrBase64: string | null | undefined): Promise<string | null> => {
+export function tieneFechaInvalida(eq: any): boolean {
+  if (!eq) return false;
+
+  const nombreEq = (eq.nombre || '').toLowerCase();
+  const claseEq = (eq.clase || '').toLowerCase();
+  const tipoEq = (eq.tipo || '').toLowerCase();
+
+  const tieneRetimbreKey = Object.keys(eq).some(k => k.toLowerCase().includes('retimbre'));
+  const tieneHidraKey = Object.keys(eq).some(k => k.toLowerCase().includes('hidra') || k.toLowerCase().includes('pruebahidra'));
+
+  const esExtintor = nombreEq.includes('extintor') || claseEq.includes('extintor') || tipoEq.includes('extintor') || tieneRetimbreKey;
+  const esBie = nombreEq.includes('bie') || nombreEq.includes('boca') || claseEq.includes('bie') || claseEq.includes('boca') || tipoEq.includes('bie') || tipoEq.includes('boca') || (tieneHidraKey && !tieneRetimbreKey);
+
+  // Si no es ninguno de los dos, no hay regla de fecha inválida estándar
+  if (!esExtintor && !esBie) {
+    return false;
+  }
+
+  // Encontrar claves
+  let keyFab = '';
+  let keyRet = '';
+  let keyHidra = '';
+
+  for (const k of Object.keys(eq)) {
+    const kLower = k.toLowerCase();
+    if (kLower.includes('revision') || kLower.includes('inspeccion') || kLower.includes('proxim')) {
+      continue;
+    }
+    if (kLower.includes('fabricaci') || kLower.includes('fechafab') || kLower.includes('añofab') || kLower.includes('anofab')) {
+      keyFab = k;
+    } else if (kLower.includes('retimbre')) {
+      keyRet = k;
+    } else if (kLower.includes('hidra') || kLower.includes('prueba')) {
+      keyHidra = k;
+    }
+  }
+
+  const valFab = keyFab ? eq[keyFab] : null;
+  const valRet = keyRet ? eq[keyRet] : null;
+  const valHidra = keyHidra ? eq[keyHidra] : null;
+
+  const parseDate = (val: any) => {
+    if (typeof val !== 'string' || !val || val === '-') return null;
+    const clean = val.trim();
+    if (/^\d{4}-\d{2}(-\d{2})?$/.test(clean)) {
+      const d = new Date(clean);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    return null;
+  };
+
+  const dateFab = parseDate(valFab);
+  const dateRet = parseDate(valRet);
+  const dateHidra = parseDate(valHidra);
+
+  const today = new Date();
+
+  // 1. Lógica de Extintores
+  if (esExtintor && dateFab) {
+    const monthsSinceFab = (today.getFullYear() - dateFab.getFullYear()) * 12 + today.getMonth() - dateFab.getMonth();
+    if (monthsSinceFab >= 240) {
+      return true; // Caducado >= 20 años
+    }
+
+    // Retimbre
+    let refDate = dateFab;
+    if (dateRet) {
+      refDate = dateRet;
+    }
+    const monthsSinceRef = (today.getFullYear() - refDate.getFullYear()) * 12 + today.getMonth() - refDate.getMonth();
+    if (monthsSinceRef >= 60 || monthsSinceFab >= 237 || monthsSinceRef >= 57) {
+      return true; // Necesita retimbre o se aproxima
+    }
+  }
+
+  // 2. Lógica de BIEs
+  if (esBie) {
+    if (dateFab) {
+      let diffYears = today.getFullYear() - dateFab.getFullYear();
+      if (today.getMonth() < dateFab.getMonth() || (today.getMonth() === dateFab.getMonth() && today.getDate() < dateFab.getDate())) {
+        diffYears--;
+      }
+      if (diffYears >= 20) {
+        return true; // Caducado >= 20 años (BIE)
+      }
+    }
+
+    if (dateHidra) {
+      let diffYears = today.getFullYear() - dateHidra.getFullYear();
+      if (today.getMonth() < dateHidra.getMonth() || (today.getMonth() === dateHidra.getMonth() && today.getDate() < dateHidra.getDate())) {
+        diffYears--;
+      }
+      if (diffYears >= 5) {
+        return true; // Necesita prueba hidráulica >= 5 años (BIE)
+      }
+    }
+  }
+
+  return false;
+}
+
+export function equipoTieneAnomalias(eq: any): boolean {
+  if (!eq) return false;
+
+  // 1. Campo .anomalias con texto
+  if (eq.anomalias && typeof eq.anomalias === 'string' && eq.anomalias.trim() !== '') {
+    return true;
+  }
+
+  // 2. Nueva validación: Anomalía de fecha
+  if (tieneFechaInvalida(eq)) {
+    return true;
+  }
+
+  // 3. Revisar todas las propiedades de eq
+  for (const k of Object.keys(eq)) {
+    const kLower = k.toLowerCase();
+    
+    // Ignorar claves de metadatos conocidas
+    if (
+      kLower === 'id' ||
+      kLower === 'centroid' ||
+      kLower === 'sistemaid' ||
+      kLower === 'codigo' ||
+      kLower === 'nombre' ||
+      kLower === 'ubicacion' ||
+      kLower === 'revisable' ||
+      kLower === 'revisado' ||
+      kLower === 'placa' ||
+      kLower === 'clase' ||
+      kLower === 'fabricante' ||
+      kLower === 'fechafabricacion' ||
+      kLower === 'ultimoretimbre' ||
+      kLower === 'pesocapacidad' ||
+      kLower === 'longitud' ||
+      kLower === 'pruebahidraulica' ||
+      kLower === 'foto' ||
+      kLower === 'createdat' ||
+      kLower === 'updatedat' ||
+      kLower === 'capacidad' ||
+      kLower === 'peso' ||
+      kLower === 'marca' ||
+      kLower === 'modelo' ||
+      kLower === 'tipo' ||
+      kLower === 'preciounidad' ||
+      kLower === 'precio' ||
+      kLower === 'subtotal' ||
+      kLower === 'cantidad' ||
+      kLower === 'anomalias' ||
+      kLower === 'ordendelista' ||
+      kLower === 'ordenlista' ||
+      kLower === 'fecharevision' ||
+      kLower === 'fechaderevision'
+    ) {
+      continue;
+    }
+
+    const val = eq[k];
+
+    // 3. Cualquier campo de notas/observaciones/anomalía con texto
+    if (kLower.includes('nota') || kLower.includes('observaci') || kLower.includes('anomal')) {
+      if (typeof val === 'string' && val.trim() !== '') {
+        return true;
+      }
+      continue;
+    }
+
+    // 4. Si el valor es boolean false o string 'false'
+    if (val === false || val === 'false') {
+      return true;
+    }
+
+    // 5. Si el valor es una cadena que representa un estado negativo
+    if (typeof val === 'string') {
+      const valUpper = val.toUpperCase().trim();
+      if (
+        valUpper === 'NO CORRECTO' ||
+        valUpper.includes('NO CORRECTO') ||
+        valUpper === 'INCORRECTO'
+      ) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+export function determinarSiFechaEsInvalida(
+  eq: any,
+  key: string,
+  label: string,
+  esBie: boolean,
+  esExtintor: boolean,
+  keyFabOverride?: string,
+  keyRetOverride?: string
+): boolean {
+  if (!eq) return false;
+  const val = eq[key];
+  const lbl = (label || '').toLowerCase();
+  
+  // Si es un extintor (o el sistema es Extintores)
+  if (esExtintor || lbl.includes('extintor')) {
+    const esFab = lbl.includes('fabricaci') || lbl.includes('fecha fab');
+    const esRet = lbl.includes('retimbre');
+    
+    if (esFab || esRet) {
+      let keyFab = keyFabOverride || (esFab ? key : '');
+      let keyRet = keyRetOverride || (esRet ? key : '');
+      
+      if (!keyFab) {
+        const found = Object.keys(eq).find(k => k.toLowerCase().includes('fabricaci') || k.toLowerCase().includes('fechafab'));
+        if (found) keyFab = found;
+      }
+      if (!keyRet) {
+        const found = Object.keys(eq).find(k => k.toLowerCase().includes('retimbre'));
+        if (found) keyRet = found;
+      }
+      
+      const valFab = keyFab ? eq[keyFab] : null;
+      const valRet = keyRet ? eq[keyRet] : null;
+      const today = new Date();
+      
+      if (esFab) {
+        if (!valFab || valFab === '-') return false;
+        const dateFab = new Date(valFab);
+        if (!isNaN(dateFab.getTime())) {
+          const monthsSinceFab = (today.getFullYear() - dateFab.getFullYear()) * 12 + today.getMonth() - dateFab.getMonth();
+          if (monthsSinceFab >= 240 || monthsSinceFab >= 237) {
+            return true; // Caducado o se aproxima a caducidad >= 20 años (237 meses para aviso)
+          }
+        }
+      } else if (esRet) {
+        const dateFab = valFab ? new Date(valFab) : null;
+        const dateRet = valRet && valRet !== '-' ? new Date(valRet) : null;
+        
+        const isFabValid = dateFab && !isNaN(dateFab.getTime());
+        const isRetValid = dateRet && !isNaN(dateRet.getTime());
+        
+        if (isRetValid) {
+          const monthsSinceRet = (today.getFullYear() - dateRet!.getFullYear()) * 12 + today.getMonth() - dateRet!.getMonth();
+          if (monthsSinceRet >= 60 || monthsSinceRet >= 57) {
+            return true; // Necesita retimbre o se aproxima >= 5 años
+          }
+        } else if (isFabValid) {
+          const monthsSinceFab = (today.getFullYear() - dateFab!.getFullYear()) * 12 + today.getMonth() - dateFab!.getMonth();
+          if (monthsSinceFab >= 60 || monthsSinceFab >= 57) {
+            return true; // Necesita retimbre desde fabricación >= 5 años
+          }
+        }
+      }
+    }
+  }
+
+  // Si es una BIE (o el sistema es BIEs / Bocas de Incendio)
+  if (esBie || lbl.includes('bie') || lbl.includes('boca')) {
+    if (!val || val === '-') return false;
+    const esFabBie = lbl.includes('fabricaci') || lbl.includes('fecha fab');
+    const esHidraBie = lbl.includes('hidra') || lbl.includes('prueba') || lbl.includes('manguera');
+    
+    if (esFabBie) {
+      const dateFab = new Date(val);
+      if (!isNaN(dateFab.getTime())) {
+        const today = new Date();
+        let diffYears = today.getFullYear() - dateFab.getFullYear();
+        if (today.getMonth() < dateFab.getMonth() || (today.getMonth() === dateFab.getMonth() && today.getDate() < dateFab.getDate())) {
+          diffYears--;
+        }
+        if (diffYears >= 20) {
+          return true; // Caducado >= 20 años
+        }
+      }
+    }
+    
+    if (esHidraBie) {
+      const dateHidra = new Date(val);
+      if (!isNaN(dateHidra.getTime())) {
+        const today = new Date();
+        let diffYears = today.getFullYear() - dateHidra.getFullYear();
+        if (today.getMonth() < dateHidra.getMonth() || (today.getMonth() === dateHidra.getMonth() && today.getDate() < dateHidra.getDate())) {
+          diffYears--;
+        }
+        if (diffYears >= 5) {
+          return true; // Necesita prueba hidráulica >= 5 años
+        }
+      }
+    }
+  }
+
+  return false;
+}
+
+
+export const fetchImageToBase64 = async (urlOrBase64: string | null | undefined): Promise<string | null> => {
   if (!urlOrBase64) return null;
   if (urlOrBase64.startsWith('data:')) {
     return urlOrBase64;
@@ -103,7 +396,7 @@ const fetchImageToBase64 = async (urlOrBase64: string | null | undefined): Promi
   return urlOrBase64;
 };
 
-const getImageFormat = (base64: string | null | undefined): string => {
+export const getImageFormat = (base64: string | null | undefined): string => {
   if (!base64) return 'PNG';
   if (base64.startsWith('data:image/png')) return 'PNG';
   if (base64.startsWith('data:image/jpeg') || base64.startsWith('data:image/jpg')) return 'JPEG';
@@ -834,9 +1127,45 @@ export const generarActaExtintoresPDF = async (
               },
               didParseCell: function (data: any) {
                 if (data.section === 'body') {
+                  const idx = data.row.index * 2;
+                  const item1 = filteredSecItems[idx];
+                  const item2 = filteredSecItems[idx + 1];
+
+                  const esExtintor = title.toUpperCase().includes('EXTINTOR') || (eq.nombre || '').toUpperCase().includes('EXTINTOR') || (eq.clase || '').toUpperCase().includes('EXTINTOR');
+                  const esBie = title.toUpperCase().includes('BIE') || title.toUpperCase().includes('BOCA') || (eq.nombre || '').toUpperCase().includes('BIE') || (eq.clase || '').toUpperCase().includes('BIE');
+
+                  if (data.column.index === 1 && item1 && item1.tipoRespuesta === 'fecha') {
+                    if (determinarSiFechaEsInvalida(eq, item1.key, item1.label || '', esBie, esExtintor, itemFechaFab?.key, itemRetimbre?.key || itemPruebaH?.key)) {
+                      data.cell.styles.textColor = [200, 0, 0];
+                      data.cell.styles.fontStyle = 'bold';
+                    }
+                  }
+                  if (data.column.index === 3 && item2 && item2.tipoRespuesta === 'fecha') {
+                    if (determinarSiFechaEsInvalida(eq, item2.key, item2.label || '', esBie, esExtintor, itemFechaFab?.key, itemRetimbre?.key || itemPruebaH?.key)) {
+                      data.cell.styles.textColor = [200, 0, 0];
+                      data.cell.styles.fontStyle = 'bold';
+                    }
+                  }
+
                   if (data.column.index === 0 || data.column.index === 2) {
                     data.cell.styles.fontStyle = 'bold';
-                    data.cell.styles.fillColor = [245, 247, 250];
+                    if (title.toUpperCase().includes('DETECCIÓN') || title.toUpperCase().includes('DETECCION')) {
+                      data.cell.styles.fillColor = [70, 80, 95];
+                      data.cell.styles.textColor = [255, 255, 255];
+                      data.cell.styles.lineColor = [255, 255, 255];
+                    } else {
+                      data.cell.styles.fillColor = [245, 247, 250];
+                    }
+                  }
+                  if (data.column.index === 1 || data.column.index === 3) {
+                    const rawStr = String(data.cell.raw || '').toUpperCase().trim();
+                    if (rawStr.includes('NO CORRECTO')) {
+                      data.cell.styles.textColor = [200, 0, 0];
+                      data.cell.styles.fontStyle = 'bold';
+                    } else if (rawStr.includes('CORRECTO')) {
+                      data.cell.styles.textColor = [0, 128, 0];
+                      data.cell.styles.fontStyle = 'bold';
+                    }
                   }
                 }
               }
@@ -904,7 +1233,10 @@ export const generarActaExtintoresPDF = async (
                 margin: { top: 40, left: 14, right: 14 },
                 headStyles: { fillColor: [128, 0, 32], textColor: [255, 255, 255], fontSize: 7.5, halign: 'center', valign: 'middle', lineWidth: 0.1, lineColor: [255, 255, 255] },
                 bodyStyles: { fontSize: 7.5, halign: 'left', valign: 'middle', lineWidth: 0.1, lineColor: [200, 200, 200] },
-                columnStyles: {
+                columnStyles: (sec.title && (sec.title.toUpperCase().includes('CONCLUSIONES') || sec.title.toUpperCase().includes('CONCLUSIO') || sec.title.includes('11'))) ? {
+                  0: { halign: 'left' },
+                  1: { halign: 'center', cellWidth: 'wrap' }
+                } : {
                   0: { halign: 'left', cellWidth: 229 },
                   1: { halign: 'center', cellWidth: 40 }
                 },
@@ -922,6 +1254,16 @@ export const generarActaExtintoresPDF = async (
                 },
                 didParseCell: function (data: any) {
                   if (data.section === 'body' && data.column.index === 1) {
+                    const item = filteredSecItems[data.row.index];
+                    if (item && item.tipoRespuesta === 'fecha') {
+                      const esExtintor = title.toUpperCase().includes('EXTINTOR') || (eq.nombre || '').toUpperCase().includes('EXTINTOR') || (eq.clase || '').toUpperCase().includes('EXTINTOR');
+                      const esBie = title.toUpperCase().includes('BIE') || title.toUpperCase().includes('BOCA') || (eq.nombre || '').toUpperCase().includes('BIE') || (eq.clase || '').toUpperCase().includes('BIE');
+                      if (determinarSiFechaEsInvalida(eq, item.key, item.label || '', esBie, esExtintor, itemFechaFab?.key, itemRetimbre?.key || itemPruebaH?.key)) {
+                        data.cell.styles.textColor = [200, 0, 0];
+                        data.cell.styles.fontStyle = 'bold';
+                        return;
+                      }
+                    }
                     if (data.cell.raw === 'X') {
                       data.cell.styles.textColor = anomalyTextColor;
                       data.cell.styles.fontStyle = 'bold';
@@ -929,8 +1271,17 @@ export const generarActaExtintoresPDF = async (
                     } else if (data.cell.raw === 'TICK') {
                       data.cell.text = [''];
                     } else if (data.cell.raw !== '-') {
-                      data.cell.styles.textColor = [0, 0, 0];
-                      data.cell.styles.fontStyle = 'normal';
+                      const rawStr = String(data.cell.raw || '').toUpperCase().trim();
+                      if (rawStr.includes('NO CORRECTO')) {
+                        data.cell.styles.textColor = [200, 0, 0];
+                        data.cell.styles.fontStyle = 'bold';
+                      } else if (rawStr.includes('CORRECTO')) {
+                        data.cell.styles.textColor = [0, 128, 0];
+                        data.cell.styles.fontStyle = 'bold';
+                      } else {
+                        data.cell.styles.textColor = [0, 0, 0];
+                        data.cell.styles.fontStyle = 'normal';
+                      }
                     }
                   }
                 },
@@ -1006,16 +1357,50 @@ export const generarActaExtintoresPDF = async (
                data.cell.text = [''];
             }
           }
-          if (data.section === 'body' && data.column.index >= headersBase.length) {
-            if (data.cell.raw === 'X') {
-              data.cell.styles.textColor = anomalyTextColor;
-              data.cell.styles.fontStyle = 'bold';
-              data.cell.styles.fontSize = 9;
-            } else if (data.cell.raw === 'TICK') {
-              data.cell.text = [''];
-            } else if (data.cell.raw !== '-') {
-              data.cell.styles.textColor = [0,0,0];
-              data.cell.styles.fontStyle = 'normal';
+          if (data.section === 'body') {
+            if (data.column.index < headersBase.length) {
+              const eq = equipos[data.row.index];
+              if (eq) {
+                let isDateAnomaly = false;
+                if (isBie) {
+                  if (data.column.index === 6 && itemFechaFab) {
+                    isDateAnomaly = determinarSiFechaEsInvalida(eq, itemFechaFab.key, itemFechaFab.label || 'Fabricación', true, false, itemFechaFab.key, itemPruebaH?.key);
+                  } else if (data.column.index === 7 && itemPruebaH) {
+                    isDateAnomaly = determinarSiFechaEsInvalida(eq, itemPruebaH.key, itemPruebaH.label || 'Prueba Hidráulica', true, false, itemFechaFab?.key, itemPruebaH.key);
+                  }
+                } else {
+                  const esExtintor = title.toUpperCase().includes('EXTINTOR');
+                  if (data.column.index === 5 && itemFechaFab) {
+                    isDateAnomaly = determinarSiFechaEsInvalida(eq, itemFechaFab.key, itemFechaFab.label || 'Fabricación', false, esExtintor, itemFechaFab.key, itemRetimbre?.key);
+                  } else if (data.column.index === 6 && itemRetimbre) {
+                    isDateAnomaly = determinarSiFechaEsInvalida(eq, itemRetimbre.key, itemRetimbre.label || 'Retimbre', false, esExtintor, itemFechaFab?.key, itemRetimbre.key);
+                  }
+                }
+                if (isDateAnomaly) {
+                  data.cell.styles.textColor = [200, 0, 0];
+                  data.cell.styles.fontStyle = 'bold';
+                }
+              }
+            } else if (data.column.index >= headersBase.length) {
+              if (data.cell.raw === 'X') {
+                data.cell.styles.textColor = anomalyTextColor;
+                data.cell.styles.fontStyle = 'bold';
+                data.cell.styles.fontSize = 9;
+              } else if (data.cell.raw === 'TICK') {
+                data.cell.text = [''];
+              } else if (data.cell.raw !== '-') {
+                const rawStr = String(data.cell.raw || '').toUpperCase().trim();
+                if (rawStr.includes('NO CORRECTO')) {
+                  data.cell.styles.textColor = [200, 0, 0];
+                  data.cell.styles.fontStyle = 'bold';
+                } else if (rawStr.includes('CORRECTO')) {
+                  data.cell.styles.textColor = [0, 128, 0];
+                  data.cell.styles.fontStyle = 'bold';
+                } else {
+                  data.cell.styles.textColor = [0,0,0];
+                  data.cell.styles.fontStyle = 'normal';
+                }
+              }
             }
           }
         },
@@ -1085,23 +1470,7 @@ export const generarActaExtintoresPDF = async (
     }
 
     finalY += 8;
-    const anomalias = equipos.filter(eq => {
-      // 1. Chequear si alguna de las checkKeys de este checklist tiene valor falso (anomalía)
-      const hasCheckKeysUnmarked = checkKeys.some(k => eq[k] === false || eq[k] === 'false');
-      // 2. Chequear si alguna propiedad de eq que empiece con 'check' es false (por compatibilidad)
-      const hasChecksUnmarked = Object.keys(eq).some(k => k.startsWith('check') && (eq[k] === false || eq[k] === 'false'));
-      // 3. Chequear si tiene texto en eq.anomalias
-      const hasText = eq.anomalias && eq.anomalias.trim() !== '';
-      
-      const notasItem = checkItemsDeSistema.find(item => {
-        const lbl = (item.label || '').toLowerCase();
-        return lbl.includes('notas') || lbl.includes('observaciones') || lbl.includes('anomal');
-      });
-      const notasValue = notasItem && eq[notasItem.key] ? String(eq[notasItem.key]).trim() : '';
-      const hasNotasText = notasValue !== '';
-      
-      return hasCheckKeysUnmarked || hasChecksUnmarked || hasText || hasNotasText;
-    });
+    const anomalias = equipos.filter(eq => equipoTieneAnomalias(eq));
 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(10);
@@ -1532,7 +1901,9 @@ export const generarAlbaranPDF = async (
   noSave?: boolean,
   titulo?: string,
   periodicidad?: string,
-  sistemas?: Record<string, any>[]
+  sistemas?: Record<string, any>[],
+  numeroPedido?: string,
+  fechaCreacion?: string
 ) => {
   const doc = new jsPDF('p', 'mm', 'a4');
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -1564,11 +1935,21 @@ export const generarAlbaranPDF = async (
   doc.text('ALBARÁN DE TRABAJO', pageWidth - 14, headerY + 35.5, { align: 'right' });
 
   // Mostrar el título del albarán si existe
+  let rightSideY = headerY + 42;
   if (titulo) {
     doc.setFontSize(9);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(100, 100, 100);
-    doc.text(`${titulo}`, pageWidth - 14, headerY + 42, { align: 'right' });
+    doc.text(`${titulo}`, pageWidth - 14, rightSideY, { align: 'right' });
+    rightSideY += 5.5;
+  }
+
+  // Mostrar el número de pedido si existe
+  if (numeroPedido) {
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(100, 100, 100);
+    doc.text(`N. Pedido: ${numeroPedido}`, pageWidth - 14, rightSideY, { align: 'right' });
   }
 
   doc.setFontSize(10);
@@ -1582,7 +1963,8 @@ export const generarAlbaranPDF = async (
   doc.setFont("helvetica", "normal");
   doc.text('Fecha: ', 14, headerY + 14);
   doc.setFont("helvetica", "bold");
-  doc.text(new Date().toLocaleDateString(), 14 + doc.getTextWidth('Fecha: '), headerY + 14);
+  const dateStr = fechaCreacion ? new Date(fechaCreacion).toLocaleDateString() : new Date().toLocaleDateString();
+  doc.text(dateStr, 14 + doc.getTextWidth('Fecha: '), headerY + 14);
 
   doc.setFont("helvetica", "normal");
   doc.text('Técnico: ', 14, headerY + 20);
@@ -1597,12 +1979,16 @@ export const generarAlbaranPDF = async (
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
   doc.setTextColor(0, 0, 0);
-  doc.text('DATOS DE LA INSTALACIÓN:', 14, headerY + 34);
+  doc.text('Datos del cliente:', 14, headerY + 32);
   doc.setFont("helvetica", "normal");
-  doc.text(`${cliente?.nombre || 'Cliente'}`, 14, headerY + 40);
-  doc.text(`${centro?.nombre || 'Centro'}`, 14, headerY + 46);
-  doc.text(`${centro?.direccion || ''}`, 14, headerY + 52);
-  doc.text(`${[centro?.poblacion, centro?.provincia].filter(Boolean).join(', ')}`, 14, headerY + 58);
+  doc.text(`${cliente?.nombre || 'Cliente'}`, 14, headerY + 37.5);
+
+  doc.setFont("helvetica", "bold");
+  doc.text('Datos del centro:', 14, headerY + 44.5);
+  doc.setFont("helvetica", "normal");
+  doc.text(`${centro?.nombre || 'Centro'}`, 14, headerY + 50);
+  doc.text(`${centro?.direccion || ''}`, 14, headerY + 55.5);
+  doc.text(`${[centro?.poblacion, centro?.provincia].filter(Boolean).join(', ')}`, 14, headerY + 61);
 
   // Si hay items del albarán, usarlos; si no, agrupar equipos por modelo
   let tableData: string[][];
@@ -1665,7 +2051,7 @@ export const generarAlbaranPDF = async (
   ];
 
   autoTable(doc, {
-    startY: headerY + 61,
+    startY: headerY + 65,
     head: [['Cant.', 'Concepto', 'Descripción', 'Precio ud.', 'Subtotal']],
     body: tableDataConTotales,
     theme: 'grid',
@@ -1768,9 +2154,11 @@ export const generarAlbaranPDFView = async (
   items?: { cantidad: number; concepto: string; descripcion: string; precioUnidad: number; subtotal: number }[],
   empresa?: Record<string, any>,
   titulo?: string,
-  periodicidad?: string
+  periodicidad?: string,
+  numeroPedido?: string,
+  fechaCreacion?: string
 ): Promise<string> => {
-  const doc = await generarAlbaranPDF(cliente, centro, equiposTodos, numeroMantenimiento, tecnicoNombre, firmaCliente, firmaTecnico, nombreFirmante, items, empresa, true, titulo, periodicidad);
+  const doc = await generarAlbaranPDF(cliente, centro, equiposTodos, numeroMantenimiento, tecnicoNombre, firmaCliente, firmaTecnico, nombreFirmante, items, empresa, true, titulo, periodicidad, undefined, numeroPedido, fechaCreacion);
   return doc.output('bloburl').toString();
 };
 
@@ -1996,22 +2384,7 @@ export const generarCertificadoPDF = async (
   // ── RESULTADO DE LA REVISIÓN ──
   let tieneAlgunaAnomalia = false;
   if (equiposTodos && equiposTodos.length > 0) {
-    tieneAlgunaAnomalia = equiposTodos.some(eq => {
-      // 1. Un check en rojo/falso
-      const hasChecksUnmarked = Object.keys(eq).some(k => k.toLowerCase().startsWith('check') && eq[k] === false);
-      // 2. Campo .anomalias con texto
-      const hasText = eq.anomalias && typeof eq.anomalias === 'string' && eq.anomalias.trim() !== '';
-      // 3. Cualquier campo de notas/observaciones/anomalía con texto
-      const hasNotesText = Object.keys(eq).some(k => {
-        const keyLower = k.toLowerCase();
-        if (keyLower.includes('nota') || keyLower.includes('observaci') || keyLower.includes('anomal')) {
-          const val = eq[k];
-          return typeof val === 'string' && val.trim() !== '';
-        }
-        return false;
-      });
-      return hasChecksUnmarked || hasText || hasNotesText;
-    });
+    tieneAlgunaAnomalia = equiposTodos.some(eq => equipoTieneAnomalias(eq));
   }
 
   const rawEstado = (estadoCertificado || 'Favorable').toLowerCase();
@@ -2453,4 +2826,4 @@ export const generarPresupuestoPDF = async (
   }
 
   doc.save(`Presupuesto_${presupuesto.numeroPresupuesto || 'N-A'}.pdf`);
-};
+};

@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileText, Building2, MapPin, CalendarDays, Search, Trash2, Download, Lock, X, Check } from 'lucide-react';
+import { FileText, Building2, MapPin, CalendarDays, Search, Trash2, Download, Eye, X, Check } from 'lucide-react';
 import { subscribePartes, subscribeCentros, subscribeClientes, subscribeTecnicos, deleteParte, db } from './firebase';
-import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc, query, where } from 'firebase/firestore';
 import { generarActaExtintoresPDF, generarAlbaranPDF, generarCertificadoPDF } from './pdfGenerator';
+import { generarContratoPDF } from './pdfContratoGenerator';
 
 interface ParteItem {
   id: string;
@@ -37,6 +38,11 @@ interface Centro {
   poblacion?: string;
   provincia?: string;
   empresaId?: string;
+  numeroContrato?: string;
+  fechaInicioContrato?: string;
+  fechaFinContrato?: string;
+  importeAnualContrato?: string;
+  observacionesContrato?: string;
 }
 
 export default function Partes() {
@@ -51,7 +57,7 @@ export default function Partes() {
 
   const [showDownloadModal, setShowDownloadModal] = useState(false);
   const [selectedParteToDownload, setSelectedParteToDownload] = useState<ParteItem | null>(null);
-  const [downloadOptions, setDownloadOptions] = useState({ acta: true, certificado: true, albaran: true });
+  const [downloadOptions, setDownloadOptions] = useState({ acta: true, certificado: true, albaran: true, contrato: false });
 
   useEffect(() => {
     const unsubPartes = subscribePartes((items) => {
@@ -137,7 +143,7 @@ export default function Partes() {
 
   const openDownloadModal = (parte: ParteItem) => {
     setSelectedParteToDownload(parte);
-    setDownloadOptions({ acta: true, certificado: true, albaran: true });
+    setDownloadOptions({ acta: true, certificado: true, albaran: true, contrato: false });
     setShowDownloadModal(true);
   };
 
@@ -284,9 +290,52 @@ export default function Partes() {
 
       // 3. Albarán
       if (downloadOptions.albaran) {
+        let numeroPedido = (parte as any).numeroPedido || '';
+        try {
+          const albaranesCol = collection(db, 'albaranes');
+          let q = query(albaranesCol, where('parteId', '==', parte.id));
+          let snap = await getDocs(q);
+          if (snap.empty && (parte as any)._docId && (parte as any)._docId !== parte.id) {
+            q = query(albaranesCol, where('parteId', '==', (parte as any)._docId));
+            snap = await getDocs(q);
+          }
+          if (!snap.empty) {
+            const albData = snap.docs[0].data();
+            if (albData && albData.numeroPedido) {
+              numeroPedido = albData.numeroPedido;
+            }
+          }
+        } catch (err) {
+          console.error("Error fetching albaran for numeroPedido:", err);
+        }
+
         await generarAlbaranPDF(
           cliente, centro, equiposTodos, numeroMantenimiento, tecnicoNombre,
-          firmaCliente, firmaTecnico, nombreFirmante, undefined, empresaSeleccionada, false, 'ALBARÁN DE REVISIÓN', parte.periodicidad, sistemasDelCentro
+          firmaCliente, firmaTecnico, nombreFirmante, undefined, empresaSeleccionada, false, 'ALBARÁN DE REVISIÓN', parte.periodicidad, sistemasDelCentro, numeroPedido, parte.fechaCreacion
+        );
+      }
+
+      // 4. Contrato de Mantenimiento
+      if (downloadOptions.contrato) {
+        const systemsWithCounts = sistemasDelCentro.map(s => {
+          const count = equiposTodos.filter(eq => eq.sistemaId === s.id).length;
+          return {
+            ...s,
+            cantidadEquipos: count
+          };
+        });
+
+        await generarContratoPDF(
+          cliente,
+          centro,
+          systemsWithCounts,
+          {
+            numeroContrato: centro.numeroContrato || '',
+            fechaInicio: centro.fechaInicioContrato || '',
+            fechaFin: centro.fechaFinContrato || '',
+            importeAnual: centro.importeAnualContrato || '',
+            observaciones: centro.observacionesContrato || ''
+          }
         );
       }
 
@@ -482,9 +531,9 @@ export default function Partes() {
                               <div 
                                 className={`w-2.5 h-2.5 rounded-full mr-2 shrink-0 ${
                                   (parte.estado === 'Pre-Cerrado' || parte.estado === 'Cerrado')
-                                    ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.8)]'
+                                    ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.8)]'
                                     : parte.estado === 'En revisión' 
-                                      ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.8)]' 
+                                      ? 'bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.8)]' 
                                       : 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.8)]'
                                 }`} 
                                 title={
@@ -501,7 +550,7 @@ export default function Partes() {
                               className="p-2 rounded-lg hover:bg-sky-50 text-sky-600 transition-colors"
                               title={(parte.estado === 'Pre-Cerrado' || parte.estado === 'Cerrado') ? "Revisar parte finalizado" : "Ir a Revisión"}
                             >
-                              {(parte.estado === 'Pre-Cerrado' || parte.estado === 'Cerrado') ? <Lock className="w-5 h-5" /> : <Search className="w-5 h-5" />}
+                              {(parte.estado === 'Pre-Cerrado' || parte.estado === 'Cerrado') ? <Eye className="w-5 h-5" /> : <Search className="w-5 h-5" />}
                             </button>
                             
                             {(parte.estado === 'Pre-Cerrado' || parte.estado === 'Cerrado' || parte.estado === 'Descargado (Offline)' || (parte as any).firmaCliente) && (
@@ -596,6 +645,19 @@ export default function Partes() {
                   />
                   <span className="font-medium text-zinc-700">Albarán de Trabajo</span>
                 </label>
+
+                <label className="flex items-center p-3 rounded-xl border border-zinc-200 hover:bg-zinc-50 cursor-pointer transition-colors">
+                  <div className={`w-5 h-5 rounded flex items-center justify-center mr-3 transition-colors ${downloadOptions.contrato ? 'bg-sky-500 border-sky-500' : 'border-2 border-zinc-300'}`}>
+                    {downloadOptions.contrato && <Check className="w-3.5 h-3.5 text-white" />}
+                  </div>
+                  <input 
+                    type="checkbox" 
+                    className="hidden"
+                    checked={downloadOptions.contrato}
+                    onChange={(e) => setDownloadOptions(prev => ({ ...prev, contrato: e.target.checked }))}
+                  />
+                  <span className="font-medium text-zinc-700">Contrato de Mantenimiento</span>
+                </label>
               </div>
 
               <div className="mt-6 pt-5 border-t border-zinc-100 flex gap-3">
@@ -607,7 +669,7 @@ export default function Partes() {
                 </button>
                 <button
                   onClick={confirmDownloadPDFs}
-                  disabled={!downloadOptions.acta && !downloadOptions.certificado && !downloadOptions.albaran}
+                  disabled={!downloadOptions.acta && !downloadOptions.certificado && !downloadOptions.albaran && !downloadOptions.contrato}
                   className="flex-1 py-2.5 px-4 rounded-xl font-medium bg-sky-600 text-white hover:bg-sky-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   <Download className="w-4 h-4" />

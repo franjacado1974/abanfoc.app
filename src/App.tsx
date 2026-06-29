@@ -6,7 +6,8 @@ import {
   ShieldCheck, ArrowLeft,
   Clock
 } from 'lucide-react';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import Loader from './components/Loader';
 import DashboardTecnico from './DashboardTecnico';
 import Clientes from './Clientes';
 import Centros from './Centros';
@@ -27,6 +28,7 @@ import Ajustes from './Ajustes';
 import Sidebar from './components/Sidebar';
 import { verifyUser } from './firebase';
 import { APP_VERSION } from './constants';
+import { useRegisterSW } from 'virtual:pwa-register/react';
 
 interface Usuario {
   id: string;
@@ -88,7 +90,10 @@ function Login({ usuarios: _usuarios, onLogin }: { usuarios: Usuario[], onLogin:
           />
           <button type="submit" className="w-full bg-black hover:bg-zinc-800 text-white py-3.5 sm:py-4 rounded-xl sm:rounded-2xl font-bold shadow-lg transition-all active:scale-95">Entrar</button>
         </form>
-        <p className="text-center text-zinc-400 text-xs mt-4">{APP_VERSION}</p>
+        <div className="flex items-center justify-center gap-2 mt-4 text-zinc-400 text-xs">
+          <img src="/salamandra-orange.png" alt="salamandra" className="h-10 w-10 object-contain" />
+          <span>{APP_VERSION}</span>
+        </div>
       </div>
     </div>
   );
@@ -383,6 +388,121 @@ function PageLayout({ user, onLogout, appLogo, children }: { user: Usuario | nul
 }
 
 export default function App() {
+  const {
+    needRefresh: [needRefresh, setNeedRefresh],
+    updateServiceWorker,
+  } = useRegisterSW({
+    onRegistered(r) {
+      console.log('SW Registered: ', r);
+    },
+    onRegisterError(error) {
+      console.log('SW registration error', error);
+    },
+  });
+
+  const [newVersion, setNewVersion] = useState<string>('');
+
+  useEffect(() => {
+    if (needRefresh) {
+      fetch('/version.json?t=' + Date.now())
+        .then(res => {
+          if (!res.ok) throw new Error('Failed to fetch version');
+          return res.json();
+        })
+        .then(data => {
+          if (data && data.version) {
+            setNewVersion(data.version);
+          }
+        })
+        .catch(err => {
+          console.error('Error fetching new version:', err);
+        });
+    }
+  }, [needRefresh]);
+
+  const renderUpdatePrompt = () => {
+    if (!needRefresh) return null;
+    return (
+      <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-4 md:w-96 z-[9999] bg-zinc-900/95 text-white p-4 rounded-2xl shadow-2xl border border-zinc-800 backdrop-blur-md flex flex-col gap-3 animate-slide-up">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center text-orange-500 shrink-0">
+            <Clock className="w-5 h-5 animate-pulse" />
+          </div>
+          <div>
+            <h4 className="font-bold text-sm text-zinc-100 font-sans">
+              Nueva versión disponible{newVersion ? ` (${newVersion})` : ''}
+            </h4>
+            <p className="text-xs text-zinc-400 mt-0.5 font-sans">Actualiza la aplicación para disfrutar de las últimas mejoras y correcciones.</p>
+          </div>
+        </div>
+        <div className="flex gap-2 justify-end mt-1 font-sans">
+          <button 
+            onClick={() => setNeedRefresh(false)}
+            className="px-3.5 py-2 rounded-xl text-xs font-semibold text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer"
+          >
+            Descartar
+          </button>
+          <button 
+            onClick={() => updateServiceWorker(true)}
+            className="px-4 py-2 rounded-xl text-xs font-bold bg-orange-500 hover:bg-orange-600 text-white transition-all shadow-md shadow-orange-500/10 active:scale-95 cursor-pointer"
+          >
+            Actualizar ahora
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    console.log(`User choice to install: ${outcome}`);
+    setDeferredPrompt(null);
+  };
+
+  const renderInstallPrompt = () => {
+    if (!deferredPrompt) return null;
+    return (
+      <div className="fixed top-4 left-4 right-4 md:left-auto md:right-4 md:w-96 z-[9999] bg-zinc-900/95 text-white p-4 rounded-2xl shadow-2xl border border-zinc-800 backdrop-blur-md flex flex-col gap-3 animate-slide-down">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center text-orange-500 shrink-0">
+            <Building2 className="w-5 h-5 animate-bounce" />
+          </div>
+          <div>
+            <h4 className="font-bold text-sm text-zinc-100 font-sans">Instalar aplicación</h4>
+            <p className="text-xs text-zinc-400 mt-0.5 font-sans">Instala ABANFOC en tu dispositivo para un acceso rápido y mejor rendimiento.</p>
+          </div>
+        </div>
+        <div className="flex gap-2 justify-end mt-1 font-sans">
+          <button 
+            onClick={() => setDeferredPrompt(null)}
+            className="px-3.5 py-2 rounded-xl text-xs font-semibold text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer"
+          >
+            Ahora no
+          </button>
+          <button 
+            onClick={handleInstallClick}
+            className="px-4 py-2 rounded-xl text-xs font-bold bg-orange-500 hover:bg-orange-600 text-white transition-all shadow-md shadow-orange-500/10 active:scale-95 cursor-pointer"
+          >
+            Instalar
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   const [loggedUser, setLoggedUser] = useState<Usuario | null>(() => {
     try {
       const session = sessionStorage.getItem('firecheck_logged_user');
@@ -395,6 +515,18 @@ export default function App() {
       return stored ? JSON.parse(stored) : [];
     } catch { return []; }
   });
+
+  const [isDataLoading, setIsDataLoading] = useState(false);
+
+  useEffect(() => {
+    if (loggedUser) {
+      setIsDataLoading(true);
+      const timer = setTimeout(() => {
+        setIsDataLoading(false);
+      }, 2500);
+      return () => clearTimeout(timer);
+    }
+  }, [loggedUser]);
 
   const LOGO_URL = "/favicon.png";
 
@@ -413,12 +545,34 @@ export default function App() {
   };
 
   if (!loggedUser) {
-    return <Login usuarios={availableUsers} onLogin={setLoggedUser} />;
+    return (
+      <>
+        <Login usuarios={availableUsers} onLogin={setLoggedUser} />
+        {renderUpdatePrompt()}
+        {renderInstallPrompt()}
+      </>
+    );
+  }
+
+  if (isDataLoading) {
+    return (
+      <>
+        <Loader />
+        {renderUpdatePrompt()}
+        {renderInstallPrompt()}
+      </>
+    );
   }
 
   // El usuario técnico solo ve su dashboard sin menú lateral
   if (loggedUser.rol === 'tecnico') {
-    return <DashboardTecnico loggedUser={loggedUser} onLogout={handleLogout} />;
+    return (
+      <>
+        <DashboardTecnico loggedUser={loggedUser} onLogout={handleLogout} />
+        {renderUpdatePrompt()}
+        {renderInstallPrompt()}
+      </>
+    );
   }
 
   return (
@@ -522,6 +676,8 @@ export default function App() {
           </ProtectedRoute>
         } />
       </Routes>
+      {renderUpdatePrompt()}
+      {renderInstallPrompt()}
     </BrowserRouter>
   );
 }

@@ -21,6 +21,13 @@ interface Props {
     getCheckStats: (eq: EquipoInstalado) => { ok: number; fail: number; pending: number };
 }
 
+const esUbicacionMarcaModelo = (label?: string, key?: string) => {
+    const lbl = (label || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const k = (key || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    return lbl.includes('ubicacion') || lbl.includes('marca') || lbl.includes('modelo') ||
+           k.includes('ubicacion') || k.includes('marca') || k.includes('modelo');
+};
+
 export default function SistemaGenerico({
     sist,
     filteredEqs,
@@ -255,19 +262,20 @@ export default function SistemaGenerico({
                                                                                                   (() => {
                                                                                                       const labelLower = (item.label || '').toLowerCase().replace(/[áéíóú]/g, (c) => ({'á':'a','é':'e','í':'i','ó':'o','ú':'u'})[c] || c);
                                                                                                       const esNumeroOrden = labelLower.includes('orden');
+                                                                                                      const esUCase = esUbicacionMarcaModelo(item.label, item.key);
                                                                                                       const placeholderTexto = labelLower.includes('referencia') && labelLower.includes('instalacion')
                                                                                                           ? 'Ejemplo: Area general o zona'
                                                                                                           : '...';
                                                                                                       return (
                                                                                                           <input
                                                                                                               type="text"
-                                                                                                              value={esNumeroOrden ? (eq.codigo || '') : (typeof val === 'string' ? val : '')}
+                                                                                                              value={esNumeroOrden ? (eq.codigo || '') : (typeof val === 'string' ? (esUCase ? val.toUpperCase() : val) : '')}
                                                                                                               onChange={(e) => {
                                                                                                                   if (!esNumeroOrden) {
-                                                                                                                      handleCheckChange(eq.id, item.key, e.target.value);
+                                                                                                                      handleCheckChange(eq.id, item.key, esUCase ? e.target.value.toUpperCase() : e.target.value);
                                                                                                                   }
                                                                                                               }}
-                                                                                                              className={`w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${esNumeroOrden ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''}`}
+                                                                                                              className={`w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${esNumeroOrden ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''} ${esUCase ? 'uppercase' : ''}`}
                                                                                                               placeholder={placeholderTexto}
                                                                                                               readOnly={esNumeroOrden}
                                                                                                           />
@@ -345,6 +353,7 @@ export default function SistemaGenerico({
                                                                              } else if (tipo === 'texto') {
                                                                                  const labelLower = (item.label || '').toLowerCase().replace(/[áéíóú]/g, (c) => ({'á':'a','é':'e','í':'i','ó':'o','ú':'u'})[c] || c);
                                                                                  const esNumeroOrden = labelLower.includes('orden');
+                                                                                 const esUCase = esUbicacionMarcaModelo(item.label, item.key);
                                                                                  if (esNumeroOrden) console.log('🔍 Campo Nº Orden detectado, eq.codigo =', eq.codigo);
                                                                                  const placeholderTexto = labelLower.includes('referencia') && labelLower.includes('instalacion')
                                                                                      ? 'Ejemplo: Area general o zona'
@@ -355,13 +364,13 @@ export default function SistemaGenerico({
                                                                                          <label className="text-[10px] font-semibold text-slate-500">{item.label}</label>
                                                                                          <input
                                                                                              type="text"
-                                                                                             value={esNumeroOrden ? (eq.codigo || '') : (typeof val === 'string' ? val : '')}
+                                                                                             value={esNumeroOrden ? (eq.codigo || '') : (typeof val === 'string' ? (esUCase ? val.toUpperCase() : val) : '')}
                                                                                              onChange={(e) => {
                                                                                                  if (!esNumeroOrden) {
-                                                                                                     handleCheckChange(eq.id, item.key, e.target.value);
+                                                                                                     handleCheckChange(eq.id, item.key, esUCase ? e.target.value.toUpperCase() : e.target.value);
                                                                                                  }
                                                                                              }}
-                                                                                             className={`w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${esNumeroOrden ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''} ${tieneValorTexto ? 'font-bold' : ''}`}
+                                                                                             className={`w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${esNumeroOrden ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''} ${tieneValorTexto ? 'font-bold' : ''} ${esUCase ? 'uppercase' : ''}`}
                                                                                              placeholder={placeholderTexto}
                                                                                              readOnly={esNumeroOrden}
                                                                                          />

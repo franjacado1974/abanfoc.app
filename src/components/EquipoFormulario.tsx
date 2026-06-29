@@ -29,6 +29,13 @@ interface EquipoFormularioProps {
     equiposExistentes?: EquipoInstalado[];
 }
 
+const isUbicacionMarcaModelo = (label?: string, key?: string) => {
+    const lbl = (label || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const k = (key || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    return lbl.includes('ubicacion') || lbl.includes('marca') || lbl.includes('modelo') ||
+           k.includes('ubicacion') || k.includes('marca') || k.includes('modelo');
+};
+
 export default function EquipoFormulario({
     equipo,
     sistemaId,
@@ -227,7 +234,14 @@ export default function EquipoFormulario({
                     } else if (label.includes('nombre') || label.includes('tipo')) {
                         equipoToSave.nombre = strVal;
                     } else if (label.includes('ubicación') || label.includes('ubicacion')) {
-                        equipoToSave.ubicacion = strVal;
+                        equipoToSave.ubicacion = strVal.toUpperCase();
+                        (equipoToSave as any)[item.key] = strVal.toUpperCase();
+                    } else if (label.includes('marca')) {
+                        equipoToSave.marca = strVal.toUpperCase();
+                        (equipoToSave as any)[item.key] = strVal.toUpperCase();
+                    } else if (label.includes('modelo')) {
+                        equipoToSave.modelo = strVal.toUpperCase();
+                        (equipoToSave as any)[item.key] = strVal.toUpperCase();
                     } else if (label.includes('fabricaci')) {
                         equipoToSave.fechaFabricacion = strVal;
                     } else if (label.includes('retimbre')) {
@@ -237,6 +251,10 @@ export default function EquipoFormulario({
                     }
                 }
             });
+
+            if (equipoToSave.ubicacion) equipoToSave.ubicacion = equipoToSave.ubicacion.toUpperCase();
+            if (equipoToSave.marca) equipoToSave.marca = equipoToSave.marca.toUpperCase();
+            if (equipoToSave.modelo) equipoToSave.modelo = equipoToSave.modelo.toUpperCase();
 
             // Si es nuevo, generar ID
             if (isNew && !equipoToSave.id) {
@@ -458,6 +476,7 @@ export default function EquipoFormulario({
     const renderField = (item: ItemPlantilla) => {
         const value = formData[item.key as keyof EquipoInstalado];
         const tipo = (item.tipoRespuesta as string) || 'texto';
+        const isUCase = isUbicacionMarcaModelo(item.label, item.key);
         const isErrorDate = 
             ((caducado || necesitaRetimbre || seAproxima) && (item.key === fabItem?.key || item.key === retItem?.key)) ||
             (isBie && ((caducadoBie && item.key === fabItemBie?.key) || (necesitaPruebaBie && item.key === hidraulicaItemBie?.key)));
@@ -581,9 +600,9 @@ export default function EquipoFormulario({
                                 return (
                                     <input
                                         type="text"
-                                        value={typeof value === 'string' ? value : ''}
-                                        onChange={(e) => handleChange(item.key, e.target.value)}
-                                        className={`w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 transition-colors ${
+                                        value={typeof value === 'string' ? (isUCase ? value.toUpperCase() : value) : ''}
+                                        onChange={(e) => handleChange(item.key, isUCase ? e.target.value.toUpperCase() : e.target.value)}
+                                        className={`w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 transition-colors ${isUCase ? 'uppercase' : ''} ${
                                             isErrorDate || isAnoFieldWithMsg
                                             ? 'bg-red-50 border-red-400 text-red-700 focus:border-red-500 focus:ring-red-500/20' 
                                             : 'bg-white border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20'
@@ -811,9 +830,9 @@ export default function EquipoFormulario({
                         <label className="text-xs font-semibold text-slate-600">{item.label}</label>
                         <input
                             type="text"
-                            value={typeof value === 'string' ? value : ''}
-                            onChange={(e) => handleChange(item.key, e.target.value)}
-                            className={`w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 transition-colors ${
+                            value={typeof value === 'string' ? (isUCase ? value.toUpperCase() : value) : ''}
+                            onChange={(e) => handleChange(item.key, isUCase ? e.target.value.toUpperCase() : e.target.value)}
+                            className={`w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 transition-colors ${isUCase ? 'uppercase' : ''} ${
                                 isErrorDate || isAnoFieldWithMsg
                                 ? 'bg-red-50 border-red-400 text-red-700 focus:border-red-500 focus:ring-red-500/20' 
                                 : 'bg-white border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20'
@@ -893,9 +912,9 @@ export default function EquipoFormulario({
                                 <label className="text-xs font-semibold text-slate-600">Ubicación</label>
                                 <input
                                     type="text"
-                                    value={formData.ubicacion || ''}
-                                    onChange={(e) => handleChange('ubicacion', e.target.value)}
-                                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                                    value={(formData.ubicacion || '').toUpperCase()}
+                                    onChange={(e) => handleChange('ubicacion', e.target.value.toUpperCase())}
+                                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 uppercase"
                                     placeholder="Ubicación..."
                                 />
                             </div>

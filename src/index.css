@@ -81,3 +81,38 @@ body {
   border-color: #d4c9b8;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
+
+/* Loader animations */
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes fill-progress {
+  from { width: 0%; }
+  to { width: 100%; }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.1), 0 4px 20px rgba(0, 0, 0, 0.05);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 40px rgba(239, 68, 68, 0.25), 0 4px 30px rgba(0, 0, 0, 0.08);
+    transform: scale(1.02);
+  }
+}
+
+.animate-spin-slow {
+  animation: spin-slow 3s linear infinite;
+}
+
+.animate-fill-progress {
+  animation: fill-progress 2.5s linear forwards;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 3s ease-in-out infinite;
+}
+

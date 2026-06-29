@@ -21,6 +21,13 @@ interface Props {
     getCheckStats: (eq: EquipoInstalado) => { ok: number; fail: number; pending: number };
 }
 
+const esUbicacionMarcaModelo = (label?: string, key?: string) => {
+    const lbl = (label || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const k = (key || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    return lbl.includes('ubicacion') || lbl.includes('marca') || lbl.includes('modelo') ||
+           k.includes('ubicacion') || k.includes('marca') || k.includes('modelo');
+};
+
 export default function SistemaDeteccion({
     sist,
     filteredEqs,
@@ -34,9 +41,62 @@ export default function SistemaDeteccion({
     showToast,
     setEditEquipo,
     handleDeleteEquipo,
-    handleCheckChange,
+    handleCheckChange: propHandleCheckChange,
     getCheckStats
 }: Props) {
+    const handleCheckChange = (equipoId: string, itemKey: string, value: any, itemName?: string) => {
+        // Primero, obtener el equipo actual antes de aplicar el cambio
+        const eq = equiposInstalados.find((e: EquipoInstalado) => e.id === equipoId);
+        
+        // Llamar al prop original para actualizar el estado
+        propHandleCheckChange(equipoId, itemKey, value, itemName);
+
+        if (eq) {
+            const itemsToUse = getItemsToUse(sist.id);
+            const notasItem = itemsToUse.find(item => {
+                const lbl = (item.label || '').toLowerCase();
+                return lbl.includes('notas') || lbl.includes('observaciones') || lbl.includes('anomal');
+            });
+
+            if (notasItem && itemKey !== notasItem.key) {
+                let questionText = itemName;
+                if (!questionText) {
+                    const matchingItem = itemsToUse.find(item => item.key === itemKey);
+                    questionText = matchingItem?.label || '';
+                }
+
+                if (questionText) {
+                    const targetText = `${questionText} ,NO CORRECTO.`;
+                    const currentNotas = typeof eq[notasItem.key as keyof EquipoInstalado] === 'string'
+                        ? (eq[notasItem.key as keyof EquipoInstalado] as string)
+                        : '';
+
+                    if (typeof value === 'string' && value.toUpperCase() === 'NO CORRECTO') {
+                        // Añadir si no está presente
+                        if (!currentNotas.includes(targetText)) {
+                            const finalNotas = currentNotas 
+                                ? `${currentNotas}\n${targetText}`
+                                : targetText;
+                            propHandleCheckChange(equipoId, notasItem.key, finalNotas);
+                        }
+                    } else {
+                        // Si cambia de "NO CORRECTO" a otra cosa, quitar el texto automático
+                        const oldValue = eq[itemKey as keyof EquipoInstalado];
+                        if (typeof oldValue === 'string' && oldValue.toUpperCase() === 'NO CORRECTO') {
+                            if (currentNotas.includes(targetText)) {
+                                const finalNotas = currentNotas
+                                    .replace(targetText, '')
+                                    .replace(/^\n+|\n+$/g, '') // limpiar saltos de línea al principio/final
+                                    .replace(/\n{2,}/g, '\n'); // normalizar múltiples saltos de línea
+                                propHandleCheckChange(equipoId, notasItem.key, finalNotas);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    };
+
     const getResponseColorClass = (value: any, isSelected: boolean) => {
         if (typeof value !== 'string' || !value) return 'text-slate-500';
         const valUpper = value.toUpperCase();
@@ -49,7 +109,15 @@ export default function SistemaDeteccion({
         <>
             {                                                    filteredEqs.map((eq, i) => {
                                                         const itemsToUse = getItemsToUse(sist.id);
-                                                        const algunCheckRojo = itemsToUse.some((item) => eq[item.key as keyof EquipoInstalado] === false);
+                                                        const algunCheckRojo = itemsToUse.some((item) => {
+                                                            const val = eq[item.key as keyof EquipoInstalado];
+                                                            if (val === false || val === 'false') return true;
+                                                            if (typeof val === 'string') {
+                                                                const valUpper = val.toUpperCase().trim();
+                                                                return valUpper === 'NO CORRECTO' || valUpper.includes('NO CORRECTO') || valUpper === 'INCORRECTO';
+                                                            }
+                                                            return false;
+                                                        });
                                                         const stats = getCheckStats(eq);
                                                         
                                                         const isExtintor = (sist.tipo || sist.familia || '').toLowerCase().includes('extintor');
@@ -112,7 +180,11 @@ export default function SistemaDeteccion({
                                                                             if (lbl.includes('notas') || lbl.includes('observaciones') || lbl.includes('anomal')) return false;
                                                                             return true;
                                                                         }).map(item => {
-                                                                             const val = eq[item.key as keyof EquipoInstalado];
+                                                                             const rawVal = eq[item.key as keyof EquipoInstalado];
+                                                                             const itemOpciones = (item as any).opciones || [];
+                                                                             const val = (rawVal === undefined || rawVal === '') && itemOpciones.includes('CORRECTO')
+                                                                                 ? 'CORRECTO'
+                                                                                 : rawVal;
                                                                              const tipo = (item as ChecklistItem).tipoRespuesta as string || 'check';
                                                                              const lbl = (item.label || '').toLowerCase();
                                                                              const esCampoNotas = lbl.includes('notas') || lbl.includes('observaciones') || lbl.includes('anomal');
@@ -260,27 +332,28 @@ export default function SistemaDeteccion({
                                                                         );
                                                                     })()
                                                                ) : (
-                                                                   (() => {
-                                                                       const labelLower = (item.label || '').toLowerCase().replace(/[áéíóú]/g, (c) => ({'á':'a','é':'e','í':'i','ó':'o','ú':'u'})[c] || c);
-                                                                       const esNumeroOrden = labelLower.includes('orden');
-                                                                       const placeholderTexto = labelLower.includes('referencia') && labelLower.includes('instalacion')
-                                                                           ? 'Ejemplo: Area general o zona'
-                                                                           : '...';
-                                                                       return (
-                                                                           <input
-                                                                               type="text"
-                                                                               value={esNumeroOrden ? (eq.codigo || '') : (typeof val === 'string' ? val : '')}
-                                                                               onChange={(e) => {
-                                                                                   if (!esNumeroOrden) {
-                                                                                       handleCheckChange(eq.id, item.key, e.target.value);
-                                                                                   }
-                                                                               }}
-                                                                               className={`w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${esNumeroOrden ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''} ${esNumeroOrden ? '' : getResponseColorClass(val, typeof val === 'string' && val.trim() !== '')}`}
-                                                                               placeholder={placeholderTexto}
-                                                                               readOnly={esNumeroOrden}
-                                                                           />
-                                                                       );
-                                                                   })()
+                                                                    (() => {
+                                                                        const labelLower = (item.label || '').toLowerCase().replace(/[áéíóú]/g, (c) => ({'á':'a','é':'e','í':'i','ó':'o','ú':'u'})[c] || c);
+                                                                        const esNumeroOrden = labelLower.includes('orden');
+                                                                        const esUCase = esUbicacionMarcaModelo(item.label, item.key);
+                                                                        const placeholderTexto = labelLower.includes('referencia') && labelLower.includes('instalacion')
+                                                                            ? 'Ejemplo: Area general o zona'
+                                                                            : '...';
+                                                                        return (
+                                                                            <input
+                                                                                type="text"
+                                                                                value={esNumeroOrden ? (eq.codigo || '') : (typeof val === 'string' ? (esUCase ? val.toUpperCase() : val) : '')}
+                                                                                onChange={(e) => {
+                                                                                    if (!esNumeroOrden) {
+                                                                                        handleCheckChange(eq.id, item.key, esUCase ? e.target.value.toUpperCase() : e.target.value);
+                                                                                    }
+                                                                                }}
+                                                                                className={`w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${esNumeroOrden ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''} ${esNumeroOrden ? '' : getResponseColorClass(val, typeof val === 'string' && val.trim() !== '')} ${esUCase ? 'uppercase' : ''}`}
+                                                                                placeholder={placeholderTexto}
+                                                                                readOnly={esNumeroOrden}
+                                                                            />
+                                                                        );
+                                                                    })()
                                                                )}
                                                            </div>
                                                        </div>
@@ -333,6 +406,26 @@ export default function SistemaDeteccion({
                                                                                      </div>
                                                                                  );
                                                                                 } else if (tipo === 'fecha') {
+                                                                                const lblLower = (item.label || '').toLowerCase();
+                                                                                const isFechaRevision = lblLower.includes('fecha de revisi');
+
+                                                                                if (isFechaRevision) {
+                                                                                    const fechaValFull = typeof val === 'string' ? val : '';
+                                                                                    const hoyStr = new Date().toISOString().split('T')[0];
+                                                                                    const noEsHoy = fechaValFull !== hoyStr;
+                                                                                    return (
+                                                                                        <div key={item.key} className="flex flex-col gap-0.5">
+                                                                                            <label className="text-[10px] font-normal text-slate-500">{item.label}</label>
+                                                                                            <input
+                                                                                                type="date"
+                                                                                                value={fechaValFull}
+                                                                                                onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value)}
+                                                                                                className={`w-full px-2 py-1.5 border rounded-lg text-xs font-bold outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${noEsHoy ? 'border-orange-400 bg-orange-50 text-orange-800' : 'border-slate-200 bg-white'}`}
+                                                                                            />
+                                                                                        </div>
+                                                                                    );
+                                                                                }
+
                                                                                 const fechaVal = typeof val === 'string' && val ? val.substring(0, 7) : '';
                                                                                 const isErrorDate = (caducado || necesitaRetimbre || seAproxima) && (item.key === fabItemKey || item.key === retItemKey);
                                                                                 return (
@@ -353,6 +446,7 @@ export default function SistemaDeteccion({
                                                                              } else if (tipo === 'texto') {
                                                                                  const labelLower = (item.label || '').toLowerCase().replace(/[áéíóú]/g, (c) => ({'á':'a','é':'e','í':'i','ó':'o','ú':'u'})[c] || c);
                                                                                  const esNumeroOrden = labelLower.includes('orden');
+                                                                                 const esUCase = esUbicacionMarcaModelo(item.label, item.key);
                                                                                  if (esNumeroOrden) console.log('🔍 Campo Nº Orden detectado, eq.codigo =', eq.codigo);
                                                                                  const placeholderTexto = labelLower.includes('referencia') && labelLower.includes('instalacion')
                                                                                      ? 'Ejemplo: Area general o zona'
@@ -363,13 +457,13 @@ export default function SistemaDeteccion({
                                                                                          <label className="text-[10px] font-normal text-slate-500">{item.label}</label>
                                                                                          <input
                                                                                              type="text"
-                                                                                             value={esNumeroOrden ? (eq.codigo || '') : (typeof val === 'string' ? val : '')}
+                                                                                             value={esNumeroOrden ? (eq.codigo || '') : (typeof val === 'string' ? (esUCase ? val.toUpperCase() : val) : '')}
                                                                                              onChange={(e) => {
                                                                                                  if (!esNumeroOrden) {
-                                                                                                     handleCheckChange(eq.id, item.key, e.target.value);
+                                                                                                     handleCheckChange(eq.id, item.key, esUCase ? e.target.value.toUpperCase() : e.target.value);
                                                                                                  }
                                                                                              }}
-                                                                                             className={`w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${esNumeroOrden ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''} ${esNumeroOrden ? '' : getResponseColorClass(val, tieneValorTexto)}`}
+                                                                                             className={`w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${esNumeroOrden ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''} ${esNumeroOrden ? '' : getResponseColorClass(val, tieneValorTexto)} ${esUCase ? 'uppercase' : ''}`}
                                                                                              placeholder={placeholderTexto}
                                                                                              readOnly={esNumeroOrden}
                                                                                          />

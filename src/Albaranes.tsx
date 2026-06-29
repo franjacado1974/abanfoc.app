@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { ArrowLeft, FileDigit, Download, Search, CheckCircle2, Circle, Clock, Trash2, Plus, Building2, MapPin, Save, Trash, Edit, Copy, Maximize2, X } from 'lucide-react';
+import { ArrowLeft, FileDigit, Download, Search, CheckCircle2, Circle, Clock, Trash2, Plus, Building2, MapPin, Save, Trash, Edit, Copy, Maximize2, X, Signature } from 'lucide-react';
 import { addAlbaran, updateAlbaran, deleteAlbaran, subscribeAlbaranes, subscribeEmpresas, subscribeTecnicos, subscribeCentros, subscribeClientes, subscribeTrabajos, db, type Albaran, type Cliente, type Centro, type Equipo, type Tecnico, type Empresa, type TrabajoConfig } from './firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { generarAlbaranPDF } from './pdfGenerator';
@@ -11,6 +11,37 @@ const formatMoneda = (valor: any) => {
   const parts = num.toFixed(2).split('.');
   parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
   return `${parts.join(',')} €`;
+};
+
+const isFirmaValida = (firma: string | undefined): boolean => {
+  if (!firma) return false;
+  if (firma.length <= 4400) return false;
+  if (firma.startsWith('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAlgAADICAYAAAA0n5+2')) return false;
+  return true;
+};
+
+const isCanvasBlank = (canvas: HTMLCanvasElement | null): boolean => {
+  if (!canvas) return true;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return true;
+  try {
+    const buffer = new Uint32Array(
+      ctx.getImageData(0, 0, canvas.width, canvas.height).data.buffer
+    );
+    return !buffer.some(color => color !== 0);
+  } catch {
+    return true;
+  }
+};
+
+const getFormattedDate = (isoString: string | undefined): string => {
+  if (!isoString) return '';
+  const date = new Date(isoString);
+  if (isNaN(date.getTime())) return '';
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
 };
 
 interface AlbaranesProps {
@@ -63,12 +94,29 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
     albaran: 100,
     fecha: 90,
     pedido: 90,
-    centro: 160,
-    titulo: 200,
-    estado: 100,
-    acciones: 120,
+    centro: 'auto',
+    titulo: 'auto',
+    estado: 110,
+    acciones: 180,
   });
   const resizingRef = useRef<{ key: string; startX: number; startWidth: number } | null>(null);
+
+  // Helper function to calculate column styles dynamically
+  const getColStyle = (key: string) => {
+    const width = colWidths[key];
+    if (width === 'auto') {
+      if (key === 'centro') {
+        return { flex: '2 1 0%', minWidth: '220px' };
+      }
+      if (key === 'titulo') {
+        return { flex: '3 1 0%', minWidth: '280px' };
+      }
+    }
+    return {
+      width: typeof width === 'number' ? `${width}px` : width,
+      flexShrink: 0,
+    };
+  };
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -210,6 +258,10 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
     const matchesFilter = !showOnlyPending || !alb.facturado;
     
     return matchesSearch && matchesFilter;
+  }).sort((a, b) => {
+    const dateA = a.fechaCreacion ? new Date(a.fechaCreacion).getTime() : 0;
+    const dateB = b.fechaCreacion ? new Date(b.fechaCreacion).getTime() : 0;
+    return dateB - dateA;
   });
 
   const generateNextAlbaranId = () => {
@@ -332,14 +384,17 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
       return;
     }
 
-    const firmaCliente = canvasClienteRef.current?.toDataURL('image/png') || '';
-    const firmaTecnico = canvasTecnicoRef.current?.toDataURL('image/png') || '';
+    const rawFirmaCliente = canvasClienteRef.current?.toDataURL('image/png') || '';
+    const rawFirmaTecnico = canvasTecnicoRef.current?.toDataURL('image/png') || '';
+
+    const firmaCliente = isCanvasBlank(canvasClienteRef.current) ? '' : rawFirmaCliente;
+    const firmaTecnico = isCanvasBlank(canvasTecnicoRef.current) ? '' : rawFirmaTecnico;
 
     const albaranToSave: Albaran = { // Removed type assertion
       ...form,
       firmaCliente,
       firmaTecnico,
-      fechaCreacion: editingId ? form.fechaCreacion : new Date().toISOString()
+      fechaCreacion: form.fechaCreacion || new Date().toISOString()
     };
 
     try {
@@ -426,110 +481,143 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
           </div>
         ) : (
           <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden">
-              <div className="hidden md:flex items-center bg-[#f9f7f4] border-b-2 border-zinc-200 px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-zinc-500">
-              <div className="relative pr-3 select-none" style={{ width: colWidths.albaran }}>
-                <div>Nº Albarán</div>
-                <div className="absolute top-0 right-0 h-full w-4 -mr-2 cursor-col-resize border-l-2 border-dashed border-zinc-600" onMouseDown={(e) => handleMouseDownResize('albaran', e)} />
-              </div>
-              <div className="relative pr-3 select-none" style={{ width: colWidths.fecha }}>
-                <div>Fecha</div>
-                <div className="absolute top-0 right-0 h-full w-4 -mr-2 cursor-col-resize border-l-2 border-dashed border-zinc-600" onMouseDown={(e) => handleMouseDownResize('fecha', e)} />
-              </div>
-              <div className="relative pr-3 select-none" style={{ width: colWidths.pedido }}>
-                <div>Nº Pedido</div>
-                <div className="absolute top-0 right-0 h-full w-4 -mr-2 cursor-col-resize border-l-2 border-dashed border-zinc-600" onMouseDown={(e) => handleMouseDownResize('pedido', e)} />
-              </div>
-              <div className="relative pr-3 select-none" style={{ width: colWidths.centro }}>
-                <div>Centro</div>
-                <div className="absolute top-0 right-0 h-full w-4 -mr-2 cursor-col-resize border-l-2 border-dashed border-zinc-600" onMouseDown={(e) => handleMouseDownResize('centro', e)} />
-              </div>
-              <div className="relative pr-3 select-none" style={{ width: colWidths.titulo }}>
-                <div>Título</div>
-                <div className="absolute top-0 right-0 h-full w-4 -mr-2 cursor-col-resize border-l-2 border-dashed border-zinc-600" onMouseDown={(e) => handleMouseDownResize('titulo', e)} />
-              </div>
-              <div className="flex-1 min-w-0"></div>
-              {!isTecnicoMode && (
-                <div className="relative text-center pr-3 select-none" style={{ width: colWidths.estado }}>
-                  <div>Estado</div>
-                  <div className="absolute top-0 right-0 h-full w-4 -mr-2 cursor-col-resize border-l-2 border-dashed border-zinc-600" onMouseDown={(e) => handleMouseDownResize('estado', e)} />
-                </div>
-              )}
-              <div className="relative text-center select-none" style={{ width: colWidths.acciones }}>
-                <div>Acciones</div>
-              </div>
-            </div>
-            <div className="divide-y divide-zinc-100">
-              {filtered.map((alb) => {
-                const cliente = clientes.find(c => c.id === alb.clienteId);
-                const centro = centros.find(c => c._docId === alb.centroId || c.id === alb.centroId);
-                return (
-                  <div key={alb.id} className="flex flex-col md:flex-row md:items-center px-4 py-3.5 hover:bg-zinc-50/80 transition-colors group">
-                    <div className="flex md:hidden items-center justify-between mb-2">
-                      <span className="text-[10px] font-mono font-bold text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded">{alb.id}</span>
-                      <div className="flex items-center gap-1">
-                        <button onClick={async () => {
-                          const eqsDelCentro = equipos.filter(e => e.centroId === alb.centroId);
-                          const empId = alb.empresaId || centro?.empresaId;
-                          let empresa = empresas.find(e => e._docId === empId || e.id === empId);
-                          if (!empresa && empId) {
-                            try {
-                                const docSnap = await getDoc(doc(db, 'empresa', empId));
-                                if (docSnap.exists()) empresa = { _docId: docSnap.id, ...(docSnap.data() as any) };
-                            } catch(e){}
-                          }
-                          const tecnico = tecnicos.find(t => t.id === alb.tecnicoId);
-                          const tecnicoNombre = tecnico ? `${tecnico.nombre} ${tecnico.apellidos}` : '';
-                          await generarAlbaranPDF(cliente as any || null, centro as any || null, eqsDelCentro as any[], alb.numeroMantenimiento || alb.id, tecnicoNombre, alb.firmaCliente, alb.firmaTecnico, alb.nombreFirmante, alb.items, empresa as any, false, alb.titulo, alb.periodicidad);
-                        }} className="p-1.5 text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100 rounded-lg transition-colors" title="Descargar PDF"><Download className="w-4 h-4" /></button>
-                        <button onClick={() => handleEditAlbaran(alb)} className="p-1.5 text-zinc-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"><Edit className="w-4 h-4" /></button>
-                      </div>
-                    </div>
-                    <div className="flex md:hidden">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-bold text-zinc-900 truncate">{cliente?.nombre || 'Desconocido'}</p>
-                        <p className="text-xs text-zinc-500">{new Date(alb.fechaCreacion).toLocaleDateString()}</p>
-                      </div>
-                    </div>
-                      <div className="hidden md:flex items-center w-full">
-                      <div className="pr-3" style={{ width: colWidths.albaran }}><span className="text-[11px] font-mono font-bold text-zinc-500 bg-zinc-100 px-1.5 py-0.5 rounded">{alb.id}</span></div>
-                      <div className="pr-3 text-sm text-zinc-600" style={{ width: colWidths.fecha }}>{new Date(alb.fechaCreacion).toLocaleDateString()}</div>
-                      <div className="pr-3 text-sm text-zinc-600 truncate" style={{ width: colWidths.pedido }}>{alb.numeroPedido || '-'}</div>
-                      <div className="pr-3 text-sm text-zinc-600 truncate flex items-center gap-1" style={{ width: colWidths.centro }}><MapPin className="w-3 h-3 text-zinc-400 shrink-0" />{centro?.nombre || cliente?.nombre || 'Desconocido'}</div>
-                      <div className="pr-3 min-w-0" style={{ width: colWidths.titulo }}><p className="text-sm font-bold text-zinc-900 truncate">{alb.titulo || '-'}</p></div>
-                      <div className="flex-1 min-w-0"></div>
-                      {!isTecnicoMode && (
-                        <div className="flex justify-center pr-2" style={{ width: colWidths.estado }}>
-                          <button onClick={() => toggleFacturado(alb.id)} className={`text-[10px] font-bold px-2 py-1 rounded-lg border flex items-center gap-1 ${
-                            alb.facturado ? 'bg-blue-600 border-blue-700 text-white' : 'bg-zinc-100 border-zinc-200 text-zinc-500'
-                          }`}>
-                            {alb.facturado ? <CheckCircle2 className="w-3 h-3" /> : <Circle className="w-3 h-3" />}
-                            {alb.facturado ? 'Facturado' : 'Pendiente'}
-                          </button>
-                        </div>
-                      )}
-                      <div className="flex items-center justify-center gap-1" style={{ width: colWidths.acciones }}>
-                        <button onClick={async () => {
-                          const eqsDelCentro = equipos.filter(e => e.centroId === alb.centroId);
-                          const empId = alb.empresaId || centro?.empresaId;
-                          let empresa = empresas.find(e => e._docId === empId || e.id === empId);
-                          if (!empresa && empId) {
-                            try {
-                                const docSnap = await getDoc(doc(db, 'empresa', empId));
-                                if (docSnap.exists()) empresa = { _docId: docSnap.id, ...(docSnap.data() as any) };
-                            } catch(e){}
-                          }
-                          const tecnico = tecnicos.find(t => t.id === alb.tecnicoId);
-                          const tecnicoNombre = tecnico ? `${tecnico.nombre} ${tecnico.apellidos}` : '';
-                          await generarAlbaranPDF(cliente as any || null, centro as any || null, eqsDelCentro as any[], alb.numeroMantenimiento || alb.id, tecnicoNombre, alb.firmaCliente, alb.firmaTecnico, alb.nombreFirmante, alb.items, empresa as any, false, alb.titulo, alb.periodicidad);
-                        }} className="p-1.5 text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100 rounded-lg transition-colors" title="Descargar PDF"><Download className="w-4 h-4" /></button>
-                        {!isVisualizador && <button onClick={() => handleEditAlbaran(alb)} className="p-1.5 text-zinc-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors" title="Editar"><Edit className="w-4 h-4" /></button>}
-                        {!isVisualizador && !isTecnicoMode && <button onClick={() => handleDuplicateAlbaran(alb)} className="p-1.5 text-zinc-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-colors" title="Duplicar"><Copy className="w-4 h-4" /></button>}
-                        {!isVisualizador && !isTecnicoMode && <button onClick={() => handleDeleteAlbaran(alb.id)} className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Eliminar"><Trash2 className="w-4 h-4" /></button>}
-                      </div>
-                    </div>
+            <div className="overflow-x-auto">
+              <div className="min-w-full w-max flex flex-col">
+                <div className="hidden md:flex items-center bg-[#f9f7f4] border-b-2 border-zinc-200 px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-zinc-500 w-full">
+                  <div className="relative pr-3 select-none" style={getColStyle('albaran')}>
+                    <div>Nº Albarán</div>
+                    <div className="absolute top-0 right-0 h-full w-4 -mr-2 cursor-col-resize border-l-2 border-dashed border-zinc-600" onMouseDown={(e) => handleMouseDownResize('albaran', e)} />
                   </div>
-                );
-              })}
+                  <div className="relative pr-3 select-none" style={getColStyle('fecha')}>
+                    <div>Fecha</div>
+                    <div className="absolute top-0 right-0 h-full w-4 -mr-2 cursor-col-resize border-l-2 border-dashed border-zinc-600" onMouseDown={(e) => handleMouseDownResize('fecha', e)} />
+                  </div>
+                  <div className="relative pr-3 select-none" style={getColStyle('pedido')}>
+                    <div>Nº Pedido</div>
+                    <div className="absolute top-0 right-0 h-full w-4 -mr-2 cursor-col-resize border-l-2 border-dashed border-zinc-600" onMouseDown={(e) => handleMouseDownResize('pedido', e)} />
+                  </div>
+                  <div className="relative pr-3 select-none" style={getColStyle('centro')}>
+                    <div>Centro</div>
+                    <div className="absolute top-0 right-0 h-full w-4 -mr-2 cursor-col-resize border-l-2 border-dashed border-zinc-600" onMouseDown={(e) => handleMouseDownResize('centro', e)} />
+                  </div>
+                  <div className="relative pr-3 select-none" style={getColStyle('titulo')}>
+                    <div>Título</div>
+                    <div className="absolute top-0 right-0 h-full w-4 -mr-2 cursor-col-resize border-l-2 border-dashed border-zinc-600" onMouseDown={(e) => handleMouseDownResize('titulo', e)} />
+                  </div>
+                  <div className="flex-1 min-w-0"></div>
+                  {!isTecnicoMode && (
+                    <div className="relative text-center pr-3 select-none" style={getColStyle('estado')}>
+                      <div>Estado</div>
+                      <div className="absolute top-0 right-0 h-full w-4 -mr-2 cursor-col-resize border-l-2 border-dashed border-zinc-600" onMouseDown={(e) => handleMouseDownResize('estado', e)} />
+                    </div>
+                  )}
+                  <div className="relative text-center select-none" style={getColStyle('acciones')}>
+                    <div>Acciones</div>
+                  </div>
+                </div>
+                <div className="divide-y divide-zinc-100 w-full">
+                  {filtered.map((alb) => {
+                    const cliente = clientes.find(c => c.id === alb.clienteId);
+                    const centro = centros.find(c => c._docId === alb.centroId || c.id === alb.centroId);
+                    return (
+                      <div key={alb.id} className="flex flex-col md:flex-row md:items-center px-4 py-3.5 hover:bg-zinc-50/80 transition-colors group">
+                        <div className="flex md:hidden items-center justify-between mb-2">
+                          <span className="text-[10px] font-mono font-bold text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded">{alb.id}</span>
+                          <div className="flex items-center gap-1">
+                            <span 
+                              className={`p-1.5 rounded-lg ${
+                                isFirmaValida(alb.firmaCliente) 
+                                  ? 'text-emerald-600 bg-emerald-50/80 font-bold' 
+                                  : 'text-zinc-300'
+                              }`} 
+                              title={isFirmaValida(alb.firmaCliente) ? "Firmado por el cliente" : "Pendiente de firma del cliente"}
+                            >
+                              <Signature className="w-4 h-4" />
+                            </span>
+                            <button onClick={async () => {
+                              const eqsDelCentro = equipos.filter(e => e.centroId === alb.centroId);
+                              const empId = alb.empresaId || centro?.empresaId;
+                              let empresa = empresas.find(e => e._docId === empId || e.id === empId);
+                              if (!empresa && empId) {
+                                try {
+                                    const docSnap = await getDoc(doc(db, 'empresa', empId));
+                                    if (docSnap.exists()) empresa = { _docId: docSnap.id, ...(docSnap.data() as any) };
+                                } catch(e){}
+                              }
+                              const tecnico = tecnicos.find(t => t.id === alb.tecnicoId);
+                              const tecnicoNombre = tecnico ? `${tecnico.nombre} ${tecnico.apellidos}` : '';
+                              await generarAlbaranPDF(cliente as any || null, centro as any || null, eqsDelCentro as any[], alb.numeroMantenimiento || alb.id, tecnicoNombre, alb.firmaCliente, alb.firmaTecnico, alb.nombreFirmante, alb.items, empresa as any, false, alb.titulo, alb.periodicidad, undefined, alb.numeroPedido, alb.fechaCreacion);
+                            }} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Descargar PDF"><Download className="w-4 h-4" /></button>
+                            <button onClick={() => handleEditAlbaran(alb)} className="p-1.5 text-black hover:bg-zinc-100 rounded-lg transition-colors"><Edit className="w-4 h-4" /></button>
+                          </div>
+                        </div>
+                        <div className="flex md:hidden">
+                          <div className="flex-1 min-w-0 space-y-1">
+                            <div className="flex items-center gap-1.5 text-xs font-medium text-zinc-500 truncate">
+                              <Building2 className="w-3.5 h-3.5 shrink-0 text-zinc-400" />
+                              <span>{cliente?.nombre || 'Cliente Desconocido'}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-sm font-bold text-zinc-900 truncate uppercase">
+                              <MapPin className="w-3.5 h-3.5 shrink-0 text-zinc-400" />
+                              <span>{centro?.nombre || cliente?.nombre || 'Centro Desconocido'}</span>
+                            </div>
+                            <div className="text-[10px] text-zinc-400 pl-5">
+                              {new Date(alb.fechaCreacion).toLocaleDateString()}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="hidden md:flex items-center w-full">
+                          <div className="pr-3" style={getColStyle('albaran')}><span className="text-[11px] font-mono font-bold text-zinc-500 bg-zinc-100 px-1.5 py-0.5 rounded">{alb.id}</span></div>
+                          <div className="pr-3 text-sm text-zinc-600" style={getColStyle('fecha')}>{new Date(alb.fechaCreacion).toLocaleDateString()}</div>
+                          <div className="pr-3 text-sm text-zinc-600 truncate" style={getColStyle('pedido')}>{alb.numeroPedido || '-'}</div>
+                          <div className="pr-3 text-sm text-zinc-600 truncate flex items-center gap-1" style={getColStyle('centro')}><MapPin className="w-3 h-3 text-zinc-400 shrink-0" />{centro?.nombre || cliente?.nombre || 'Desconocido'}</div>
+                          <div className="pr-3 min-w-0" style={getColStyle('titulo')}><p className="text-sm font-bold text-zinc-900 truncate">{alb.titulo || '-'}</p></div>
+                          <div className="flex-1 min-w-0"></div>
+                          {!isTecnicoMode && (
+                            <div className="flex justify-center pr-2" style={getColStyle('estado')}>
+                              <button onClick={() => toggleFacturado(alb.id)} className={`text-[10px] font-bold px-2 py-1 rounded-lg border flex items-center gap-1 ${
+                                alb.facturado ? 'bg-blue-600 border-blue-700 text-white' : 'bg-zinc-100 border-zinc-200 text-zinc-500'
+                              }`}>
+                                {alb.facturado ? <CheckCircle2 className="w-3 h-3" /> : <Circle className="w-3 h-3" />}
+                                {alb.facturado ? 'Facturado' : 'Pendiente'}
+                              </button>
+                            </div>
+                          )}
+                          <div className="flex items-center justify-center gap-1" style={getColStyle('acciones')}>
+                            <span 
+                              className={`p-1.5 rounded-lg ${
+                                isFirmaValida(alb.firmaCliente) 
+                                  ? 'text-emerald-600 bg-emerald-50/80 font-bold' 
+                                  : 'text-zinc-300'
+                              }`} 
+                              title={isFirmaValida(alb.firmaCliente) ? "Firmado por el cliente" : "Pendiente de firma del cliente"}
+                            >
+                              <Signature className="w-4 h-4" />
+                            </span>
+                            <button onClick={async () => {
+                              const eqsDelCentro = equipos.filter(e => e.centroId === alb.centroId);
+                              const empId = alb.empresaId || centro?.empresaId;
+                              let empresa = empresas.find(e => e._docId === empId || e.id === empId);
+                              if (!empresa && empId) {
+                                try {
+                                    const docSnap = await getDoc(doc(db, 'empresa', empId));
+                                    if (docSnap.exists()) empresa = { _docId: docSnap.id, ...(docSnap.data() as any) };
+                                } catch(e){}
+                              }
+                              const tecnico = tecnicos.find(t => t.id === alb.tecnicoId);
+                              const tecnicoNombre = tecnico ? `${tecnico.nombre} ${tecnico.apellidos}` : '';
+                              await generarAlbaranPDF(cliente as any || null, centro as any || null, eqsDelCentro as any[], alb.numeroMantenimiento || alb.id, tecnicoNombre, alb.firmaCliente, alb.firmaTecnico, alb.nombreFirmante, alb.items, empresa as any, false, alb.titulo, alb.periodicidad, undefined, alb.numeroPedido, alb.fechaCreacion);
+                            }} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Descargar PDF"><Download className="w-4 h-4" /></button>
+                            {!isVisualizador && <button onClick={() => handleEditAlbaran(alb)} className="p-1.5 text-black hover:bg-zinc-100 rounded-lg transition-colors" title="Editar"><Edit className="w-4 h-4" /></button>}
+                            {!isVisualizador && !isTecnicoMode && <button onClick={() => handleDuplicateAlbaran(alb)} className="p-1.5 text-violet-600 hover:bg-violet-50 rounded-lg transition-colors" title="Duplicar"><Copy className="w-4 h-4" /></button>}
+                            {!isVisualizador && !isTecnicoMode && <button onClick={() => handleDeleteAlbaran(alb.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Eliminar"><Trash2 className="w-4 h-4" /></button>}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -665,7 +753,7 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                 </div>
               </div>
 
-              {/* Número Documento y Título */}
+              {/* Número Documento, Fecha y Título */}
               <div className="flex flex-col md:flex-row gap-6">
                 <div className="flex-1 max-w-xs space-y-2">
                   <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Número de Albarán *</label>
@@ -675,6 +763,27 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                     value={form.id}
                     readOnly
                     className="w-full px-5 py-3.5 bg-black text-white font-mono font-bold rounded-2xl outline-none border border-zinc-800"
+                  />
+                </div>
+
+                <div className="flex-1 max-w-xs space-y-2">
+                  <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Fecha *</label>
+                  <input 
+                    required
+                    type="date"
+                    value={getFormattedDate(form.fechaCreacion)}
+                    onChange={e => {
+                      const selectedDate = e.target.value;
+                      if (selectedDate) {
+                        const [year, month, day] = selectedDate.split('-').map(Number);
+                        const newDate = form.fechaCreacion ? new Date(form.fechaCreacion) : new Date();
+                        newDate.setFullYear(year);
+                        newDate.setMonth(month - 1);
+                        newDate.setDate(day);
+                        setForm({...form, fechaCreacion: newDate.toISOString()});
+                      }
+                    }}
+                    className="w-full px-5 py-3.5 bg-zinc-50 border border-zinc-200 rounded-2xl outline-none focus:ring-2 focus:ring-violet-500/20 transition-all font-bold text-sm text-zinc-900"
                   />
                 </div>
                 

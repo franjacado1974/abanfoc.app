@@ -21,6 +21,13 @@ interface Props {
     getCheckStats: (eq: EquipoInstalado) => { ok: number; fail: number; pending: number };
 }
 
+const esUbicacionMarcaModelo = (label?: string, key?: string) => {
+    const lbl = (label || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const k = (key || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    return lbl.includes('ubicacion') || lbl.includes('marca') || lbl.includes('modelo') ||
+           k.includes('ubicacion') || k.includes('marca') || k.includes('modelo');
+};
+
 export default function SistemaBies({
     sist,
     filteredEqs,
@@ -148,8 +155,12 @@ export default function SistemaBies({
                                                                             if (lbl.includes('notas') || lbl.includes('observaciones') || lbl.includes('anomal')) return false;
                                                                             return true;
                                                                         }).map(item => {
-                                                                             const val = eq[item.key as keyof EquipoInstalado];
-                                                                              const tipo = (item as ChecklistItem).tipoRespuesta as string || 'check';
+                                                                             const rawVal = eq[item.key as keyof EquipoInstalado];
+                                                                             const itemOpciones = (item as any).opciones || [];
+                                                                             const val = (rawVal === undefined || rawVal === '') && itemOpciones.includes('CORRECTO')
+                                                                                 ? 'CORRECTO'
+                                                                                 : rawVal;
+                                                                             const tipo = (item as ChecklistItem).tipoRespuesta as string || 'check';
                                                                              const lbl = (item.label || '').toLowerCase();
                                                                              const esCampoNotas = lbl.includes('notas') || lbl.includes('observaciones') || lbl.includes('anomal');
                                                                              
@@ -300,26 +311,27 @@ export default function SistemaBies({
                                                                     })()
                                                                ) : (
                                                                    (() => {
-                                                                       const labelLower = (item.label || '').toLowerCase().replace(/[áéíóú]/g, (c) => ({'á':'a','é':'e','í':'i','ó':'o','ú':'u'})[c] || c);
-                                                                       const esNumeroOrden = labelLower.includes('orden');
-                                                                       const placeholderTexto = labelLower.includes('referencia') && labelLower.includes('instalacion')
-                                                                           ? 'Ejemplo: Area general o zona'
-                                                                           : '...';
-                                                                       return (
-                                                                           <input
-                                                                               type="text"
-                                                                               value={esNumeroOrden ? (eq.codigo || '') : (typeof val === 'string' ? val : '')}
-                                                                               onChange={(e) => {
-                                                                                   if (!esNumeroOrden) {
-                                                                                       handleCheckChange(eq.id, item.key, e.target.value);
-                                                                                   }
-                                                                               }}
-                                                                               className={`w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${esNumeroOrden ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''}`}
-                                                                               placeholder={placeholderTexto}
-                                                                               readOnly={esNumeroOrden}
-                                                                           />
-                                                                       );
-                                                                   })()
+                                                                        const labelLower = (item.label || '').toLowerCase().replace(/[áéíóú]/g, (c) => ({'á':'a','é':'e','í':'i','ó':'o','ú':'u'})[c] || c);
+                                                                        const esNumeroOrden = labelLower.includes('orden');
+                                                                        const esUCase = esUbicacionMarcaModelo(item.label, item.key);
+                                                                        const placeholderTexto = labelLower.includes('referencia') && labelLower.includes('instalacion')
+                                                                            ? 'Ejemplo: Area general o zona'
+                                                                            : '...';
+                                                                        return (
+                                                                            <input
+                                                                                type="text"
+                                                                                value={esNumeroOrden ? (eq.codigo || '') : (typeof val === 'string' ? (esUCase ? val.toUpperCase() : val) : '')}
+                                                                                onChange={(e) => {
+                                                                                    if (!esNumeroOrden) {
+                                                                                        handleCheckChange(eq.id, item.key, esUCase ? e.target.value.toUpperCase() : e.target.value);
+                                                                                    }
+                                                                                }}
+                                                                                className={`w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${esNumeroOrden ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''} ${esUCase ? 'uppercase' : ''}`}
+                                                                                placeholder={placeholderTexto}
+                                                                                readOnly={esNumeroOrden}
+                                                                            />
+                                                                        );
+                                                                    })()
                                                                )}
                                                            </div>
                                                        </div>
@@ -372,6 +384,24 @@ export default function SistemaBies({
                                                                                      </div>
                                                                                  );
                                                                                 } else if (tipo === 'fecha') {
+                                                                                const lblLower = (item.label || '').toLowerCase();
+                                                                                const isFechaRevision = lblLower.includes('fecha de revisi');
+                                                                                if (isFechaRevision) {
+                                                                                    const fechaValFull = typeof val === 'string' ? val : '';
+                                                                                    const hoyStr = new Date().toISOString().split('T')[0];
+                                                                                    const noEsHoy = fechaValFull !== hoyStr;
+                                                                                    return (
+                                                                                        <div key={item.key} className="flex flex-col gap-0.5">
+                                                                                            <label className="text-[10px] font-semibold text-slate-500">{item.label}</label>
+                                                                                            <input
+                                                                                                type="date"
+                                                                                                value={fechaValFull}
+                                                                                                onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value)}
+                                                                                                className={`w-full px-2 py-1.5 border rounded-lg text-xs font-bold outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${noEsHoy ? 'border-orange-400 bg-orange-50 text-orange-800' : 'border-slate-200 bg-white'}`}
+                                                                                            />
+                                                                                        </div>
+                                                                                    );
+                                                                                }
                                                                                 const fechaVal = typeof val === 'string' && val ? val.substring(0, 7) : '';
                                                                                 const isErrorDate = 
                                                                                     ((caducado || necesitaRetimbre || seAproxima) && (item.key === fabItemKey || item.key === retItemKey)) ||
@@ -393,30 +423,31 @@ export default function SistemaBies({
                                                                                     </div>
                                                                                 );
                                                                              } else if (tipo === 'texto') {
-                                                                                 const labelLower = (item.label || '').toLowerCase().replace(/[áéíóú]/g, (c) => ({'á':'a','é':'e','í':'i','ó':'o','ú':'u'})[c] || c);
-                                                                                 const esNumeroOrden = labelLower.includes('orden');
-                                                                                 if (esNumeroOrden) console.log('🔍 Campo Nº Orden detectado, eq.codigo =', eq.codigo);
-                                                                                 const placeholderTexto = labelLower.includes('referencia') && labelLower.includes('instalacion')
-                                                                                     ? 'Ejemplo: Area general o zona'
-                                                                                     : '...';
-                                                                                 const tieneValorTexto = !esNumeroOrden && typeof val === 'string' && val.trim() !== '';
-                                                                                 return (
-                                                                                     <div key={item.key} className="flex flex-col gap-0.5">
-                                                                                         <label className="text-[10px] font-semibold text-slate-500">{item.label}</label>
-                                                                                         <input
-                                                                                             type="text"
-                                                                                             value={esNumeroOrden ? (eq.codigo || '') : (typeof val === 'string' ? val : '')}
-                                                                                             onChange={(e) => {
-                                                                                                 if (!esNumeroOrden) {
-                                                                                                     handleCheckChange(eq.id, item.key, e.target.value);
-                                                                                                 }
-                                                                                             }}
-                                                                                             className={`w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${esNumeroOrden ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''} ${tieneValorTexto ? 'font-bold' : ''}`}
-                                                                                             placeholder={placeholderTexto}
-                                                                                             readOnly={esNumeroOrden}
-                                                                                         />
-                                                                                     </div>
-                                                                                 );
+                                                                                  const labelLower = (item.label || '').toLowerCase().replace(/[áéíóú]/g, (c) => ({'á':'a','é':'e','í':'i','ó':'o','ú':'u'})[c] || c);
+                                                                                  const esNumeroOrden = labelLower.includes('orden');
+                                                                                  const esUCase = esUbicacionMarcaModelo(item.label, item.key);
+                                                                                  if (esNumeroOrden) console.log('🔍 Campo Nº Orden detectado, eq.codigo =', eq.codigo);
+                                                                                  const placeholderTexto = labelLower.includes('referencia') && labelLower.includes('instalacion')
+                                                                                      ? 'Ejemplo: Area general o zona'
+                                                                                      : '...';
+                                                                                  const tieneValorTexto = !esNumeroOrden && typeof val === 'string' && val.trim() !== '';
+                                                                                  return (
+                                                                                      <div key={item.key} className="flex flex-col gap-0.5">
+                                                                                          <label className="text-[10px] font-semibold text-slate-500">{item.label}</label>
+                                                                                          <input
+                                                                                              type="text"
+                                                                                              value={esNumeroOrden ? (eq.codigo || '') : (typeof val === 'string' ? (esUCase ? val.toUpperCase() : val) : '')}
+                                                                                              onChange={(e) => {
+                                                                                                  if (!esNumeroOrden) {
+                                                                                                      handleCheckChange(eq.id, item.key, esUCase ? e.target.value.toUpperCase() : e.target.value);
+                                                                                                  }
+                                                                                              }}
+                                                                                              className={`w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${esNumeroOrden ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''} ${tieneValorTexto ? 'font-bold' : ''} ${esUCase ? 'uppercase' : ''}`}
+                                                                                              placeholder={placeholderTexto}
+                                                                                              readOnly={esNumeroOrden}
+                                                                                          />
+                                                                                      </div>
+                                                                                  );
                                                                               } else if (tipo === 'texto-largo') {
                                                                                  // No renderizar "notas" en el grid
                                                                                  const lbl = (item.label || '').toLowerCase();

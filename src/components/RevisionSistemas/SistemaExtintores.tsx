@@ -21,6 +21,13 @@ interface Props {
     getCheckStats: (eq: EquipoInstalado) => { ok: number; fail: number; pending: number };
 }
 
+const esUbicacionMarcaModelo = (label?: string, key?: string) => {
+    const lbl = (label || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const k = (key || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    return lbl.includes('ubicacion') || lbl.includes('marca') || lbl.includes('modelo') ||
+           k.includes('ubicacion') || k.includes('marca') || k.includes('modelo');
+};
+
 export default function SistemaExtintores({
     sist,
     filteredEqs,
@@ -104,7 +111,11 @@ export default function SistemaExtintores({
                                                                             if (lbl.includes('notas') || lbl.includes('observaciones') || lbl.includes('anomal')) return false;
                                                                             return true;
                                                                         }).map(item => {
-                                                                             const val = eq[item.key as keyof EquipoInstalado];
+                                                                              const rawVal = eq[item.key as keyof EquipoInstalado];
+                                                                              const itemOpciones = (item as any).opciones || [];
+                                                                              const val = (rawVal === undefined || rawVal === '') && itemOpciones.includes('CORRECTO')
+                                                                                  ? 'CORRECTO'
+                                                                                  : rawVal;
                                                                              const tipo = (item as ChecklistItem).tipoRespuesta as string || 'check';
                                                                              const lbl = (item.label || '').toLowerCase();
                                                                              const esCampoNotas = lbl.includes('notas') || lbl.includes('observaciones') || lbl.includes('anomal');
@@ -253,26 +264,27 @@ export default function SistemaExtintores({
                                                                     })()
                                                                ) : (
                                                                    (() => {
-                                                                       const labelLower = (item.label || '').toLowerCase().replace(/[áéíóú]/g, (c) => ({'á':'a','é':'e','í':'i','ó':'o','ú':'u'})[c] || c);
-                                                                       const esNumeroOrden = labelLower.includes('orden');
-                                                                       const placeholderTexto = labelLower.includes('referencia') && labelLower.includes('instalacion')
-                                                                           ? 'Ejemplo: Area general o zona'
-                                                                           : '...';
-                                                                       return (
-                                                                           <input
-                                                                               type="text"
-                                                                               value={esNumeroOrden ? (eq.codigo || '') : (typeof val === 'string' ? val : '')}
-                                                                               onChange={(e) => {
-                                                                                   if (!esNumeroOrden) {
-                                                                                       handleCheckChange(eq.id, item.key, e.target.value);
-                                                                                   }
-                                                                               }}
-                                                                               className={`w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${esNumeroOrden ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''}`}
-                                                                               placeholder={placeholderTexto}
-                                                                               readOnly={esNumeroOrden}
-                                                                           />
-                                                                       );
-                                                                   })()
+                                                                        const labelLower = (item.label || '').toLowerCase().replace(/[áéíóú]/g, (c) => ({'á':'a','é':'e','í':'i','ó':'o','ú':'u'})[c] || c);
+                                                                        const esNumeroOrden = labelLower.includes('orden');
+                                                                        const esUCase = esUbicacionMarcaModelo(item.label, item.key);
+                                                                        const placeholderTexto = labelLower.includes('referencia') && labelLower.includes('instalacion')
+                                                                            ? 'Ejemplo: Area general o zona'
+                                                                            : '...';
+                                                                        return (
+                                                                            <input
+                                                                                type="text"
+                                                                                value={esNumeroOrden ? (eq.codigo || '') : (typeof val === 'string' ? (esUCase ? val.toUpperCase() : val) : '')}
+                                                                                onChange={(e) => {
+                                                                                    if (!esNumeroOrden) {
+                                                                                        handleCheckChange(eq.id, item.key, esUCase ? e.target.value.toUpperCase() : e.target.value);
+                                                                                    }
+                                                                                }}
+                                                                                className={`w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${esNumeroOrden ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''} ${esUCase ? 'uppercase' : ''}`}
+                                                                                placeholder={placeholderTexto}
+                                                                                readOnly={esNumeroOrden}
+                                                                            />
+                                                                        );
+                                                                    })()
                                                                )}
                                                            </div>
                                                        </div>
@@ -363,30 +375,31 @@ export default function SistemaExtintores({
                                                                                      </div>
                                                                                  );
                                                                              } else if (tipo === 'texto') {
-                                                                                 const labelLower = (item.label || '').toLowerCase().replace(/[áéíóú]/g, (c) => ({'á':'a','é':'e','í':'i','ó':'o','ú':'u'})[c] || c);
-                                                                                 const esNumeroOrden = labelLower.includes('orden');
-                                                                                 if (esNumeroOrden) console.log('🔍 Campo Nº Orden detectado, eq.codigo =', eq.codigo);
-                                                                                 const placeholderTexto = labelLower.includes('referencia') && labelLower.includes('instalacion')
-                                                                                     ? 'Ejemplo: Area general o zona'
-                                                                                     : '...';
-                                                                                 const tieneValorTexto = !esNumeroOrden && typeof val === 'string' && val.trim() !== '';
-                                                                                 return (
-                                                                                     <div key={item.key} className="flex flex-col gap-0.5">
-                                                                                         <label className="text-[10px] font-semibold text-slate-500">{item.label}</label>
-                                                                                         <input
-                                                                                             type="text"
-                                                                                             value={esNumeroOrden ? (eq.codigo || '') : (typeof val === 'string' ? val : '')}
-                                                                                             onChange={(e) => {
-                                                                                                 if (!esNumeroOrden) {
-                                                                                                     handleCheckChange(eq.id, item.key, e.target.value);
-                                                                                                 }
-                                                                                             }}
-                                                                                             className={`w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${esNumeroOrden ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''} ${tieneValorTexto ? 'font-bold' : ''}`}
-                                                                                             placeholder={placeholderTexto}
-                                                                                             readOnly={esNumeroOrden}
-                                                                                         />
-                                                                                     </div>
-                                                                                 );
+                                                                                  const labelLower = (item.label || '').toLowerCase().replace(/[áéíóú]/g, (c) => ({'á':'a','é':'e','í':'i','ó':'o','ú':'u'})[c] || c);
+                                                                                  const esNumeroOrden = labelLower.includes('orden');
+                                                                                  const esUCase = esUbicacionMarcaModelo(item.label, item.key);
+                                                                                  if (esNumeroOrden) console.log('🔍 Campo Nº Orden detectado, eq.codigo =', eq.codigo);
+                                                                                  const placeholderTexto = labelLower.includes('referencia') && labelLower.includes('instalacion')
+                                                                                      ? 'Ejemplo: Area general o zona'
+                                                                                      : '...';
+                                                                                  const tieneValorTexto = !esNumeroOrden && typeof val === 'string' && val.trim() !== '';
+                                                                                  return (
+                                                                                      <div key={item.key} className="flex flex-col gap-0.5">
+                                                                                          <label className="text-[10px] font-semibold text-slate-500">{item.label}</label>
+                                                                                          <input
+                                                                                              type="text"
+                                                                                              value={esNumeroOrden ? (eq.codigo || '') : (typeof val === 'string' ? (esUCase ? val.toUpperCase() : val) : '')}
+                                                                                              onChange={(e) => {
+                                                                                                  if (!esNumeroOrden) {
+                                                                                                      handleCheckChange(eq.id, item.key, esUCase ? e.target.value.toUpperCase() : e.target.value);
+                                                                                                  }
+                                                                                              }}
+                                                                                              className={`w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${esNumeroOrden ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''} ${tieneValorTexto ? 'font-bold' : ''} ${esUCase ? 'uppercase' : ''}`}
+                                                                                              placeholder={placeholderTexto}
+                                                                                              readOnly={esNumeroOrden}
+                                                                                          />
+                                                                                      </div>
+                                                                                  );
                                                                               } else if (tipo === 'texto-largo') {
                                                                                  // No renderizar "notas" en el grid
                                                                                  const lbl = (item.label || '').toLowerCase();

@@ -65,3 +65,12 @@ if (updated === content) {
   fs.writeFileSync(constantsFile, updated, 'utf8');
   console.log(`✅ constants.ts actualizado con versión: ${version}`);
 }
+
+// ── Actualizar version.json en public ──────────────────────────────────────
+try {
+  const versionFile = path.join(__dirname, '..', 'public', 'version.json');
+  fs.writeFileSync(versionFile, JSON.stringify({ version }, null, 2), 'utf8');
+  console.log(`✅ public/version.json actualizado con versión: ${version}`);
+} catch (err) {
+  console.error('⚠️  Error al escribir public/version.json:', err);
+}

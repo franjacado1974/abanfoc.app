@@ -9,8 +9,8 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
-      registerType: 'autoUpdate',
-      includeAssets: ['favicon.png', 'bg-login.jpg', 'logo.png'],
+      registerType: 'prompt',
+      includeAssets: ['salamandra.jpg', 'salamandra.png', 'salamandra-orange.png', 'salamandra-white.png', 'favicon.png', 'bg-login.jpg', 'logo.png'],
       manifest: {
         name: 'ABANFOC',
         short_name: 'ABANFOC',
@@ -23,13 +23,13 @@ export default defineConfig({
         start_url: '/',
         icons: [
           {
-            src: '/favicon.png',
+            src: '/salamandra.png',
             sizes: '192x192',
             type: 'image/png',
             purpose: 'any maskable'
           },
           {
-            src: '/favicon.png',
+            src: '/salamandra.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'any maskable'

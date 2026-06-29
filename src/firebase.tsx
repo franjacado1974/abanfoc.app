@@ -1,6 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
-import { getFirestore, collection, getDocs, query, where, orderBy, addDoc, doc, updateDoc, setDoc, deleteDoc, onSnapshot, enableMultiTabIndexedDbPersistence } from "firebase/firestore";
+import { getFirestore, collection, getDocs, getDoc, query, where, orderBy, addDoc, doc, updateDoc, setDoc, deleteDoc, onSnapshot, enableMultiTabIndexedDbPersistence } from "firebase/firestore";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 const firebaseConfig = {
@@ -87,6 +87,7 @@ export interface Albaran {
   numeroPedido?: string;
   titulo?: string;
   periodicidad?: string;
+  _docId?: string;
 }
 
 export interface TrabajoConfig {
@@ -117,6 +118,18 @@ export interface Centro {
   provincia?: string;
   telefono?: string;
   empresaId?: string;
+  periodicidad?: string[];
+  mesesRevision?: string[];
+  tecnicoId?: string;
+  numeroContrato?: string;
+  fechaInicioContrato?: string;
+  fechaFinContrato?: string;
+  importeAnualContrato?: string;
+  observacionesContrato?: string;
+  sistemasContrato?: string[];
+  precioAnualContrato?: string;
+  precioTrimestralContrato?: string;
+  precioMensualContrato?: string;
 }
 
 export interface Equipo {
@@ -452,6 +465,54 @@ export async function updateCentro(id: string, centro: Centro) {
   }
 }
 
+export async function saveContrato(centroDocId: string, contratoData: any) {
+  try {
+    const ref = doc(db, 'contratos', centroDocId);
+    await setDoc(ref, {
+      ...contratoData,
+      centroId: centroDocId,
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+    return true;
+  } catch (e) {
+    console.error('saveContrato error:', e);
+    throw e;
+  }
+}
+
+export async function syncContratosExistentes(centros: Centro[]) {
+  try {
+    const contratosCol = collection(db, 'contratos');
+    const snap = await getDocs(contratosCol);
+    const existingContractDocIds = new Set(snap.docs.map(d => d.id));
+
+    for (const centro of centros) {
+      const docId = centro._docId || centro.id;
+      if (centro.numeroContrato && !existingContractDocIds.has(docId)) {
+        console.info('Sincronizando contrato para el centro:', centro.nombre);
+        const ref = doc(db, 'contratos', docId);
+        await setDoc(ref, {
+          clienteId: centro.clienteId || '',
+          numeroContrato: centro.numeroContrato,
+          fechaInicioContrato: centro.fechaInicioContrato || '',
+          fechaFinContrato: centro.fechaFinContrato || '',
+          importeAnualContrato: centro.importeAnualContrato || '',
+          observacionesContrato: centro.observacionesContrato || '',
+          periodicidad: centro.periodicidad || [],
+          sistemasContrato: (centro as any).sistemasContrato || (centro.observacionesContrato ? centro.observacionesContrato.split(', ').filter(Boolean) : []),
+          precioAnualContrato: (centro as any).precioAnualContrato || '',
+          precioTrimestralContrato: (centro as any).precioTrimestralContrato || '',
+          precioMensualContrato: (centro as any).precioMensualContrato || '',
+          centroId: docId,
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+      }
+    }
+  } catch (e) {
+    console.error('Error in syncContratosExistentes:', e);
+  }
+}
+
 export async function deleteCentro(id: string) {
   try {
     const ref = doc(db, 'centros', id);
@@ -764,6 +825,244 @@ export function subscribeFamilias(callback: (familias: Familia[]) => void) {
   }
 }
 
+async function enviarCorreoAlbaran(albaran: Albaran) {
+  try {
+    // 1. Obtener detalles del cliente para el correo
+    let clienteName = 'Cliente desconocido';
+    let clienteCif = '-';
+    let clienteDireccion = '';
+    let clientePoblacion = '';
+    let clienteProvincia = '';
+    let clienteCp = '';
+    if (albaran.clienteId) {
+      try {
+        const clientDocRef = doc(db, 'clientes', albaran.clienteId);
+        const clientSnap = await getDoc(clientDocRef);
+        if (clientSnap.exists()) {
+          const clientData = clientSnap.data();
+          if (clientData) {
+            clienteName = clientData.nombre || 'Cliente sin nombre';
+            clienteCif = clientData.cif || '-';
+            clienteDireccion = clientData.direccion || '';
+            clientePoblacion = clientData.poblacion || '';
+            clienteProvincia = clientData.provincia || '';
+            clienteCp = clientData.cp || '';
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching client details for email:", err);
+      }
+    }
+
+    // 2. Obtener detalles del centro para el correo
+    let centroName = 'Centro desconocido';
+    let centroDireccion = '';
+    let centroPoblacion = '';
+    let centroProvincia = '';
+    let centroCp = '';
+    if (albaran.centroId) {
+      try {
+        const centroDocRef = doc(db, 'centros', albaran.centroId);
+        const centroSnap = await getDoc(centroDocRef);
+        if (centroSnap.exists()) {
+          const centroData = centroSnap.data();
+          if (centroData) {
+            centroName = centroData.nombre || 'Centro sin nombre';
+            centroDireccion = centroData.direccion || '';
+            centroPoblacion = centroData.poblacion || '';
+            centroProvincia = centroData.provincia || '';
+            centroCp = centroData.cp || '';
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching centro details for email:", err);
+      }
+    }
+
+    // 3. Obtener nombre del técnico para el correo
+    let tecnicoNombre = 'No asignado';
+    if (albaran.tecnicoId) {
+      try {
+        const docRef = doc(db, 'tecnicos', albaran.tecnicoId);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          tecnicoNombre = `${data?.nombre || ''} ${data?.apellidos || ''}`.trim();
+        } else {
+          const q = query(collection(db, 'tecnicos'), where('id', '==', albaran.tecnicoId));
+          const querySnap = await getDocs(q);
+          if (!querySnap.empty) {
+            const data = querySnap.docs[0].data();
+            tecnicoNombre = `${data?.nombre || ''} ${data?.apellidos || ''}`.trim();
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching tecnico for email:", err);
+      }
+    }
+
+    const docId = albaran.id || 'NUEVO';
+    const collectionsToTrigger = ['mail', 'emails', 'mails', 'email'];
+    
+    // Formatear la fecha
+    let fechaStr = '';
+    try {
+      if (albaran.fechaCreacion) {
+        fechaStr = new Date(albaran.fechaCreacion).toLocaleDateString('es-ES');
+      } else {
+        fechaStr = new Date().toLocaleDateString('es-ES');
+      }
+    } catch {
+      fechaStr = albaran.fechaCreacion || '';
+    }
+
+    // Formatear asunto del correo
+    let subjectStr = `Albarán recibido de : ${clienteName}`;
+    if (centroName && centroName !== 'Centro desconocido' && centroName !== clienteName) {
+      subjectStr = `Albarán recibido de : ${clienteName} / ${centroName}`;
+    }
+
+    // Formatear moneda
+    const formatMoneda = (val: number) => {
+      return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(val || 0);
+    };
+
+    let itemsHtml = '';
+    let subtotalTotal = 0;
+    if (albaran.items && albaran.items.length > 0) {
+      itemsHtml = albaran.items.map(item => {
+        const sub = item.subtotal || (item.cantidad * item.precioUnidad) || 0;
+        subtotalTotal += sub;
+        return `
+          <tr>
+            <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center;">${item.cantidad}</td>
+            <td style="padding: 8px; border-bottom: 1px solid #ddd;"><b>${item.concepto || ''}</b></td>
+            <td style="padding: 8px; border-bottom: 1px solid #ddd;">${item.descripcion || ''}</td>
+            <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: right;">${formatMoneda(item.precioUnidad)}</td>
+            <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: right;">${formatMoneda(sub)}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    const ivaImporte = subtotalTotal * 0.21;
+    const totalConIva = subtotalTotal + ivaImporte;
+
+    const emailPayload = {
+      to: 'abanfoc@abanfoc.es',
+      message: {
+        subject: subjectStr,
+        html: `
+          <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 12px; background-color: #ffffff;">
+            <h2 style="color: #800020; border-bottom: 2px solid #800020; padding-bottom: 10px; margin-top: 0;">Detalles del Albarán: ${docId}</h2>
+            
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+              <tr>
+                <td style="width: 50%; vertical-align: top; padding-right: 10px;">
+                  <h4 style="color: #666; margin: 10px 0 5px 0; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px;">Datos del Cliente</h4>
+                  <p style="margin: 0; font-size: 14px;"><b>${clienteName}</b></p>
+                  <p style="margin: 3px 0 0 0; font-size: 13px; color: #555;">CIF: ${clienteCif}</p>
+                  <p style="margin: 3px 0 0 0; font-size: 13px; color: #555;">${clienteDireccion}</p>
+                  <p style="margin: 3px 0 0 0; font-size: 13px; color: #555;">${[clienteCp, clientePoblacion, clienteProvincia].filter(Boolean).join(', ')}</p>
+                </td>
+                <td style="width: 50%; vertical-align: top; padding-left: 10px; border-left: 1px solid #eee;">
+                  <h4 style="color: #666; margin: 10px 0 5px 0; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px;">Datos de la Instalación (Centro)</h4>
+                  <p style="margin: 0; font-size: 14px;"><b>${centroName}</b></p>
+                  <p style="margin: 3px 0 0 0; font-size: 13px; color: #555;">${centroDireccion}</p>
+                  <p style="margin: 3px 0 0 0; font-size: 13px; color: #555;">${[centroCp, centroPoblacion, centroProvincia].filter(Boolean).join(', ')}</p>
+                </td>
+              </tr>
+            </table>
+
+            <div style="background-color: #f9f9f9; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #f0f0f0;">
+              <h4 style="color: #666; margin: 0 0 10px 0; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px;">Información del Albarán</h4>
+              <table style="width: 100%; font-size: 13px; line-height: 1.5;">
+                <tr>
+                  <td style="width: 40%; color: #666;"><b>Título:</b></td>
+                  <td>${albaran.titulo || '-'}</td>
+                </tr>
+                <tr>
+                  <td style="color: #666;"><b>Fecha:</b></td>
+                  <td>${fechaStr}</td>
+                </tr>
+                <tr>
+                  <td style="color: #666;"><b>Nº Mantenimiento:</b></td>
+                  <td>${albaran.numeroMantenimiento || '-'}</td>
+                </tr>
+                <tr>
+                  <td style="color: #666;"><b>N. Pedido:</b></td>
+                  <td>${albaran.numeroPedido || '-'}</td>
+                </tr>
+                <tr>
+                  <td style="color: #666;"><b>Periodicidad:</b></td>
+                  <td>${albaran.periodicidad || '-'}</td>
+                </tr>
+                <tr>
+                  <td style="color: #666;"><b>Técnico:</b></td>
+                  <td>${tecnicoNombre}</td>
+                </tr>
+                <tr>
+                  <td style="color: #666;"><b>Firmado por Cliente:</b></td>
+                  <td>${albaran.firmaCliente ? `Sí (Receptor: ${albaran.nombreFirmante || 'No especificado'})` : 'No'}</td>
+                </tr>
+              </table>
+            </div>
+
+            <h4 style="color: #666; margin: 15px 0 10px 0; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px;">Detalle de Líneas de Trabajo</h4>
+            <table style="width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 20px;">
+              <thead>
+                <tr style="background-color: #800020; color: #ffffff;">
+                  <th style="padding: 10px 8px; text-align: center; border-radius: 6px 0 0 0;">Cant.</th>
+                  <th style="padding: 10px 8px; text-align: left;">Concepto</th>
+                  <th style="padding: 10px 8px; text-align: left;">Descripción</th>
+                  <th style="padding: 10px 8px; text-align: right;">Precio ud.</th>
+                  <th style="padding: 10px 8px; text-align: right; border-radius: 0 6px 0 0;">Subtotal</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${itemsHtml || '<tr><td colspan="5" style="padding: 15px; text-align: center; color: #888;">No hay líneas de trabajo en este albarán.</td></tr>'}
+              </tbody>
+            </table>
+
+            ${subtotalTotal > 0 ? `
+              <table style="width: 40%; margin-left: auto; font-size: 13px; line-height: 1.6; border-collapse: collapse;">
+                <tr>
+                  <td style="padding: 4px 0; color: #666;">Subtotal:</td>
+                  <td style="padding: 4px 0; text-align: right; font-weight: bold;">${formatMoneda(subtotalTotal)}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 4px 0; color: #666; border-bottom: 1px solid #eee;">IVA (21%):</td>
+                  <td style="padding: 4px 0; text-align: right; font-weight: bold; border-bottom: 1px solid #eee;">${formatMoneda(ivaImporte)}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 8px 0 4px 0; font-size: 15px; color: #800020; font-weight: bold;">Total + IVA:</td>
+                  <td style="padding: 8px 0 4px 0; text-align: right; font-size: 15px; color: #800020; font-weight: bold;">${formatMoneda(totalConIva)}</td>
+                </tr>
+              </table>
+            ` : ''}
+            
+            <div style="margin-top: 30px; border-top: 1px solid #eee; padding-top: 15px; text-align: center; font-size: 11px; color: #999;">
+              <p>Este es un correo automático generado por el sistema de gestión de Abanfoc.</p>
+            </div>
+          </div>
+        `
+      }
+    };
+
+    for (const colName of collectionsToTrigger) {
+      try {
+        const mailCol = collection(db, colName);
+        await addDoc(mailCol, emailPayload);
+        console.info(`Correo de albarán registrado en la colección '${colName}' de Firestore`);
+      } catch (mailErr) {
+        console.error(`Error al registrar el correo de albarán en la colección '${colName}':`, mailErr);
+      }
+    }
+  } catch (err) {
+    console.error("Error global en enviarCorreoAlbaran:", err);
+  }
+}
+
 export async function addAlbaran(albaran: Albaran) {
   try {
     const col = collection(db, 'albaranes');
@@ -773,17 +1072,27 @@ export async function addAlbaran(albaran: Albaran) {
       updatedAt: new Date().toISOString()
     };
 
+    let finalAlbaran: Albaran;
+
     if (albaran.id) {
       const docRef = doc(db, 'albaranes', albaran.id);
       await setDoc(docRef, albaranToSave);
       console.info('addAlbaran: created with custom ID', albaran.id);
-      return { ...albaranToSave, _docId: albaran.id };
+      finalAlbaran = { ...albaranToSave, _docId: albaran.id };
     } else {
       const newDocRef = await addDoc(col, albaranToSave);
       console.info('addAlbaran: created with generated ID', newDocRef.id);
       const { id: _, ...rest } = albaranToSave;
-      return { ...rest, _docId: newDocRef.id, id: newDocRef.id };
+      finalAlbaran = { ...rest, _docId: newDocRef.id, id: newDocRef.id };
     }
+
+    try {
+      await enviarCorreoAlbaran(finalAlbaran);
+    } catch (emailErr) {
+      console.error('Error in enviarCorreoAlbaran inside addAlbaran:', emailErr);
+    }
+
+    return finalAlbaran;
   } catch (e) {
     console.error('addAlbaran error:', e);
     throw e;
@@ -802,6 +1111,13 @@ export async function updateAlbaran(albaran: Albaran) {
     };
     await setDoc(docRef, albaranToUpdate, { merge: true });
     console.info('updateAlbaran: updated', albaran.id);
+
+    try {
+      await enviarCorreoAlbaran(albaranToUpdate);
+    } catch (emailErr) {
+      console.error('Error in enviarCorreoAlbaran inside updateAlbaran:', emailErr);
+    }
+
     return { _docId: albaran.id, ...albaranToUpdate };
   } catch (e) {
     console.error('updateAlbaran error:', e);

@@ -1,14 +1,15 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/set-state-in-effect */
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, Save, Plus, Search, Edit, Trash2, MapPin, Layers, X, Copy, AlertTriangle, Upload, Download, Building2, UserCheck, Eye, Phone, Mail, Users, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Save, Plus, Search, Edit, Trash2, MapPin, Layers, X, Copy, AlertTriangle, Upload, Download, Building2, UserCheck, Eye, Phone, Mail, Users, ChevronRight, FileText } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { CATEGORIAS_POR_DEFECTO, getIconForSistema } from './Sistemas';
-import { addCentro, updateCentro, deleteCentro, subscribeCentros, subscribeFamilias, subscribeArticulos, subscribeTecnicos, subscribeEmpresas, addCentroSistema, deleteCentroSistema, subscribeCentroSistemas, addEquipoInstalado, updateEquipoInstalado, deleteEquipoInstalado, subscribeEquiposInstalados, sistemaToSlug } from './firebase';
+import { addCentro, updateCentro, deleteCentro, subscribeCentros, subscribeFamilias, subscribeArticulos, subscribeTecnicos, subscribeEmpresas, addCentroSistema, deleteCentroSistema, subscribeCentroSistemas, addEquipoInstalado, updateEquipoInstalado, deleteEquipoInstalado, subscribeEquiposInstalados, sistemaToSlug, saveContrato, syncContratosExistentes } from './firebase';
 import type { Articulo, Tecnico } from './firebase';
 import ConfirmationModal from './ConfirmationModal';
 import DetailModal from './components/DetailModal';
 import EquipoFormulario from './components/EquipoFormulario';
+import { generarContratoPDF } from './pdfContratoGenerator';
 
 const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
@@ -49,6 +50,15 @@ export interface Centro {
   mesesRevision?: string[];
   tecnicoId?: string;
   empresaId?: string;
+  numeroContrato?: string;
+  fechaInicioContrato?: string;
+  fechaFinContrato?: string;
+  importeAnualContrato?: string;
+  observacionesContrato?: string;
+  sistemasContrato?: string[];
+  precioAnualContrato?: string;
+  precioTrimestralContrato?: string;
+  precioMensualContrato?: string;
 }
 
 export interface Parte {
@@ -150,6 +160,19 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
   const [isPeriodicidadModalOpen, setIsPeriodicidadModalOpen] = useState(false);
   const [centroForPeriodicidad, setCentroForPeriodicidad] = useState<Centro | null>(null);
   const [formPeriodicidad, setFormPeriodicidad] = useState<{ periodicidad: string[], mesesRevision: string[] }>({ periodicidad: [], mesesRevision: [] });
+  const [isContratoModalOpen, setIsContratoModalOpen] = useState(false);
+  const [centroForContrato, setCentroForContrato] = useState<Centro | null>(null);
+  const [formContrato, setFormContrato] = useState({
+    numeroContrato: '',
+    fechaInicio: '',
+    fechaFin: '',
+    observaciones: '',
+    periodicidad: [] as string[],
+    sistemasContrato: [] as string[],
+    precioAnual: '',
+    precioTrimestral: '',
+    precioMensual: ''
+  });
   const [isTecnicoModalOpen, setIsTecnicoModalOpen] = useState(false);
   const [centroForTecnico, setCentroForTecnico] = useState<Centro | null>(null);
   const [selectedTecnicoId, setSelectedTecnicoId] = useState('');
@@ -301,6 +324,15 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
     return () => { if (unsub) unsub(); };
   }, []);
 
+  const syncRef = useRef(false);
+
+  useEffect(() => {
+    if (centros.length > 0 && !syncRef.current) {
+      syncRef.current = true;
+      syncContratosExistentes(centros);
+    }
+  }, [centros]);
+
   // Suscripción en tiempo real a los sistemas del centro seleccionado
   useEffect(() => {
     const centroDocId = centroSeleccionado?._docId || centroSeleccionado?.id;
@@ -390,6 +422,80 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
     saveToDB(updatedCentros);
     setIsPeriodicidadModalOpen(false);
     setCentroForPeriodicidad(null);
+    // Volver a mostrar el detalle del centro con los datos actualizados
+    const centroActualizado = updatedCentros.find(c => c.id === updatedCentro.id) || updatedCentro;
+    setSelectedCentro(centroActualizado);
+    setIsDetailOpen(true);
+  };
+
+  const handleSaveContrato = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!centroForContrato) return;
+
+    const isMensual = formContrato.periodicidad.includes('Mensual');
+    const isTrimestral = formContrato.periodicidad.includes('Trimestral');
+    const isAnual = formContrato.periodicidad.includes('Anual');
+
+    const pAnual = parseFloat(formContrato.precioAnual) || 0;
+    const pTrimestral = parseFloat(formContrato.precioTrimestral) || 0;
+    const pMensual = parseFloat(formContrato.precioMensual) || 0;
+
+    let total = 0;
+    if (isAnual && isTrimestral && isMensual) {
+      total = pAnual + (pTrimestral * 3) + (pMensual * 8);
+    } else if (isAnual && isTrimestral) {
+      total = pAnual + (pTrimestral * 3);
+    } else if (isAnual && isMensual) {
+      total = pAnual + (pMensual * 11);
+    } else if (isTrimestral && isMensual) {
+      total = (pTrimestral * 4) + (pMensual * 8);
+    } else if (isAnual) {
+      total = pAnual;
+    } else if (isTrimestral) {
+      total = pTrimestral * 4;
+    } else if (isMensual) {
+      total = pMensual * 12;
+    }
+
+    const updatedCentro = {
+      ...centroForContrato,
+      numeroContrato: formContrato.numeroContrato.trim(),
+      fechaInicioContrato: formContrato.fechaInicio,
+      fechaFinContrato: formContrato.fechaFin,
+      importeAnualContrato: String(total),
+      observacionesContrato: formContrato.sistemasContrato.join(', '),
+      periodicidad: formContrato.periodicidad,
+      sistemasContrato: formContrato.sistemasContrato,
+      precioAnualContrato: formContrato.precioAnual.trim(),
+      precioTrimestralContrato: formContrato.precioTrimestral.trim(),
+      precioMensualContrato: formContrato.precioMensual.trim()
+    };
+    const docId = (centroForContrato as any)._docId || centroForContrato.id;
+    const { _docId, ...centroData } = updatedCentro as any;
+    try {
+      await updateCentro(docId, centroData);
+      await saveContrato(docId, {
+        clienteId: centroForContrato.clienteId,
+        numeroContrato: formContrato.numeroContrato.trim(),
+        fechaInicioContrato: formContrato.fechaInicio,
+        fechaFinContrato: formContrato.fechaFin,
+        importeAnualContrato: String(total),
+        observacionesContrato: formContrato.sistemasContrato.join(', '),
+        periodicidad: formContrato.periodicidad,
+        sistemasContrato: formContrato.sistemasContrato,
+        precioAnualContrato: formContrato.precioAnual.trim(),
+        precioTrimestralContrato: formContrato.precioTrimestral.trim(),
+        precioMensualContrato: formContrato.precioMensual.trim()
+      });
+    } catch (err) {
+      console.error('Error guardando contrato en Firestore:', err);
+      alert('Error al guardar el contrato en Firestore');
+      return;
+    }
+    const updatedCentros = centros.map(c => c.id === centroForContrato.id ? { ...updatedCentro, _docId: (c as any)._docId || _docId } : c);
+    saveToDB(updatedCentros);
+    setIsContratoModalOpen(false);
+    setCentroForContrato(null);
     // Volver a mostrar el detalle del centro con los datos actualizados
     const centroActualizado = updatedCentros.find(c => c.id === updatedCentro.id) || updatedCentro;
     setSelectedCentro(centroActualizado);
@@ -670,8 +776,36 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
                     <p className="text-sm text-zinc-700 bg-zinc-50 rounded-xl p-3.5">{selectedCentro.periodicidad.join(', ')}{selectedCentro.mesesRevision?.length ? ` — Revisión en ${selectedCentro.mesesRevision[0]}` : ''}</p>
                   </div>
                 )}
+                {selectedCentro.numeroContrato && (
+                  <div className="pt-4 border-t border-zinc-200">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-500 mb-2">Contrato de Mantenimiento</h4>
+                    <div className="text-sm text-zinc-700 bg-zinc-50 rounded-xl p-3.5 space-y-1.5">
+                      <p><strong>Nº Contrato:</strong> {selectedCentro.numeroContrato}</p>
+                      {selectedCentro.fechaInicioContrato && <p><strong>Vigencia:</strong> {new Date(selectedCentro.fechaInicioContrato).toLocaleDateString('es-ES')} a {selectedCentro.fechaFinContrato ? new Date(selectedCentro.fechaFinContrato).toLocaleDateString('es-ES') : 'indefinido'}</p>}
+                      {selectedCentro.importeAnualContrato && <p><strong>Importe Anual:</strong> {selectedCentro.importeAnualContrato} €</p>}
+                    </div>
+                  </div>
+                )}
                 <div className="flex flex-wrap justify-center gap-2 pt-4 border-t border-zinc-200">
                   <button onClick={() => { setIsDetailOpen(false); setCentroForPeriodicidad(selectedCentro); setFormPeriodicidad({ periodicidad: selectedCentro.periodicidad || [], mesesRevision: selectedCentro.mesesRevision || [] }); setIsPeriodicidadModalOpen(true); }} className="flex items-center justify-center gap-1 bg-blue-400 text-white px-2.5 py-1.5 rounded-lg text-xs font-medium hover:bg-blue-500 transition-colors border border-blue-600"><Layers className="w-3.5 h-3.5" /> Periodicidad</button>
+                  <button onClick={() => {
+                    setIsDetailOpen(false);
+                    setCentroForContrato(selectedCentro);
+                    setFormContrato({
+                      numeroContrato: selectedCentro.numeroContrato || selectedCentro.id || '',
+                      fechaInicio: selectedCentro.fechaInicioContrato || '',
+                      fechaFin: selectedCentro.fechaFinContrato || '',
+                      observaciones: selectedCentro.observacionesContrato || '',
+                      periodicidad: selectedCentro.periodicidad || [],
+                      sistemasContrato: selectedCentro.sistemasContrato || (selectedCentro.observacionesContrato ? selectedCentro.observacionesContrato.split(', ').filter(Boolean) : []),
+                      precioAnual: (selectedCentro as any).precioAnualContrato || '',
+                      precioTrimestral: (selectedCentro as any).precioTrimestralContrato || '',
+                      precioMensual: (selectedCentro as any).precioMensualContrato || ''
+                    });
+                    setIsContratoModalOpen(true);
+                  }} className="flex items-center justify-center gap-1 bg-amber-500 text-white px-2.5 py-1.5 rounded-lg text-xs font-medium hover:bg-amber-600 transition-colors border border-amber-600">
+                    <FileText className="w-3.5 h-3.5" /> Contrato Mantenimiento
+                  </button>
                   <button onClick={() => { setIsDetailOpen(false); setCentroForTecnico(selectedCentro); setSelectedTecnicoId(selectedCentro.tecnicoId || ''); setIsTecnicoModalOpen(true); }} className="flex items-center justify-center gap-1 bg-green-400 text-white px-2.5 py-1.5 rounded-lg text-xs font-medium hover:bg-green-500 transition-colors border border-green-600"><UserCheck className="w-3.5 h-3.5" /> {isTecnicoMode ? 'Técnico Asignado' : 'Asignar Técnico'}</button>
                   <button onClick={() => { setIsDetailOpen(false); setCentroForEmpresa(selectedCentro); setSelectedEmpresaId(selectedCentro.empresaId || ''); setIsEmpresaModalOpen(true); }} className="flex items-center justify-center gap-1 bg-rose-400 text-white px-2.5 py-1.5 rounded-lg text-xs font-medium hover:bg-rose-500 transition-colors border border-rose-600"><Building2 className="w-3.5 h-3.5" /> Empresa Mantenedora</button>
                   {!isTecnicoMode && (
@@ -729,6 +863,204 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
                 <div className="pt-4 flex gap-3">
                   <button type="button" onClick={() => setIsPeriodicidadModalOpen(false)} className="flex-1 px-4 py-3 rounded-xl font-bold text-zinc-500 hover:bg-zinc-100 transition-colors">{isTecnicoMode ? 'Cerrar' : 'Cancelar'}</button>
                   {!isTecnicoMode && <button type="submit" className="flex-1 bg-black hover:bg-zinc-800 text-white px-4 py-3 rounded-xl font-bold shadow-lg shadow-black/10 transition-all">Guardar Periodicidad</button>}
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {isContratoModalOpen && centroForContrato && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[100]">
+            <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl flex flex-col animate-in fade-in zoom-in-95 duration-200 overflow-hidden">
+              <div className="px-6 py-4 border-b border-zinc-100 flex items-center justify-between bg-zinc-50/50">
+                <div><h2 className="text-lg font-bold text-zinc-900">Contrato de Mantenimiento</h2><p className="text-xs text-zinc-500">{centroForContrato.nombre}</p></div>
+                <button onClick={() => setIsContratoModalOpen(false)} className="p-2 text-zinc-400 hover:text-black hover:bg-white rounded-xl transition-colors"><X className="w-5 h-5" /></button>
+              </div>
+              <form onSubmit={handleSaveContrato} className="p-6 space-y-4 overflow-y-auto max-h-[70vh]">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-zinc-700">Nº de Contrato</label>
+                    <input
+                      disabled={isTecnicoMode}
+                      type="text"
+                      value={formContrato.numeroContrato}
+                      onChange={e => setFormContrato({ ...formContrato, numeroContrato: e.target.value })}
+                      placeholder="Ej: CONT-2026-0001"
+                      className="w-full px-3 py-2 border border-zinc-200 rounded-xl text-sm outline-none focus:border-zinc-400 transition-colors bg-white text-black"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-zinc-700">Fecha de Inicio</label>
+                    <input
+                      disabled={isTecnicoMode}
+                      type="date"
+                      value={formContrato.fechaInicio}
+                      onChange={e => setFormContrato({ ...formContrato, fechaInicio: e.target.value })}
+                      className="w-full px-3 py-2 border border-zinc-200 rounded-xl text-sm outline-none focus:border-zinc-400 transition-colors bg-white text-black"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-zinc-700">Fecha de Fin / Vencimiento</label>
+                    <input
+                      disabled={isTecnicoMode}
+                      type="date"
+                      value={formContrato.fechaFin}
+                      onChange={e => setFormContrato({ ...formContrato, fechaFin: e.target.value })}
+                      className="w-full px-3 py-2 border border-zinc-200 rounded-xl text-sm outline-none focus:border-zinc-400 transition-colors bg-white text-black"
+                    />
+                  </div>
+                </div>
+
+                {/* Selector de Periodicidad */}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-zinc-700">Periodicidad del Contrato e Importe por revisión</label>
+                  <div className="space-y-3 p-3.5 border border-zinc-200 rounded-xl bg-zinc-50/30">
+                    {[
+                      { type: 'Anual', stateKey: 'precioAnual', label: 'Anual (Revisión Anual)' },
+                      { type: 'Trimestral', stateKey: 'precioTrimestral', label: 'Trimestral (Revisión Trimestral)' },
+                      { type: 'Mensual', stateKey: 'precioMensual', label: 'Mensual (Revisión Mensual)' }
+                    ].map(({ type, stateKey, label }) => {
+                      const isChecked = formContrato.periodicidad.includes(type);
+                      return (
+                        <div key={type} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-100 last:border-b-0 pb-2.5 last:pb-0">
+                          <label className={`flex items-center gap-2 group ${isTecnicoMode ? 'cursor-not-allowed opacity-75' : 'cursor-pointer'}`}>
+                            <input
+                              disabled={isTecnicoMode}
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={e => {
+                                const newTypes = e.target.checked
+                                  ? [...formContrato.periodicidad, type]
+                                  : formContrato.periodicidad.filter(t => t !== type);
+                                setFormContrato({ ...formContrato, periodicidad: newTypes });
+                              }}
+                              className={`w-4 h-4 text-black rounded border-zinc-300 focus:ring-black ${isTecnicoMode ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                            />
+                            <span className={`text-sm font-medium text-zinc-700 ${!isTecnicoMode && 'group-hover:text-black'} transition-colors`}>{label}</span>
+                          </label>
+                          
+                          {isChecked && (
+                            <div className="flex items-center gap-2 shrink-0 pl-6 sm:pl-0">
+                              <span className="text-xs font-medium text-zinc-500">Importe (€):</span>
+                              <input
+                                disabled={isTecnicoMode}
+                                type="number"
+                                value={formContrato[stateKey as 'precioAnual' | 'precioTrimestral' | 'precioMensual']}
+                                onChange={e => setFormContrato({ ...formContrato, [stateKey]: e.target.value })}
+                                placeholder="Ej: 150"
+                                className="w-24 px-2.5 py-1 border border-zinc-200 rounded-lg text-xs outline-none focus:border-zinc-400 bg-white text-black text-right font-semibold"
+                              />
+                              <span className="text-[10px] text-zinc-400 font-bold uppercase shrink-0">+ IVA</span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Sistemas a Revisar */}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-zinc-700">Sistemas a revisar</label>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 border border-zinc-200 rounded-xl p-3 bg-zinc-50/30">
+                    {categoriasSistema.map(cat => (
+                      <label key={cat.id} className={`flex items-center gap-1.5 group ${isTecnicoMode ? 'cursor-not-allowed opacity-75' : 'cursor-pointer'} py-0.5`}>
+                        <input
+                          disabled={isTecnicoMode}
+                          type="checkbox"
+                          checked={formContrato.sistemasContrato.includes(cat.nombre)}
+                          onChange={e => {
+                            const newSist = e.target.checked
+                              ? [...formContrato.sistemasContrato, cat.nombre]
+                              : formContrato.sistemasContrato.filter(s => s !== cat.nombre);
+                            setFormContrato({ ...formContrato, sistemasContrato: newSist });
+                          }}
+                          className={`w-3.5 h-3.5 text-black rounded border-zinc-300 focus:ring-black ${isTecnicoMode ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                        />
+                        <span className={`text-xs font-semibold text-zinc-600 ${!isTecnicoMode && 'group-hover:text-black'} transition-colors truncate`}>{cat.nombre}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-zinc-100 flex gap-3 items-center">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const client = clientes.find(cl => cl.id === centroForContrato.clienteId);
+                      const systems = centroSistemas
+                        .filter(s => s.centroId === centroForContrato._docId || s.centroId === centroForContrato.id)
+                        .map(s => {
+                          const count = equiposInstalados.filter(eq => 
+                            (eq.centroId === centroForContrato.id || eq.centroId === centroForContrato._docId) && 
+                            eq.sistemaId === s.id
+                          ).length;
+                          return {
+                            ...s,
+                            cantidadEquipos: count
+                          };
+                        });
+                      
+                      const pAnual = parseFloat(formContrato.precioAnual) || 0;
+                      const pTrimestral = parseFloat(formContrato.precioTrimestral) || 0;
+                      const pMensual = parseFloat(formContrato.precioMensual) || 0;
+
+                      let total = 0;
+                      const isMensual = formContrato.periodicidad.includes('Mensual');
+                      const isTrimestral = formContrato.periodicidad.includes('Trimestral');
+                      const isAnual = formContrato.periodicidad.includes('Anual');
+
+                      if (isAnual && isTrimestral && isMensual) {
+                        total = pAnual + (pTrimestral * 3) + (pMensual * 8);
+                      } else if (isAnual && isTrimestral) {
+                        total = pAnual + (pTrimestral * 3);
+                      } else if (isAnual && isMensual) {
+                        total = pAnual + (pMensual * 11);
+                      } else if (isTrimestral && isMensual) {
+                        total = (pTrimestral * 4) + (pMensual * 8);
+                      } else if (isAnual) {
+                        total = pAnual;
+                      } else if (isTrimestral) {
+                        total = pTrimestral * 4;
+                      } else if (isMensual) {
+                        total = pMensual * 12;
+                      }
+
+                      const tempCentro = {
+                        ...centroForContrato,
+                        numeroContrato: formContrato.numeroContrato.trim(),
+                        fechaInicioContrato: formContrato.fechaInicio,
+                        fechaFinContrato: formContrato.fechaFin,
+                        importeAnualContrato: String(total),
+                        observacionesContrato: formContrato.sistemasContrato.join(', '),
+                        periodicidad: formContrato.periodicidad,
+                        sistemasContrato: formContrato.sistemasContrato,
+                        precioAnualContrato: formContrato.precioAnual.trim(),
+                        precioTrimestralContrato: formContrato.precioTrimestral.trim(),
+                        precioMensualContrato: formContrato.precioMensual.trim()
+                      };
+
+                      await generarContratoPDF(client, tempCentro, systems, {
+                        numeroContrato: formContrato.numeroContrato.trim(),
+                        fechaInicio: formContrato.fechaInicio,
+                        fechaFin: formContrato.fechaFin,
+                        importeAnual: String(total),
+                        observaciones: formContrato.sistemasContrato.join(', ')
+                      });
+                    }}
+                    className="flex-1 flex items-center justify-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition-all shadow-md shadow-amber-500/10 cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5" /> Descargar PDF
+                  </button>
+
+                  {!isTecnicoMode && (
+                    <button
+                      type="submit"
+                      className="flex-1 bg-black hover:bg-zinc-800 text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow-lg shadow-black/10 transition-all cursor-pointer text-center"
+                    >
+                      Guardar Contrato
+                    </button>
+                  )}
                 </div>
               </form>
             </div>

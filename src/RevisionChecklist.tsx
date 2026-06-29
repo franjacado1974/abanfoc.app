@@ -12,6 +12,194 @@ import ConfirmationModal from './ConfirmationModal';
 import { getIconForSistema } from './Sistemas';
 import EquipoFormulario from './components/EquipoFormulario';
 
+export function tieneFechaInvalida(eq: any): boolean {
+    if (!eq) return false;
+
+    const nombreEq = (eq.nombre || '').toLowerCase();
+    const claseEq = (eq.clase || '').toLowerCase();
+    const tipoEq = (eq.tipo || '').toLowerCase();
+
+    const tieneRetimbreKey = Object.keys(eq).some(k => k.toLowerCase().includes('retimbre'));
+    const tieneHidraKey = Object.keys(eq).some(k => k.toLowerCase().includes('hidra') || k.toLowerCase().includes('pruebahidra'));
+
+    const esExtintor = nombreEq.includes('extintor') || claseEq.includes('extintor') || tipoEq.includes('extintor') || tieneRetimbreKey;
+    const esBie = nombreEq.includes('bie') || nombreEq.includes('boca') || claseEq.includes('bie') || claseEq.includes('boca') || tipoEq.includes('bie') || tipoEq.includes('boca') || (tieneHidraKey && !tieneRetimbreKey);
+
+    // Si no es ninguno de los dos, no hay regla de fecha inválida estándar
+    if (!esExtintor && !esBie) {
+        return false;
+    }
+
+    // Encontrar claves
+    let keyFab = '';
+    let keyRet = '';
+    let keyHidra = '';
+
+    for (const k of Object.keys(eq)) {
+        const kLower = k.toLowerCase();
+        if (kLower.includes('revision') || kLower.includes('inspeccion') || kLower.includes('proxim')) {
+            continue;
+        }
+        if (kLower.includes('fabricaci') || kLower.includes('fechafab') || kLower.includes('añofab') || kLower.includes('anofab')) {
+            keyFab = k;
+        } else if (kLower.includes('retimbre')) {
+            keyRet = k;
+        } else if (kLower.includes('hidra') || kLower.includes('prueba')) {
+            keyHidra = k;
+        }
+    }
+
+    const valFab = keyFab ? eq[keyFab] : null;
+    const valRet = keyRet ? eq[keyRet] : null;
+    const valHidra = keyHidra ? eq[keyHidra] : null;
+
+    const parseDate = (val: any) => {
+        if (typeof val !== 'string' || !val || val === '-') return null;
+        const clean = val.trim();
+        if (/^\d{4}-\d{2}(-\d{2})?$/.test(clean)) {
+            const d = new Date(clean);
+            return isNaN(d.getTime()) ? null : d;
+        }
+        return null;
+    };
+
+    const dateFab = parseDate(valFab);
+    const dateRet = parseDate(valRet);
+    const dateHidra = parseDate(valHidra);
+
+    const today = new Date();
+
+    // 1. Lógica de Extintores
+    if (esExtintor && dateFab) {
+        const monthsSinceFab = (today.getFullYear() - dateFab.getFullYear()) * 12 + today.getMonth() - dateFab.getMonth();
+        if (monthsSinceFab >= 240) {
+            return true; // Caducado >= 20 años
+        }
+
+        // Retimbre
+        let refDate = dateFab;
+        if (dateRet) {
+            refDate = dateRet;
+        }
+        const monthsSinceRef = (today.getFullYear() - refDate.getFullYear()) * 12 + today.getMonth() - refDate.getMonth();
+        if (monthsSinceRef >= 60 || monthsSinceFab >= 237 || monthsSinceRef >= 57) {
+            return true; // Necesita retimbre o se aproxima
+        }
+    }
+
+    // 2. Lógica de BIEs
+    if (esBie) {
+        if (dateFab) {
+            let diffYears = today.getFullYear() - dateFab.getFullYear();
+            if (today.getMonth() < dateFab.getMonth() || (today.getMonth() === dateFab.getMonth() && today.getDate() < dateFab.getDate())) {
+                diffYears--;
+            }
+            if (diffYears >= 20) {
+                return true; // Caducado >= 20 años (BIE)
+            }
+        }
+
+        if (dateHidra) {
+            let diffYears = today.getFullYear() - dateHidra.getFullYear();
+            if (today.getMonth() < dateHidra.getMonth() || (today.getMonth() === dateHidra.getMonth() && today.getDate() < dateHidra.getDate())) {
+                diffYears--;
+            }
+            if (diffYears >= 5) {
+                return true; // Necesita prueba hidráulica >= 5 años (BIE)
+            }
+        }
+    }
+
+    return false;
+}
+
+export function equipoTieneAnomalias(eq: any): boolean {
+    if (!eq) return false;
+
+    // 1. Campo .anomalias con texto
+    if (eq.anomalias && typeof eq.anomalias === 'string' && eq.anomalias.trim() !== '') {
+        return true;
+    }
+
+    // 2. Nueva validación: Anomalía de fecha
+    if (tieneFechaInvalida(eq)) {
+        return true;
+    }
+
+    // 3. Revisar todas las propiedades de eq
+    for (const k of Object.keys(eq)) {
+        const kLower = k.toLowerCase();
+        
+        // Ignorar claves de metadatos conocidas
+        if (
+            kLower === 'id' ||
+            kLower === 'centroid' ||
+            kLower === 'sistemaid' ||
+            kLower === 'codigo' ||
+            kLower === 'nombre' ||
+            kLower === 'ubicacion' ||
+            kLower === 'revisable' ||
+            kLower === 'revisado' ||
+            kLower === 'placa' ||
+            kLower === 'clase' ||
+            kLower === 'fabricante' ||
+            kLower === 'fechafabricacion' ||
+            kLower === 'ultimoretimbre' ||
+            kLower === 'pesocapacidad' ||
+            kLower === 'longitud' ||
+            kLower === 'pruebahidraulica' ||
+            kLower === 'foto' ||
+            kLower === 'createdat' ||
+            kLower === 'updatedat' ||
+            kLower === 'capacidad' ||
+            kLower === 'peso' ||
+            kLower === 'marca' ||
+            kLower === 'modelo' ||
+            kLower === 'tipo' ||
+            kLower === 'preciounidad' ||
+            kLower === 'precio' ||
+            kLower === 'subtotal' ||
+            kLower === 'cantidad' ||
+            kLower === 'anomalias' ||
+            kLower === 'ordendelista' ||
+            kLower === 'ordenlista' ||
+            kLower === 'fecharevision' ||
+            kLower === 'fechaderevision'
+        ) {
+            continue;
+        }
+
+        const val = eq[k];
+
+        // 3. Cualquier campo de notas/observaciones/anomalía con texto
+        if (kLower.includes('nota') || kLower.includes('observaci') || kLower.includes('anomal')) {
+            if (typeof val === 'string' && val.trim() !== '') {
+                return true;
+            }
+            continue;
+        }
+
+        // 4. Si el valor es boolean false o string 'false'
+        if (val === false || val === 'false') {
+            return true;
+        }
+
+        // 5. Si el valor es una cadena que representa un estado negativo
+        if (typeof val === 'string') {
+            const valUpper = val.toUpperCase().trim();
+            if (
+                valUpper === 'NO CORRECTO' ||
+                valUpper.includes('NO CORRECTO') ||
+                valUpper === 'INCORRECTO'
+            ) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
 export default function RevisionChecklist() {
     const navigate = useNavigate();
     const location = useLocation();
@@ -503,7 +691,15 @@ export default function RevisionChecklist() {
 
         const equiposInvalidos = equiposInstalados.filter((eq) => {
             const itemsDelSistema = checklistItemsPorSistema[eq.sistemaId] || [];
-            const algunCheckRojo = itemsDelSistema.some((item) => eq[item.key as keyof EquipoInstalado] === false);
+            const algunCheckRojo = itemsDelSistema.some((item) => {
+                const val = eq[item.key as keyof EquipoInstalado];
+                if (val === false || val === 'false') return true;
+                if (typeof val === 'string') {
+                    const valUpper = val.toUpperCase().trim();
+                    return valUpper === 'NO CORRECTO' || valUpper.includes('NO CORRECTO') || valUpper === 'INCORRECTO';
+                }
+                return false;
+            });
 
             const tieneAnomalia = itemsDelSistema.some(item => {
                 const lbl = (item.label || '').toLowerCase();
@@ -624,6 +820,7 @@ export default function RevisionChecklist() {
             alert('Por favor, introduce el nombre del cliente.');
             return;
         }
+        if (!centro || !parte) return;
 
         const firmaCliente = canvasClienteRef.current?.toDataURL('image/png') || '';
         const firmaTecnico = canvasTecnicoRef.current?.toDataURL('image/png') || '';
@@ -645,6 +842,35 @@ export default function RevisionChecklist() {
 
         const numMantenimiento = parte?.numeroMantenimiento || await generateNumeroMantenimiento();
 
+        // Generar items para el albarán basado en los equipos de este centro
+        const conteoPorSistema: Record<string, { cantidad: number, nombre: string }> = {};
+        equiposInstalados.forEach(eq => {
+            const sistId = eq.sistemaId || 'sin-sistema';
+            if (!conteoPorSistema[sistId]) {
+                const sist = sistemasDelCentro.find(s => s.id === sistId);
+                conteoPorSistema[sistId] = {
+                    cantidad: 0,
+                    nombre: (sist as any)?.nombre || (sist as any)?.tipo || (sist as any)?.familia || eq.nombre || eq.clase || 'Equipos varios'
+                };
+            }
+            conteoPorSistema[sistId].cantidad += 1;
+        });
+
+        const per = parte?.periodicidad || 'Revisión';
+        const conceptoStr = per.toLowerCase().includes('revisión') || per.toLowerCase().includes('revision') ? per : `Revisión ${per}`;
+
+        const albaranItems = Object.values(conteoPorSistema).map(sys => {
+            const desc = (sys.nombre || '').trim();
+            const formattedDesc = desc ? desc.charAt(0).toUpperCase() + desc.slice(1).toLowerCase() : '';
+            return {
+                cantidad: sys.cantidad,
+                concepto: conceptoStr,
+                descripcion: formattedDesc,
+                precioUnidad: 0,
+                subtotal: 0
+            };
+        });
+
         const nuevoAlbaran: Albaran = {
             id: nextId,
             centroId: centro?.id || '',
@@ -655,13 +881,41 @@ export default function RevisionChecklist() {
             numeroMantenimiento: numMantenimiento,
             fechaCreacion: new Date().toISOString(),
             facturado: false,
-            items: [], // Se puede poblar basándose en los equipos revisados
+            items: albaranItems,
             firmaCliente,
             firmaTecnico,
             nombreFirmante: nombreClienteFirma
         };
 
         await saveEquiposProgress();
+
+
+
+        // Determinar si hay alguna anomalía para fijar el estado del Certificado
+        const tieneAnomalia = equiposInstalados.some(eq => equipoTieneAnomalias(eq));
+
+        const estadoCertificado = tieneAnomalia ? 'No favorable' : 'Favorable';
+
+
+        // Guardar Certificado localmente para que aparezca en el menú Certificados
+        try {
+            const nuevoCertificado = {
+                id: `CERT-${new Date().getFullYear().toString().slice(-2)}-${Math.floor(1000 + Math.random() * 9000)}`,
+                clienteId: centro?.clienteId || parte?.clienteId || '',
+                centroId: centro?.id || '',
+                empresaId: centro?.empresaId || parte?.empresaId || '',
+                parteId: parteId,
+                numeroMantenimiento: numMantenimiento,
+                fechaCreacion: new Date().toISOString(),
+                estado: estadoCertificado
+            };
+
+            const certificadosExistentes = JSON.parse(localStorage.getItem('firecheck_db_certificados') || '[]');
+            certificadosExistentes.push(nuevoCertificado);
+            localStorage.setItem('firecheck_db_certificados', JSON.stringify(certificadosExistentes));
+        } catch (certSaveErr) {
+            console.error('Error al guardar el certificado en local storage:', certSaveErr);
+        }
 
         try {
             // Guardar Albarán con las firmas
@@ -826,23 +1080,7 @@ export default function RevisionChecklist() {
 
     const sistemaTieneAnomalias = (sistemaId: string) => {
         const equiposSistema = equiposInstalados.filter((eq) => eq.sistemaId === sistemaId);
-        const items = getItemsToUse(sistemaId);
-        return equiposSistema.some((eq) => {
-            const checkRojo = items.some((item) => eq[item.key as keyof EquipoInstalado] === false);
-            
-            // Comprobar si hay mensajes de anomalias en los campos de notas
-            const campoNotasConAnomalia = items.some(item => {
-                const lbl = (item.label || '').toLowerCase();
-                if (lbl.includes('notas') || lbl.includes('observaciones') || lbl.includes('anomal')) {
-                    const val = eq[item.key as keyof EquipoInstalado];
-                    if (typeof val === 'string' && val.trim() !== '') return true;
-                }
-                return false;
-            });
-
-            const textoAnomalia = !!eq.anomalias && eq.anomalias.trim() !== '';
-            return checkRojo || textoAnomalia || campoNotasConAnomalia;
-        });
+        return equiposSistema.some((eq) => equipoTieneAnomalias(eq));
     };
 
     const getCheckStats = (eq: EquipoInstalado) => {
@@ -851,10 +1089,17 @@ export default function RevisionChecklist() {
         let pending = 0;
         const items = getItemsToUse(eq.sistemaId);
         items.forEach(item => {
+            if ((item.tipoRespuesta as any) === 'seccion' || (item.tipoRespuesta as any) === 'titulo' || item.tipoRespuesta === 'tabla') return;
             const val = eq[item.key as keyof EquipoInstalado];
-            if (val === true) ok++;
-            else if (val === false) fail++;
-            else pending++;
+            if (val === true || val === 'true' || (typeof val === 'string' && val.toUpperCase().trim() === 'CORRECTO')) {
+                ok++;
+            } else if (val === false || val === 'false' || (typeof val === 'string' && (val.toUpperCase().trim() === 'NO CORRECTO' || val.toUpperCase().trim().includes('NO CORRECTO') || val.toUpperCase().trim() === 'INCORRECTO'))) {
+                fail++;
+            } else if (val === undefined || val === null || val === '') {
+                pending++;
+            } else {
+                ok++;
+            }
         });
         return { ok, fail, pending };
     };
@@ -1036,7 +1281,7 @@ export default function RevisionChecklist() {
                                                             const primerEquipo = equiposSistema[0];
                                                             const valorReferencia = primerEquipo[itemReferenciaInstalacion.key as keyof EquipoInstalado];
                                                             if (typeof valorReferencia === 'string' && valorReferencia.trim() !== '') {
-                                                                referenciaTexto = valorReferencia.trim() + ', ';
+                                                                referenciaTexto = valorReferencia.trim().toUpperCase() + ', ';
                                                             }
                                                         }
                                                         
@@ -1247,7 +1492,16 @@ export default function RevisionChecklist() {
                     plantillaId={sistemasDelCentro.find(s => s.id === addEquipo.sistemaId)?.tipo || sistemasDelCentro.find(s => s.id === addEquipo.sistemaId)?.familia || ''}
                     equiposExistentes={equiposInstalados.filter(e => e.sistemaId === addEquipo.sistemaId)}
                     onSave={async (equipo) => {
+                        const itemsToUse = addEquipo.sistemaId ? (checklistItemsPorSistema[addEquipo.sistemaId] || []) : [];
+                        const defaultCorrecto: Record<string, string> = {};
+                        itemsToUse.forEach((item: ChecklistItem) => {
+                            const opciones = (item as any).opciones || [];
+                            if (opciones.includes('CORRECTO')) {
+                                defaultCorrecto[item.key] = 'CORRECTO';
+                            }
+                        });
                         const equipoConCodigo = {
+                            ...defaultCorrecto,
                             ...equipo,
                             codigo: equipo.codigo || '',
                             revisado: false

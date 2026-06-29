@@ -78,8 +78,10 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
           <div className="flex items-center gap-3 overflow-hidden">
             <img src={appLogo} alt="Logo" className="h-9 w-9 object-contain rounded-lg ring-2 ring-orange-400/30" onError={(e) => { (e.target as HTMLImageElement).src = '/favicon.png'; }} />
             <div>
-              <p className="text-sm font-bold text-orange-400 leading-tight">ABANFOKING</p>
-              <p className="text-[9px] text-white/80 font-medium">{APP_VERSION}</p>
+              <p className="text-sm font-bold text-orange-400 leading-tight">ABANFOC</p>
+              <p className="text-xs text-white/90 font-medium">
+                {APP_VERSION}
+              </p>
             </div>
           </div>
         )}
