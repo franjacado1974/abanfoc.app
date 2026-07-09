@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Users, CalendarDays, FileText, SearchCheck, Wrench,
@@ -44,6 +44,87 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [displayLogo, setDisplayLogo] = useState(appLogo);
+
+  useEffect(() => {
+    const loadAndProcessLogo = async () => {
+      let sourceUrl = appLogo;
+
+      try {
+        const { storage } = await import('../firebase');
+        const { ref, getDownloadURL } = await import('firebase/storage');
+        const storageRef = ref(storage, 'empresa/escudo sin fondo.png');
+        const url = await getDownloadURL(storageRef);
+        if (url) {
+          sourceUrl = url;
+          localStorage.setItem('firecheck_db_logo', url);
+        }
+      } catch (err) {
+        console.warn('Could not load escudo sin fondo.png from Firebase Storage, using fallback logo:', err);
+      }
+
+      if (!sourceUrl) return;
+
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.src = sourceUrl;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          setDisplayLogo(sourceUrl);
+          return;
+        }
+        ctx.drawImage(img, 0, 0);
+        try {
+          const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const data = imgData.data;
+          let changed = false;
+          for (let i = 0; i < data.length; i += 4) {
+            const r = data[i];
+            const g = data[i + 1];
+            const b = data[i + 2];
+            const a = data[i + 3];
+            
+            if (a > 0) {
+              // Check if the pixel is dominant red
+              const isRed = r > 60 && r > g + 25 && r > b + 25;
+              if (isRed) {
+                // Mute green and blue to make it solid red and remove white spots inside
+                const newG = Math.round(g * 0.1);
+                const newB = Math.round(b * 0.1);
+                if (g !== newG || b !== newB) {
+                  data[i + 1] = newG;
+                  data[i + 2] = newB;
+                  changed = true;
+                }
+              } else {
+                // Make non-red pixels (like white background/spots) fully transparent
+                data[i + 3] = 0;
+                changed = true;
+              }
+            }
+          }
+          if (changed) {
+            ctx.putImageData(imgData, 0, 0);
+            setDisplayLogo(canvas.toDataURL('image/png'));
+          } else {
+            setDisplayLogo(sourceUrl);
+          }
+        } catch (err) {
+          console.error('Error processing logo transparency:', err);
+          setDisplayLogo(sourceUrl);
+        }
+      };
+      img.onerror = () => {
+        setDisplayLogo(sourceUrl);
+      };
+    };
+
+    loadAndProcessLogo();
+  }, [appLogo]);
 
   const userRole = user?.rol || 'visualizador';
 
@@ -57,7 +138,7 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
 
   const isActive = (path: string) => {
     if (path === '/') return location.pathname === '/';
-    return location.pathname.startsWith(path);
+    return location.pathname === path || location.pathname.startsWith(path + '/');
   };
 
   const handleNavigate = (path: string) => {
@@ -65,7 +146,7 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
     setMobileOpen(false);
   };
 
-  const sidebarBgColor = '#00008B';
+  const sidebarBgColor = '#000000';
 
   const sidebarContent = (
     <div
@@ -73,25 +154,25 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
       style={{ backgroundColor: sidebarBgColor }}
     >
       {/* Logo & Header */}
-      <div className={`flex items-center ${collapsed ? 'justify-center' : 'justify-between'} px-4 py-5 border-b border-white/20`}>
+      <div className="flex items-center justify-center px-4 py-5 border-b border-zinc-900">
         {!collapsed && (
-          <div className="flex items-center gap-3 overflow-hidden">
-            <img src={appLogo} alt="Logo" className="h-9 w-9 object-contain rounded-lg ring-2 ring-orange-400/30" onError={(e) => { (e.target as HTMLImageElement).src = '/favicon.png'; }} />
-            <div>
-              <p className="text-sm font-bold text-orange-400 leading-tight">ABANFOC</p>
-              <p className="text-xs text-white/90 font-medium">
+          <div className="flex flex-col items-center gap-2 w-full overflow-hidden py-1">
+            <img src={displayLogo} alt="Logo" className="h-16 w-16 object-contain" onError={(e) => { (e.target as HTMLImageElement).src = '/favicon.png'; }} />
+            <div className="text-center">
+              <p className="text-lg font-black tracking-wider text-red-600 leading-tight">ABANFOC</p>
+              <p className="text-xs text-white/90 font-semibold mt-0.5">
                 {APP_VERSION}
               </p>
             </div>
           </div>
         )}
         {collapsed && (
-          <img src={appLogo} alt="Logo" className="h-8 w-8 object-contain rounded-lg ring-2 ring-orange-400/30" onError={(e) => { (e.target as HTMLImageElement).src = '/favicon.png'; }} />
+          <img src={displayLogo} alt="Logo" className="h-9 w-9 object-contain" onError={(e) => { (e.target as HTMLImageElement).src = '/favicon.png'; }} />
         )}
       </div>
 
       {/* Navigation */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden py-2 scrollbar-thin scrollbar-thumb-blue-700 scrollbar-track-transparent">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden py-2 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent">
         {Object.entries(groupedItems).map(([section, items]) => {
           return (
             <div key={section}>
@@ -105,12 +186,12 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
                       collapsed ? 'justify-center mx-0 px-0 w-16' : ''
                     } ${
                        active
-                         ? 'bg-orange-500/20 text-orange-300 shadow-sm shadow-orange-500/10 border border-orange-500/20'
-                         : 'text-white hover:text-orange-500 hover:bg-white/10'
+                         ? 'text-red-600 bg-transparent font-bold'
+                         : 'text-white hover:text-red-500 hover:bg-white/10'
                     }`}
                     title={collapsed ? item.title : undefined}
                   >
-                    <div className={`flex items-center justify-center w-5 h-5 ${active ? 'text-white' : 'text-white'}`}>
+                    <div className={`flex items-center justify-center w-5 h-5 ${active ? 'text-red-600' : 'text-white'}`}>
                       <item.Icon className="w-4 h-4" strokeWidth={1.5} />
                     </div>
                     {!collapsed && <span className="truncate">{item.title}</span>}
@@ -123,30 +204,30 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
       </div>
 
       {/* User Info & Logout */}
-      <div className={`border-t border-white/20 px-3 py-3 shrink-0 ${collapsed ? 'flex flex-col items-center gap-2' : ''}`}>
+      <div className={`border-t border-zinc-900 px-3 py-3 shrink-0 ${collapsed ? 'flex flex-col items-center gap-2' : ''}`}>
         <div className="md:hidden mb-3 px-1">
           <p className="text-white/70 text-[9px] font-bold uppercase tracking-widest">Sesión Activa</p>
-          <p className="text-white/70 text-[9px]">{APP_VERSION}</p>
+          <p className="text-white/70 text-[9px] font-medium">{APP_VERSION}</p>
         </div>
         {!collapsed && user && (
           <div className="flex items-center gap-3 mb-3">
-            <div className="w-8 h-8 bg-orange-500/20 rounded-full flex items-center justify-center text-xs font-bold text-orange-400 border border-orange-500/30">
+            <div className="w-8 h-8 bg-red-500/20 rounded-full flex items-center justify-center text-xs font-bold text-red-500 border border-red-500/30">
               {user.nombre.charAt(0)}{user.apellidos.charAt(0)}
             </div>
             <div className="min-w-0">
               <p className="text-sm font-semibold text-white truncate">{user.nombre} {user.apellidos}</p>
-              <p className="text-[9px] text-orange-400 uppercase font-bold tracking-wider truncate">{user.rol}</p>
+              <p className="text-[9px] text-red-500 uppercase font-bold tracking-wider truncate">{user.rol}</p>
             </div>
           </div>
         )}
         {collapsed && user && (
-          <div className="w-8 h-8 bg-orange-500/20 rounded-full flex items-center justify-center text-xs font-bold text-orange-400 border border-orange-500/30 mb-2 -mt-2">
+          <div className="w-8 h-8 bg-red-500/20 rounded-full flex items-center justify-center text-xs font-bold text-red-500 border border-red-500/30 mb-2 -mt-2">
             {user.nombre.charAt(0)}{user.apellidos.charAt(0)}
           </div>
         )}
         <button
           onClick={onLogout}
-          className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-white hover:text-orange-500 hover:bg-white/10 transition-all uppercase tracking-wider ${
+          className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-white hover:text-red-500 hover:bg-white/10 transition-all uppercase tracking-wider ${
             collapsed ? 'justify-center' : ''
           }`}
           title="Cerrar Sesión"
@@ -159,7 +240,8 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
       {/* Collapse button (desktop) */}
       <button
         onClick={() => setCollapsed(!collapsed)}
-        className="absolute -right-3 top-1/2 transform -translate-y-1/2 w-6 h-6 bg-[#00008B] border border-white/30 rounded-full flex items-center justify-center text-orange-400 hover:text-orange-300 hover:brightness-110 transition-all shadow-lg hidden md:flex"
+        className="absolute -right-3 top-1/2 transform -translate-y-1/2 w-6 h-6 border border-zinc-800 rounded-full flex items-center justify-center text-red-500 hover:text-red-400 hover:brightness-110 transition-all shadow-lg hidden md:flex"
+        style={{ backgroundColor: sidebarBgColor }}
         title={collapsed ? 'Expandir menú' : 'Contraer menú'}
       >
         {collapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronLeft className="w-3 h-3" />}
@@ -172,7 +254,8 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
       {/* Mobile toggle button */}
       <button
         onClick={() => setMobileOpen(true)}
-        className="fixed top-4 left-4 z-[100] w-10 h-10 bg-[#00008B] text-orange-400 rounded-xl flex items-center justify-center shadow-lg md:hidden border border-white/20"
+        className="fixed top-4 left-4 z-[100] w-10 h-10 text-red-500 rounded-xl flex items-center justify-center shadow-lg md:hidden border border-zinc-900"
+        style={{ backgroundColor: sidebarBgColor }}
         aria-label="Abrir menú"
       >
         <Menu className="w-5 h-5" />
@@ -199,7 +282,7 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
 
       {/* Desktop sidebar */}
       <aside className="hidden md:block relative">
-        <div className="h-screen text-white shadow-2xl border-r border-white/20" style={{ backgroundColor: sidebarBgColor }}>
+        <div className="h-screen text-white shadow-2xl border-r border-zinc-900" style={{ backgroundColor: sidebarBgColor }}>
           {sidebarContent}
         </div>
       </aside>

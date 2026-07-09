@@ -4,8 +4,8 @@ import SistemaDeteccion from './components/RevisionSistemas/SistemaDeteccion';
 import SistemaGenerico from './components/RevisionSistemas/SistemaGenerico';
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, Save, Layers, ChevronDown, ChevronUp, Plus, X, CheckCircle2, AlertTriangle, PenLine, RotateCcw, CheckCheck, Lock } from 'lucide-react';
-import { addEquipoInstalado, addAlbaran, updateEquipoInstalado, updateParte as updateParteFirestore, subscribePartes, subscribeCentros, subscribeClientes, subscribeCentroSistemas, subscribeEquiposInstalados, subscribeArticulos, subscribeSistemasCategorias, generateNumeroMantenimiento, type Albaran, type ChecklistItem } from './firebase';
+import { ArrowLeft, Save, Layers, ChevronDown, ChevronUp, Plus, X, CheckCircle2, AlertTriangle, PenLine, RotateCcw, CheckCheck, Lock, MessageSquare } from 'lucide-react';
+import { addEquipoInstalado, addAlbaran, updateEquipoInstalado, updateParte as updateParteFirestore, updateCentro, subscribePartes, subscribeCentros, subscribeClientes, subscribeCentroSistemas, subscribeEquiposInstalados, subscribeArticulos, subscribeSistemasCategorias, generateNumeroMantenimiento, type Albaran, type ChecklistItem } from './firebase';
 import { subscribePlantillas, subscribeItemsDePlantilla, type ItemPlantilla } from './plantillas';
 import type { Centro, Parte, Cliente, CentroSistema, EquipoInstalado } from './Centros';
 import ConfirmationModal from './ConfirmationModal';
@@ -207,6 +207,9 @@ export default function RevisionChecklist() {
 
     const [centro, setCentro] = useState<Centro | null>(null);
     const [parte, setParte] = useState<Parte | null>(null);
+    const [showCommentsModal, setShowCommentsModal] = useState(false);
+    const [privateComment, setPrivateComment] = useState('');
+    const [publicComment, setPublicComment] = useState('');
     const [sistemasDelCentro, setSistemasDelCentro] = useState<CentroSistema[]>([]);
     const [equiposInstalados, setEquiposInstalados] = useState<EquipoInstalado[]>([]);
     const [, setEquiposCatalogo] = useState<any[]>(() => JSON.parse(localStorage.getItem('firecheck_db_sistemas_equipos') || '[]'));
@@ -948,6 +951,41 @@ export default function RevisionChecklist() {
         }
     };
 
+    const handleOpenComments = () => {
+        setPrivateComment(parte?.comentariosPrivados || '');
+        setPublicComment(centro?.comentariosTecnico || '');
+        setShowCommentsModal(true);
+    };
+
+    const handleSaveComments = async () => {
+        if (!parteId || !centro) return;
+
+        // 1. Guardar comentarios privados en el parte
+        await handleParteChange({ comentariosPrivados: privateComment });
+
+        // 2. Guardar comentarios públicos en el centro
+        const docId = centro._docId || centro.id;
+        if (docId) {
+            // Actualizar en localStorage para soporte offline
+            const storedCentros = JSON.parse(localStorage.getItem('firecheck_db_centros') || '[]');
+            const updatedCentros = storedCentros.map((c: Centro) =>
+                (c.id === centro.id || c._docId === centro._docId) ? { ...c, comentariosTecnico: publicComment } : c
+            );
+            localStorage.setItem('firecheck_db_centros', JSON.stringify(updatedCentros));
+            setCentro(prev => prev ? { ...prev, comentariosTecnico: publicComment } : null);
+
+            // Sincronizar con Firestore
+            try {
+                await updateCentro(docId, { comentariosTecnico: publicComment } as any);
+            } catch (err) {
+                console.error('Error actualizando comentarios del centro en Firestore:', err);
+            }
+        }
+
+        setShowCommentsModal(false);
+        alert('Comentarios guardados correctamente.');
+    };
+
     const handlePauseRevision = () => {
         if (!parteId) return;
 
@@ -985,9 +1023,17 @@ export default function RevisionChecklist() {
                         }
                     }
                 });
+                const notasItem = itemsToUse.find(item => {
+                    const lbl = (item.label || '').toLowerCase();
+                    return lbl.includes('notas') || lbl.includes('observaciones') || lbl.includes('anomal');
+                });
+                if (notasItem) {
+                    allChecked[notasItem.key] = '';
+                }
                 return {
                     ...eq,
                     revisado: true,
+                    anomalias: '',
                     ...allChecked
                 };
             }
@@ -1422,6 +1468,12 @@ export default function RevisionChecklist() {
                 {/* Bottom Actions */}
                 <div className="mt-10 pt-6 border-t border-slate-200 flex flex-col sm:flex-row justify-end gap-3">
                     <button
+                        onClick={handleOpenComments}
+                        className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-white bg-zinc-700 hover:bg-zinc-800 shadow-lg shadow-zinc-200 transition-all text-sm sm:w-auto"
+                    >
+                        <MessageSquare className="w-4 h-4" /> Comentarios
+                    </button>
+                    <button
                         onClick={handlePauseRevision}
                         className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-white bg-slate-600 hover:bg-slate-700 shadow-lg shadow-slate-200 transition-all text-sm sm:w-auto"
                     >
@@ -1696,6 +1748,74 @@ export default function RevisionChecklist() {
                 </div>
                 );
             })()}
+
+            {/* MODAL COMENTARIOS */}
+            {showCommentsModal && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[200]">
+                    <div className="bg-white rounded-3xl w-full max-w-xl shadow-2xl flex flex-col animate-in fade-in zoom-in-95 duration-200 overflow-hidden max-h-[90vh]">
+                        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
+                            <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                                <MessageSquare className="w-5 h-5 text-red-600" /> Comentarios de la revisión
+                            </h2>
+                            <button
+                                onClick={() => setShowCommentsModal(false)}
+                                className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <div className="overflow-y-auto p-6 space-y-6">
+                            {/* Campo Privado */}
+                            <div>
+                                <label className="block text-sm font-bold text-slate-800 mb-1 flex flex-col">
+                                    <span>Datos privados</span>
+                                    <span className="text-xs font-semibold text-red-600 uppercase tracking-wider mt-0.5">NO SE VERÁN EN LA DOCUMENTACIÓN</span>
+                                </label>
+                                <textarea
+                                    value={privateComment}
+                                    onChange={(e) => setPrivateComment(e.target.value)}
+                                    rows={4}
+                                    placeholder="Escribe aquí los comentarios internos o privados..."
+                                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all text-sm font-normal text-slate-700 bg-slate-50/50"
+                                />
+                                <p className="text-[11px] text-slate-400 mt-1 font-medium">Esta información se guardará únicamente de forma interna en el parte de trabajo.</p>
+                            </div>
+
+                            {/* Campo Público */}
+                            <div>
+                                <label className="block text-sm font-bold text-slate-800 mb-1 flex flex-col">
+                                    <span>Información pública</span>
+                                    <span className="text-xs font-semibold text-green-600 uppercase tracking-wider mt-0.5">SE VERÁ EN EL DOCUMENTO PDF ACTAS</span>
+                                </label>
+                                <textarea
+                                    value={publicComment}
+                                    onChange={(e) => setPublicComment(e.target.value)}
+                                    rows={4}
+                                    placeholder="Escribe aquí las observaciones públicas que deben aparecer en el acta..."
+                                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all text-sm font-normal text-slate-700 bg-slate-50/50"
+                                />
+                                <p className="text-[11px] text-slate-400 mt-1 font-medium">Esta información quedará sincronizada en la colección de centros y se imprimirá en el acta oficial.</p>
+                            </div>
+                        </div>
+
+                        <div className="p-6 border-t border-slate-100 flex flex-col sm:flex-row justify-end gap-3 shrink-0">
+                            <button
+                                onClick={() => setShowCommentsModal(false)}
+                                className="px-5 py-2.5 rounded-xl font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors text-sm w-full sm:w-auto"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={handleSaveComments}
+                                className="px-5 py-2.5 rounded-xl font-bold text-white bg-red-600 hover:bg-red-700 transition-colors shadow-lg shadow-red-200 text-sm w-full sm:w-auto"
+                            >
+                                Guardar comentarios
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* TOAST DE GUARDADO */}
             {toastMessage && (

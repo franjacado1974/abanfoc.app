@@ -174,7 +174,7 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
 
   // ─── VISTA LISTA DE PARTES ─────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-[#f8f6f3]">
+    <div className="min-h-screen bg-[#DCE1E5]">
       {/* Header */}
       <header className="sticky top-0 z-20 bg-white/90 backdrop-blur-md border-b border-zinc-200 shadow-sm">
         <div className="flex items-center gap-3 px-4 py-3">
@@ -290,6 +290,14 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
                           {centro?.nombre || 'Centro desconocido'}
                         </h3>
                       </div>
+                      {parte.retirarExtintoresRetimbrado && !parte.retimbradoReiniciado && (
+                        <span 
+                          className="text-lg animate-pulse mr-1.5 shrink-0 select-none"
+                          title="Extintores retirados para retimbrado (Pendiente)"
+                        >
+                          🧯
+                        </span>
+                      )}
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase shrink-0 mt-0.5 ${getEstadoBadge(parte.estado)}`}>
                         {parte.estado === 'Descargado (Offline)' ? 'Offline' : parte.estado}
                       </span>
@@ -343,6 +351,14 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
+                      {parte.retirarExtintoresRetimbrado && !parte.retimbradoReiniciado && (
+                        <span 
+                          className="text-lg animate-pulse mr-1 shrink-0 select-none"
+                          title="Extintores retirados para retimbrado (Pendiente)"
+                        >
+                          🧯
+                        </span>
+                      )}
                       <span className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase ${getEstadoBadge(parte.estado)}`}>
                         {parte.estado === 'Descargado (Offline)' ? 'Offline' : parte.estado}
                       </span>

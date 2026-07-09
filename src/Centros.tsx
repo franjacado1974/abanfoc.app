@@ -59,6 +59,7 @@ export interface Centro {
   precioAnualContrato?: string;
   precioTrimestralContrato?: string;
   precioMensualContrato?: string;
+  comentariosTecnico?: string;
 }
 
 export interface Parte {
@@ -77,6 +78,13 @@ export interface Parte {
   firmaCliente?: string;
   firmaTecnico?: string;
   nombreFirmante?: string;
+  retirarExtintoresRetimbrado?: boolean;
+  dejarExtintoresDeposito?: boolean;
+  cantidadExtintoresDeposito?: number;
+  retimbradoReiniciado?: boolean;
+  observacionesTecnico?: string;
+  cantidadRetimbrados?: number;
+  comentariosPrivados?: string;
 }
 
 const generateId = () => {
@@ -171,7 +179,8 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
     sistemasContrato: [] as string[],
     precioAnual: '',
     precioTrimestral: '',
-    precioMensual: ''
+    precioMensual: '',
+    formaPago: 'Transferencia bancaria'
   });
   const [isTecnicoModalOpen, setIsTecnicoModalOpen] = useState(false);
   const [centroForTecnico, setCentroForTecnico] = useState<Centro | null>(null);
@@ -468,7 +477,8 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
       sistemasContrato: formContrato.sistemasContrato,
       precioAnualContrato: formContrato.precioAnual.trim(),
       precioTrimestralContrato: formContrato.precioTrimestral.trim(),
-      precioMensualContrato: formContrato.precioMensual.trim()
+      precioMensualContrato: formContrato.precioMensual.trim(),
+      formaPagoContrato: formContrato.formaPago
     };
     const docId = (centroForContrato as any)._docId || centroForContrato.id;
     const { _docId, ...centroData } = updatedCentro as any;
@@ -485,7 +495,8 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
         sistemasContrato: formContrato.sistemasContrato,
         precioAnualContrato: formContrato.precioAnual.trim(),
         precioTrimestralContrato: formContrato.precioTrimestral.trim(),
-        precioMensualContrato: formContrato.precioMensual.trim()
+        precioMensualContrato: formContrato.precioMensual.trim(),
+        formaPagoContrato: formContrato.formaPago
       });
     } catch (err) {
       console.error('Error guardando contrato en Firestore:', err);
@@ -800,7 +811,8 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
                       sistemasContrato: selectedCentro.sistemasContrato || (selectedCentro.observacionesContrato ? selectedCentro.observacionesContrato.split(', ').filter(Boolean) : []),
                       precioAnual: (selectedCentro as any).precioAnualContrato || '',
                       precioTrimestral: (selectedCentro as any).precioTrimestralContrato || '',
-                      precioMensual: (selectedCentro as any).precioMensualContrato || ''
+                      precioMensual: (selectedCentro as any).precioMensualContrato || '',
+                      formaPago: (selectedCentro as any).formaPagoContrato || 'Transferencia bancaria'
                     });
                     setIsContratoModalOpen(true);
                   }} className="flex items-center justify-center gap-1 bg-amber-500 text-white px-2.5 py-1.5 rounded-lg text-xs font-medium hover:bg-amber-600 transition-colors border border-amber-600">
@@ -959,27 +971,32 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
                   </div>
                 </div>
 
-                {/* Sistemas a Revisar */}
+                {/* Forma de Pago */}
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-zinc-700">Sistemas a revisar</label>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 border border-zinc-200 rounded-xl p-3 bg-zinc-50/30">
-                    {categoriasSistema.map(cat => (
-                      <label key={cat.id} className={`flex items-center gap-1.5 group ${isTecnicoMode ? 'cursor-not-allowed opacity-75' : 'cursor-pointer'} py-0.5`}>
-                        <input
-                          disabled={isTecnicoMode}
-                          type="checkbox"
-                          checked={formContrato.sistemasContrato.includes(cat.nombre)}
-                          onChange={e => {
-                            const newSist = e.target.checked
-                              ? [...formContrato.sistemasContrato, cat.nombre]
-                              : formContrato.sistemasContrato.filter(s => s !== cat.nombre);
-                            setFormContrato({ ...formContrato, sistemasContrato: newSist });
-                          }}
-                          className={`w-3.5 h-3.5 text-black rounded border-zinc-300 focus:ring-black ${isTecnicoMode ? 'cursor-not-allowed' : 'cursor-pointer'}`}
-                        />
-                        <span className={`text-xs font-semibold text-zinc-600 ${!isTecnicoMode && 'group-hover:text-black'} transition-colors truncate`}>{cat.nombre}</span>
-                      </label>
-                    ))}
+                  <label className="text-xs font-bold text-zinc-700">Forma de Pago del Contrato</label>
+                  <div className="flex flex-wrap gap-4 p-3.5 border border-zinc-200 rounded-xl bg-zinc-50/30">
+                    {['Transferencia bancaria', 'Efectivo', 'Domiciliación bancaria'].map((forma) => {
+                      const isChecked = formContrato.formaPago === forma;
+                      return (
+                        <label key={forma} className={`flex items-center gap-2 group ${isTecnicoMode ? 'cursor-not-allowed opacity-75' : 'cursor-pointer'}`}>
+                          <input
+                            disabled={isTecnicoMode}
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => {
+                              setFormContrato({ 
+                                ...formContrato, 
+                                formaPago: isChecked ? '' : forma 
+                              });
+                            }}
+                            className={`w-4 h-4 text-black rounded border-zinc-300 focus:ring-black ${isTecnicoMode ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                          />
+                          <span className={`text-sm font-medium text-zinc-700 ${!isTecnicoMode && 'group-hover:text-black'} transition-colors`}>
+                            {forma}
+                          </span>
+                        </label>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -1037,7 +1054,8 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
                         sistemasContrato: formContrato.sistemasContrato,
                         precioAnualContrato: formContrato.precioAnual.trim(),
                         precioTrimestralContrato: formContrato.precioTrimestral.trim(),
-                        precioMensualContrato: formContrato.precioMensual.trim()
+                        precioMensualContrato: formContrato.precioMensual.trim(),
+                        formaPagoContrato: formContrato.formaPago
                       };
 
                       await generarContratoPDF(client, tempCentro, systems, {
@@ -1045,7 +1063,8 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
                         fechaInicio: formContrato.fechaInicio,
                         fechaFin: formContrato.fechaFin,
                         importeAnual: String(total),
-                        observaciones: formContrato.sistemasContrato.join(', ')
+                        observaciones: formContrato.sistemasContrato.join(', '),
+                        formaPago: formContrato.formaPago
                       });
                     }}
                     className="flex-1 flex items-center justify-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition-all shadow-md shadow-amber-500/10 cursor-pointer"
@@ -1220,42 +1239,48 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
                           {equiposDelSistema.length === 0 ? (
                             <p className="text-xs text-zinc-400 italic py-4 text-center bg-white rounded-lg border border-dashed border-zinc-200">No hay equipos en este sistema.</p>
                           ) : (
-                            <div className="space-y-1.5">
-                              <div className="hidden md:flex items-center px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-zinc-400">
-                                <div className="w-16 shrink-0">Orden</div>
-                                <div className="flex-1 min-w-0">Tipo</div>
-                                <div className="w-36 shrink-0">Ubicación</div>
-                                <div className="w-20 shrink-0 text-right">Acciones</div>
-                              </div>
-                              {equiposDelSistema.filter(eq => eq.revisable !== false).map((eq: any, i) => {
-                                const hasAnomalies = Object.keys(eq).some(k => k.startsWith('check') && eq[k] === false);
-                                return (
-                                  <div key={eq.id} className="flex flex-col md:flex-row md:items-center px-3 py-2.5 rounded-lg bg-white border border-zinc-200 hover:border-zinc-300 transition-colors">
-                                    <div className="flex md:hidden items-center justify-between mb-1">
-                                      <span className="text-[10px] font-mono font-bold text-zinc-400">#{eq.codigo || (i+1).toString().padStart(2, '0')}</span>
-                                      <div className="flex items-center gap-1">
-                                        {hasAnomalies && <AlertTriangle className="w-3.5 h-3.5 text-red-500" />}
-                                      </div>
-                                    </div>
-                                    <div className="w-full md:w-16 shrink-0 hidden md:block">
-                                      <span className="px-1.5 py-0.5 bg-zinc-900 text-white text-[10px] font-mono font-bold rounded-lg">{eq.codigo || (i+1).toString().padStart(2, '0')}</span>
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                      <span className="text-sm font-semibold text-zinc-800">{eq.nombre || eq.tipo || eq.modelo || 'Equipo sin tipo'}</span>
-                                    </div>
-                                    <div className="w-full md:w-36 shrink-0 text-xs text-zinc-500 truncate mt-0.5 md:mt-0">{eq.ubicacion || '—'}</div>
-                                    {!isTecnicoMode && (
-                                      <div className="flex items-center gap-1 shrink-0 mt-1 md:mt-0 justify-end">
-                                        {hasAnomalies && <span className="hidden md:inline" title="Anomalías detectadas"><AlertTriangle className="w-3.5 h-3.5 text-red-500" /></span>}
-                                        <button onClick={(e) => { e.stopPropagation(); handleEditEquipo(eq, sist); }} className="p-1 text-zinc-400 hover:text-amber-600 hover:bg-amber-50 rounded transition-colors" title="Editar equipo"><Edit className="w-3.5 h-3.5" /></button>
-                                        <button onClick={(e) => { e.stopPropagation(); handleDuplicateEquipoCentro(eq); }} className="p-1 text-zinc-400 hover:text-sky-600 hover:bg-sky-50 rounded transition-colors" title="Duplicar equipo"><Copy className="w-3.5 h-3.5" /></button>
-                                        <button onClick={(e) => { e.stopPropagation(); handleDeleteEquipo(eq.id); }} className="p-1 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors" title="Eliminar equipo"><Trash2 className="w-3.5 h-3.5" /></button>
-                                      </div>
-                                    )}
+                            (() => {
+                              const sistLower = (sist.tipo || sist.familia || '').toLowerCase();
+                              const esAreaCobertura = sistLower.includes('detecci') || sistLower.includes('rociador') || sistLower.includes('sprinkler') || (sistLower.includes('puesto') && sistLower.includes('control'));
+                              return (
+                                <div className="space-y-1.5">
+                                  <div className="hidden md:flex items-center px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                                    <div className="w-16 shrink-0">Orden</div>
+                                    <div className="flex-1 min-w-0">Tipo</div>
+                                    <div className="w-36 shrink-0">{esAreaCobertura ? 'Área de cobertura' : 'Ubicación'}</div>
+                                    <div className="w-20 shrink-0 text-right">Acciones</div>
                                   </div>
-                                );
-                              })}
-                            </div>
+                                  {equiposDelSistema.filter(eq => eq.revisable !== false).map((eq: any, i) => {
+                                    const hasAnomalies = Object.keys(eq).some(k => k.startsWith('check') && eq[k] === false);
+                                    return (
+                                      <div key={eq.id} className="flex flex-col md:flex-row md:items-center px-3 py-2.5 rounded-lg bg-white border border-zinc-200 hover:border-zinc-300 transition-colors">
+                                        <div className="flex md:hidden items-center justify-between mb-1">
+                                          <span className="text-[10px] font-mono font-bold text-zinc-400">#{eq.codigo || (i+1).toString().padStart(2, '0')}</span>
+                                          <div className="flex items-center gap-1">
+                                            {hasAnomalies && <AlertTriangle className="w-3.5 h-3.5 text-red-500" />}
+                                          </div>
+                                        </div>
+                                        <div className="w-full md:w-16 shrink-0 hidden md:block">
+                                          <span className="px-1.5 py-0.5 bg-zinc-900 text-white text-[10px] font-mono font-bold rounded-lg">{eq.codigo || (i+1).toString().padStart(2, '0')}</span>
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                          <span className="text-sm font-semibold text-zinc-800">{eq.nombre || eq.tipo || eq.modelo || 'Equipo sin tipo'}</span>
+                                        </div>
+                                        <div className="w-full md:w-36 shrink-0 text-xs text-zinc-500 truncate mt-0.5 md:mt-0">{eq.ubicacion || '—'}</div>
+                                        {!isTecnicoMode && (
+                                          <div className="flex items-center gap-1 shrink-0 mt-1 md:mt-0 justify-end">
+                                            {hasAnomalies && <span className="hidden md:inline" title="Anomalías detectadas"><AlertTriangle className="w-3.5 h-3.5 text-red-500" /></span>}
+                                            <button onClick={(e) => { e.stopPropagation(); handleEditEquipo(eq, sist); }} className="p-1 text-zinc-400 hover:text-amber-600 hover:bg-amber-50 rounded transition-colors" title="Editar equipo"><Edit className="w-3.5 h-3.5" /></button>
+                                            <button onClick={(e) => { e.stopPropagation(); handleDuplicateEquipoCentro(eq); }} className="p-1 text-zinc-400 hover:text-sky-600 hover:bg-sky-50 rounded transition-colors" title="Duplicar equipo"><Copy className="w-3.5 h-3.5" /></button>
+                                            <button onClick={(e) => { e.stopPropagation(); handleDeleteEquipo(eq.id); }} className="p-1 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors" title="Eliminar equipo"><Trash2 className="w-3.5 h-3.5" /></button>
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              );
+                            })()
                           )}
                         </div>
                       )}

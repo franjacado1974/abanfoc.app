@@ -19,6 +19,10 @@ interface ParteItem {
   estado: string;
   fechaProgramada?: string;
   _docId?: string;
+  retirarExtintoresRetimbrado?: boolean;
+  retimbradoReiniciado?: boolean;
+  observacionesTecnico?: string;
+  cantidadRetimbrados?: number;
 }
 
 interface Cliente {
@@ -276,7 +280,8 @@ export default function Partes() {
       if (downloadOptions.acta) {
         await generarActaExtintoresPDF(
           cliente, centro, sistemasDelCentro, equiposTodos, numeroMantenimiento,
-          tecnicoNombre, undefined, firmaCliente, firmaTecnico, nombreFirmante, checklistItemsPorSistema, empresaSeleccionada
+          tecnicoNombre, undefined, firmaCliente, firmaTecnico, nombreFirmante, checklistItemsPorSistema, empresaSeleccionada,
+          false, parte.observacionesTecnico
         );
       }
 
@@ -334,7 +339,8 @@ export default function Partes() {
             fechaInicio: centro.fechaInicioContrato || '',
             fechaFin: centro.fechaFinContrato || '',
             importeAnual: centro.importeAnualContrato || '',
-            observaciones: centro.observacionesContrato || ''
+            observaciones: centro.observacionesContrato || '',
+            formaPago: (centro as any).formaPagoContrato || ''
           }
         );
       }
@@ -527,6 +533,14 @@ export default function Partes() {
                         </td>
                         <td className="px-4 py-4">
                           <div className="flex items-center justify-end gap-2">
+                             {parte.retirarExtintoresRetimbrado && !parte.retimbradoReiniciado && (
+                              <span 
+                                className="text-lg animate-pulse mr-2 shrink-0 select-none"
+                                title="Extintores retirados para retimbrado (Pendiente)"
+                              >
+                                🧯
+                              </span>
+                            )}
                             {(parte.tecnicoId || parte.estado === 'En revisión' || parte.estado === 'Pre-Cerrado' || parte.estado === 'Cerrado') && (
                               <div 
                                 className={`w-2.5 h-2.5 rounded-full mr-2 shrink-0 ${

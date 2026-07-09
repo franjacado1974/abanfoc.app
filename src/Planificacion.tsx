@@ -27,6 +27,8 @@ interface Parte {
   numeroMantenimiento?: string;
   fechaProgramada?: string; // ISO YYYY-MM-DD
   empresaId?: string;
+  observacionesTecnico?: string;
+  comentariosPrivados?: string;
 }
 
 
@@ -38,8 +40,7 @@ export default function Planificacion() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [searchMonth, setSearchMonth] = useState('');
   const [showWeekends, setShowWeekends] = useState(true);
-  // Track which centros have already been dragged to the calendar (avoid duplicates)
-  const [usedCentroIds, setUsedCentroIds] = useState<string[]>([]);
+
 
   useEffect(() => {
     const safeParse = (key: string) => {
@@ -110,12 +111,28 @@ export default function Planificacion() {
     return null;
   };
 
+  const isRevisionScheduled = (centroId: string, revisionType: string, mesNombre: string, year: number): boolean => {
+    return partes.some(p => {
+      if (p.centroId !== centroId) return false;
+      if (p.periodicidad !== revisionType) return false;
+      if (!p.fechaProgramada) return false;
+      
+      const parts = p.fechaProgramada.split('-');
+      if (parts.length !== 3) return false;
+      const pMonthIdx = parseInt(parts[1], 10) - 1;
+      const pYear = parseInt(parts[2], 10);
+      
+      return MESES[pMonthIdx] === mesNombre && pYear === year;
+    });
+  };
+
   // Centros con revisión en el mes buscado, excluyendo los ya usados (arrastrados al calendario)
   const centrosConRevision = searchMonth
     ? centros
         .filter(c => {
           const info = getCentroRevisionInfo(c, searchMonth);
-          return info && info.tieneRevision && !usedCentroIds.includes(c._docId || c.id);
+          const cId = c._docId || c.id;
+          return info && info.tieneRevision && !isRevisionScheduled(cId, info.tipo, searchMonth, currentDate.getFullYear());
         })
         .map(c => {
           const info = getCentroRevisionInfo(c, searchMonth)!;
@@ -167,6 +184,20 @@ export default function Planificacion() {
       const revisionType = e.dataTransfer.getData('revisionType');
       const centro = centros.find(c => c._docId === centroId || c.id === centroId);
       if (!centro) return;
+
+      // Buscar observaciones del último parte del mismo centro para inicializar el nuevo parte con ellas
+      let ultimaObs = '';
+      if (partes && partes.length > 0) {
+        const partesCentro = partes.filter(p => p.centroId === (centro._docId || centro.id));
+        if (partesCentro.length > 0) {
+          const ordenados = [...partesCentro].sort((a, b) => b.fechaCreacion.localeCompare(a.fechaCreacion));
+          const conObs = ordenados.find(p => p.observacionesTecnico && p.observacionesTecnico.trim() !== '');
+          if (conObs) {
+            ultimaObs = conObs.observacionesTecnico || '';
+          }
+        }
+      }
+
       const newParte = {
         id: `PARTE-${generateId().slice(0, 8).toUpperCase()}`,
         centroId: centro._docId || centro.id,
@@ -179,10 +210,10 @@ export default function Planificacion() {
         mesesRevision: (centro.mesesRevision || []).join(', '),
         estado: 'Planificado' as const,
         fechaProgramada: dateStr,
+        observacionesTecnico: ultimaObs,
       };
       // Guardar en Firestore (la suscripción actualizará el estado local)
       try { await addParte(newParte as any); } catch (err) { console.error('Error creando parte en Firestore:', err); }
-      setUsedCentroIds(prev => [...prev, centro._docId || centro.id]);
     } else {
       // Cambio de fecha: actualizar en Firestore
       const parteId = e.dataTransfer.getData('parteId');
@@ -190,6 +221,22 @@ export default function Planificacion() {
       if (!parte) return;
       const docId = (parte as any)._docId || parteId;
       try { await updateParte(docId, { fechaProgramada: dateStr }); } catch (err) { console.error('Error actualizando fecha en Firestore:', err); }
+    }
+  };
+
+  const onDropSidebar = async (e: React.DragEvent) => {
+    e.preventDefault();
+    const dragType = e.dataTransfer.getData('dragType');
+    if (dragType === 'parte') {
+      const parteId = e.dataTransfer.getData('parteId');
+      const parte = partes.find(p => p.id === parteId);
+      if (!parte) return;
+      const docId = (parte as any)._docId || parteId;
+      try {
+        await updateParte(docId, { fechaProgramada: '' });
+      } catch (err) {
+        console.error('Error al quitar del calendario desde barra:', err);
+      }
     }
   };
 
@@ -226,7 +273,7 @@ export default function Planificacion() {
 
         <div className="flex flex-col lg:flex-row gap-6 lg:h-[calc(100vh-180px)]">
           {/* BARRA LATERAL IZQUIERDA */}
-          <div className="w-full lg:w-80 bg-white rounded-3xl p-6 shadow-xl border border-sky-100 flex flex-col shrink-0 h-[400px] lg:h-full">
+          <div onDragOver={onDragOver} onDrop={onDropSidebar} className="w-full lg:w-80 bg-white rounded-3xl p-6 shadow-xl border border-sky-100 flex flex-col shrink-0 h-[400px] lg:h-full">
             {/* FILTRO DE BÚSQUEDA POR MES */}
             <div className="mb-5">
               <div className="relative">
@@ -314,7 +361,7 @@ export default function Planificacion() {
                   <div key={dateStr + idx} onDragOver={onDragOver} onDrop={(e) => onDrop(e, dateStr)} className={`min-h-[80px] md:min-h-[100px] p-1 md:p-2 border border-sky-50 flex flex-col ${currentMonth ? 'bg-amber-50/20' : 'bg-zinc-50/50 opacity-40'}`}>
                     <span className="text-xs font-bold text-zinc-400 mb-1">{date.getDate()}</span>
                     <div className="flex-1 space-y-1">
-                      {partes.filter(p => p.fechaProgramada === dateStr).map(p => {
+                      {partes.filter(p => p.fechaProgramada === dateStr && p.estado !== 'Cerrado').map(p => {
                         const centro = centros.find(c => c._docId === p.centroId || c.id === p.centroId);
                         return (
                           <div key={p.id} className="group relative">
@@ -325,9 +372,6 @@ export default function Planificacion() {
                               onClick={async () => {
                                 const docId = (p as any)._docId || p.id;
                                 try { await updateParte(docId, { fechaProgramada: '' }); } catch (err) { console.error(err); }
-                                if (p.centroId) {
-                                  setUsedCentroIds(prev => prev.filter(id => id !== p.centroId));
-                                }
                               }}
                               className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm hover:bg-red-600"
                               title="Quitar del calendario y volver a la barra"

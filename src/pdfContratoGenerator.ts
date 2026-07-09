@@ -11,6 +11,7 @@ export const generarContratoPDF = async (
     fechaFin: string;
     importeAnual: string;
     observaciones: string;
+    formaPago?: string;
   }
 ) => {
   const doc = new jsPDF('p', 'mm', 'a4');
@@ -361,8 +362,36 @@ export const generarContratoPDF = async (
   doc.setFont('helvetica', 'normal');
   y += 2;
 
+  const formaPagoTxt = contrato.formaPago || 'Transferencia bancaria';
+  
+  // Render clause (b) with payment method in bold and uppercase
+  const part1 = "b) Las cuotas mencionadas serán abonadas una vez realizados los trabajos según condiciones acordadas: ";
+  const part2 = ` ${formaPagoTxt.toUpperCase()}`;
+  
+  const part1Lines = doc.splitTextToSize(part1, pageWidth - margen * 2);
+  part1Lines.forEach((line: string, idx: number) => {
+    if (y > pageHeight - 20) {
+      doc.addPage();
+      y = 4;
+    }
+    
+    if (idx === part1Lines.length - 1) {
+      doc.setFont('helvetica', 'normal');
+      doc.text(line, margen, y);
+      
+      const widthOfLine = doc.getTextWidth(line);
+      doc.setFont('helvetica', 'bold');
+      doc.text(part2, margen + widthOfLine, y);
+      doc.setFont('helvetica', 'normal');
+    } else {
+      doc.setFont('helvetica', 'normal');
+      doc.text(line, margen, y);
+    }
+    y += 3.5;
+  });
+  y += 0.5;
+
   const obligacionesClienteResto = [
-    'b) Las cuotas mencionadas serán abonadas una vez realizado el servicio correspondiente y según las condiciones de pago acordadas al formalizar el contrato: Transferencia bancaria al finalizar trabajos',
     'c) El cliente entiende que este importe se debe a la revisión del sistema y que no van incluidos los suministros ni recambios o accesorios que se necesiten, tampoco incluye recargas ni retimbres de extintores los cuales se facturarán aparte.',
     'd) El cliente mantendrá informada a la empresa mantenedora de todo tipo de incidencias que tengan relación con las instalaciones y/o los servicios encomendados.'
   ];
@@ -403,14 +432,46 @@ export const generarContratoPDF = async (
     y += 3.5;
   });
 
-  y += 1.5;
+  const formatFecha = (fechaStr: string) => {
+    if (!fechaStr) return '';
+    try {
+      const date = new Date(fechaStr);
+      if (isNaN(date.getTime())) return fechaStr;
+      return date.toLocaleDateString('es-ES');
+    } catch (e) {
+      return fechaStr;
+    }
+  };
+
+  const formatFechaFin = (fechaStr: string) => {
+    if (!fechaStr) return 'Indefinida';
+    try {
+      const date = new Date(fechaStr);
+      if (isNaN(date.getTime())) return fechaStr;
+      return date.toLocaleDateString('es-ES');
+    } catch (e) {
+      return fechaStr;
+    }
+  };
+
+  y += 1.0;
+  if (y > pageHeight - 20) {
+    doc.addPage();
+    y = 4;
+  }
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.0);
+  doc.setTextColor(40, 40, 40);
+  const fechaHoy = new Date().toLocaleDateString('es-ES');
+  doc.text(`Fecha de inicio: ${formatFecha(contrato.fechaInicio)}      Fecha de finalización: ${formatFechaFin(contrato.fechaFin)}   (Documento realizado en Barcelona a ${fechaHoy})`, margen, y);
+  y += 5.0;
 
   // --- DOCUMENTACIÓN Y GARANTÍAS ---
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9.0);
   doc.setTextColor(40, 40, 40);
   doc.text('DOCUMENTACIÓN Y GARANTÍAS', margen, y);
-  y += 4;
+  y += 3;
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.0);
@@ -432,7 +493,7 @@ export const generarContratoPDF = async (
     doc.setFontSize(9.0);
     doc.setTextColor(40, 40, 40);
     doc.text('SISTEMAS A REVISAR EN EL CENTRO', margen, y);
-    y += 5;
+    y += 3.5;
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7.5);
@@ -460,7 +521,19 @@ export const generarContratoPDF = async (
     });
   }
 
-  y = Math.max(y + 8, pageHeight - 89);
+  y += 2;
+  if (y > pageHeight - 20) {
+    doc.addPage();
+    y = 12;
+  }
+
+  // Fecha y lugar de firma
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(40, 40, 40);
+
+
+  y += 1;
 
   // Firmas
   doc.setFont('helvetica', 'bold');
@@ -471,8 +544,8 @@ export const generarContratoPDF = async (
   if (sealBase64) {
     try {
       const sealProps = doc.getImageProperties(sealBase64);
-      const maxSealWidth = 50;
-      const maxSealHeight = 35;
+      const maxSealWidth = 45;
+      const maxSealHeight = 27;
       const sealRatio = sealProps.width / sealProps.height;
       const sealWidth = Math.min(maxSealWidth, maxSealHeight * sealRatio);
       const sealHeight = sealWidth / sealRatio;
@@ -483,7 +556,7 @@ export const generarContratoPDF = async (
     }
   }
 
-  y += 20;
+  y += 12;
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7);
   doc.text('Firma y Sello:', margen + 8, y);

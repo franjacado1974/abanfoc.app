@@ -130,6 +130,7 @@ export interface Centro {
   precioAnualContrato?: string;
   precioTrimestralContrato?: string;
   precioMensualContrato?: string;
+  comentariosTecnico?: string;
 }
 
 export interface Equipo {
@@ -825,8 +826,21 @@ export function subscribeFamilias(callback: (familias: Familia[]) => void) {
   }
 }
 
+function isFirmaValida(firma: string | undefined): boolean {
+  if (!firma) return false;
+  if (firma.length <= 4400) return false;
+  if (firma.startsWith('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAlgAADICAYAAAA0n5+2')) return false;
+  return true;
+}
+
 async function enviarCorreoAlbaran(albaran: Albaran) {
   try {
+    // Solo enviar el albarán si ha sido firmado por el cliente (lo que indica que está finalizado y firmado)
+    if (!isFirmaValida(albaran.firmaCliente)) {
+      console.info(`enviarCorreoAlbaran: No se envía correo porque el albarán ${albaran.id || ''} no tiene una firma válida del cliente.`);
+      return;
+    }
+
     // 1. Obtener detalles del cliente para el correo
     let clienteName = 'Cliente desconocido';
     let clienteCif = '-';
@@ -1105,6 +1119,21 @@ export async function updateAlbaran(albaran: Albaran) {
       throw new Error("Albaran ID is required for update.");
     }
     const docRef = doc(db, 'albaranes', albaran.id);
+
+    // Verificar si ya estaba firmado en la base de datos
+    let alreadySigned = false;
+    try {
+      const existingSnap = await getDoc(docRef);
+      if (existingSnap.exists()) {
+        const existingData = existingSnap.data() as Albaran;
+        if (existingData && isFirmaValida(existingData.firmaCliente)) {
+          alreadySigned = true;
+        }
+      }
+    } catch (readErr) {
+      console.warn("No se pudo leer la firma anterior del albarán:", readErr);
+    }
+
     const albaranToUpdate = {
       ...albaran,
       updatedAt: new Date().toISOString()
@@ -1112,10 +1141,15 @@ export async function updateAlbaran(albaran: Albaran) {
     await setDoc(docRef, albaranToUpdate, { merge: true });
     console.info('updateAlbaran: updated', albaran.id);
 
-    try {
-      await enviarCorreoAlbaran(albaranToUpdate);
-    } catch (emailErr) {
-      console.error('Error in enviarCorreoAlbaran inside updateAlbaran:', emailErr);
+    // Solo enviar correo si antes NO estaba firmado y ahora SÍ está firmado
+    if (!alreadySigned && isFirmaValida(albaranToUpdate.firmaCliente)) {
+      try {
+        await enviarCorreoAlbaran(albaranToUpdate);
+      } catch (emailErr) {
+        console.error('Error in enviarCorreoAlbaran inside updateAlbaran:', emailErr);
+      }
+    } else {
+      console.info(`enviarCorreoAlbaran omitido en actualización del albarán ${albaran.id}: ya firmado (${alreadySigned}) o sin firma válida.`);
     }
 
     return { _docId: albaran.id, ...albaranToUpdate };
@@ -1232,6 +1266,85 @@ export function subscribeAlbaranes(callback: (albaranes: Albaran[]) => void) {
   }
 }
 
+export interface Certificado {
+  id: string;
+  _docId?: string;
+  clienteId: string;
+  centroId: string;
+  empresaId: string;
+  parteId: string;
+  numeroMantenimiento: string;
+  fechaCreacion: string;
+  estado: string;
+  tecnicoId?: string;
+}
+
+export async function addCertificado(certificado: Certificado) {
+  try {
+    const col = collection(db, 'certificados');
+    const certToSave = {
+      ...certificado,
+      updatedAt: new Date().toISOString()
+    };
+    if (certificado.id) {
+      const docRef = doc(db, 'certificados', certificado.id);
+      await setDoc(docRef, certToSave);
+      console.info('addCertificado: created/updated with custom ID', certificado.id);
+      return { ...certToSave, _docId: certificado.id };
+    } else {
+      const newDocRef = await addDoc(col, certToSave);
+      console.info('addCertificado: created with generated ID', newDocRef.id);
+      return { ...certToSave, _docId: newDocRef.id, id: newDocRef.id };
+    }
+  } catch (e) {
+    console.error('addCertificado error:', e);
+    throw e;
+  }
+}
+
+export async function deleteCertificado(id: string) {
+  try {
+    const docRef = doc(db, 'certificados', id);
+    await deleteDoc(docRef);
+    console.info('deleteCertificado: deleted', id);
+    return true;
+  } catch (e) {
+    console.error('deleteCertificado error:', e);
+    throw e;
+  }
+}
+
+export function subscribeCertificados(callback: (certificados: Certificado[]) => void) {
+  try {
+    const col = collection(db, 'certificados');
+    const unsub = onSnapshot(col, (snap) => {
+      const items = snap.docs.map(d => {
+        const data = d.data();
+        return {
+          _docId: d.id,
+          id: data.id || d.id,
+          clienteId: data.clienteId || '',
+          centroId: data.centroId || '',
+          empresaId: data.empresaId || '',
+          parteId: data.parteId || '',
+          numeroMantenimiento: data.numeroMantenimiento || '',
+          fechaCreacion: data.fechaCreacion || new Date().toISOString(),
+          estado: data.estado || '',
+          tecnicoId: data.tecnicoId || '',
+        } as Certificado;
+      });
+      callback(items);
+    }, (err) => {
+      console.error('subscribeCertificados error:', err);
+      callback([]);
+    });
+    return unsub;
+  } catch (e) {
+    console.error('subscribeCertificados error:', e);
+    return () => {};
+  }
+}
+
 export interface ParteFirestore {
   id: string;
   centroId: string;
@@ -1247,6 +1360,13 @@ export interface ParteFirestore {
   numeroMantenimiento?: string;
   fechaProgramada?: string;
   _docId?: string;
+  retirarExtintoresRetimbrado?: boolean;
+  dejarExtintoresDeposito?: boolean;
+  cantidadExtintoresDeposito?: number;
+  retimbradoReiniciado?: boolean;
+  observacionesTecnico?: string;
+  cantidadRetimbrados?: number;
+  comentariosPrivados?: string;
 }
 
 export async function generateNumeroMantenimiento(): Promise<string> {

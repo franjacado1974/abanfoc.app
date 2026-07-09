@@ -36,9 +36,9 @@ export const obtenerDatosEmpresa = () => cargaDatosEmpresa();
 export function tieneFechaInvalida(eq: any): boolean {
   if (!eq) return false;
 
-  const nombreEq = (eq.nombre || '').toLowerCase();
-  const claseEq = (eq.clase || '').toLowerCase();
-  const tipoEq = (eq.tipo || '').toLowerCase();
+  const nombreEq = (eq.nombre && typeof eq.nombre === 'string' ? eq.nombre : '').toLowerCase();
+  const claseEq = (eq.clase && typeof eq.clase === 'string' ? eq.clase : '').toLowerCase();
+  const tipoEq = (eq.tipo && typeof eq.tipo === 'string' ? eq.tipo : '').toLowerCase();
 
   const tieneRetimbreKey = Object.keys(eq).some(k => k.toLowerCase().includes('retimbre'));
   const tieneHidraKey = Object.keys(eq).some(k => k.toLowerCase().includes('hidra') || k.toLowerCase().includes('pruebahidra'));
@@ -57,6 +57,9 @@ export function tieneFechaInvalida(eq: any): boolean {
   let keyHidra = '';
 
   for (const k of Object.keys(eq)) {
+    if (k.startsWith('check') || k.startsWith('item_')) {
+      continue;
+    }
     const kLower = k.toLowerCase();
     if (kLower.includes('revision') || kLower.includes('inspeccion') || kLower.includes('proxim')) {
       continue;
@@ -137,20 +140,15 @@ export function tieneFechaInvalida(eq: any): boolean {
 export function equipoTieneAnomalias(eq: any): boolean {
   if (!eq) return false;
 
-  // 1. Campo .anomalias con texto
+  // REGLA 1: El campo directo "anomalias" ("Observaciones y anomalías del equipo:") tiene texto → rojo → NO FAVORABLE
   if (eq.anomalias && typeof eq.anomalias === 'string' && eq.anomalias.trim() !== '') {
     return true;
   }
 
-  // 2. Nueva validación: Anomalía de fecha
-  if (tieneFechaInvalida(eq)) {
-    return true;
-  }
-
-  // 3. Revisar todas las propiedades de eq
+  // Revisar todos los campos dinámicos del equipo
   for (const k of Object.keys(eq)) {
     const kLower = k.toLowerCase();
-    
+
     // Ignorar claves de metadatos conocidas
     if (
       kLower === 'id' ||
@@ -192,26 +190,29 @@ export function equipoTieneAnomalias(eq: any): boolean {
 
     const val = eq[k];
 
-    // 3. Cualquier campo de notas/observaciones/anomalía con texto
-    if (kLower.includes('nota') || kLower.includes('observaci') || kLower.includes('anomal')) {
+    // REGLA 2a: Campo dinámico cuya clave contiene "anomal" ("Observaciones y anomalías del equipo:" con clave dinámica) tiene texto → rojo → NO FAVORABLE
+    if (kLower.includes('anomal')) {
       if (typeof val === 'string' && val.trim() !== '') {
         return true;
       }
+      // Si no tiene texto, ignorar aunque la clave sea de anomalías
       continue;
     }
 
-    // 4. Si el valor es boolean false o string 'false'
+    // REGLA 2b: Pregunta de checklist con respuesta boolean false → equivale a "NO CORRECTO" en UI → NO FAVORABLE
     if (val === false || val === 'false') {
       return true;
     }
 
-    // 5. Si el valor es una cadena que representa un estado negativo
+    // REGLA 2c: Pregunta de checklist con respuesta explícita "NO CORRECTO", "INCORRECTO" o "NO CONFORME" → NO FAVORABLE
     if (typeof val === 'string') {
       const valUpper = val.toUpperCase().trim();
       if (
         valUpper === 'NO CORRECTO' ||
         valUpper.includes('NO CORRECTO') ||
-        valUpper === 'INCORRECTO'
+        valUpper === 'INCORRECTO' ||
+        valUpper === 'NO CONFORME' ||
+        valUpper.includes('NO CONFORME')
       ) {
         return true;
       }
@@ -417,7 +418,8 @@ export const generarActaExtintoresPDF = async (
   nombreFirmante?: string,
   checklistItemsPorSistema?: Record<string, { key: string; label: string; tipoRespuesta?: string }[]>,
   empresa?: Record<string, any>,
-  noSave?: boolean
+  noSave?: boolean,
+  observacionesTecnico?: string
 ) => {
   const doc = new jsPDF('landscape');
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -816,9 +818,14 @@ export const generarActaExtintoresPDF = async (
       currentY = 34;
     }
 
-    const headersBase = isBie ?
-      ['Nº', 'Nivel planta y ubicación', 'Placa', 'Tipo', 'Longitud', 'Fabricante', 'Fecha\nFabricación', 'Prueba\nHidráulica'] :
-      ['Nº', 'Nivel planta y ubicación', 'Placa', 'Tipo', 'Fabricante', 'Fecha\nFabricación', 'Último\nRetimbre'];
+    const titleUpper = title.toUpperCase();
+    const esPuertasRF = titleUpper.includes('PUERTA') || 
+                        titleUpper.includes('CORTAFUEGO') || 
+                        titleUpper.includes('RF');
+    const esCasetas = titleUpper.includes('CASETA') || 
+                      titleUpper.includes('DOTACION') ||
+                      titleUpper.includes('DOTACIÓN');
+    const esHidrante = titleUpper.includes('HIDRANTE') && !esCasetas;
 
     const checkItemsDeSistema = (checklistItemsPorSistema && sistemaId && checklistItemsPorSistema[sistemaId]) ? checklistItemsPorSistema[sistemaId] : [];
 
@@ -836,7 +843,12 @@ export const generarActaExtintoresPDF = async (
 
     const findItem = (keywords: string[]) => checkItemsDeSistema.find(item => {
       const lbl = normalize(item.label || '');
-      return keywords.some(k => lbl.includes(normalize(k)));
+      return keywords.some(k => {
+        const normK = normalize(k);
+        // Usar regex con límite de palabra (\b) para evitar coincidencias parciales como "normalizado" con "marca"
+        const regex = new RegExp('\\b' + normK.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') + '\\b', 'i');
+        return regex.test(lbl);
+      });
     });
 
     const itemPlaca = findItem(['placa', 'industria']);
@@ -847,10 +859,55 @@ export const generarActaExtintoresPDF = async (
     const itemFechaFab = findItem(['fabricacion', 'ano', 'fecha fab']);
     const itemRetimbre = findItem(['retimbre']);
     const itemPruebaH = findItem(['prueba hidra', 'prueba hidraulica', 'hidraulica']);
+    const itemSalidaBocas = findItem(['salida bocas', 'salida', 'bocas']);
+    const itemDiametro = findItem(['diametro', 'diam', 'ø']);
+
+    // Casetas
+    const findItemByCond = (cond: (lbl: string) => boolean) => checkItemsDeSistema.find(item => cond(normalize(item.label || '')));
+
+    const itemTipoCaseta = findItemByCond(lbl => lbl.includes('tipo de caseta') || lbl.includes('tipo caseta') || lbl.includes('tipo de armario') || lbl.includes('tipo armario'));
+    const item70Fab = findItemByCond(lbl => lbl.includes('tramo 70') || (lbl.includes('70 mm') && lbl.includes('fabricaci')));
+    const item70PH = findItemByCond(lbl => (lbl.includes('70 mm') || lbl.includes('tramo 70')) && (lbl.includes('p.h') || lbl.includes('prueba') || lbl.includes('ultima') || lbl.includes('ultimo')));
+    
+    const item45FabA = findItemByCond(lbl => lbl.includes('45 mm') && lbl.includes('fabricaci') && (lbl.includes('(a)') || lbl.includes('tramo a') || lbl.includes('tramo (a)')));
+    const item45PHA = findItemByCond(lbl => lbl.includes('45 mm') && (lbl.includes('p.h') || lbl.includes('prueba') || lbl.includes('ultima') || lbl.includes('ultimo')) && (lbl.includes('(a)') || lbl.includes('tramo a') || lbl.includes('tramo (a)')));
+
+    const item45FabB = findItemByCond(lbl => lbl.includes('45 mm') && lbl.includes('fabricaci') && (lbl.includes('(b)') || lbl.includes('tramo b') || lbl.includes('tramo (b)')));
+    const item45PHB = findItemByCond(lbl => lbl.includes('45 mm') && (lbl.includes('p.h') || lbl.includes('prueba') || lbl.includes('ultima') || lbl.includes('ultimo')) && (lbl.includes('(b)') || lbl.includes('tramo b') || lbl.includes('tramo (b)')));
+
+    const item45Fab = item45FabA || findItemByCond(lbl => lbl.includes('tramo 45') || (lbl.includes('45 mm') && lbl.includes('fabricaci')));
+    const item45PH = item45PHA || findItemByCond(lbl => (lbl.includes('45 mm') || lbl.includes('tramo 45')) && (lbl.includes('p.h') || lbl.includes('prueba') || lbl.includes('ultima') || lbl.includes('ultimo')));
+
+    const headersBase = isBie ?
+      ['Nº', 'Nivel planta y ubicación', 'Placa', 'Tipo', 'Longitud', 'Fabricante', 'Fecha\nFabricación', 'Prueba\nHidráulica'] :
+      (esPuertasRF ?
+        ['Nº', 'Nivel planta y ubicación', 'Clase', 'Tipo de puerta'] :
+        (esHidrante ?
+          ['Nº', 'Ubicación', 'Tipo', 'Salida Bocas', 'Diámetro', 'Fabricante', 'Fecha\nFabricación'] :
+          (esCasetas ?
+            [
+              'Nº',
+              'Ubicación',
+              'Tipo',
+              item70Fab?.label ? item70Fab.label.replace('Tramo', '\nTramo') : 'Fecha fabricación\nTramo 70 mm.',
+              item70PH?.label ? item70PH.label.replace('Tramo', '\nTramo') : 'Última P.H.\nTramo 70 mm.',
+              item45FabA?.label ? item45FabA.label.replace('Tramo', '\nTramo') : 'Fecha fabricación\nTramo (A) 45 mm.',
+              item45PHA?.label ? item45PHA.label.replace('Tramo', '\nTramo') : 'Última P.H\nTramo (A) 45 mm.',
+              item45FabB?.label ? item45FabB.label.replace('Tramo', '\nTramo') : 'Fecha fabricación\nTramo (B) 45 mm.',
+              item45PHB?.label ? item45PHB.label.replace('Tramo', '\nTramo') : 'Última P.H\nTramo (B) 45 mm.'
+            ] :
+            ['Nº', 'Nivel planta y ubicación', 'Placa', 'Tipo', 'Fabricante', 'Fecha\nFabricación', 'Último\nRetimbre']
+          )
+        )
+      );
 
     const fixedItemsKeys = [
         itemPlaca?.key, itemClase?.key, itemTipo?.key, itemLongitud?.key,
-        itemFabricante?.key, itemFechaFab?.key, itemRetimbre?.key, itemPruebaH?.key
+        itemFabricante?.key, itemFechaFab?.key, itemRetimbre?.key, itemPruebaH?.key,
+        itemSalidaBocas?.key, itemDiametro?.key,
+        itemTipoCaseta?.key, item70Fab?.key, item70PH?.key,
+        item45FabA?.key, item45PHA?.key, item45FabB?.key, item45PHB?.key,
+        item45Fab?.key, item45PH?.key
     ].filter(Boolean);
 
     const checkItems = (checkItemsDeSistema || []).filter(item => {
@@ -864,7 +921,8 @@ export const generarActaExtintoresPDF = async (
                          lbl.includes('fecha de revision') || // Exclude from PDF
                          lbl.includes('fecha revision') ||    // Exclude from PDF
                          item.tipoRespuesta === 'imagen' ||
-                         item.tipoRespuesta === 'seccion'; // Excluir campos de imagen y secciones explícitamente
+                         item.tipoRespuesta === 'seccion' ||
+                         item.tipoRespuesta === 'titulo'; // Excluir campos de imagen y secciones explícitamente
 
       return !isNotas && !isFixed && !isExcluded;
     });
@@ -917,24 +975,58 @@ export const generarActaExtintoresPDF = async (
     };
 
     const tableData = equipos.map(eq => {
-      const baseRow = isBie ? [
-        padCodigo(eq.codigo),
-        eq.ubicacion || '-',
-        getVal(eq, itemPlaca, 'placa'),
-        getVal(eq, itemTipo, 'nombre'),
-        getVal(eq, itemLongitud, 'longitud'),
-        getVal(eq, itemFabricante, 'fabricante'),
-        formatMesAno(getVal(eq, itemFechaFab, 'fechaFabricacion')),
-        formatMesAno(getVal(eq, itemPruebaH, 'pruebaHidraulica'))
-      ] : [
-        padCodigo(eq.codigo),
-        eq.ubicacion || '-',
-        getVal(eq, itemPlaca, 'placa'),
-        getVal(eq, itemTipo, 'nombre'),
-        getVal(eq, itemFabricante, 'fabricante'),
-        formatMesAno(getVal(eq, itemFechaFab, 'fechaFabricacion')),
-        formatMesAno(getVal(eq, itemRetimbre, 'ultimoRetimbre'))
-      ];
+      let baseRow: any[] = [];
+      if (isBie) {
+        baseRow = [
+          padCodigo(eq.codigo),
+          eq.ubicacion || '-',
+          getVal(eq, itemPlaca, 'placa'),
+          getVal(eq, itemTipo, 'nombre'),
+          getVal(eq, itemLongitud, 'longitud'),
+          getVal(eq, itemFabricante, 'fabricante'),
+          formatMesAno(getVal(eq, itemFechaFab, 'fechaFabricacion')),
+          formatMesAno(getVal(eq, itemPruebaH, 'pruebaHidraulica'))
+        ];
+      } else if (esPuertasRF) {
+        baseRow = [
+          padCodigo(eq.codigo),
+          eq.ubicacion || '-',
+          getVal(eq, itemClase, 'clase'),
+          getVal(eq, itemTipo, 'tipo')
+        ];
+      } else if (esHidrante) {
+        baseRow = [
+          padCodigo(eq.codigo),
+          eq.ubicacion || '-',
+          getVal(eq, itemTipo, 'tipo'),
+          getVal(eq, itemSalidaBocas, 'salidaBocas'),
+          getVal(eq, itemDiametro, 'diametro'),
+          getVal(eq, itemFabricante, 'fabricante'),
+          formatMesAno(getVal(eq, itemFechaFab, 'fechaFabricacion'))
+        ];
+      } else if (esCasetas) {
+        baseRow = [
+          padCodigo(eq.codigo),
+          eq.ubicacion || '-',
+          getVal(eq, itemTipoCaseta, 'tipo'),
+          formatMesAno(getVal(eq, item70Fab, 'fechaFabricacion70')),
+          formatMesAno(getVal(eq, item70PH, 'fechaPH70')),
+          formatMesAno(getVal(eq, item45FabA, 'fechaFabricacion45A') !== '-' ? getVal(eq, item45FabA, 'fechaFabricacion45A') : getVal(eq, item45Fab, 'fechaFabricacion45')),
+          formatMesAno(getVal(eq, item45PHA, 'fechaPH45A') !== '-' ? getVal(eq, item45PHA, 'fechaPH45A') : getVal(eq, item45PH, 'fechaPH45')),
+          formatMesAno(getVal(eq, item45FabB, 'fechaFabricacion45B')),
+          formatMesAno(getVal(eq, item45PHB, 'fechaPH45B'))
+        ];
+      } else {
+        baseRow = [
+          padCodigo(eq.codigo),
+          eq.ubicacion || '-',
+          getVal(eq, itemPlaca, 'placa'),
+          getVal(eq, itemTipo, 'nombre'),
+          getVal(eq, itemFabricante, 'fabricante'),
+          formatMesAno(getVal(eq, itemFechaFab, 'fechaFabricacion')),
+          formatMesAno(getVal(eq, itemRetimbre, 'ultimoRetimbre'))
+        ];
+      }
 
       return [
         ...baseRow,
@@ -945,7 +1037,7 @@ export const generarActaExtintoresPDF = async (
     const nombreSistema = title.toUpperCase();
     const esExtintor = nombreSistema.includes('EXTINTOR');
     const esBie = nombreSistema.includes('BIE') || nombreSistema.includes('BOCA');
-    const usarLayoutVertical = (!esExtintor && !esBie) || checkKeys.length > 22;
+    const usarLayoutVertical = (!esExtintor && !esBie && !esPuertasRF && !esHidrante && !esCasetas) || checkKeys.length > 22;
 
     let finalY = currentY;
 
@@ -963,7 +1055,19 @@ export const generarActaExtintoresPDF = async (
 
       if (iconoBase64) {
         try {
-          doc.addImage(iconoBase64, 'PNG', 14, currentY + 2, 12, 12);
+          const imgProps = doc.getImageProperties(iconoBase64);
+          const maxWidth = 12;
+          const maxHeight = 12;
+          const imgRatio = imgProps.width / imgProps.height;
+          let imgWidth = maxWidth;
+          let imgHeight = imgWidth / imgRatio;
+          if (imgHeight > maxHeight) {
+            imgHeight = maxHeight;
+            imgWidth = imgHeight * imgRatio;
+          }
+          const xOffset = 14 + (maxWidth - imgWidth) / 2;
+          const yOffset = (currentY + 2) + (maxHeight - imgHeight) / 2;
+          doc.addImage(iconoBase64, 'PNG', xOffset, yOffset, imgWidth, imgHeight);
         } catch (err) {
           console.error("Error rendering section icon:", err);
         }
@@ -1010,7 +1114,7 @@ export const generarActaExtintoresPDF = async (
       let currentSection: SectionData | null = null;
 
       for (const item of checkItemsDeSistema) {
-        if (item.tipoRespuesta === 'seccion') {
+        if (item.tipoRespuesta === 'seccion' || item.tipoRespuesta === 'titulo') {
           currentSection = {
             title: item.label || 'Sección',
             items: [],
@@ -1064,7 +1168,8 @@ export const generarActaExtintoresPDF = async (
                                lbl.includes('fecha de revision') ||
                                lbl.includes('fecha revision') ||
                                item.tipoRespuesta === 'imagen';
-            return !isNotas && !isFixed && !isExcluded;
+            const isDeteccion = title.toUpperCase().includes('DETECCIÓN') || title.toUpperCase().includes('DETECCION');
+            return !isNotas && !(isFixed && !isDeteccion) && !isExcluded;
           });
 
           if (filteredSecItems.length === 0) continue;
@@ -1083,11 +1188,12 @@ export const generarActaExtintoresPDF = async (
           const secTitleNorm = sec.title.toUpperCase();
 
           if (secTitleNorm.includes('DATOS INSTALACIÓN') || secTitleNorm.includes('DATOS INSTALACION')) {
-            // Renderizar Sección 1: Datos de instalación en 4 columnas
+            // Renderizar Sección 1: Datos de instalación en 6 columnas (3 pares de datos)
             const datosRows: any[] = [];
-            for (let i = 0; i < filteredSecItems.length; i += 2) {
+            for (let i = 0; i < filteredSecItems.length; i += 3) {
               const item1 = filteredSecItems[i];
               const val1 = getDisplayValue(eq[item1.key]);
+              
               let label2 = '';
               let val2 = '';
               if (i + 1 < filteredSecItems.length) {
@@ -1095,11 +1201,22 @@ export const generarActaExtintoresPDF = async (
                 label2 = item2.label || '';
                 val2 = getDisplayValue(eq[item2.key]);
               }
+              
+              let label3 = '';
+              let val3 = '';
+              if (i + 2 < filteredSecItems.length) {
+                const item3 = filteredSecItems[i + 2];
+                label3 = item3.label || '';
+                val3 = getDisplayValue(eq[item3.key]);
+              }
+              
               datosRows.push([
                 item1.label || '',
                 val1,
                 label2,
-                val2
+                val2,
+                label3,
+                val3
               ]);
             }
 
@@ -1109,13 +1226,15 @@ export const generarActaExtintoresPDF = async (
               headStyles: { fillColor: [128, 0, 32], textColor: [255, 255, 255], fontSize: 7.5, halign: 'center', valign: 'middle', lineWidth: 0.1, lineColor: [255, 255, 255] },
               bodyStyles: { fontSize: 7, halign: 'left', valign: 'middle', lineWidth: 0.1, lineColor: [200, 200, 200] },
               columnStyles: {
-                0: { halign: 'left', cellWidth: 89.5 },
-                1: { halign: 'center', cellWidth: 45 },
-                2: { halign: 'left', cellWidth: 89.5 },
-                3: { halign: 'center', cellWidth: 45 }
+                0: { halign: 'left', cellWidth: 'auto' },
+                1: { halign: 'center', cellWidth: 18 },
+                2: { halign: 'left', cellWidth: 'auto' },
+                3: { halign: 'center', cellWidth: 18 },
+                4: { halign: 'left', cellWidth: 'auto' },
+                5: { halign: 'center', cellWidth: 21 }
               },
                 head: [
-                  [{ content: sec.title, colSpan: 4, styles: { fillColor: [128, 0, 32], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5, halign: 'left' } }]
+                  [{ content: sec.title, colSpan: 6, styles: { fillColor: [128, 0, 32], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5, halign: 'left' } }]
                 ],
               body: datosRows,
               didDrawPage: function (_data: any) {
@@ -1127,12 +1246,13 @@ export const generarActaExtintoresPDF = async (
               },
               didParseCell: function (data: any) {
                 if (data.section === 'body') {
-                  const idx = data.row.index * 2;
+                  const idx = data.row.index * 3;
                   const item1 = filteredSecItems[idx];
                   const item2 = filteredSecItems[idx + 1];
+                  const item3 = filteredSecItems[idx + 2];
 
-                  const esExtintor = title.toUpperCase().includes('EXTINTOR') || (eq.nombre || '').toUpperCase().includes('EXTINTOR') || (eq.clase || '').toUpperCase().includes('EXTINTOR');
-                  const esBie = title.toUpperCase().includes('BIE') || title.toUpperCase().includes('BOCA') || (eq.nombre || '').toUpperCase().includes('BIE') || (eq.clase || '').toUpperCase().includes('BIE');
+                  const esExtintor = title.toUpperCase().includes('EXTINTOR') || (typeof eq.nombre === 'string' ? eq.nombre : '').toUpperCase().includes('EXTINTOR') || (typeof eq.clase === 'string' ? eq.clase : '').toUpperCase().includes('EXTINTOR');
+                  const esBie = title.toUpperCase().includes('BIE') || title.toUpperCase().includes('BOCA') || (typeof eq.nombre === 'string' ? eq.nombre : '').toUpperCase().includes('BIE') || (typeof eq.clase === 'string' ? eq.clase : '').toUpperCase().includes('BIE');
 
                   if (data.column.index === 1 && item1 && item1.tipoRespuesta === 'fecha') {
                     if (determinarSiFechaEsInvalida(eq, item1.key, item1.label || '', esBie, esExtintor, itemFechaFab?.key, itemRetimbre?.key || itemPruebaH?.key)) {
@@ -1146,8 +1266,14 @@ export const generarActaExtintoresPDF = async (
                       data.cell.styles.fontStyle = 'bold';
                     }
                   }
+                  if (data.column.index === 5 && item3 && item3.tipoRespuesta === 'fecha') {
+                    if (determinarSiFechaEsInvalida(eq, item3.key, item3.label || '', esBie, esExtintor, itemFechaFab?.key, itemRetimbre?.key || itemPruebaH?.key)) {
+                      data.cell.styles.textColor = [200, 0, 0];
+                      data.cell.styles.fontStyle = 'bold';
+                    }
+                  }
 
-                  if (data.column.index === 0 || data.column.index === 2) {
+                  if (data.column.index === 0 || data.column.index === 2 || data.column.index === 4) {
                     data.cell.styles.fontStyle = 'bold';
                     if (title.toUpperCase().includes('DETECCIÓN') || title.toUpperCase().includes('DETECCION')) {
                       data.cell.styles.fillColor = [70, 80, 95];
@@ -1157,12 +1283,12 @@ export const generarActaExtintoresPDF = async (
                       data.cell.styles.fillColor = [245, 247, 250];
                     }
                   }
-                  if (data.column.index === 1 || data.column.index === 3) {
+                  if (data.column.index === 1 || data.column.index === 3 || data.column.index === 5) {
                     const rawStr = String(data.cell.raw || '').toUpperCase().trim();
-                    if (rawStr.includes('NO CORRECTO')) {
+                    if (rawStr.includes('NO CORRECTO') || rawStr.includes('NO CONFORME')) {
                       data.cell.styles.textColor = [200, 0, 0];
                       data.cell.styles.fontStyle = 'bold';
-                    } else if (rawStr.includes('CORRECTO')) {
+                    } else if (rawStr.includes('CORRECTO') || rawStr.includes('CONFORME')) {
                       data.cell.styles.textColor = [0, 128, 0];
                       data.cell.styles.fontStyle = 'bold';
                     }
@@ -1173,55 +1299,23 @@ export const generarActaExtintoresPDF = async (
             currentY = (doc as any).lastAutoTable.finalY || currentY;
 
           } else {
-            // Verificar si contiene tabla (tipo tabla) - Sección 10
+            const normalItems = filteredSecItems.filter(item => item.tipoRespuesta !== 'tabla');
             const tableItem = filteredSecItems.find(item => item.tipoRespuesta === 'tabla');
-            if (tableItem) {
-              const tableVal = eq[tableItem.key];
-              let tableHeaders: string[] = tableItem.opciones || [];
-              let tableRows: string[][] = [];
-              try {
-                if (tableVal && typeof tableVal === 'string') {
-                  const parsed = JSON.parse(tableVal);
-                  if (Array.isArray(parsed)) {
-                    tableRows = parsed;
-                  }
-                }
-              } catch (err) {
-                console.error("Error parsing table input value:", err);
-              }
 
-              if (tableHeaders.length === 0) {
-                tableHeaders = ['Detalle'];
-              }
-              if (tableRows.length === 0) {
-                tableRows = [Array(tableHeaders.length).fill('-')];
-              }
-
-              autoTable(doc, {
-                startY: currentY,
-                margin: { top: 40, left: 14, right: 14 },
-                headStyles: { fillColor: [70, 80, 95], textColor: [255, 255, 255], fontSize: 7.5, halign: 'center', valign: 'middle', lineWidth: 0.1, lineColor: [255, 255, 255] },
-                bodyStyles: { fontSize: 7, halign: 'center', valign: 'middle', lineWidth: 0.1, lineColor: [200, 200, 200] },
-                head: [
-                  [{ content: sec.title, colSpan: tableHeaders.length, styles: { fillColor: [128, 0, 32], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5, halign: 'left' } }],
-                  tableHeaders
-                ],
-                body: tableRows,
-                didDrawPage: function (_data: any) {
-                  const absolutePageNum = (doc.internal as any).getCurrentPageInfo().pageNumber;
-                  if (!drawnTablePages.has(absolutePageNum)) {
-                    drawTableHeader(absolutePageNum);
-                    drawnTablePages.add(absolutePageNum);
-                  }
-                }
-              });
-              currentY = (doc as any).lastAutoTable.finalY || currentY;
-
-            } else {
+            if (normalItems.length > 0) {
               // Cuestionarios normales (Secciones 2 a 9, 11, etc.): Tabla de 2 columnas por filas
               const checkRows: any[] = [];
-              for (const item of filteredSecItems) {
-                const val = getMark(eq[item.key]);
+              for (const item of normalItems) {
+                let rawVal = eq[item.key];
+                const itemOpciones = (item as any).opciones || [];
+                if (rawVal === undefined || rawVal === '') {
+                  if (itemOpciones.includes('CORRECTO')) {
+                    rawVal = 'CORRECTO';
+                  } else if (itemOpciones.includes('CONFORME')) {
+                    rawVal = 'CONFORME';
+                  }
+                }
+                const val = getMark(rawVal);
                 checkRows.push([
                   item.label || '',
                   val
@@ -1254,10 +1348,10 @@ export const generarActaExtintoresPDF = async (
                 },
                 didParseCell: function (data: any) {
                   if (data.section === 'body' && data.column.index === 1) {
-                    const item = filteredSecItems[data.row.index];
+                    const item = normalItems[data.row.index];
                     if (item && item.tipoRespuesta === 'fecha') {
-                      const esExtintor = title.toUpperCase().includes('EXTINTOR') || (eq.nombre || '').toUpperCase().includes('EXTINTOR') || (eq.clase || '').toUpperCase().includes('EXTINTOR');
-                      const esBie = title.toUpperCase().includes('BIE') || title.toUpperCase().includes('BOCA') || (eq.nombre || '').toUpperCase().includes('BIE') || (eq.clase || '').toUpperCase().includes('BIE');
+                      const esExtintor = title.toUpperCase().includes('EXTINTOR') || (typeof eq.nombre === 'string' ? eq.nombre : '').toUpperCase().includes('EXTINTOR') || (typeof eq.clase === 'string' ? eq.clase : '').toUpperCase().includes('EXTINTOR');
+                      const esBie = title.toUpperCase().includes('BIE') || title.toUpperCase().includes('BOCA') || (typeof eq.nombre === 'string' ? eq.nombre : '').toUpperCase().includes('BIE') || (typeof eq.clase === 'string' ? eq.clase : '').toUpperCase().includes('BIE');
                       if (determinarSiFechaEsInvalida(eq, item.key, item.label || '', esBie, esExtintor, itemFechaFab?.key, itemRetimbre?.key || itemPruebaH?.key)) {
                         data.cell.styles.textColor = [200, 0, 0];
                         data.cell.styles.fontStyle = 'bold';
@@ -1272,10 +1366,10 @@ export const generarActaExtintoresPDF = async (
                       data.cell.text = [''];
                     } else if (data.cell.raw !== '-') {
                       const rawStr = String(data.cell.raw || '').toUpperCase().trim();
-                      if (rawStr.includes('NO CORRECTO')) {
+                      if (rawStr.includes('NO CORRECTO') || rawStr.includes('NO CONFORME')) {
                         data.cell.styles.textColor = [200, 0, 0];
                         data.cell.styles.fontStyle = 'bold';
-                      } else if (rawStr.includes('CORRECTO')) {
+                      } else if (rawStr.includes('CORRECTO') || rawStr.includes('CONFORME')) {
                         data.cell.styles.textColor = [0, 128, 0];
                         data.cell.styles.fontStyle = 'bold';
                       } else {
@@ -1299,6 +1393,89 @@ export const generarActaExtintoresPDF = async (
               });
               currentY = (doc as any).lastAutoTable.finalY || currentY;
             }
+
+            if (tableItem) {
+              if (normalItems.length > 0) {
+                currentY += 6; // Espacio entre el cuestionario y la tabla
+              }
+              const tableVal = eq[tableItem.key];
+              let tableHeaders: string[] = tableItem.opciones || [];
+              let tableRows: string[][] = [];
+              try {
+                if (tableVal && typeof tableVal === 'string') {
+                  const parsed = JSON.parse(tableVal);
+                  if (Array.isArray(parsed)) {
+                    tableRows = parsed;
+                  }
+                }
+              } catch (err) {
+                console.error("Error parsing table input value:", err);
+              }
+
+              if (tableHeaders.length === 0) {
+                tableHeaders = ['Detalle'];
+              }
+              if (tableRows.length === 0) {
+                tableRows = [Array(tableHeaders.length).fill('-')];
+              }
+
+              const formatHeader = (h: string) => {
+                const norm = String(h || '').trim();
+                
+                if (norm.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes('ubicacion')) {
+                  return norm;
+                }
+                
+                return norm.replace(/\s+/g, '\n');
+              };
+
+              const colStyles: any = {};
+              tableHeaders.forEach((h, index) => {
+                const norm = String(h || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                if (norm.includes('ubicacion')) {
+                  colStyles[index] = { cellWidth: 'auto', halign: 'left' };
+                } else {
+                  colStyles[index] = { cellWidth: 'wrap' };
+                }
+              });
+
+              autoTable(doc, {
+                startY: currentY,
+                margin: { top: 40, left: 14, right: 14 },
+                headStyles: { 
+                  fillColor: [70, 80, 95], 
+                  textColor: [255, 255, 255], 
+                  fontSize: 7, 
+                  halign: 'center', 
+                  valign: 'middle', 
+                  lineWidth: 0.1, 
+                  lineColor: [255, 255, 255],
+                  cellPadding: 2
+                },
+                bodyStyles: { 
+                  fontSize: 7, 
+                  halign: 'center', 
+                  valign: 'middle', 
+                  lineWidth: 0.1, 
+                  lineColor: [200, 200, 200],
+                  cellPadding: 2
+                },
+                columnStyles: colStyles,
+                head: [
+                  [{ content: normalItems.length > 0 ? tableItem.label : sec.title, colSpan: tableHeaders.length, styles: { fillColor: [128, 0, 32], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5, halign: 'left' } }],
+                  tableHeaders.map(formatHeader)
+                ],
+                body: tableRows,
+                didDrawPage: function (_data: any) {
+                  const absolutePageNum = (doc.internal as any).getCurrentPageInfo().pageNumber;
+                  if (!drawnTablePages.has(absolutePageNum)) {
+                    drawTableHeader(absolutePageNum);
+                    drawnTablePages.add(absolutePageNum);
+                  }
+                }
+              });
+              currentY = (doc as any).lastAutoTable.finalY || currentY;
+            }
           }
         }
         currentY += 6;
@@ -1314,6 +1491,7 @@ export const generarActaExtintoresPDF = async (
       checkHeaders.forEach((_, i) => {
         dynamicColumnStyles[headersBase.length + i] = { halign: 'center', cellWidth: 7.5 };
       });
+
 
       doc.setFont("helvetica", "normal");
       doc.setFontSize(6.5);
@@ -1368,7 +1546,33 @@ export const generarActaExtintoresPDF = async (
                   } else if (data.column.index === 7 && itemPruebaH) {
                     isDateAnomaly = determinarSiFechaEsInvalida(eq, itemPruebaH.key, itemPruebaH.label || 'Prueba Hidráulica', true, false, itemFechaFab?.key, itemPruebaH.key);
                   }
-                } else {
+                } else if (esHidrante) {
+                  if (data.column.index === 6 && itemFechaFab) {
+                    isDateAnomaly = determinarSiFechaEsInvalida(eq, itemFechaFab.key, itemFechaFab.label || 'Fabricación', false, false, itemFechaFab.key);
+                  }
+                } else if (esCasetas) {
+                  if (data.column.index === 3 && item70Fab) {
+                    isDateAnomaly = determinarSiFechaEsInvalida(eq, item70Fab.key, item70Fab.label || 'Fabricación 70', true, false, item70Fab.key, item70PH?.key);
+                  } else if (data.column.index === 4 && item70PH) {
+                    isDateAnomaly = determinarSiFechaEsInvalida(eq, item70PH.key, item70PH.label || 'Prueba 70', true, false, item70Fab?.key, item70PH.key);
+                  } else if (data.column.index === 5) {
+                    const activeItem = item45FabA || item45Fab;
+                    const activePH = item45PHA || item45PH;
+                    if (activeItem) {
+                      isDateAnomaly = determinarSiFechaEsInvalida(eq, activeItem.key, activeItem.label || 'Fabricación 45 (A)', true, false, activeItem.key, activePH?.key);
+                    }
+                  } else if (data.column.index === 6) {
+                    const activeItem = item45FabA || item45Fab;
+                    const activePH = item45PHA || item45PH;
+                    if (activePH) {
+                      isDateAnomaly = determinarSiFechaEsInvalida(eq, activePH.key, activePH.label || 'Prueba 45 (A)', true, false, activeItem?.key, activePH.key);
+                    }
+                  } else if (data.column.index === 7 && item45FabB) {
+                    isDateAnomaly = determinarSiFechaEsInvalida(eq, item45FabB.key, item45FabB.label || 'Fabricación 45 (B)', true, false, item45FabB.key, item45PHB?.key);
+                  } else if (data.column.index === 8 && item45PHB) {
+                    isDateAnomaly = determinarSiFechaEsInvalida(eq, item45PHB.key, item45PHB.label || 'Prueba 45 (B)', true, false, item45FabB?.key, item45PHB.key);
+                  }
+                } else if (!esPuertasRF) {
                   const esExtintor = title.toUpperCase().includes('EXTINTOR');
                   if (data.column.index === 5 && itemFechaFab) {
                     isDateAnomaly = determinarSiFechaEsInvalida(eq, itemFechaFab.key, itemFechaFab.label || 'Fabricación', false, esExtintor, itemFechaFab.key, itemRetimbre?.key);
@@ -1382,6 +1586,27 @@ export const generarActaExtintoresPDF = async (
                 }
               }
             } else if (data.column.index >= headersBase.length) {
+              const item = checkItems[data.column.index - headersBase.length];
+              if (item && item.tipoRespuesta === 'fecha') {
+                const val = data.cell.raw;
+                if (val && val !== '-') {
+                  const str = String(val).trim();
+                  const isRevision = (item.label || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes('revision');
+                  if (isRevision) {
+                    const parts = str.split('-');
+                    if (parts.length === 3) {
+                      data.cell.text = [`${parts[2]}/${parts[1]}/${parts[0]}`];
+                    }
+                  } else {
+                    const parts = str.split('-');
+                    if (parts.length === 3) {
+                      data.cell.text = [`${parts[1]}-${parts[0]}`];
+                    } else if (parts.length === 2) {
+                      data.cell.text = [`${parts[1]}-${parts[0]}`];
+                    }
+                  }
+                }
+              }
               if (data.cell.raw === 'X') {
                 data.cell.styles.textColor = anomalyTextColor;
                 data.cell.styles.fontStyle = 'bold';
@@ -1390,10 +1615,10 @@ export const generarActaExtintoresPDF = async (
                 data.cell.text = [''];
               } else if (data.cell.raw !== '-') {
                 const rawStr = String(data.cell.raw || '').toUpperCase().trim();
-                if (rawStr.includes('NO CORRECTO')) {
+                if (rawStr.includes('NO CORRECTO') || rawStr.includes('NO CONFORME')) {
                   data.cell.styles.textColor = [200, 0, 0];
                   data.cell.styles.fontStyle = 'bold';
-                } else if (rawStr.includes('CORRECTO')) {
+                } else if (rawStr.includes('CORRECTO') || rawStr.includes('CONFORME')) {
                   data.cell.styles.textColor = [0, 128, 0];
                   data.cell.styles.fontStyle = 'bold';
                 } else {
@@ -1412,7 +1637,23 @@ export const generarActaExtintoresPDF = async (
             const centerY = cellY + (cellH / 2);
 
             if (iconoBase64) {
-              doc.addImage(iconoBase64, 'PNG', cellX + 2, centerY - 6, 12, 12);
+              try {
+                const imgProps = doc.getImageProperties(iconoBase64);
+                const maxWidth = 12;
+                const maxHeight = 12;
+                const imgRatio = imgProps.width / imgProps.height;
+                let imgWidth = maxWidth;
+                let imgHeight = imgWidth / imgRatio;
+                if (imgHeight > maxHeight) {
+                  imgHeight = maxHeight;
+                  imgWidth = imgHeight * imgRatio;
+                }
+                const xOffset = (cellX + 2) + (maxWidth - imgWidth) / 2;
+                const yOffset = (centerY - 6) + (maxHeight - imgHeight) / 2;
+                doc.addImage(iconoBase64, 'PNG', xOffset, yOffset, imgWidth, imgHeight);
+              } catch (err) {
+                console.error("Error rendering header system icon:", err);
+              }
             }
             doc.setFont("helvetica", "bold");
             doc.setFontSize(12);
@@ -1472,6 +1713,62 @@ export const generarActaExtintoresPDF = async (
     finalY += 8;
     const anomalias = equipos.filter(eq => equipoTieneAnomalias(eq));
 
+    // 1. Si es Casetas, pintar primero el listado de material obligatorio requerido
+    if (esCasetas) {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8.5);
+      doc.setTextColor(0, 0, 0);
+      
+      if (finalY > 275) {
+        doc.addPage();
+        const newPageNum = (doc.internal as any).getNumberOfPages();
+        if (!drawnTablePages.has(newPageNum)) {
+          drawTableHeader(newPageNum);
+          drawnTablePages.add(newPageNum);
+        }
+        finalY = 34;
+      }
+      doc.text("Las casetas de intemperie deben estar dotadas del siguiente material en su interior y de forma ordenada:", 14, finalY);
+      finalY += 4.5;
+
+      doc.setFont("helvetica", "normal");
+      const textoCaseta = [
+        "• 1 und. Tramo de manguera de 70 mm (15 metros de longitud).",
+        "• 2 und. Tramo de manguera de 45 mm (15 metros de longitud).",
+        "• 1 und. Lanza de 70 mm. con Sistema de cierre, apertura y doble efecto.",
+        "• 2 und. Lanza de 45 mm. con Sistema de cierre, apertura y doble efecto.",
+        "• 1 und. De Bifurcación de 70 mm. con 2 salidas de 45 mm. con válvulas en ambas salidas.",
+        "• 1 und. De reducción de 70 mm. x 45 mm.",
+        "• 1 und. Llave de apertura del hidrante."
+      ];
+
+      for (const linea of textoCaseta) {
+        if (finalY > 275) {
+          doc.addPage();
+          const newPageNum = (doc.internal as any).getNumberOfPages();
+          if (!drawnTablePages.has(newPageNum)) {
+            drawTableHeader(newPageNum);
+            drawnTablePages.add(newPageNum);
+          }
+          finalY = 34;
+          doc.setFont("helvetica", "normal");
+        }
+        doc.text(linea, 14, finalY);
+        finalY += 4.5;
+      }
+      finalY += 3;
+    }
+
+    // 2. Pintar el título "Anomalías y observaciones:" (debajo de la lista en casetas)
+    if (finalY > 275) {
+      doc.addPage();
+      const newPageNum = (doc.internal as any).getNumberOfPages();
+      if (!drawnTablePages.has(newPageNum)) {
+        drawTableHeader(newPageNum);
+        drawnTablePages.add(newPageNum);
+      }
+      finalY = 34;
+    }
     doc.setFont("helvetica", "bold");
     doc.setFontSize(10);
     doc.setTextColor(0, 0, 0);
@@ -1522,21 +1819,53 @@ export const generarActaExtintoresPDF = async (
           textAnomalia = eq.anomalias;
         } else {
           const fallosStr = checksFallados.length > 0 ? `Falló en: ${checksFallados.join(', ')}.` : '';
+          const dateWarning = tieneFechaInvalida(eq) ? 'Fecha de fabricación/retimbrado caducada o próxima a caducar.' : '';
           if (notasValue) {
-            textAnomalia = fallosStr ? `${fallosStr} Observaciones: ${notasValue}` : notasValue;
+            textAnomalia = fallosStr 
+              ? `${fallosStr} Observaciones: ${notasValue}` 
+              : (dateWarning ? `${dateWarning} Observaciones: ${notasValue}` : notasValue);
           } else {
-            textAnomalia = fallosStr || 'No supera las comprobaciones visuales.';
+            textAnomalia = fallosStr || dateWarning || '';
           }
+        }
+
+        if (textAnomalia.trim() === '') {
+          continue; // Si no hay anomalía real descrita, no pintar nada para este equipo
         }
 
         doc.text(`Nº ${eq.codigo} ${eq.placa ? `(${eq.placa})` : ''} — Anomalías: ${textAnomalia}`, 14, finalY);
         finalY += 5.5;
 
-        // Si hay foto, añadirla
-        if (eq.foto && typeof eq.foto === 'string' && eq.foto.trim() !== '') {
-          try {
-            // Verificar si necesitamos espacio para la imagen
-            if (finalY > 140) {
+        // Si hay fotos, añadirlas todas (hasta 4 en la misma línea)
+        const currentFotos = (Array.isArray(eq.fotos) ? eq.fotos : (eq.foto && typeof eq.foto === 'string' && eq.foto.trim() !== '' ? [eq.foto] : [])).filter(Boolean);
+
+        if (currentFotos.length > 0) {
+          const fitImage = (imageData: string, xStart: number) => {
+            try {
+              const imgProps = doc.getImageProperties(imageData);
+              const maxWidth = 40;
+              const maxHeight = 30;
+              const imgRatio = imgProps.width / imgProps.height;
+              let imgWidth = maxWidth;
+              let imgHeight = imgWidth / imgRatio;
+              
+              if (imgHeight > maxHeight) {
+                imgHeight = maxHeight;
+                imgWidth = imgHeight * imgRatio;
+              }
+              
+              const xOffset = xStart + (maxWidth - imgWidth) / 2;
+              doc.addImage(imageData, 'JPEG', xOffset, finalY, imgWidth, imgHeight);
+              return imgHeight;
+            } catch (err) {
+              console.error("Error rendering image:", err);
+              return 0;
+            }
+          };
+
+          for (let idx = 0; idx < currentFotos.length; idx += 4) {
+            // Verificar si necesitamos espacio para la fila de imágenes
+            if (finalY > 150) {
               doc.addPage();
               const newPageNum = (doc.internal as any).getNumberOfPages();
               if (!drawnTablePages.has(newPageNum)) {
@@ -1546,33 +1875,24 @@ export const generarActaExtintoresPDF = async (
               finalY = 34;
             }
 
-            // Cargar la imagen usando el helper robusto
-            const imageData = await fetchImageToBase64(eq.foto);
-            
-            // Si no pudimos obtener un base64 válido, no intentamos añadirlo a jsPDF
-            if (!imageData || !imageData.startsWith('data:')) {
-              console.warn("Skipping equipment photo because it could not be converted to base64:", eq.foto);
-              continue;
+            let rowHeight = 0;
+            const imagesInRow = currentFotos.slice(idx, idx + 4);
+
+            for (let i = 0; i < imagesInRow.length; i++) {
+              const foto = imagesInRow[i];
+              try {
+                const imageData = await fetchImageToBase64(foto);
+                if (imageData && imageData.startsWith('data:')) {
+                  const xPos = 14 + i * (40 + 2);
+                  const h = fitImage(imageData, xPos);
+                  if (h > rowHeight) rowHeight = h;
+                }
+              } catch (err) {
+                console.error(`Error adding image ${i} in row to PDF:`, err);
+              }
             }
 
-            // Añadir la imagen al PDF
-            const imgProps = doc.getImageProperties(imageData);
-            const maxWidth = 80;
-            const maxHeight = 60;
-            const imgRatio = imgProps.width / imgProps.height;
-            let imgWidth = maxWidth;
-            let imgHeight = imgWidth / imgRatio;
-            
-            if (imgHeight > maxHeight) {
-              imgHeight = maxHeight;
-              imgWidth = imgHeight * imgRatio;
-            }
-
-            doc.addImage(imageData, 'JPEG', 14, finalY, imgWidth, imgHeight);
-            finalY += imgHeight + 5;
-          } catch (imgErr) {
-            console.error("Error adding image to PDF:", imgErr);
-            // Continuar sin la imagen si hay error
+            finalY += (rowHeight > 0 ? rowHeight : 30) + 4;
           }
         }
       }
@@ -1586,13 +1906,23 @@ export const generarActaExtintoresPDF = async (
   let tableStartY = 34;
   let hasRenderedAnySystem = false;
 
-  // Ordenar: sistemas con "EXTINTOR" primero, luego el resto
+  // Ordenar: EXTINTOR primero (10), luego HIDRANTE (20) y CASETA (21) juntos, luego BIE (30), luego el resto (100)
   const sistemasOrdenados = [...sistemas].sort((a, b) => {
-    const aEsExtintor = (a.familia || a.tipo || '').toUpperCase().includes('EXTINTOR');
-    const bEsExtintor = (b.familia || b.tipo || '').toUpperCase().includes('EXTINTOR');
-    if (aEsExtintor && !bEsExtintor) return -1;
-    if (!aEsExtintor && bEsExtintor) return 1;
-    return 0;
+    const getWeight = (s: any) => {
+      const familyOrType = (s.familia || s.tipo || '').toUpperCase();
+      if (familyOrType.includes('EXTINTOR')) return 10;
+      if (familyOrType.includes('CASETA') || familyOrType.includes('DOTACION') || familyOrType.includes('DOTACIÓN')) return 21;
+      if (familyOrType.includes('HIDRANTE')) return 20;
+      if (familyOrType.includes('BIE') || familyOrType.includes('BOCA')) return 30;
+      return 100;
+    };
+    const wA = getWeight(a);
+    const wB = getWeight(b);
+    if (wA !== wB) return wA - wB;
+    
+    const nameA = (a.tipo || a.nombre || '').toUpperCase();
+    const nameB = (b.tipo || b.nombre || '').toUpperCase();
+    return nameA.localeCompare(nameB);
   });
 
   // Renderizar cada sistema en una página separada
@@ -1624,16 +1954,20 @@ export const generarActaExtintoresPDF = async (
           const a = normalizarParaIcono(nombreA);
           const b = normalizarParaIcono(nombreB);
           if (a === b) return true;
-          if (a.includes(b) || b.includes(a)) return true;
+          // Reglas específicas por tipo de sistema (orden importante: más específicas primero)
+          if (a.includes('rociador') && b.includes('rociador')) return true;
           if (a.includes('deteccion') && b.includes('deteccion')) return true;
           if (a.includes('extintor') && b.includes('extintor')) return true;
           if ((a.includes('bie') || a.includes('boca de incendio') || a.includes('boca de equipamiento')) && 
               (b.includes('bie') || b.includes('boca de incendio') || b.includes('boca de equipamiento'))) return true;
-          
-          const stopWords = ['incendio', 'incendios', 'sistema', 'sistemas', 'proteccion', 'equipo', 'equipos', 'automatica', 'automatico', 'manual', 'manuales'];
-          const palabrasA = a.split(/\s+/).filter(w => w.length > 3 && !stopWords.includes(w));
-          const palabrasB = b.split(/\s+/).filter(w => w.length > 3 && !stopWords.includes(w));
-          return palabrasA.some(wa => palabrasB.some(wb => wa === wb));
+          // Coincidencia por substring solo si el nombre de categoría tiene suficiente longitud (>=5 chars)
+          // para evitar falsos positivos con nombres cortos como "BIE", "RED", etc.
+          if (b.length >= 5 && a.includes(b)) return true;
+          if (a.length >= 5 && b.includes(a)) return true;
+          const stopWords = ['incendio', 'incendios', 'sistema', 'sistemas', 'proteccion', 'equipo', 'equipos', 'automatica', 'automatico', 'manual', 'manuales', 'red', 'puesto', 'control'];
+          const palabrasA = a.split(/\s+/).filter(w => w.length > 4 && !stopWords.includes(w));
+          const palabrasB = b.split(/\s+/).filter(w => w.length > 4 && !stopWords.includes(w));
+          return palabrasA.length > 0 && palabrasB.length > 0 && palabrasA.some(wa => palabrasB.some(wb => wa === wb));
         };
 
         const cat = categoriasSistema.find((c: any) => coincidenSistemas(c.nombre, nombreSistema));
@@ -1737,9 +2071,10 @@ export const generarActaExtintoresPDF = async (
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8.5);
   doc.setTextColor(60, 60, 60);
-  const obsTexto = (centro?.observaciones || 'Sin observaciones adicionales por parte del técnico actuante.');
-  doc.text(obsTexto.length > 150 ? obsTexto.substring(0, 147) + '...' : obsTexto, 20, sigY);
-  sigY += 12;
+  const obsTexto = (centro?.comentariosTecnico || observacionesTecnico || centro?.observaciones || 'Sin observaciones adicionales por parte del técnico actuante.');
+  const lines = doc.splitTextToSize(obsTexto, pageWidth - 40);
+  doc.text(lines, 20, sigY);
+  sigY += (lines.length * 4) + 6;
 
   sigY += 10;
 
@@ -1866,7 +2201,8 @@ export const generarActaExtintoresPDFView = async (
   firmaTecnico?: string,
   nombreFirmante?: string,
   checklistItemsPorSistema?: Record<string, { key: string; label: string; tipoRespuesta?: string }[]>,
-  empresa?: Record<string, any>
+  empresa?: Record<string, any>,
+  observacionesTecnico?: string
 ): Promise<string> => {
   const doc = await generarActaExtintoresPDF(
     cliente,
@@ -1881,7 +2217,8 @@ export const generarActaExtintoresPDFView = async (
     nombreFirmante,
     checklistItemsPorSistema,
     empresa,
-    true
+    true,
+    observacionesTecnico
   );
   return doc.output('bloburl').toString();
 };
@@ -2324,20 +2661,116 @@ export const generarCertificadoPDF = async (
       equiposPorSistema[sistId].push(eq);
     });
 
-    // Pre-calcular la altura de la tarjeta de sistemas
-    let cardSistemasH = 12; // Margen superior y título
-    Object.entries(equiposPorSistema).forEach(([, eqs]) => {
-      cardSistemasH += 5; // Título del sistema
+    interface SystemWithHeight {
+      sistId: string;
+      nombreSistema: string;
+      conteoPorTipo: Record<string, number>;
+      height: number;
+    }
+
+    const entries = Object.entries(equiposPorSistema);
+    const systemsWithHeight: SystemWithHeight[] = entries.map(([sistId, eqs]) => {
+      const sist = sistemas.find(s => s.id === sistId);
+      const nombreSistema = sist?.nombre || sist?.tipo || 'Sistema sin nombre';
+      
       const conteoPorTipo: Record<string, number> = {};
       eqs.forEach(eq => {
-        const tipoEquipo = eq.nombre || eq.clase || 'Equipo';
-        const capacidad = eq.capacidad || eq.peso || '';
-        const clave = capacidad ? `${tipoEquipo} ${capacidad}` : tipoEquipo;
-        conteoPorTipo[clave] = 1;
+        let fallbackName = 'Equipo';
+        const nsUpper = nombreSistema.toUpperCase();
+        if (nsUpper.includes('EXTINTOR')) {
+          fallbackName = 'Extintor';
+        } else if (nsUpper.includes('BIE') || nsUpper.includes('BOCA')) {
+          fallbackName = 'BIE';
+        } else if (nsUpper.includes('DETEC') || nsUpper.includes('HUMO')) {
+          fallbackName = 'Detector';
+        } else if (nsUpper.includes('PUERTA')) {
+          fallbackName = 'Puerta RF';
+        }
+
+        // Escanear todas las claves de eq para detectar agente o capacidad implícitos
+        let detectedAgente = '';
+        let detectedCapacidad = '';
+        for (const k of Object.keys(eq)) {
+          if (k.toLowerCase() === 'id' || k.toLowerCase() === 'centroid' || k.toLowerCase() === 'sistemaid') continue;
+          const val = eq[k];
+          if (typeof val === 'string') {
+            const valUpper = val.toUpperCase().trim();
+            if (!detectedAgente) {
+              if (valUpper.includes('POLVO ABC') || valUpper === 'POLVO') {
+                detectedAgente = 'Polvo ABC';
+              } else if (valUpper.includes('CO2')) {
+                detectedAgente = 'CO2';
+              } else if (valUpper.includes('AGUA')) {
+                detectedAgente = 'Agua';
+              } else if (valUpper.includes('ESPUMA')) {
+                detectedAgente = 'Espuma';
+              }
+            }
+            if (!detectedCapacidad) {
+              const match = valUpper.match(/(\d+\s*KG)/) || valUpper.match(/(\d+\s*L)/);
+              if (match) {
+                detectedCapacidad = match[1].toLowerCase().replace(/\s+/g, ' ');
+              }
+            }
+          }
+        }
+
+        const valName = (val: any) => typeof val === 'string' && val.trim() !== '' && val.toLowerCase() !== 'true' && val.toLowerCase() !== 'false' ? val.trim() : null;
+        const tipoEquipo = valName(eq.nombre) || valName(eq.clase) || valName(eq.agente) || valName(eq.tipo) || valName(eq.marca) || detectedAgente || fallbackName;
+
+        let capacidad = '';
+        if (eq.capacidad && typeof eq.capacidad === 'string' && eq.capacidad.toLowerCase() !== 'true' && eq.capacidad.toLowerCase() !== 'false') {
+          capacidad = eq.capacidad;
+        } else if (eq.peso && typeof eq.peso === 'string' && eq.peso.toLowerCase() !== 'true' && eq.peso.toLowerCase() !== 'false') {
+          capacidad = eq.peso;
+        } else {
+          capacidad = detectedCapacidad;
+        }
+
+        // Normalizar tipo y capacidad para agrupar exactamente igual
+        let cleanTipo = tipoEquipo.trim();
+        let cleanCap = capacidad.trim();
+
+        // Evitar duplicar la capacidad en el tipo
+        if (cleanCap && cleanTipo.toLowerCase().includes(cleanCap.toLowerCase())) {
+          cleanCap = '';
+        }
+
+        let clave = cleanCap ? `${cleanTipo} ${cleanCap}.` : `${cleanTipo}.`;
+        
+        // Unificar formato de "kg" y "l" (casing y puntos) para evitar separaciones
+        clave = clave.replace(/\s+kg\.?/gi, ' Kg.');
+        clave = clave.replace(/\s+l\.?/gi, ' L.');
+        
+        // Limpiar puntos duplicados
+        clave = clave.replace(/\.\.+$/, '.');
+
+        conteoPorTipo[clave] = (conteoPorTipo[clave] || 0) + 1;
       });
-      cardSistemasH += Object.keys(conteoPorTipo).length * 4.5;
-      cardSistemasH += 2; // Espaciado entre sistemas
+
+      const linesCount = Object.keys(conteoPorTipo).length;
+      const height = 5 + linesCount * 4.5 + 2;
+
+      return {
+        sistId,
+        nombreSistema,
+        conteoPorTipo,
+        height
+      };
     });
+
+    // Agrupar en bloques de hasta 8 sistemas (4 por columna)
+    const blocks: { col0: SystemWithHeight[]; col1: SystemWithHeight[]; height: number }[] = [];
+    let cardSistemasH = 12; // Margen superior y título
+    for (let b = 0; b < systemsWithHeight.length; b += 8) {
+      const col0 = systemsWithHeight.slice(b, b + 4);
+      const col1 = systemsWithHeight.slice(b + 4, b + 8);
+      const h0 = col0.reduce((sum, s) => sum + s.height, 0);
+      const h1 = col1.reduce((sum, s) => sum + s.height, 0);
+      const maxHeight = Math.max(h0, h1);
+      blocks.push({ col0, col1, height: maxHeight });
+      cardSistemasH += maxHeight;
+    }
 
     doc.setDrawColor(220, 220, 220);
     doc.setFillColor(250, 251, 252);
@@ -2346,49 +2779,58 @@ export const generarCertificadoPDF = async (
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(9);
     doc.setTextColor(60, 60, 60);
-    doc.text('SISTEMAS Y EQUIPOS REVISADOS', margen + 4, y + 6);
+    doc.text('SISTEMAS Y EQUIPOS REVISADOS', pageWidth / 2, y + 6, { align: 'center' });
 
-    let sy = y + 11;
-    Object.entries(equiposPorSistema).forEach(([sistId, eqs]) => {
-      const sist = sistemas.find(s => s.id === sistId);
-      const nombreSistema = sist?.nombre || sist?.tipo || 'Sistema sin nombre';
+    let currentBlockY = y + 11;
+    blocks.forEach(block => {
+      // Dibujar Columna 0 (Izquierda)
+      let col0_Y = currentBlockY;
+      block.col0.forEach(s => {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8);
+        doc.setTextColor(50, 70, 120);
+        doc.text(s.nombreSistema, margen + 8, col0_Y);
+        col0_Y += 5;
 
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(8);
-      doc.setTextColor(50, 70, 120);
-      doc.text(nombreSistema, margen + 8, sy);
-      sy += 5;
-
-      const conteoPorTipo: Record<string, number> = {};
-      eqs.forEach(eq => {
-        const tipoEquipo = eq.nombre || eq.clase || 'Equipo';
-        const capacidad = eq.capacidad || eq.peso || '';
-        const clave = capacidad ? `${tipoEquipo} ${capacidad}` : tipoEquipo;
-        conteoPorTipo[clave] = (conteoPorTipo[clave] || 0) + 1;
+        Object.entries(s.conteoPorTipo).forEach(([clave, cantidad]) => {
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(7.5);
+          doc.setTextColor(80, 80, 80);
+          doc.text(`• ${clave} — ${cantidad} unidad${cantidad > 1 ? 'es' : ''}`, margen + 14, col0_Y, { maxWidth: (pageWidth / 2) - margen - 12 });
+          col0_Y += 4.5;
+        });
+        col0_Y += 2;
       });
 
-      Object.entries(conteoPorTipo).forEach(([clave, cantidad]) => {
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(7.5);
-        doc.setTextColor(80, 80, 80);
-        doc.text(`• ${clave} — ${cantidad} unidad${cantidad > 1 ? 'es' : ''}`, margen + 14, sy, { maxWidth: pageWidth - margen * 2 - 20 });
-        sy += 4.5;
+      // Dibujar Columna 1 (Derecha)
+      let col1_Y = currentBlockY;
+      block.col1.forEach(s => {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8);
+        doc.setTextColor(50, 70, 120);
+        doc.text(s.nombreSistema, pageWidth / 2 + 4, col1_Y);
+        col1_Y += 5;
+
+        Object.entries(s.conteoPorTipo).forEach(([clave, cantidad]) => {
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(7.5);
+          doc.setTextColor(80, 80, 80);
+          doc.text(`• ${clave} — ${cantidad} unidad${cantidad > 1 ? 'es' : ''}`, pageWidth / 2 + 10, col1_Y, { maxWidth: (pageWidth / 2) - margen - 12 });
+          col1_Y += 4.5;
+        });
+        col1_Y += 2;
       });
 
-      sy += 2;
+      currentBlockY += block.height;
     });
 
     y += cardSistemasH + 8;
   }
 
   // ── RESULTADO DE LA REVISIÓN ──
-  let tieneAlgunaAnomalia = false;
-  if (equiposTodos && equiposTodos.length > 0) {
-    tieneAlgunaAnomalia = equiposTodos.some(eq => equipoTieneAnomalias(eq));
-  }
-
+  // Confiamos en el estadoCertificado calculado en RevisionChecklist (ya tiene la lógica correcta)
   const rawEstado = (estadoCertificado || 'Favorable').toLowerCase();
-  const esNegativo = rawEstado.includes('negativo') || rawEstado.includes('no') || tieneAlgunaAnomalia;
+  const esNegativo = rawEstado.includes('no favorable') || rawEstado.includes('negativo') || rawEstado.includes('no favorabl');
   const estadoLimpio = esNegativo ? 'NO favorable' : 'Favorable';
 
   // Texto de certificación formal

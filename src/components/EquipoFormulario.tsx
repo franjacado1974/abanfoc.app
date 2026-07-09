@@ -144,7 +144,16 @@ export default function EquipoFormulario({
                     setPlantillaEncontradaNombre(plantillaEncontrada.nombre);
                     unsub = subscribeItemsDePlantilla(plantillaEncontrada.id, (items) => {
                         const ordenados = [...items].sort((a, b) => a.orden - b.orden);
-                        setPlantillaItems(ordenados);
+                        const nameLower = sistemaNombre.toLowerCase();
+                        const esAreaCobertura = nameLower.includes('detecci') || nameLower.includes('rociador') || nameLower.includes('sprinkler') || (nameLower.includes('puesto') && nameLower.includes('control'));
+                        const itemsModificados = ordenados.map(it => {
+                            const lbl = (it.label || '').toLowerCase();
+                            if (esAreaCobertura && (lbl.includes('ubicacion') || lbl.includes('ubicación') || lbl.includes('cobertura'))) {
+                                return { ...it, label: 'Área de cobertura de este sistema' };
+                            }
+                            return it;
+                        });
+                        setPlantillaItems(itemsModificados);
                         setLoading(false);
                     });
                 } else {
@@ -233,7 +242,7 @@ export default function EquipoFormulario({
                         equipoToSave.codigo = strVal;
                     } else if (label.includes('nombre') || label.includes('tipo')) {
                         equipoToSave.nombre = strVal;
-                    } else if (label.includes('ubicación') || label.includes('ubicacion')) {
+                    } else if (label.includes('ubicación') || label.includes('ubicacion') || label.includes('cobertura')) {
                         equipoToSave.ubicacion = strVal.toUpperCase();
                         (equipoToSave as any)[item.key] = strVal.toUpperCase();
                     } else if (label.includes('marca')) {
@@ -320,6 +329,25 @@ export default function EquipoFormulario({
     const fabItemBie = isBie ? plantillaItems.find(i => i.label.toLowerCase().includes('fabricaci')) : null;
     const hidraulicaItemBie = isBie ? plantillaItems.find(i => i.label.toLowerCase().includes('hidra') || i.label.toLowerCase().includes('prueba')) : null;
     const anoItemBie = isBie ? plantillaItems.find(i => i.label.toLowerCase().includes('anomal') || i.label.toLowerCase().includes('observacion') || i.label.toLowerCase().includes('notas')) : null;
+
+    const isCasetas = sistemaNombre.toLowerCase().includes('caseta') || sistemaNombre.toLowerCase().includes('dotacion');
+    const item70Fab = isCasetas ? plantillaItems.find(i => {
+        const lbl = i.label.toLowerCase();
+        return lbl.includes('tramo 70') || (lbl.includes('70 mm') && lbl.includes('fabricaci'));
+    }) : null;
+    const item70PH = isCasetas ? plantillaItems.find(i => {
+        const lbl = i.label.toLowerCase();
+        return lbl.includes('70 mm') && (lbl.includes('p.h.') || lbl.includes('prueba') || lbl.includes('ultima'));
+    }) : null;
+    const item45Fab = isCasetas ? plantillaItems.find(i => {
+        const lbl = i.label.toLowerCase();
+        return lbl.includes('tramo 45') || (lbl.includes('45 mm') && lbl.includes('fabricaci'));
+    }) : null;
+    const item45PH = isCasetas ? plantillaItems.find(i => {
+        const lbl = i.label.toLowerCase();
+        return lbl.includes('45 mm') && (lbl.includes('p.h.') || lbl.includes('prueba') || lbl.includes('ultima'));
+    }) : null;
+    const anoItemCasetas = isCasetas ? plantillaItems.find(i => i.label.toLowerCase().includes('anomal') || i.label.toLowerCase().includes('observacion') || i.label.toLowerCase().includes('notas')) : null;
 
     let caducado = false;
     let necesitaRetimbre = false;
@@ -470,6 +498,124 @@ export default function EquipoFormulario({
         anoItemBie?.key
     ]);
 
+    let caducado70 = false;
+    let necesitaPrueba70 = false;
+    let caducado45 = false;
+    let necesitaPrueba45 = false;
+    let autoMsg70Fab = "";
+    let autoMsg70PH = "";
+    let autoMsg45Fab = "";
+    let autoMsg45PH = "";
+
+    if (isCasetas) {
+        if (item70Fab) {
+            const val = formData[item70Fab.key as keyof EquipoInstalado] as string;
+            if (val) {
+                const today = new Date();
+                const d = new Date(val);
+                if (!isNaN(d.getTime())) {
+                    let diff = today.getFullYear() - d.getFullYear();
+                    if (today.getMonth() < d.getMonth() || (today.getMonth() === d.getMonth() && today.getDate() < d.getDate())) diff--;
+                    if (diff >= 20) {
+                        caducado70 = true;
+                        autoMsg70Fab = "Manguera 70 mm. caducada + de 20 años se debe sustituir según normativa.";
+                    }
+                }
+            }
+        }
+        if (item70PH) {
+            const val = formData[item70PH.key as keyof EquipoInstalado] as string;
+            if (val) {
+                const today = new Date();
+                const d = new Date(val);
+                if (!isNaN(d.getTime())) {
+                    let diff = today.getFullYear() - d.getFullYear();
+                    if (today.getMonth() < d.getMonth() || (today.getMonth() === d.getMonth() && today.getDate() < d.getDate())) diff--;
+                    if (diff >= 5) {
+                        necesitaPrueba70 = true;
+                        autoMsg70PH = "Manguera 70 mm. necesita prueba hidráulica (última hace + de 5 años).";
+                    }
+                }
+            }
+        }
+        if (item45Fab) {
+            const val = formData[item45Fab.key as keyof EquipoInstalado] as string;
+            if (val) {
+                const today = new Date();
+                const d = new Date(val);
+                if (!isNaN(d.getTime())) {
+                    let diff = today.getFullYear() - d.getFullYear();
+                    if (today.getMonth() < d.getMonth() || (today.getMonth() === d.getMonth() && today.getDate() < d.getDate())) diff--;
+                    if (diff >= 20) {
+                        caducado45 = true;
+                        autoMsg45Fab = "Manguera 45 mm. caducada + de 20 años se debe sustituir según normativa.";
+                    }
+                }
+            }
+        }
+        if (item45PH) {
+            const val = formData[item45PH.key as keyof EquipoInstalado] as string;
+            if (val) {
+                const today = new Date();
+                const d = new Date(val);
+                if (!isNaN(d.getTime())) {
+                    let diff = today.getFullYear() - d.getFullYear();
+                    if (today.getMonth() < d.getMonth() || (today.getMonth() === d.getMonth() && today.getDate() < d.getDate())) diff--;
+                    if (diff >= 5) {
+                        necesitaPrueba45 = true;
+                        autoMsg45PH = "Manguera 45 mm. necesita prueba hidráulica (última hace + de 5 años).";
+                    }
+                }
+            }
+        }
+    }
+
+    useEffect(() => {
+        if (!isCasetas || !anoItemCasetas) return;
+        
+        setFormData(prev => {
+            const currentAno = (prev[anoItemCasetas.key as keyof EquipoInstalado] as string) || "";
+            const msgs = [
+                "Manguera 70 mm. caducada + de 20 años se debe sustituir según normativa.",
+                "Manguera 70 mm. necesita prueba hidráulica (última hace + de 5 años).",
+                "Manguera 45 mm. caducada + de 20 años se debe sustituir según normativa.",
+                "Manguera 45 mm. necesita prueba hidráulica (última hace + de 5 años)."
+            ];
+            
+            let newVal = currentAno;
+            msgs.forEach(m => { newVal = newVal.replace(m, '').trim(); });
+            newVal = newVal.replace(/\n\n+/g, '\n').trim();
+
+            if (autoMsg70Fab) {
+                newVal = (newVal + (newVal ? "\n" : "") + autoMsg70Fab).trim();
+            }
+            if (autoMsg70PH) {
+                newVal = (newVal + (newVal ? "\n" : "") + autoMsg70PH).trim();
+            }
+            if (autoMsg45Fab) {
+                newVal = (newVal + (newVal ? "\n" : "") + autoMsg45Fab).trim();
+            }
+            if (autoMsg45PH) {
+                newVal = (newVal + (newVal ? "\n" : "") + autoMsg45PH).trim();
+            }
+
+            if (newVal === currentAno) return prev;
+            
+            return { ...prev, [anoItemCasetas.key]: newVal };
+        });
+    }, [
+        formData[item70Fab?.key || ''], 
+        formData[item70PH?.key || ''], 
+        formData[item45Fab?.key || ''], 
+        formData[item45PH?.key || ''], 
+        autoMsg70Fab, 
+        autoMsg70PH,
+        autoMsg45Fab,
+        autoMsg45PH,
+        isCasetas, 
+        anoItemCasetas?.key
+    ]);
+
 
     // ── Render de cada campo según tipoRespuesta ──────────────────────────
 
@@ -479,10 +625,19 @@ export default function EquipoFormulario({
         const isUCase = isUbicacionMarcaModelo(item.label, item.key);
         const isErrorDate = 
             ((caducado || necesitaRetimbre || seAproxima) && (item.key === fabItem?.key || item.key === retItem?.key)) ||
-            (isBie && ((caducadoBie && item.key === fabItemBie?.key) || (necesitaPruebaBie && item.key === hidraulicaItemBie?.key)));
+            (isBie && ((caducadoBie && item.key === fabItemBie?.key) || (necesitaPruebaBie && item.key === hidraulicaItemBie?.key))) ||
+            (isCasetas && (
+                (caducado70 && item.key === item70Fab?.key) || 
+                (necesitaPrueba70 && item.key === item70PH?.key) ||
+                (caducado45 && item.key === item45Fab?.key) ||
+                (necesitaPrueba45 && item.key === item45PH?.key)
+            ));
+        const isObservationsField = 
+            item.label.toLowerCase().includes('anomal') || 
+            item.label.toLowerCase().includes('observaci') || 
+            item.label.toLowerCase().includes('nota');
         const isAnoFieldWithMsg = 
-            (isExtintor && item.key === anoItem?.key && typeof value === 'string' && value.trim() !== '') ||
-            (isBie && item.key === anoItemBie?.key && typeof value === 'string' && (value.includes("Equipo caducado + de 20 años") || value.includes("Se necesita realizar prueba hidráulica")));
+            isObservationsField && typeof value === 'string' && value.trim() !== '';
 
         if (item.horizontal || tipo === 'pregunta-horizontal') {
             const isCheck = tipo === 'check';
@@ -537,12 +692,13 @@ export default function EquipoFormulario({
                             />
                         ) : isFecha ? (
                             (() => {
-                                const fechaVal = typeof value === 'string' && value ? value.substring(0, 7) : '';
+                                const esFechaRevision = (item.label || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes('revision');
+                                const fechaVal = typeof value === 'string' && value ? (esFechaRevision ? value.substring(0, 10) : value.substring(0, 7)) : '';
                                 return (
                                     <input
-                                        type="month"
+                                        type={esFechaRevision ? "date" : "month"}
                                         value={fechaVal}
-                                        onChange={(e) => handleChange(item.key, e.target.value ? e.target.value + '-01' : '')}
+                                        onChange={(e) => handleChange(item.key, esFechaRevision ? e.target.value : (e.target.value ? e.target.value + '-01' : ''))}
                                         className={`w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 transition-colors ${
                                             isErrorDate 
                                             ? 'bg-red-50 border-red-400 text-red-700 focus:border-red-500 focus:ring-red-500/20' 
@@ -565,7 +721,12 @@ export default function EquipoFormulario({
                             />
                         ) : isDesplegable ? (
                             (() => {
-                                const opciones = (item as any).opciones || [];
+                                const labelLower = (item.label || '').toLowerCase().trim();
+                                const isTipoField = labelLower === 'tipo' || labelLower === 'tipo de equipo';
+                                const isDeteccion = sistemaNombre.toLowerCase().includes('detecci');
+                                const opciones = (isDeteccion && isTipoField)
+                                    ? ['CONVENCIONAL', 'ANALÓGICA']
+                                    : ((item as any).opciones || []);
                                 return (
                                     <select
                                         value={typeof value === 'string' ? value : ''}
@@ -583,7 +744,9 @@ export default function EquipoFormulario({
                             (() => {
                                 const labelLower = (item.label || '').toLowerCase().trim();
                                 const isTipoField = labelLower === 'tipo' || labelLower === 'tipo de equipo';
-                                if (isTipoField && tiposSistema.length > 0) {
+                                const isDeteccion = sistemaNombre.toLowerCase().includes('detecci');
+                                if (isTipoField && (isDeteccion || tiposSistema.length > 0)) {
+                                    const opciones = isDeteccion ? ['CONVENCIONAL', 'ANALÓGICA'] : tiposSistema.map(ts => ts.nombre);
                                     return (
                                         <select
                                             value={typeof value === 'string' ? value : ''}
@@ -591,8 +754,8 @@ export default function EquipoFormulario({
                                             className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
                                         >
                                             <option value="">Selecciona un tipo...</option>
-                                            {tiposSistema.map(ts => (
-                                                <option key={ts.id} value={ts.nombre}>{ts.nombre}</option>
+                                            {opciones.map((opt: string, idx: number) => (
+                                                <option key={idx} value={opt}>{opt}</option>
                                             ))}
                                         </select>
                                     );
@@ -676,14 +839,15 @@ export default function EquipoFormulario({
                 );
 
             case 'fecha': {
-                const fechaVal = typeof value === 'string' && value ? value.substring(0, 7) : '';
+                const esFechaRevision = (item.label || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes('revision');
+                const fechaVal = typeof value === 'string' && value ? (esFechaRevision ? value.substring(0, 10) : value.substring(0, 7)) : '';
                 return (
                     <div key={item.key} className="flex flex-col gap-1">
                         <label className="text-xs font-semibold text-slate-600">{item.label}</label>
                         <input
-                            type="month"
+                            type={esFechaRevision ? "date" : "month"}
                             value={fechaVal}
-                            onChange={(e) => handleChange(item.key, e.target.value ? e.target.value + '-01' : '')}
+                            onChange={(e) => handleChange(item.key, esFechaRevision ? e.target.value : (e.target.value ? e.target.value + '-01' : ''))}
                             className={`w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 transition-colors ${
                                 isErrorDate 
                                 ? 'bg-red-50 border-red-400 text-red-700 focus:border-red-500 focus:ring-red-500/20' 
@@ -784,7 +948,12 @@ export default function EquipoFormulario({
                 );
 
             case 'desplegable': {
-                const opciones = (item as any).opciones || [];
+                const labelLower = (item.label || '').toLowerCase().trim();
+                const isTipoField = labelLower === 'tipo' || labelLower === 'tipo de equipo';
+                const isDeteccion = sistemaNombre.toLowerCase().includes('detecci');
+                const opciones = (isDeteccion && isTipoField)
+                    ? ['CONVENCIONAL', 'ANALÓGICA']
+                    : ((item as any).opciones || []);
                 return (
                     <div key={item.key} className="flex flex-col gap-1">
                         <label className="text-xs font-semibold text-slate-600">{item.label}</label>
@@ -806,8 +975,10 @@ export default function EquipoFormulario({
             default: {
                 const labelLower = (item.label || '').toLowerCase().trim();
                 const isTipoField = labelLower === 'tipo' || labelLower === 'tipo de equipo';
+                const isDeteccion = sistemaNombre.toLowerCase().includes('detecci');
                 
-                if (isTipoField && tiposSistema.length > 0) {
+                if (isTipoField && (isDeteccion || tiposSistema.length > 0)) {
+                    const opciones = isDeteccion ? ['CONVENCIONAL', 'ANALÓGICA'] : tiposSistema.map(ts => ts.nombre);
                     return (
                         <div key={item.key} className="flex flex-col gap-1">
                             <label className="text-xs font-semibold text-slate-600">{item.label}</label>
@@ -817,8 +988,8 @@ export default function EquipoFormulario({
                                 className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
                             >
                                 <option value="">Selecciona un tipo...</option>
-                                {tiposSistema.map(ts => (
-                                    <option key={ts.id} value={ts.nombre}>{ts.nombre}</option>
+                                {opciones.map((opt: string, idx: number) => (
+                                    <option key={idx} value={opt}>{opt}</option>
                                 ))}
                             </select>
                         </div>
@@ -909,13 +1080,15 @@ export default function EquipoFormulario({
                                 />
                             </div>
                             <div className="flex flex-col gap-1">
-                                <label className="text-xs font-semibold text-slate-600">Ubicación</label>
+                                <label className="text-xs font-semibold text-slate-600">
+                                    {(sistemaNombre.toLowerCase().includes('detecci') || sistemaNombre.toLowerCase().includes('rociador') || sistemaNombre.toLowerCase().includes('sprinkler') || (sistemaNombre.toLowerCase().includes('puesto') && sistemaNombre.toLowerCase().includes('control'))) ? 'Área de cobertura de este sistema' : 'Ubicación'}
+                                </label>
                                 <input
                                     type="text"
                                     value={(formData.ubicacion || '').toUpperCase()}
                                     onChange={(e) => handleChange('ubicacion', e.target.value.toUpperCase())}
                                     className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 uppercase"
-                                    placeholder="Ubicación..."
+                                    placeholder={(sistemaNombre.toLowerCase().includes('detecci') || sistemaNombre.toLowerCase().includes('rociador') || sistemaNombre.toLowerCase().includes('sprinkler') || (sistemaNombre.toLowerCase().includes('puesto') && sistemaNombre.toLowerCase().includes('control'))) ? 'Área de cobertura de este sistema...' : 'Ubicación...'}
                                 />
                             </div>
                         </div>

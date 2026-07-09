@@ -8,7 +8,8 @@
     "prebuild": "node scripts/update-version.cjs",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "deploy": "firebase deploy --project app-abanfoc-v1 --only hosting"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

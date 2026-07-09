@@ -109,15 +109,18 @@ export default function SistemaDeteccion({
         <>
             {                                                    filteredEqs.map((eq, i) => {
                                                         const itemsToUse = getItemsToUse(sist.id);
-                                                        const algunCheckRojo = itemsToUse.some((item) => {
-                                                            const val = eq[item.key as keyof EquipoInstalado];
-                                                            if (val === false || val === 'false') return true;
-                                                            if (typeof val === 'string') {
-                                                                const valUpper = val.toUpperCase().trim();
-                                                                return valUpper === 'NO CORRECTO' || valUpper.includes('NO CORRECTO') || valUpper === 'INCORRECTO';
-                                                            }
-                                                            return false;
-                                                        });
+                                                         const algunCheckRojo = itemsToUse.some((item) => {
+                                                             const lbl = (item.label || '').toLowerCase();
+                                                             if (lbl.includes('notas') || lbl.includes('observaciones') || lbl.includes('anomal')) return false;
+
+                                                             const val = eq[item.key as keyof EquipoInstalado];
+                                                             if (val === false || val === 'false') return true;
+                                                             if (typeof val === 'string') {
+                                                                 const valUpper = val.toUpperCase().trim();
+                                                                 return valUpper === 'NO CORRECTO' || valUpper.includes('NO CORRECTO') || valUpper === 'INCORRECTO';
+                                                             }
+                                                             return false;
+                                                         });
                                                         const stats = getCheckStats(eq);
                                                         
                                                         const isExtintor = (sist.tipo || sist.familia || '').toLowerCase().includes('extintor');
@@ -652,9 +655,17 @@ export default function SistemaDeteccion({
                                                                                                      allChecked[item.key] = true;
                                                                                                  }
                                                                                              });
+                                                                                             const notasItem = itemsToUse.find(item => {
+                                                                                                 const lbl = (item.label || '').toLowerCase();
+                                                                                                 return lbl.includes('notas') || lbl.includes('observaciones') || lbl.includes('anomal');
+                                                                                             });
+                                                                                             if (notasItem) {
+                                                                                                 allChecked[notasItem.key] = '';
+                                                                                             }
                                                                                              return {
                                                                                                  ...currEq,
                                                                                                  revisado: true,
+                                                                                                 anomalias: '',
                                                                                                  ...allChecked
                                                                                              };
                                                                                          }

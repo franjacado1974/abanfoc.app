@@ -27,9 +27,9 @@ export default function DetailModal({ isOpen, onClose, title, children }: Detail
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[300] flex flex-col bg-[#f8f6f3]">
+    <div className="fixed inset-0 z-[300] flex flex-col bg-[#DCE1E5]">
       {/* Header */}
-      <div className="sticky top-0 z-10 bg-[#f8f6f3]/90 backdrop-blur-md border-b border-zinc-200/60 shrink-0">
+      <div className="sticky top-0 z-10 bg-[#DCE1E5]/90 backdrop-blur-md border-b border-zinc-200/60 shrink-0">
         <div className="flex items-center justify-between px-4 sm:px-6 py-4">
           <button
             onClick={onClose}

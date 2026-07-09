@@ -242,16 +242,17 @@ export default function SistemaBies({
                                                                    />
                                                                ) : isFecha ? (
                                                                    (() => {
-                                                                       const fechaVal = typeof val === 'string' && val ? val.substring(0, 7) : '';
+                                                                       const esFechaRevision = (item.label || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes('revision');
+                                                                        const fechaVal = typeof val === 'string' && val ? (esFechaRevision ? val.substring(0, 10) : val.substring(0, 7)) : '';
                                                                        const isErrorDate = 
                                                                             ((caducado || necesitaRetimbre || seAproxima) && (item.key === fabItemKey || item.key === retItemKey)) ||
                                                                             (fabItemBie && item.key === fabItemBie.key && caducadoBie) ||
                                                                             (hidraulicaItemBie && item.key === hidraulicaItemBie.key && necesitaPruebaBie);
                                                                        return (
                                                                            <input
-                                                                               type="month"
+                                                                               type={esFechaRevision ? "date" : "month"}
                                                                                value={fechaVal}
-                                                                               onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value ? e.target.value + '-01' : '')}
+                                                                               onChange={(e) => handleCheckChange(eq.id, item.key, esFechaRevision ? e.target.value : (e.target.value ? e.target.value + '-01' : ''))}
                                                                                className={`w-full px-2 py-1.5 border rounded-lg text-xs outline-none focus:ring-2 transition-colors ${
                                                                                    isErrorDate
                                                                                    ? 'bg-red-50 border-red-400 text-red-700 focus:border-red-500 focus:ring-red-500/20'

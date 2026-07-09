@@ -20,42 +20,44 @@ export default function Loader() {
   }, []);
 
   return (
-    <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-gradient-to-br from-[#f8f6f3] via-[#ffffff] to-[#f0edf5]">
-      {/* Background ambient design details */}
-      <div className="absolute top-10 left-10 w-32 h-32 bg-red-100 rounded-full blur-3xl opacity-40 animate-pulse"></div>
-      <div className="absolute bottom-10 right-10 w-40 h-40 bg-zinc-200 rounded-full blur-3xl opacity-40 animate-pulse"></div>
+    <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-black overflow-hidden select-none">
+      {/* Dark ambient glowing meshes */}
+      <div className="absolute top-[-20%] left-[-20%] w-[80%] h-[80%] rounded-full bg-red-600/15 blur-[150px] pointer-events-none"></div>
+      <div className="absolute bottom-[-20%] right-[-20%] w-[80%] h-[80%] rounded-full bg-orange-600/10 blur-[150px] pointer-events-none"></div>
+      <div className="absolute top-[30%] left-[30%] w-[45%] h-[45%] rounded-full bg-red-950/20 blur-[130px] pointer-events-none"></div>
 
-      {/* Main glassmorphic card */}
-      <div className="bg-white/80 backdrop-blur-md p-8 sm:p-12 rounded-[2.5rem] border border-zinc-200/80 flex flex-col items-center w-full max-w-sm sm:max-w-md animate-pulse-glow text-center">
-        {/* Extinguisher Icon Container */}
-        <div className="relative w-28 h-28 sm:w-32 sm:h-32 mb-8 bg-zinc-50 rounded-full flex items-center justify-center border border-zinc-200/50 shadow-inner overflow-hidden">
-          {/* Subtle rotating pattern border inside */}
-          <div className="absolute inset-2 border-2 border-dashed border-red-500/20 rounded-full animate-spin-slow"></div>
+      {/* Main dark glassmorphic card */}
+      <div className="bg-zinc-950/60 backdrop-blur-xl p-8 sm:p-12 rounded-[2.5rem] border border-zinc-900 flex flex-col items-center w-full max-w-sm sm:max-w-md shadow-2xl text-center">
+        {/* Rotating Extinguisher Container */}
+        <div className="relative w-28 h-28 sm:w-32 sm:h-32 mb-8 bg-zinc-950 rounded-full flex items-center justify-center border border-zinc-900 shadow-[inset_0_2px_4px_rgba(0,0,0,0.5),0_10px_25px_-5px_rgba(239,68,68,0.15)] overflow-hidden">
+          {/* Outer spinning dashed ring */}
+          <div className="absolute inset-1.5 border border-dashed border-red-500/40 rounded-full animate-spin-slow"></div>
+          
           {/* Extinguisher Icon itself */}
           <img 
             src={extintorBase64} 
             alt="Extintor" 
-            className="w-16 h-16 sm:w-20 sm:h-20 object-contain animate-spin-slow select-none pointer-events-none" 
+            className="w-16 h-16 sm:w-20 sm:h-20 object-contain animate-spin-slow select-none pointer-events-none filter drop-shadow-[0_0_8px_rgba(239,68,68,0.3)]" 
             onError={(e) => { (e.target as HTMLImageElement).src = '/favicon.png'; }}
           />
         </div>
 
-        {/* Text */}
-        <h3 className="text-lg sm:text-xl font-black text-zinc-900 tracking-tight mb-2">
-          Abanfoc App
+        {/* Brand App Text */}
+        <h3 className="text-xl sm:text-2xl font-black text-white tracking-tight mb-2 font-sans bg-clip-text text-transparent bg-gradient-to-r from-white via-zinc-100 to-zinc-400">
+          ABANFOC
         </h3>
-        <p className="text-zinc-500 text-xs sm:text-sm font-medium min-h-[20px] transition-all duration-300">
+        <p className="text-zinc-400 text-xs sm:text-sm font-semibold min-h-[20px] transition-all duration-300 font-sans tracking-wide">
           {loadingText}
         </p>
 
-        {/* Progress Bar Container */}
-        <div className="w-48 sm:w-56 h-1.5 bg-zinc-100 rounded-full overflow-hidden mt-6 border border-zinc-200/40">
-          <div className="h-full bg-gradient-to-r from-red-500 to-red-600 rounded-full animate-fill-progress"></div>
+        {/* Loading Progress Bar */}
+        <div className="w-48 sm:w-56 h-1.5 bg-zinc-900 rounded-full overflow-hidden mt-6 border border-zinc-800/50 shadow-inner">
+          <div className="h-full bg-gradient-to-r from-red-600 via-orange-500 to-amber-500 rounded-full animate-fill-progress"></div>
         </div>
 
-        {/* Version label */}
-        <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest mt-8">
-          Preparando entorno
+        {/* Status indicator badge */}
+        <span className="text-[9px] text-red-400 font-bold uppercase tracking-widest mt-8 px-3.5 py-1 bg-red-950/30 border border-red-900/30 rounded-full font-sans shadow-sm">
+          Preparando Entorno
         </span>
       </div>
     </div>

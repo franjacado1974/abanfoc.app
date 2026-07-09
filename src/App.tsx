@@ -6,7 +6,7 @@ import {
   ShieldCheck, ArrowLeft,
   Clock
 } from 'lucide-react';
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import Loader from './components/Loader';
 import DashboardTecnico from './DashboardTecnico';
 import Clientes from './Clientes';
@@ -26,7 +26,21 @@ import RevisionChecklist from './RevisionChecklist';
 import Revisiones from './Revisiones';
 import Ajustes from './Ajustes';
 import Sidebar from './components/Sidebar';
-import { verifyUser } from './firebase';
+import { 
+  verifyUser,
+  subscribeClientes,
+  subscribeCentros,
+  subscribeArticulos,
+  subscribeAlbaranes,
+  subscribeCertificados,
+  subscribePedidos,
+  subscribePartes,
+  subscribePresupuestos,
+  subscribeTecnicos,
+  subscribeEmpresas,
+  subscribeTrabajos,
+  subscribeSistemasCategorias
+} from './firebase';
 import { APP_VERSION } from './constants';
 import { useRegisterSW } from 'virtual:pwa-register/react';
 
@@ -203,15 +217,108 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
     return { clientes, centros, catalogo, albaranes, certificados, pedidos, partes: 0, pendientes: 0 };
   };
 
-  const stats = useMemo(() => getStats(), []);
+  const [stats, setStats] = useState(() => getStats());
+
+  useEffect(() => {
+    const unsubs: (() => void)[] = [];
+
+    const updateStats = () => {
+      setStats(getStats());
+    };
+
+    try {
+      unsubs.push(subscribeClientes((items) => {
+        localStorage.setItem('firecheck_db_clientes', JSON.stringify(items));
+        updateStats();
+      }));
+    } catch (e) { console.error('subscribeClientes failed', e); }
+
+    try {
+      unsubs.push(subscribeCentros((items) => {
+        localStorage.setItem('firecheck_db_centros', JSON.stringify(items));
+        updateStats();
+      }));
+    } catch (e) { console.error('subscribeCentros failed', e); }
+
+    try {
+      unsubs.push(subscribeArticulos((items) => {
+        localStorage.setItem('firecheck_db_articulos', JSON.stringify(items));
+        updateStats();
+      }));
+    } catch (e) { console.error('subscribeArticulos failed', e); }
+
+    try {
+      unsubs.push(subscribeAlbaranes((items) => {
+        localStorage.setItem('firecheck_db_albaranes', JSON.stringify(items));
+        updateStats();
+      }));
+    } catch (e) { console.error('subscribeAlbaranes failed', e); }
+
+    try {
+      unsubs.push(subscribeCertificados((items) => {
+        localStorage.setItem('firecheck_db_certificados', JSON.stringify(items));
+        updateStats();
+      }));
+    } catch (e) { console.error('subscribeCertificados failed', e); }
+
+    try {
+      unsubs.push(subscribePedidos((items) => {
+        localStorage.setItem('firecheck_db_pedidos', JSON.stringify(items));
+        updateStats();
+      }));
+    } catch (e) { console.error('subscribePedidos failed', e); }
+
+    // Other caches for subsequent menus
+    try {
+      unsubs.push(subscribeTecnicos((items) => {
+        localStorage.setItem('firecheck_db_tecnicos', JSON.stringify(items));
+      }));
+    } catch (e) { console.error('subscribeTecnicos failed', e); }
+
+    try {
+      unsubs.push(subscribeEmpresas((items) => {
+        localStorage.setItem('firecheck_db_empresas', JSON.stringify(items));
+      }));
+    } catch (e) { console.error('subscribeEmpresas failed', e); }
+
+    try {
+      unsubs.push(subscribeTrabajos((items) => {
+        localStorage.setItem('firecheck_db_trabajos', JSON.stringify(items));
+      }));
+    } catch (e) { console.error('subscribeTrabajos failed', e); }
+
+    try {
+      unsubs.push(subscribeSistemasCategorias((items) => {
+        localStorage.setItem('firecheck_db_sistemas_categorias', JSON.stringify(items));
+      }));
+    } catch (e) { console.error('subscribeSistemasCategorias failed', e); }
+
+    try {
+      unsubs.push(subscribePartes((items) => {
+        localStorage.setItem('firecheck_db_partes', JSON.stringify(items));
+      }));
+    } catch (e) { console.error('subscribePartes failed', e); }
+
+    try {
+      unsubs.push(subscribePresupuestos((items) => {
+        localStorage.setItem('firecheck_db_presupuestos', JSON.stringify(items));
+      }));
+    } catch (e) { console.error('subscribePresupuestos failed', e); }
+
+    return () => {
+      unsubs.forEach(unsub => {
+        if (typeof unsub === 'function') unsub();
+      });
+    };
+  }, []);
 
   return (
-    <div className="flex h-screen bg-[#f8f6f3]">
+    <div className="flex h-screen bg-[#DCE1E5]">
       <Sidebar user={loggedUser} onLogout={handleLogout} appLogo={appLogo} />
       
       <main className="flex-1 overflow-y-auto">
         {/* Top Bar */}
-        <div className="sticky top-0 z-40 bg-[#f8f6f3]/80 backdrop-blur-md border-b border-zinc-200/60">
+        <div className="sticky top-0 z-40 bg-[#DCE1E5]/80 backdrop-blur-md border-b border-zinc-200/60">
           <div className="flex items-center justify-center px-6 py-4">
             <div className="text-center">
               <h1 className="text-xl font-bold text-zinc-900">Inicio</h1>
@@ -362,7 +469,7 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
 function PlaceholderPage({ title, bgColor = "bg-zinc-50" }: { title: string, bgColor?: string }) {
   const navigate = useNavigate();
   return (
-    <div className="flex h-screen bg-[#f8f6f3]">
+    <div className="flex h-screen bg-[#DCE1E5]">
       <div className={`flex-1 overflow-y-auto ${bgColor}`}>
         <div className="p-6">
           <button onClick={() => navigate('/')} className="text-sm font-medium text-zinc-500 hover:text-black mb-6 flex items-center gap-2 transition-colors">
@@ -378,7 +485,7 @@ function PlaceholderPage({ title, bgColor = "bg-zinc-50" }: { title: string, bgC
 
 function PageLayout({ user, onLogout, appLogo, children }: { user: Usuario | null; onLogout: () => void; appLogo: string; children: React.ReactNode }) {
   return (
-    <div className="flex h-screen bg-[#f8f6f3]">
+    <div className="flex h-screen bg-[#DCE1E5]">
       <Sidebar user={user} onLogout={onLogout} appLogo={appLogo} />
       <div className="flex-1 overflow-y-auto">
         {children}
@@ -390,7 +497,6 @@ function PageLayout({ user, onLogout, appLogo, children }: { user: Usuario | nul
 export default function App() {
   const {
     needRefresh: [needRefresh, setNeedRefresh],
-    updateServiceWorker,
   } = useRegisterSW({
     onRegistered(r) {
       console.log('SW Registered: ', r);
@@ -420,6 +526,29 @@ export default function App() {
     }
   }, [needRefresh]);
 
+  const handleUpdateClick = async () => {
+    try {
+      if ('serviceWorker' in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        for (const registration of registrations) {
+          await registration.unregister();
+        }
+      }
+      if ('caches' in window) {
+        const cacheNames = await caches.keys();
+        for (const cacheName of cacheNames) {
+          await caches.delete(cacheName);
+        }
+      }
+    } catch (err) {
+      console.error('Error clearing cache:', err);
+    } finally {
+      const url = new URL(window.location.href);
+      url.searchParams.set('update_ts', Date.now().toString());
+      window.location.replace(url.toString());
+    }
+  };
+
   const renderUpdatePrompt = () => {
     if (!needRefresh) return null;
     return (
@@ -430,9 +559,9 @@ export default function App() {
           </div>
           <div>
             <h4 className="font-bold text-sm text-zinc-100 font-sans">
-              Nueva versión disponible{newVersion ? ` (${newVersion})` : ''}
+               Nueva versión disponible{newVersion ? ` (${newVersion})` : ''}
             </h4>
-            <p className="text-xs text-zinc-400 mt-0.5 font-sans">Actualiza la aplicación para disfrutar de las últimas mejoras y correcciones.</p>
+            <p className="text-xs text-zinc-450 mt-0.5 font-sans">Actualiza la aplicación para disfrutar de las últimas mejoras y correcciones.</p>
           </div>
         </div>
         <div className="flex gap-2 justify-end mt-1 font-sans">
@@ -443,7 +572,7 @@ export default function App() {
             Descartar
           </button>
           <button 
-            onClick={() => updateServiceWorker(true)}
+            onClick={handleUpdateClick}
             className="px-4 py-2 rounded-xl text-xs font-bold bg-orange-500 hover:bg-orange-600 text-white transition-all shadow-md shadow-orange-500/10 active:scale-95 cursor-pointer"
           >
             Actualizar ahora
@@ -523,7 +652,7 @@ export default function App() {
       setIsDataLoading(true);
       const timer = setTimeout(() => {
         setIsDataLoading(false);
-      }, 2500);
+      }, 3000);
       return () => clearTimeout(timer);
     }
   }, [loggedUser]);

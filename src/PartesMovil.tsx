@@ -64,7 +64,7 @@ export default function PartesMovil() {
           <button onClick={() => navigate('/')} className="p-2 -ml-2 text-zinc-400 hover:text-black transition-colors">
             <ArrowLeft className="w-6 h-6" />
           </button>
-          <img src={appLogo} alt="Logo" className="h-8 max-w-[150px] object-contain" />
+          <img src={appLogo} alt="Logo" className="h-10 max-w-[150px] object-contain" />
           <div className="w-10" />
         </div>
         <h1 className="text-xl font-black text-zinc-900 mt-2 px-1">Tareas Asignadas</h1>

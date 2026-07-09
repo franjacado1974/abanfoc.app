@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { ArrowLeft, FileDigit, Download, Search, CheckCircle2, Circle, Clock, Trash2, Plus, Building2, MapPin, Save, Trash, Edit, Copy, Maximize2, X, Signature } from 'lucide-react';
-import { addAlbaran, updateAlbaran, deleteAlbaran, subscribeAlbaranes, subscribeEmpresas, subscribeTecnicos, subscribeCentros, subscribeClientes, subscribeTrabajos, db, type Albaran, type Cliente, type Centro, type Equipo, type Tecnico, type Empresa, type TrabajoConfig } from './firebase';
+import { addAlbaran, updateAlbaran, deleteAlbaran, subscribeAlbaranes, subscribeEmpresas, subscribeTecnicos, subscribeCentros, subscribeClientes, subscribeTrabajos, db, type Albaran, type Cliente, type Centro, type Equipo, type Tecnico, type Empresa, type TrabajoConfig, updateParte } from './firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { generarAlbaranPDF } from './pdfGenerator';
 import ConfirmationModal from './ConfirmationModal';
@@ -72,6 +72,16 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingDescriptionIndex, setEditingDescriptionIndex] = useState<number | null>(null);
   const [editingLineIndex, setEditingLineIndex] = useState<number | null>(null);
+  const [precioUnidadInput, setPrecioUnidadInput] = useState<string>('');
+
+  useEffect(() => {
+    if (editingLineIndex !== null && form.items[editingLineIndex]) {
+      const val = form.items[editingLineIndex].precioUnidad;
+      setPrecioUnidadInput(val === 0 ? '' : val.toString().replace('.', ','));
+    } else {
+      setPrecioUnidadInput('');
+    }
+  }, [editingLineIndex]);
 
   const [form, setForm] = useState<Albaran>({
     id: '',
@@ -202,7 +212,27 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
   const toggleFacturado = async (id: Albaran['id']) => {
     const albaranToUpdate = albaranes.find(alb => alb.id === id);
     if (albaranToUpdate) {
-      await updateAlbaran({ ...albaranToUpdate, facturado: !albaranToUpdate.facturado });
+      const nextFacturado = !albaranToUpdate.facturado;
+      await updateAlbaran({ ...albaranToUpdate, facturado: nextFacturado });
+      
+      // Si el albarán tiene un parteId asociado y se marca como Facturado,
+      // actualizamos el estado del parte a 'Cerrado'
+      if (albaranToUpdate.parteId && nextFacturado) {
+        try {
+          await updateParte(albaranToUpdate.parteId, { estado: 'Cerrado' } as any);
+          
+          // Actualizar el localStorage para que el cambio se refleje localmente de inmediato
+          const storedPartes = JSON.parse(localStorage.getItem('firecheck_db_partes') || '[]');
+          const updatedPartes = storedPartes.map((p: any) =>
+            (p.id === albaranToUpdate.parteId || p._docId === albaranToUpdate.parteId)
+              ? { ...p, estado: 'Cerrado' }
+              : p
+          );
+          localStorage.setItem('firecheck_db_partes', JSON.stringify(updatedPartes));
+        } catch (error) {
+          console.error("Error al cerrar el parte de trabajo asociado:", error);
+        }
+      }
     }
   };
 
@@ -505,12 +535,10 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                     <div className="absolute top-0 right-0 h-full w-4 -mr-2 cursor-col-resize border-l-2 border-dashed border-zinc-600" onMouseDown={(e) => handleMouseDownResize('titulo', e)} />
                   </div>
                   <div className="flex-1 min-w-0"></div>
-                  {!isTecnicoMode && (
-                    <div className="relative text-center pr-3 select-none" style={getColStyle('estado')}>
-                      <div>Estado</div>
-                      <div className="absolute top-0 right-0 h-full w-4 -mr-2 cursor-col-resize border-l-2 border-dashed border-zinc-600" onMouseDown={(e) => handleMouseDownResize('estado', e)} />
-                    </div>
-                  )}
+                  <div className="relative text-center pr-3 select-none" style={getColStyle('estado')}>
+                    <div>Estado</div>
+                    <div className="absolute top-0 right-0 h-full w-4 -mr-2 cursor-col-resize border-l-2 border-dashed border-zinc-600" onMouseDown={(e) => handleMouseDownResize('estado', e)} />
+                  </div>
                   <div className="relative text-center select-none" style={getColStyle('acciones')}>
                     <div>Acciones</div>
                   </div>
@@ -522,7 +550,19 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                     return (
                       <div key={alb.id} className="flex flex-col md:flex-row md:items-center px-4 py-3.5 hover:bg-zinc-50/80 transition-colors group">
                         <div className="flex md:hidden items-center justify-between mb-2">
-                          <span className="text-[10px] font-mono font-bold text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded">{alb.id}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-mono font-bold text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded">{alb.id}</span>
+                            <button 
+                              onClick={() => !isVisualizador && toggleFacturado(alb.id)}
+                              disabled={isVisualizador}
+                              className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md border flex items-center gap-0.5 ${
+                                alb.facturado ? 'bg-blue-600 border-blue-700 text-white' : 'bg-zinc-100 border-zinc-200 text-zinc-500'
+                              } ${isVisualizador ? 'cursor-not-allowed opacity-70' : ''}`}
+                            >
+                              {alb.facturado ? <CheckCircle2 className="w-2.5 h-2.5" /> : <Circle className="w-2.5 h-2.5" />}
+                              {alb.facturado ? 'Facturado' : 'Pendiente'}
+                            </button>
+                          </div>
                           <div className="flex items-center gap-1">
                             <span 
                               className={`p-1.5 rounded-lg ${
@@ -573,16 +613,18 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                           <div className="pr-3 text-sm text-zinc-600 truncate flex items-center gap-1" style={getColStyle('centro')}><MapPin className="w-3 h-3 text-zinc-400 shrink-0" />{centro?.nombre || cliente?.nombre || 'Desconocido'}</div>
                           <div className="pr-3 min-w-0" style={getColStyle('titulo')}><p className="text-sm font-bold text-zinc-900 truncate">{alb.titulo || '-'}</p></div>
                           <div className="flex-1 min-w-0"></div>
-                          {!isTecnicoMode && (
-                            <div className="flex justify-center pr-2" style={getColStyle('estado')}>
-                              <button onClick={() => toggleFacturado(alb.id)} className={`text-[10px] font-bold px-2 py-1 rounded-lg border flex items-center gap-1 ${
+                          <div className="flex justify-center pr-2" style={getColStyle('estado')}>
+                            <button 
+                              onClick={() => !isVisualizador && toggleFacturado(alb.id)} 
+                              disabled={isVisualizador}
+                              className={`text-[10px] font-bold px-2 py-1 rounded-lg border flex items-center gap-1 ${
                                 alb.facturado ? 'bg-blue-600 border-blue-700 text-white' : 'bg-zinc-100 border-zinc-200 text-zinc-500'
-                              }`}>
-                                {alb.facturado ? <CheckCircle2 className="w-3 h-3" /> : <Circle className="w-3 h-3" />}
-                                {alb.facturado ? 'Facturado' : 'Pendiente'}
-                              </button>
-                            </div>
-                          )}
+                              } ${isVisualizador ? 'cursor-not-allowed opacity-70' : ''}`}
+                            >
+                              {alb.facturado ? <CheckCircle2 className="w-3 h-3" /> : <Circle className="w-3 h-3" />}
+                              {alb.facturado ? 'Facturado' : 'Pendiente'}
+                            </button>
+                          </div>
                           <div className="flex items-center justify-center gap-1" style={getColStyle('acciones')}>
                             <span 
                               className={`p-1.5 rounded-lg ${
@@ -1074,7 +1116,32 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                    <div className="grid grid-cols-2 gap-4">
                      <div className="space-y-1.5">
                        <label className="text-xs font-bold text-zinc-500 uppercase">Precio Unidad</label>
-                       <input type="number" step="0.01" value={form.items[editingLineIndex].precioUnidad} onChange={e => updateItem(editingLineIndex, 'precioUnidad', parseFloat(e.target.value))} className="w-full px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl outline-none focus:ring-2 focus:ring-violet-500/20 text-right font-bold" />
+                       <input
+                          type="text"
+                          inputMode="decimal"
+                          value={precioUnidadInput}
+                          onChange={e => {
+                            let val = e.target.value;
+                            val = val.replace(/[^0-9.,-]/g, '');
+                            setPrecioUnidadInput(val);
+                            
+                            const parsedVal = parseFloat(val.replace(',', '.'));
+                            if (!isNaN(parsedVal)) {
+                              updateItem(editingLineIndex, 'precioUnidad', parsedVal);
+                            } else {
+                              updateItem(editingLineIndex, 'precioUnidad', 0);
+                            }
+                          }}
+                          onBlur={() => {
+                            const parsedVal = parseFloat(precioUnidadInput.replace(',', '.'));
+                            if (!isNaN(parsedVal)) {
+                              setPrecioUnidadInput(parsedVal.toString().replace('.', ','));
+                            } else {
+                              setPrecioUnidadInput('0');
+                            }
+                          }}
+                          className="w-full px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl outline-none focus:ring-2 focus:ring-violet-500/20 text-right font-bold"
+                        />
                      </div>
                      <div className="space-y-1.5">
                        <label className="text-xs font-bold text-zinc-500 uppercase">Subtotal</label>

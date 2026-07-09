@@ -48,7 +48,15 @@ export default function SistemaGenerico({
         <>
             {                                                    filteredEqs.map((eq, i) => {
                                                         const itemsToUse = getItemsToUse(sist.id);
-                                                        const algunCheckRojo = itemsToUse.some((item) => eq[item.key as keyof EquipoInstalado] === false);
+                                                        const algunCheckRojo = itemsToUse.some((item) => {
+                                                            const val = eq[item.key as keyof EquipoInstalado];
+                                                            if (val === false || val === 'false') return true;
+                                                            if (typeof val === 'string') {
+                                                                const valUpper = val.toUpperCase().trim();
+                                                                return valUpper.includes('NO CORRECTO') || valUpper.includes('NO CONFORME') || valUpper === 'INCORRECTO' || valUpper === 'NO';
+                                                            }
+                                                            return false;
+                                                        });
                                                         const stats = getCheckStats(eq);
                                                         
                                                         const isExtintor = (sist.tipo || sist.familia || '').toLowerCase().includes('extintor');
@@ -111,7 +119,11 @@ export default function SistemaGenerico({
                                                                             if (lbl.includes('notas') || lbl.includes('observaciones') || lbl.includes('anomal')) return false;
                                                                             return true;
                                                                         }).map(item => {
-                                                                             const val = eq[item.key as keyof EquipoInstalado];
+                                                                            const rawVal = eq[item.key as keyof EquipoInstalado];
+                                                                            const itemOpciones = (item as any).opciones || [];
+                                                                            const val = (rawVal === undefined || rawVal === '')
+                                                                                ? (itemOpciones.includes('CORRECTO') ? 'CORRECTO' : (itemOpciones.includes('CONFORME') ? 'CONFORME' : rawVal))
+                                                                                : rawVal;
                                                                              const tipo = (item as ChecklistItem).tipoRespuesta as string || 'check';
                                                                              const lbl = (item.label || '').toLowerCase();
                                                                              const esCampoNotas = lbl.includes('notas') || lbl.includes('observaciones') || lbl.includes('anomal');
@@ -194,20 +206,29 @@ export default function SistemaGenerico({
                                                                                                   />
                                                                                               ) : isFecha ? (
                                                                                                   (() => {
-                                                                                                      const fechaVal = typeof val === 'string' && val ? val.substring(0, 7) : '';
+                                                                                                      const labelLower = (item.label || '').toLowerCase();
+                                                                                                      const isFechaRevision = labelLower.includes('fecha de revision') || labelLower.includes('fecha de revisión');
+                                                                                                      const fechaVal = typeof val === 'string' && val 
+                                                                                                          ? (isFechaRevision ? val.substring(0, 10) : val.substring(0, 7)) 
+                                                                                                          : '';
                                                                                                       const isErrorDate = (caducado || necesitaRetimbre || seAproxima) && (item.key === fabItemKey || item.key === retItemKey);
-                                                                                                      return (
-                                                                                                          <input
-                                                                                                              type="month"
-                                                                                                              value={fechaVal}
-                                                                                                              onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value ? e.target.value + '-01' : '')}
-                                                                                                              className={`w-full px-2 py-1.5 border rounded-lg text-xs outline-none focus:ring-2 transition-colors ${
-                                                                                                                  isErrorDate
-                                                                                                                  ? 'bg-red-50 border-red-400 text-red-700 focus:border-red-500 focus:ring-red-500/20'
-                                                                                                                  : 'bg-white border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20'
-                                                                                                              }`}
-                                                                                                          />
-                                                                                                      );
+                                                                                                       const hoyStr = new Date().toISOString().split('T')[0];
+                                                                                                       const noEsHoy = isFechaRevision && fechaVal !== '' && fechaVal !== hoyStr;
+                                                                                                       return (
+                                                                                                           <input
+                                                                                                               type={isFechaRevision ? 'date' : 'month'}
+                                                                                                               value={fechaVal}
+                                                                                                               onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value ? (isFechaRevision ? e.target.value : e.target.value + '-01') : '')}
+                                                                                                               className={`w-full px-2 py-1.5 border rounded-lg text-xs outline-none focus:ring-2 transition-colors ${
+                                                                                                                   isErrorDate
+                                                                                                                   ? 'bg-red-50 border-red-400 text-red-700 focus:border-red-500 focus:ring-red-500/20'
+                                                                                                                   : (noEsHoy
+                                                                                                                       ? 'border-orange-400 bg-orange-50 text-orange-800 font-bold focus:border-orange-500 focus:ring-orange-500/20'
+                                                                                                                       : 'bg-white border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20'
+                                                                                                                     )
+                                                                                                               }`}
+                                                                                                           />
+                                                                                                       );
                                                                                                   })()
                                                                                               ) : isTextoLargo ? (
                                                                                                   <textarea
@@ -224,7 +245,14 @@ export default function SistemaGenerico({
                                                                                                           <select
                                                                                                               value={typeof val === 'string' ? val : ''}
                                                                                                               onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value)}
-                                                                                                              className="w-auto min-w-[110px] px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-slate-500"
+                                                                                                              className={`w-auto min-w-[110px] px-2 py-1.5 rounded-lg text-xs outline-none focus:ring-2 border transition-all ${
+                                                                                                                               (() => {
+                                                                                                                                   const valUpper = typeof val === 'string' ? val.toUpperCase().trim() : '';
+                                                                                                                                   if (valUpper.includes('NO CORRECTO') || valUpper.includes('NO CONFORME') || valUpper === 'INCORRECTO') return 'bg-red-50 border-red-300 text-red-700 font-bold';
+                                                                                                                                   if (valUpper.includes('CORRECTO') || valUpper.includes('CONFORME')) return 'bg-green-50 border-green-300 text-green-700 font-bold';
+                                                                                                                                   return 'bg-white border-slate-200 text-slate-500';
+                                                                                                                               })()
+                                                                                                                           }`}
                                                                                                          >
                                                                                                               <option value="">Selecciona...</option>
                                                                                                               {opciones.map((opt: string, idx: number) => (
@@ -245,10 +273,34 @@ export default function SistemaGenerico({
                                                                                                                           key={idx}
                                                                                                                           type="button"
                                                                                                                           onClick={() => handleCheckChange(eq.id, item.key, isSelected ? '' : opt, item.label)}
-                                                                                                                          className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer select-none shadow-sm ${
+                                                                                                                          className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer select-none shadow-sm \${
+
                                                                                                                               isSelected
-                                                                                                                                  ? 'bg-indigo-600 text-white border-indigo-600 font-bold scale-105'
-                                                                                                                                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+
+                                                                                                                                  ? (() => {
+
+                                                                                                                                      const optUpper = (opt || '').toUpperCase().trim();
+
+                                                                                                                                      if (optUpper.includes('NO CORRECTO') || optUpper.includes('NO CONFORME') || optUpper === 'INCORRECTO') return 'bg-red-600 text-white border-red-600 font-bold scale-105';
+
+                                                                                                                                      if (optUpper.includes('CORRECTO') || optUpper.includes('CONFORME')) return 'bg-green-600 text-white border-green-600 font-bold scale-105';
+
+                                                                                                                                      return 'bg-indigo-600 text-white border-indigo-600 font-bold scale-105';
+
+                                                                                                                                    })()
+
+                                                                                                                                  : (() => {
+
+                                                                                                                                      const optUpper = (opt || '').toUpperCase().trim();
+
+                                                                                                                                      if (optUpper.includes('NO CORRECTO') || optUpper.includes('NO CONFORME') || optUpper === 'INCORRECTO') return 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100/80';
+
+                                                                                                                                      if (optUpper.includes('CORRECTO') || optUpper.includes('CONFORME')) return 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100/80';
+
+                                                                                                                                      return 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50';
+
+                                                                                                                                    })()
+
                                                                                                                           }`}
                                                                                                                       >
                                                                                                                           {opt}
@@ -333,23 +385,32 @@ export default function SistemaGenerico({
                                                                                      </div>
                                                                                  );
                                                                                 } else if (tipo === 'fecha') {
-                                                                                const fechaVal = typeof val === 'string' && val ? val.substring(0, 7) : '';
-                                                                                const isErrorDate = (caducado || necesitaRetimbre || seAproxima) && (item.key === fabItemKey || item.key === retItemKey);
-                                                                                return (
-                                                                                    <div key={item.key} className="flex flex-col gap-0.5">
-                                                                                        <label className="text-[10px] font-semibold text-slate-500">{item.label}</label>
-                                                                                        <input
-                                                                                            type="month"
-                                                                                            value={fechaVal}
-                                                                                            onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value ? e.target.value + '-01' : '')}
-                                                                                            className={`w-full px-2 py-1.5 border rounded-lg text-xs outline-none focus:ring-2 transition-colors ${
-                                                                                                isErrorDate
-                                                                                                ? 'bg-red-50 border-red-400 text-red-700 focus:border-red-500 focus:ring-red-500/20'
-                                                                                                : `bg-white border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20 ${fechaVal ? 'font-bold' : ''}`
-                                                                                            }`}
-                                                                                        />
-                                                                                    </div>
-                                                                                );
+                                                                                     const labelLower = (item.label || '').toLowerCase();
+                                                                                     const isFechaRevision = labelLower.includes('fecha de revision') || labelLower.includes('fecha de revisión');
+                                                                                     const fechaVal = typeof val === 'string' && val 
+                                                                                         ? (isFechaRevision ? val.substring(0, 10) : val.substring(0, 7)) 
+                                                                                         : '';
+                                                                                     const isErrorDate = (caducado || necesitaRetimbre || seAproxima) && (item.key === fabItemKey || item.key === retItemKey);
+                                                                                     const hoyStr = new Date().toISOString().split('T')[0];
+                                                                                     const noEsHoy = isFechaRevision && fechaVal !== '' && fechaVal !== hoyStr;
+                                                                                     return (
+                                                                                         <div key={item.key} className="flex flex-col gap-0.5">
+                                                                                             <label className="text-[10px] font-semibold text-slate-500">{item.label}</label>
+                                                                                             <input
+                                                                                                 type={isFechaRevision ? 'date' : 'month'}
+                                                                                                 value={fechaVal}
+                                                                                                 onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value ? (isFechaRevision ? e.target.value : e.target.value + '-01') : '')}
+                                                                                                 className={`w-full px-2 py-1.5 border rounded-lg text-xs outline-none focus:ring-2 transition-colors ${
+                                                                                                     isErrorDate
+                                                                                                     ? 'bg-red-50 border-red-400 text-red-700 focus:border-red-500 focus:ring-red-500/20'
+                                                                                                     : (noEsHoy
+                                                                                                         ? 'border-orange-400 bg-orange-50 text-orange-800 font-bold focus:border-orange-500 focus:ring-orange-500/20'
+                                                                                                         : `bg-white border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20 ${fechaVal ? 'font-bold' : ''}`
+                                                                                                       )
+                                                                                                 }`}
+                                                                                             />
+                                                                                         </div>
+                                                                                     );
                                                                              } else if (tipo === 'texto') {
                                                                                  const labelLower = (item.label || '').toLowerCase().replace(/[áéíóú]/g, (c) => ({'á':'a','é':'e','í':'i','ó':'o','ú':'u'})[c] || c);
                                                                                  const esNumeroOrden = labelLower.includes('orden');
@@ -423,10 +484,34 @@ export default function SistemaGenerico({
                                                                                                          key={idx}
                                                                                                          type="button"
                                                                                                          onClick={() => handleCheckChange(eq.id, item.key, isSelected ? '' : opt, item.label)}
-                                                                                                         className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer select-none shadow-sm ${
+                                                                                                         className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer select-none shadow-sm \${
+
                                                                                                              isSelected
-                                                                                                                 ? 'bg-indigo-600 text-white border-indigo-600 font-bold scale-105'
-                                                                                                                 : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+
+                                                                                                                 ? (() => {
+
+                                                                                                                     const optUpper = (opt || '').toUpperCase().trim();
+
+                                                                                                                     if (optUpper.includes('NO CORRECTO') || optUpper.includes('NO CONFORME') || optUpper === 'INCORRECTO') return 'bg-red-600 text-white border-red-600 font-bold scale-105';
+
+                                                                                                                     if (optUpper.includes('CORRECTO') || optUpper.includes('CONFORME')) return 'bg-green-600 text-white border-green-600 font-bold scale-105';
+
+                                                                                                                     return 'bg-indigo-600 text-white border-indigo-600 font-bold scale-105';
+
+                                                                                                                   })()
+
+                                                                                                                 : (() => {
+
+                                                                                                                     const optUpper = (opt || '').toUpperCase().trim();
+
+                                                                                                                     if (optUpper.includes('NO CORRECTO') || optUpper.includes('NO CONFORME') || optUpper === 'INCORRECTO') return 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100/80';
+
+                                                                                                                     if (optUpper.includes('CORRECTO') || optUpper.includes('CONFORME')) return 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100/80';
+
+                                                                                                                     return 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50';
+
+                                                                                                                   })()
+
                                                                                                          }`}
                                                                                                      >
                                                                                                          {opt}
@@ -440,29 +525,62 @@ export default function SistemaGenerico({
                                                                         })}
                                                                      </div>
                                                                  </div>
-                                                                 {/* Campo notas debajo del grid, a ancho completo */}
-                                                                 {getItemsToUse(sist.id).filter((item: ChecklistItem) => {
-                                                                     const lbl = (item.label || '').toLowerCase();
-                                                                     return lbl.includes('notas') || lbl.includes('observaciones') || lbl.includes('anomal');
-                                                                 }).map(item => {
-                                                                     const val = eq[item.key as keyof EquipoInstalado];
-                                                                     const esNoEncontrado = typeof val === 'string' && val.includes('no localizarse');
-                                                                     const esAvisoAutoMsg = typeof val === 'string' && (val.includes('Extintor caducado') || val.includes('Extintor necesita retimbre') || val.includes('Se aproxima caducidad o retimbrado'));
-                                                                     const tieneValorNotas = typeof val === 'string' && val.trim() !== '' && !esNoEncontrado;
-                                                                     const isErrorNotas = esNoEncontrado || algunCheckRojo || esAvisoAutoMsg;
-                                                                     return (
-                                                                         <div key={item.key} className="px-4 pb-3 mt-4">
-                                                                             <label className={`text-xs font-semibold mb-1 block ${isErrorNotas ? 'text-red-700' : 'text-slate-600'}`}>Observaciones y anomalías del equipo:</label>
-                                                                             <textarea
-                                                                                 value={typeof val === 'string' ? val : ''}
-                                                                                 onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value)}
-                                                                                 className={`w-full px-4 py-3 rounded-xl text-sm outline-none focus:ring-2 resize-y min-h-[80px] ${isErrorNotas ? 'bg-red-50 border-2 border-red-400 text-red-800 font-bold focus:border-red-500 focus:ring-red-500/20' : `bg-white border border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20 ${tieneValorNotas ? 'font-bold' : ''}`}`}
-                                                                                 rows={4}
-                                                                                 placeholder="Escribe aquí las anomalías, observaciones o notas..."
-                                                                             />
-                                                                         </div>
-                                                                     );
-                                                                 })}
+                                                                                                                                   {/* Campo notas debajo del grid, a ancho completo */}
+                                                                  {(() => {
+                                                                      const notesItems = getItemsToUse(sist.id).filter((item: ChecklistItem) => {
+                                                                          const lbl = (item.label || '').toLowerCase();
+                                                                          return lbl.includes('notas') || lbl.includes('observaciones') || lbl.includes('anomal');
+                                                                      });
+
+                                                                      if (notesItems.length > 0) {
+                                                                          return notesItems.map(item => {
+                                                                              const val = eq[item.key as keyof EquipoInstalado];
+                                                                              const esNoEncontrado = typeof val === 'string' && val.includes('no localizarse');
+                                                                              const tieneValorNotas = typeof val === 'string' && val.trim() !== '' && !esNoEncontrado;
+                                                                              // Detect dynamic system warnings if any
+                                                                              const isExtintor = (sist.tipo || sist.familia || '').toLowerCase().includes('extintor');
+                                                                              const isBie = (sist.tipo || sist.familia || '').toLowerCase().includes('bie') || (sist.tipo || sist.familia || '').toLowerCase().includes('boca');
+                                                                              const isCaseta = (sist.tipo || sist.familia || '').toLowerCase().includes('caseta');
+                                                                              
+                                                                              const esAvisoAutoMsg = typeof val === 'string' && (
+                                                                                  (isExtintor && (val.includes('Extintor caducado') || val.includes('Extintor necesita retimbre') || val.includes('Se aproxima caducidad o retimbrado'))) ||
+                                                                                  (isBie && (val.includes('Equipo caducado') || val.includes('Se necesita realizar prueba'))) ||
+                                                                                  (isCaseta && (val.includes('Manguera 70 mm. caducada') || val.includes('Manguera 70 mm. necesita prueba') || val.includes('Manguera 45 mm. caducada') || val.includes('Manguera 45 mm. necesita prueba')))
+                                                                              );
+                                                                              
+                                                                              const isErrorNotas = esNoEncontrado || algunCheckRojo || esAvisoAutoMsg;
+                                                                              return (
+                                                                                  <div key={item.key} className="px-4 pb-3 mt-4">
+                                                                                      <label className={`text-xs font-semibold mb-1 block ${isErrorNotas ? 'text-red-700' : 'text-slate-600'}`}>Observaciones y anomalías del equipo:</label>
+                                                                                      <textarea
+                                                                                          value={typeof val === 'string' ? val : ''}
+                                                                                          onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value)}
+                                                                                          className={`w-full px-4 py-3 rounded-xl text-sm outline-none focus:ring-2 resize-y min-h-[80px] ${isErrorNotas ? 'bg-red-50 border-2 border-red-400 text-red-800 font-bold focus:border-red-500 focus:ring-red-500/20' : `bg-white border border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20 ${tieneValorNotas ? 'font-bold' : ''}`}`}
+                                                                                          rows={4}
+                                                                                          placeholder="Escribe aquí las anomalías, observaciones o notas..."
+                                                                                      />
+                                                                                  </div>
+                                                                              );
+                                                                          });
+                                                                      } else {
+                                                                          const val = eq.anomalias;
+                                                                          const esNoEncontrado = typeof val === 'string' && val.includes('no localizarse');
+                                                                          const tieneValorNotas = typeof val === 'string' && val.trim() !== '' && !esNoEncontrado;
+                                                                          const isErrorNotas = esNoEncontrado || algunCheckRojo;
+                                                                          return (
+                                                                              <div key="static_notes" className="px-4 pb-3 mt-4">
+                                                                                  <label className={`text-xs font-semibold mb-1 block ${isErrorNotas ? 'text-red-700' : 'text-slate-600'}`}>Observaciones y anomalías del equipo:</label>
+                                                                                  <textarea
+                                                                                      value={typeof val === 'string' ? val : ''}
+                                                                                      onChange={(e) => handleCheckChange(eq.id, 'anomalias', e.target.value)}
+                                                                                      className={`w-full px-4 py-3 rounded-xl text-sm outline-none focus:ring-2 resize-y min-h-[80px] ${isErrorNotas ? 'bg-red-50 border-2 border-red-400 text-red-800 font-bold focus:border-red-500 focus:ring-red-500/20' : `bg-white border border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20 ${tieneValorNotas ? 'font-bold' : ''}`}`}
+                                                                                      rows={4}
+                                                                                      placeholder="Escribe aquí las anomalías, observaciones o notas..."
+                                                                                  />
+                                                                              </div>
+                                                                          );
+                                                                      }
+                                                                  })()}
 
                                                                  {/* Galería de fotos debajo de las anomalías */}
                                                                  {(() => {

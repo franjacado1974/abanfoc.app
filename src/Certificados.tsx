@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { FileCheck, Download, Search, CheckCircle2, CircleX, Clock, Trash2, Eye, Building2, MapPin, User, CalendarDays, AlertTriangle } from 'lucide-react';
 import ConfirmationModal from './ConfirmationModal';
 import { generarCertificadoPDF, generarCertificadoPDFView } from './pdfGenerator';
-import { db } from './firebase';
+import { db, subscribeCertificados, deleteCertificado } from './firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import DetailModal from './components/DetailModal';
 
@@ -22,10 +22,16 @@ export default function Certificados() {
   const [isDetailOpen, setIsDetailOpen] = useState(false);
 
   useEffect(() => {
-    const storedCertificados = JSON.parse(localStorage.getItem('firecheck_db_certificados') || '[]');
-    setCertificados(storedCertificados);
+    const unsubCertificados = subscribeCertificados((firebaseCertificados) => {
+      setCertificados(firebaseCertificados);
+      localStorage.setItem('firecheck_db_certificados', JSON.stringify(firebaseCertificados));
+    });
     const storedEquipos = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
     setEquipos(storedEquipos);
+
+    return () => {
+      unsubCertificados();
+    };
   }, []);
 
   const handleDeleteCertificado = (id: string) => {
@@ -33,12 +39,15 @@ export default function Certificados() {
     setIsConfirmModalOpen(true);
   };
 
-  const confirmDeleteCertificado = () => {
+  const confirmDeleteCertificado = async () => {
     if (!certificadoIdToDelete) return;
     setIsConfirmModalOpen(false);
-    const updatedCertificados = certificados.filter(cert => cert.id !== certificadoIdToDelete);
-    setCertificados(updatedCertificados);
-    localStorage.setItem('firecheck_db_certificados', JSON.stringify(updatedCertificados));
+    try {
+      await deleteCertificado(certificadoIdToDelete);
+    } catch (e) {
+      console.error("Error al eliminar certificado:", e);
+      alert("Error al eliminar el certificado de la base de datos.");
+    }
     setCertificadoIdToDelete(null);
   };
 

@@ -175,7 +175,7 @@ function DashboardHome({ loggedUser, onLogout, onNavigate }: DashboardTecnicoPro
   ];
 
   return (
-    <div className="min-h-screen bg-[#f8f6f3]">
+    <div className="min-h-screen bg-[#DCE1E5]">
       {/* Top Bar */}
       <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-zinc-200/60 shadow-sm">
         <div className="flex items-center justify-between px-4 sm:px-6 py-3">
@@ -183,7 +183,7 @@ function DashboardHome({ loggedUser, onLogout, onNavigate }: DashboardTecnicoPro
             <img
               src={appLogo}
               alt="Logo"
-              className="h-9 w-9 object-contain rounded-xl ring-2 ring-orange-400/30"
+              className="h-11 w-11 object-contain"
               onError={(e) => { (e.target as HTMLImageElement).src = '/favicon.png'; }}
             />
             <div>

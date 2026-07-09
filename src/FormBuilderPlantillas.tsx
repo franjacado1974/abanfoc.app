@@ -683,7 +683,7 @@ export default function FormBuilderPlantillas() {
   // ─── RENDER PRINCIPAL ─────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-[#f8f6f3] flex flex-col">
+    <div className="min-h-screen bg-[#DCE1E5] flex flex-col">
       {/* ── CUERPO: DOS COLUMNAS ───────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
         {/* ── SIDEBAR: Lista de plantillas ─────────────────────────────────── */}

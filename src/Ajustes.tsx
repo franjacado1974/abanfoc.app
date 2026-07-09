@@ -422,9 +422,9 @@ export default function Ajustes() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f8f6f3]">
+    <div className="min-h-screen bg-[#DCE1E5]">
       {/* Header */}
-      <div className="sticky top-0 z-40 bg-[#f8f6f3]/90 backdrop-blur-md border-b border-zinc-200/60">
+      <div className="sticky top-0 z-40 bg-[#DCE1E5]/90 backdrop-blur-md border-b border-zinc-200/60">
         <div className="flex items-center gap-3 px-4 sm:px-6 py-4">
           {view !== 'menu' ? (
             <button

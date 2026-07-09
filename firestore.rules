@@ -16,9 +16,9 @@ service cloud.firestore {
         allow read, write: if true;
       }
     }
-    // Regla general para el resto (ajustar según sea necesario)
+    // Regla general para el resto (permitir si está autenticado o antes del 2035)
     match /{document=**} {
-      allow read, write: if request.time < timestamp.date(2027, 1, 1);
+      allow read, write: if request.auth != null || request.time < timestamp.date(2035, 1, 1);
     }
   }
 }

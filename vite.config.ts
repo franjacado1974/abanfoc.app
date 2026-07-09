@@ -16,7 +16,7 @@ export default defineConfig({
         short_name: 'ABANFOC',
         description: 'Gestión de mantenimiento de instalaciones contra incendios',
         theme_color: '#18181b',
-        background_color: '#f8f6f3',
+        background_color: '#DCE1E5',
         display: 'standalone',
         orientation: 'portrait',
         scope: '/',

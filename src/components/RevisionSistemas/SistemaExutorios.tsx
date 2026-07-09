@@ -28,7 +28,7 @@ const esUbicacionMarcaModelo = (label?: string, key?: string) => {
            k.includes('ubicacion') || k.includes('marca') || k.includes('modelo');
 };
 
-export default function SistemaExtintores({
+export default function SistemaExutorios({
     sist,
     filteredEqs,
     equiposInstalados,
@@ -138,106 +138,114 @@ export default function SistemaExtintores({
                                                                                      </div>
                                                                                  );
                                                                              }
+
                                                                              if (tipo === 'tabla') {
                                                                                  return (
-                                                                                     <div key={item.key} className="col-span-full">
-                                                                                         <TableInput
-                                                                                             label={item.label}
-                                                                                             opciones={(item as any).opciones || []}
-                                                                                             filasInicio={(item as any).filasInicio}
-                                                                                             value={String(val || '')}
-                                                                                             onChange={(newVal) => handleCheckChange(eq.id, item.key, newVal)}
-                                                                                         />
-                                                                                     </div>
+                                                                                     <TableInput
+                                                                                         key={item.key}
+                                                                                         label={item.label}
+                                                                                         opciones={item.opciones || []}
+                                                                                         filasInicio={item.filasInicio}
+                                                                                         value={String(val || '')}
+                                                                                         onChange={(newVal) => handleCheckChange(eq.id, item.key, newVal)}
+                                                                                     />
                                                                                  );
                                                                              }
 
                                                                              if (item.horizontal || tipo === 'pregunta-horizontal') {
-                                                   const isCheck = tipo === 'check';
-                                                   const isNumero = tipo === 'numero';
-                                                   const isFecha = tipo === 'fecha';
-                                                   const isTextoLargo = tipo === 'texto-largo';
-                                                   const isDesplegable = tipo === 'desplegable';
-                                                   const isSeleccion = tipo === 'seleccion';
-                                                   
-                                                   return (
-                                                       <div key={item.key} className="col-span-full border-b border-slate-100 pb-2 pt-2 flex items-center justify-between gap-4">
-                                                           <span className="text-xs font-semibold text-slate-700">{item.label}</span>
-                                                            <div className={`${(isSeleccion || isDesplegable) ? 'w-auto' : 'w-48'} shrink-0 flex justify-end`}>
-                                                               {isCheck ? (
-                                                                   (() => {
-                                                                       const isChecked = val === true || (typeof val === 'string' && val.toLowerCase() === 'true');
-                                                                       const isUnchecked = val === false || (typeof val === 'string' && val.toLowerCase() === 'false');
-                                                                       return (
-                                                                           <label
-                                                                               className={`flex items-center gap-2 cursor-pointer text-xs px-2 py-1.5 rounded-lg transition-all select-none ${
-                                                                                   isUnchecked
-                                                                                       ? 'text-red-600 font-semibold bg-red-50 hover:bg-red-100'
-                                                                                       : isChecked
-                                                                                       ? 'text-green-700 font-medium bg-green-50 hover:bg-green-100'
-                                                                                       : 'text-slate-600 font-medium bg-white hover:bg-slate-50 border border-slate-200'
-                                                                               }`}
-                                                                           >
-                                                                               <input
-                                                                                   type="checkbox"
-                                                                                   checked={isChecked}
-                                                                                   onChange={(e) => handleCheckChange(eq.id, item.key, e.target.checked, item.label)}
-                                                                                   className={`w-3.5 h-3.5 rounded cursor-pointer ${
-                                                                                       isUnchecked
-                                                                                           ? 'text-red-500 border-red-300 focus:ring-red-400'
-                                                                                           : isChecked
-                                                                                           ? 'text-green-500 border-green-300 focus:ring-green-400'
-                                                                                           : 'text-slate-400 border-slate-300 focus:ring-slate-400'
-                                                                                   }`}
-                                                                               />
-                                                                               <span>OK</span>
-                                                                               {isChecked && <CheckCircle2 className="w-3 h-3 text-green-500 ml-auto" />}
-                                                                               {isUnchecked && <XCircle className="w-3 h-3 text-red-400 ml-auto" />}
-                                                                           </label>
-                                                                       );
-                                                                   })()
-                                                               ) : isNumero ? (
-                                                                   <input
-                                                                       type="number"
-                                                                       value={typeof val === 'number' ? val : ''}
-                                                                       onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value ? Number(e.target.value) : '')}
-                                                                       className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
-                                                                       placeholder="0"
-                                                                   />
-                                                               ) : isFecha ? (
-                                                                   (() => {
-                                                                       const esFechaRevision = (item.label || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes('revision');
-                                                                        const fechaVal = typeof val === 'string' && val ? (esFechaRevision ? val.substring(0, 10) : val.substring(0, 7)) : '';
-                                                                       const isErrorDate = (caducado || necesitaRetimbre || seAproxima) && (item.key === fabItemKey || item.key === retItemKey);
-                                                                       return (
-                                                                           <input
-                                                                               type={esFechaRevision ? "date" : "month"}
-                                                                               value={fechaVal}
-                                                                               onChange={(e) => handleCheckChange(eq.id, item.key, esFechaRevision ? e.target.value : (e.target.value ? e.target.value + '-01' : ''))}
-                                                                               className={`w-full px-2 py-1.5 border rounded-lg text-xs outline-none focus:ring-2 transition-colors ${
-                                                                                   isErrorDate
-                                                                                   ? 'bg-red-50 border-red-400 text-red-700 focus:border-red-500 focus:ring-red-500/20'
-                                                                                   : 'bg-white border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20'
-                                                                               }`}
-                                                                           />
-                                                                       );
-                                                                   })()
-                                                               ) : isTextoLargo ? (
-                                                                   <textarea
-                                                                       value={typeof val === 'string' ? val : ''}
-                                                                       onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value)}
-                                                                       className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 resize-none"
-                                                                       rows={2}
-                                                                       placeholder="..."
-                                                                   />
-                                                               ) : isDesplegable ? (
-                                                                   (() => {
-                                                                       const opciones = (item as any).opciones || [];
-                                                                       return (
-                                                                           <select
-                                                                               value={typeof val === 'string' ? val : ''}
-                                                                               onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value)}
-                                                                               className={`w-auto min-w-[110px] px-2 py-1.5 rounded-lg text-xs outline-none focus:ring-2 border transition-all ${
+                                                                                  const isCheck = tipo === 'check';
+                                                                                  const isNumero = tipo === 'numero';
+                                                                                  const isFecha = tipo === 'fecha';
+                                                                                  const isTextoLargo = tipo === 'texto-largo';
+                                                                                  const isDesplegable = tipo === 'desplegable';
+                                                                                  const isSeleccion = tipo === 'seleccion';
+                                                                                  
+                                                                                  return (
+                                                                                      <div key={item.key} className="col-span-full border-b border-slate-100 pb-2 pt-2 flex items-center justify-between gap-4">
+                                                                                          <span className="text-xs font-semibold text-slate-700">{item.label}</span>
+                                                                                          <div className={`${(isSeleccion || isDesplegable) ? 'w-auto' : 'w-48'} shrink-0 flex justify-end`}>
+                                                                                              {isCheck ? (
+                                                                                                  (() => {
+                                                                                                      const isChecked = val === true || (typeof val === 'string' && val.toLowerCase() === 'true');
+                                                                                                      const isUnchecked = val === false || (typeof val === 'string' && val.toLowerCase() === 'false');
+                                                                                                      return (
+                                                                                                          <label
+                                                                                                              className={`flex items-center gap-2 cursor-pointer text-xs px-2 py-1.5 rounded-lg transition-all select-none ${
+                                                                                                                  isUnchecked
+                                                                                                                      ? 'text-red-600 font-semibold bg-red-50 hover:bg-red-100'
+                                                                                                                      : isChecked
+                                                                                                                      ? 'text-green-700 font-medium bg-green-50 hover:bg-green-100'
+                                                                                                                      : 'text-slate-600 font-medium bg-white hover:bg-slate-50 border border-slate-200'
+                                                                                                              }`}
+                                                                                                          >
+                                                                                                              <input
+                                                                                                                  type="checkbox"
+                                                                                                                  checked={isChecked}
+                                                                                                                  onChange={(e) => handleCheckChange(eq.id, item.key, e.target.checked, item.label)}
+                                                                                                                  className={`w-3.5 h-3.5 rounded cursor-pointer ${
+                                                                                                                      isUnchecked
+                                                                                                                          ? 'text-red-500 border-red-300 focus:ring-red-400'
+                                                                                                                          : isChecked
+                                                                                                                          ? 'text-green-500 border-green-300 focus:ring-green-400'
+                                                                                                                          : 'text-slate-400 border-slate-300 focus:ring-slate-400'
+                                                                                                                  }`}
+                                                                                                              />
+                                                                                                              <span>OK</span>
+                                                                                                              {isChecked && <CheckCircle2 className="w-3 h-3 text-green-500 ml-auto" />}
+                                                                                                              {isUnchecked && <XCircle className="w-3 h-3 text-red-400 ml-auto" />}
+                                                                                                          </label>
+                                                                                                      );
+                                                                                                  })()
+                                                                                              ) : isNumero ? (
+                                                                                                  <input
+                                                                                                      type="number"
+                                                                                                      value={typeof val === 'number' ? val : ''}
+                                                                                                      onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value ? Number(e.target.value) : '')}
+                                                                                                      className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                                                                                                      placeholder="0"
+                                                                                                  />
+                                                                                              ) : isFecha ? (
+                                                                                                  (() => {
+                                                                                                      const labelLower = (item.label || '').toLowerCase();
+                                                                                                      const isFechaRevision = labelLower.includes('fecha de revision') || labelLower.includes('fecha de revisión');
+                                                                                                      const fechaVal = typeof val === 'string' && val 
+                                                                                                          ? (isFechaRevision ? val.substring(0, 10) : val.substring(0, 7)) 
+                                                                                                          : '';
+                                                                                                      const isErrorDate = (caducado || necesitaRetimbre || seAproxima) && (item.key === fabItemKey || item.key === retItemKey);
+                                                                                                       const hoyStr = new Date().toISOString().split('T')[0];
+                                                                                                       const noEsHoy = isFechaRevision && fechaVal !== '' && fechaVal !== hoyStr;
+                                                                                                       return (
+                                                                                                           <input
+                                                                                                               type={isFechaRevision ? 'date' : 'month'}
+                                                                                                               value={fechaVal}
+                                                                                                               onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value ? (isFechaRevision ? e.target.value : e.target.value + '-01') : '')}
+                                                                                                               className={`w-full px-2 py-1.5 border rounded-lg text-xs outline-none focus:ring-2 transition-colors ${
+                                                                                                                   isErrorDate
+                                                                                                                   ? 'bg-red-50 border-red-400 text-red-700 focus:border-red-500 focus:ring-red-500/20'
+                                                                                                                   : (noEsHoy
+                                                                                                                       ? 'border-orange-400 bg-orange-50 text-orange-800 font-bold focus:border-orange-500 focus:ring-orange-500/20'
+                                                                                                                       : 'bg-white border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20'
+                                                                                                                     )
+                                                                                                               }`}
+                                                                                                           />
+                                                                                                       );
+                                                                                                  })()
+                                                                                              ) : isTextoLargo ? (
+                                                                                                  <textarea
+                                                                                                      value={typeof val === 'string' ? val : ''}
+                                                                                                      onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value)}
+                                                                                                      className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 resize-none"
+                                                                                                      rows={2}
+                                                                                                      placeholder="..."
+                                                                                                  />
+                                                                                              ) : isDesplegable ? (
+                                                                                                  (() => {
+                                                                                                      const opciones = (item as any).opciones || [];
+                                                                                                      return (
+                                                                                                          <select
+                                                                                                              value={typeof val === 'string' ? val : ''}
+                                                                                                              onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value)}
+                                                                                                              className={`w-auto min-w-[110px] px-2 py-1.5 rounded-lg text-xs outline-none focus:ring-2 border transition-all ${
                                                                                                                                (() => {
                                                                                                                                    const valUpper = typeof val === 'string' ? val.toUpperCase().trim() : '';
                                                                                                                                    if (valUpper.includes('NO CORRECTO') || valUpper.includes('NO CONFORME') || valUpper === 'INCORRECTO') return 'bg-red-50 border-red-300 text-red-700 font-bold';
@@ -245,91 +253,91 @@ export default function SistemaExtintores({
                                                                                                                                    return 'bg-white border-slate-200 text-slate-500';
                                                                                                                                })()
                                                                                                                            }`}
-                                                                           >
-                                                                               <option value="">Selecciona...</option>
-                                                                               {opciones.map((opt: string, idx: number) => (
-                                                                                   <option key={idx} value={opt}>{opt}</option>
-                                                                               ))}
-                                                                           </select>
-                                                                       );
-                                                                   })()
-                                                               ) : isSeleccion ? (
-                                                                    (() => {
-                                                                        const opciones = (item as any).opciones || ['Sí', 'No', 'N/A'];
-                                                                        return (
-                                                                            <div className="flex gap-1.5 flex-wrap justify-end">
-                                                                                {opciones.map((opt: string, idx: number) => {
-                                                                                    const isSelected = val === opt;
-                                                                                    return (
-                                                                                        <button
-                                                                                            key={idx}
-                                                                                            type="button"
-                                                                                            onClick={() => handleCheckChange(eq.id, item.key, isSelected ? '' : opt, item.label)}
-                                                                                            className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer select-none shadow-sm \${
+                                                                                                         >
+                                                                                                              <option value="">Selecciona...</option>
+                                                                                                              {opciones.map((opt: string, idx: number) => (
+                                                                                                                  <option key={idx} value={opt}>{opt}</option>
+                                                                                                              ))}
+                                                                                                          </select>
+                                                                                                      );
+                                                                                                  })()
+                                                                                              ) : isSeleccion ? (
+                                                                                                  (() => {
+                                                                                                      const opciones = (item as any).opciones || ['Sí', 'No', 'N/A'];
+                                                                                                      return (
+                                                                                                          <div className="flex gap-1.5 flex-wrap justify-end">
+                                                                                                              {opciones.map((opt: string, idx: number) => {
+                                                                                                                  const isSelected = val === opt;
+                                                                                                                  return (
+                                                                                                                      <button
+                                                                                                                          key={idx}
+                                                                                                                          type="button"
+                                                                                                                          onClick={() => handleCheckChange(eq.id, item.key, isSelected ? '' : opt, item.label)}
+                                                                                                                          className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer select-none shadow-sm \${
 
-                                                                                                isSelected
+                                                                                                                              isSelected
 
-                                                                                                    ? (() => {
+                                                                                                                                  ? (() => {
 
-                                                                                                        const optUpper = (opt || '').toUpperCase().trim();
+                                                                                                                                      const optUpper = (opt || '').toUpperCase().trim();
 
-                                                                                                        if (optUpper.includes('NO CORRECTO') || optUpper.includes('NO CONFORME') || optUpper === 'INCORRECTO') return 'bg-red-600 text-white border-red-600 font-bold scale-105';
+                                                                                                                                      if (optUpper.includes('NO CORRECTO') || optUpper.includes('NO CONFORME') || optUpper === 'INCORRECTO') return 'bg-red-600 text-white border-red-600 font-bold scale-105';
 
-                                                                                                        if (optUpper.includes('CORRECTO') || optUpper.includes('CONFORME')) return 'bg-green-600 text-white border-green-600 font-bold scale-105';
+                                                                                                                                      if (optUpper.includes('CORRECTO') || optUpper.includes('CONFORME')) return 'bg-green-600 text-white border-green-600 font-bold scale-105';
 
-                                                                                                        return 'bg-indigo-600 text-white border-indigo-600 font-bold scale-105';
+                                                                                                                                      return 'bg-indigo-600 text-white border-indigo-600 font-bold scale-105';
 
-                                                                                                      })()
+                                                                                                                                    })()
 
-                                                                                                    : (() => {
+                                                                                                                                  : (() => {
 
-                                                                                                        const optUpper = (opt || '').toUpperCase().trim();
+                                                                                                                                      const optUpper = (opt || '').toUpperCase().trim();
 
-                                                                                                        if (optUpper.includes('NO CORRECTO') || optUpper.includes('NO CONFORME') || optUpper === 'INCORRECTO') return 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100/80';
+                                                                                                                                      if (optUpper.includes('NO CORRECTO') || optUpper.includes('NO CONFORME') || optUpper === 'INCORRECTO') return 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100/80';
 
-                                                                                                        if (optUpper.includes('CORRECTO') || optUpper.includes('CONFORME')) return 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100/80';
+                                                                                                                                      if (optUpper.includes('CORRECTO') || optUpper.includes('CONFORME')) return 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100/80';
 
-                                                                                                        return 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50';
+                                                                                                                                      return 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50';
 
-                                                                                                      })()
+                                                                                                                                    })()
 
-                                                                                            }`}
-                                                                                        >
-                                                                                            {opt}
-                                                                                        </button>
-                                                                                    );
-                                                                                })}
-                                                                            </div>
-                                                                        );
-                                                                    })()
-                                                               ) : (
-                                                                   (() => {
-                                                                        const labelLower = (item.label || '').toLowerCase().replace(/[áéíóú]/g, (c) => ({'á':'a','é':'e','í':'i','ó':'o','ú':'u'})[c] || c);
-                                                                        const esNumeroOrden = labelLower.includes('orden');
-                                                                        const esUCase = esUbicacionMarcaModelo(item.label, item.key);
-                                                                        const placeholderTexto = labelLower.includes('referencia') && labelLower.includes('instalacion')
-                                                                            ? 'Ejemplo: Area general o zona'
-                                                                            : '...';
-                                                                        return (
-                                                                            <input
-                                                                                type="text"
-                                                                                value={esNumeroOrden ? (eq.codigo || '') : (typeof val === 'string' ? (esUCase ? val.toUpperCase() : val) : '')}
-                                                                                onChange={(e) => {
-                                                                                    if (!esNumeroOrden) {
-                                                                                        handleCheckChange(eq.id, item.key, esUCase ? e.target.value.toUpperCase() : e.target.value);
-                                                                                    }
-                                                                                }}
-                                                                                className={`w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${esNumeroOrden ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''} ${esUCase ? 'uppercase' : ''}`}
-                                                                                placeholder={placeholderTexto}
-                                                                                readOnly={esNumeroOrden}
-                                                                            />
-                                                                        );
-                                                                    })()
-                                                               )}
-                                                           </div>
-                                                       </div>
-                                                   );
-                                               }                               
+                                                                                                                          }`}
+                                                                                                                      >
+                                                                                                                          {opt}
+                                                                                                                      </button>
+                                                                                                                  );
+                                                                                                              })}
+                                                                                                          </div>
+                                                                                                      );
+                                                                                                  })()
+                                                                                              ) : (
+                                                                                                  (() => {
+                                                                                                      const labelLower = (item.label || '').toLowerCase().replace(/[áéíóú]/g, (c) => ({'á':'a','é':'e','í':'i','ó':'o','ú':'u'})[c] || c);
+                                                                                                      const esNumeroOrden = labelLower.includes('orden');
+                                                                                                      const esUCase = esUbicacionMarcaModelo(item.label, item.key);
+                                                                                                      const placeholderTexto = labelLower.includes('referencia') && labelLower.includes('instalacion')
+                                                                                                          ? 'Ejemplo: Area general o zona'
+                                                                                                          : '...';
+                                                                                                      return (
+                                                                                                          <input
+                                                                                                              type="text"
+                                                                                                              value={esNumeroOrden ? (eq.codigo || '') : (typeof val === 'string' ? (esUCase ? val.toUpperCase() : val) : '')}
+                                                                                                              onChange={(e) => {
+                                                                                                                  if (!esNumeroOrden) {
+                                                                                                                      handleCheckChange(eq.id, item.key, esUCase ? e.target.value.toUpperCase() : e.target.value);
+                                                                                                                  }
+                                                                                                              }}
+                                                                                                              className={`w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${esNumeroOrden ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''} ${esUCase ? 'uppercase' : ''}`}
+                                                                                                              placeholder={placeholderTexto}
+                                                                                                              readOnly={esNumeroOrden}
+                                                                                                          />
+                                                                                                      );
+                                                                                                  })()
+                                                                                              )}
+                                                                                          </div>
+                                                                                      </div>
+                                                                                  );
+                                                                              }
                                                                             
                                                                             if (tipo === 'check') {
                                                                                 const isChecked = val === true || (typeof val === 'string' && val.toLowerCase() === 'true');
@@ -377,69 +385,58 @@ export default function SistemaExtintores({
                                                                                      </div>
                                                                                  );
                                                                                 } else if (tipo === 'fecha') {
-                                                                                 const lblLower = (item.label || '').toLowerCase();
-                                                                                 const isFechaRevision = lblLower.includes('fecha de revisi');
-                                                                                 const isErrorDate = (caducado || necesitaRetimbre || seAproxima) && (item.key === fabItemKey || item.key === retItemKey);
-
-                                                                                 if (isFechaRevision) {
-                                                                                     const fechaValFull = typeof val === 'string' ? val : '';
+                                                                                     const labelLower = (item.label || '').toLowerCase();
+                                                                                     const isFechaRevision = labelLower.includes('fecha de revision') || labelLower.includes('fecha de revisión');
+                                                                                     const fechaVal = typeof val === 'string' && val 
+                                                                                         ? (isFechaRevision ? val.substring(0, 10) : val.substring(0, 7)) 
+                                                                                         : '';
+                                                                                     const isErrorDate = (caducado || necesitaRetimbre || seAproxima) && (item.key === fabItemKey || item.key === retItemKey);
                                                                                      const hoyStr = new Date().toISOString().split('T')[0];
-                                                                                     const noEsHoy = fechaValFull !== hoyStr;
+                                                                                     const noEsHoy = isFechaRevision && fechaVal !== '' && fechaVal !== hoyStr;
                                                                                      return (
                                                                                          <div key={item.key} className="flex flex-col gap-0.5">
                                                                                              <label className="text-[10px] font-semibold text-slate-500">{item.label}</label>
                                                                                              <input
-                                                                                                 type="date"
-                                                                                                 value={fechaValFull}
-                                                                                                 onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value)}
-                                                                                                 className={`w-full px-2 py-1.5 border rounded-lg text-xs font-bold outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${noEsHoy ? 'border-orange-400 bg-orange-50 text-orange-800' : 'border-slate-200 bg-white'}`}
+                                                                                                 type={isFechaRevision ? 'date' : 'month'}
+                                                                                                 value={fechaVal}
+                                                                                                 onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value ? (isFechaRevision ? e.target.value : e.target.value + '-01') : '')}
+                                                                                                 className={`w-full px-2 py-1.5 border rounded-lg text-xs outline-none focus:ring-2 transition-colors ${
+                                                                                                     isErrorDate
+                                                                                                     ? 'bg-red-50 border-red-400 text-red-700 focus:border-red-500 focus:ring-red-500/20'
+                                                                                                     : (noEsHoy
+                                                                                                         ? 'border-orange-400 bg-orange-50 text-orange-800 font-bold focus:border-orange-500 focus:ring-orange-500/20'
+                                                                                                         : `bg-white border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20 ${fechaVal ? 'font-bold' : ''}`
+                                                                                                       )
+                                                                                                 }`}
                                                                                              />
                                                                                          </div>
                                                                                      );
-                                                                                 }
-
-                                                                                 const fechaVal = typeof val === 'string' && val ? val.substring(0, 7) : '';
+                                                                             } else if (tipo === 'texto') {
+                                                                                 const labelLower = (item.label || '').toLowerCase().replace(/[áéíóú]/g, (c) => ({'á':'a','é':'e','í':'i','ó':'o','ú':'u'})[c] || c);
+                                                                                 const esNumeroOrden = labelLower.includes('orden');
+                                                                                 const esUCase = esUbicacionMarcaModelo(item.label, item.key);
+                                                                                 if (esNumeroOrden) console.log('🔍 Campo Nº Orden detectado, eq.codigo =', eq.codigo);
+                                                                                 const placeholderTexto = labelLower.includes('referencia') && labelLower.includes('instalacion')
+                                                                                     ? 'Ejemplo: Area general o zona'
+                                                                                     : '...';
+                                                                                 const tieneValorTexto = !esNumeroOrden && typeof val === 'string' && val.trim() !== '';
                                                                                  return (
                                                                                      <div key={item.key} className="flex flex-col gap-0.5">
                                                                                          <label className="text-[10px] font-semibold text-slate-500">{item.label}</label>
                                                                                          <input
-                                                                                             type="month"
-                                                                                             value={fechaVal}
-                                                                                             onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value ? e.target.value + '-01' : '')}
-                                                                                             className={`w-full px-2 py-1.5 border rounded-lg text-xs outline-none focus:ring-2 transition-colors ${
-                                                                                                 isErrorDate
-                                                                                                 ? 'bg-red-50 border-red-400 text-red-700 focus:border-red-500 focus:ring-red-500/20'
-                                                                                                 : `bg-white border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20 ${fechaVal ? 'font-bold' : ''}`
-                                                                                             }`}
+                                                                                             type="text"
+                                                                                             value={esNumeroOrden ? (eq.codigo || '') : (typeof val === 'string' ? (esUCase ? val.toUpperCase() : val) : '')}
+                                                                                             onChange={(e) => {
+                                                                                                 if (!esNumeroOrden) {
+                                                                                                     handleCheckChange(eq.id, item.key, esUCase ? e.target.value.toUpperCase() : e.target.value);
+                                                                                                 }
+                                                                                             }}
+                                                                                             className={`w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${esNumeroOrden ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''} ${tieneValorTexto ? 'font-bold' : ''} ${esUCase ? 'uppercase' : ''}`}
+                                                                                             placeholder={placeholderTexto}
+                                                                                             readOnly={esNumeroOrden}
                                                                                          />
                                                                                      </div>
                                                                                  );
-                                                                             } else if (tipo === 'texto') {
-                                                                                  const labelLower = (item.label || '').toLowerCase().replace(/[áéíóú]/g, (c) => ({'á':'a','é':'e','í':'i','ó':'o','ú':'u'})[c] || c);
-                                                                                  const esNumeroOrden = labelLower.includes('orden');
-                                                                                  const esUCase = esUbicacionMarcaModelo(item.label, item.key);
-                                                                                  if (esNumeroOrden) console.log('🔍 Campo Nº Orden detectado, eq.codigo =', eq.codigo);
-                                                                                  const placeholderTexto = labelLower.includes('referencia') && labelLower.includes('instalacion')
-                                                                                      ? 'Ejemplo: Area general o zona'
-                                                                                      : '...';
-                                                                                  const tieneValorTexto = !esNumeroOrden && typeof val === 'string' && val.trim() !== '';
-                                                                                  return (
-                                                                                      <div key={item.key} className="flex flex-col gap-0.5">
-                                                                                          <label className="text-[10px] font-semibold text-slate-500">{item.label}</label>
-                                                                                          <input
-                                                                                              type="text"
-                                                                                              value={esNumeroOrden ? (eq.codigo || '') : (typeof val === 'string' ? (esUCase ? val.toUpperCase() : val) : '')}
-                                                                                              onChange={(e) => {
-                                                                                                  if (!esNumeroOrden) {
-                                                                                                      handleCheckChange(eq.id, item.key, esUCase ? e.target.value.toUpperCase() : e.target.value);
-                                                                                                  }
-                                                                                              }}
-                                                                                              className={`w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${esNumeroOrden ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''} ${tieneValorTexto ? 'font-bold' : ''} ${esUCase ? 'uppercase' : ''}`}
-                                                                                              placeholder={placeholderTexto}
-                                                                                              readOnly={esNumeroOrden}
-                                                                                          />
-                                                                                      </div>
-                                                                                  );
                                                                               } else if (tipo === 'texto-largo') {
                                                                                  // No renderizar "notas" en el grid
                                                                                  const lbl = (item.label || '').toLowerCase();
@@ -820,122 +817,6 @@ export default function SistemaExtintores({
                                                                              >
                                                                                  Limpiar Checks
                                                                              </button>
-                                                                             {(() => {
-                                                                                  const tieneMsgAnomalia = Object.keys(eq).some(k => {
-                                                                                      const val = eq[k];
-                                                                                      return typeof val === 'string' && val.includes('Extintor necesita retimbre');
-                                                                                  }) || (typeof eq.anomalias === 'string' && eq.anomalias.includes('Extintor necesita retimbre'));
-                                                                                  const mostrarBotonReiniciar = parte?.retirarExtintoresRetimbrado && !parte?.retimbradoReiniciado && (necesitaRetimbre || tieneMsgAnomalia);
-                                                                                  if (!mostrarBotonReiniciar) return null;
-
-                                                                                  return (
-                                                                                      <button
-                                                                                          type="button"
-                                                                                          onClick={async () => {
-                                                                                              const confirm = window.confirm('¿Confirmar que los extintores han sido retimbrados? Esto actualizará la fecha de último retimbre de este extintor a la fecha actual.');
-                                                                                              if (!confirm) return;
-
-                                                                                              const todayStr = new Date().toISOString().split('T')[0];
-                                                                                              const updatedEquipos = equiposInstalados.map(currEq => {
-                                                                                                  if (currEq.id === eq.id) {
-                                                                                                      const updatedEq: any = { ...currEq, retimbradoEnEsteParte: true, revisado: true };
-                                                                                                      // Actualizar TODAS las claves del equipo que contengan "retimbre"
-                                                                                                      Object.keys(updatedEq).forEach(k => {
-                                                                                                          if (k.toLowerCase().includes('retimbre') && !k.toLowerCase().includes('check')) {
-                                                                                                              updatedEq[k] = todayStr;
-                                                                                                          }
-                                                                                                      });
-                                                                                                      // También actualizar por clave de checklist si existe
-                                                                                                      if (retItemKey) {
-                                                                                                          updatedEq[retItemKey] = todayStr;
-                                                                                                      }
-                                                                                                      // Limpiar campos de anomalía
-                                                                                                      if (typeof updatedEq.anomalias === 'string') {
-                                                                                                          updatedEq.anomalias = updatedEq.anomalias.replace('Extintor necesita retimbre', '').trim();
-                                                                                                      }
-                                                                                                      itemsToUse.forEach(item => {
-                                                                                                          const val = updatedEq[item.key];
-                                                                                                          if (typeof val === 'string' && val.includes('Extintor necesita retimbre')) {
-                                                                                                              updatedEq[item.key] = val.replace('Extintor necesita retimbre', '').trim();
-                                                                                                          }
-                                                                                                      });
-                                                                                                      return updatedEq;
-                                                                                                  }
-                                                                                                  return currEq;
-                                                                                              });
-
-                                                                                              setEquiposInstalados(updatedEquipos);
-                                                                                              await saveEquiposProgress(updatedEquipos);
-                                                                                              const equipoModificado = updatedEquipos.find(currEq => currEq.id === eq.id);
-                                                                                              if (equipoModificado) {
-                                                                                                  try {
-                                                                                                      await updateEquipoInstalado(eq.id, equipoModificado as any);
-                                                                                                  } catch (err) {
-                                                                                                      console.error('Error al actualizar retimbre en Firestore:', err);
-                                                                                                  }
-                                                                                              }
-
-                                                                                              // Comprobar si quedan otros extintores con retimbre pendiente
-                                                                                              const quedanPendientes = updatedEquipos.filter((currEq: any) => {
-                                                                                                  const nombreEq = (currEq.nombre || '').toLowerCase();
-                                                                                                  const claseEq = (currEq.clase || '').toLowerCase();
-                                                                                                  const tipoEq = (currEq.tipo || '').toLowerCase();
-                                                                                                  const esExtintorEq = nombreEq.includes('extintor') || claseEq.includes('extintor') || tipoEq.includes('extintor');
-
-                                                                                                  if (esExtintorEq) {
-                                                                                                      const tieneMsgAnomaliaEq = Object.keys(currEq).some(k => {
-                                                                                                          const val = currEq[k];
-                                                                                                          return typeof val === 'string' && val.includes('Extintor necesita retimbre');
-                                                                                                      }) || (typeof currEq.anomalias === 'string' && currEq.anomalias.includes('Extintor necesita retimbre'));
-
-                                                                                                      let necesitaRetimbreEq = false;
-                                                                                                      const fabItemEq = itemsToUse.find(i => (i.label||'').toLowerCase().includes('fabricaci'));
-                                                                                                      const retItemEq = itemsToUse.find(i => (i.label||'').toLowerCase().includes('retimbre'));
-                                                                                                      if (fabItemEq) {
-                                                                                                          const valFab = currEq[fabItemEq.key as keyof EquipoInstalado] as string;
-                                                                                                          const valRet = retItemEq ? currEq[retItemEq.key as keyof EquipoInstalado] as string : null;
-                                                                                                          if (valFab) {
-                                                                                                              const dateFab = new Date(valFab);
-                                                                                                              if (!isNaN(dateFab.getTime())) {
-                                                                                                                  let refDate = dateFab;
-                                                                                                                  if (valRet) {
-                                                                                                                      const dr = new Date(valRet);
-                                                                                                                      if (!isNaN(dr.getTime())) refDate = dr;
-                                                                                                                  }
-                                                                                                                  const monthsSinceRef = (new Date().getFullYear() - refDate.getFullYear()) * 12 + new Date().getMonth() - refDate.getMonth();
-                                                                                                                  if (monthsSinceRef >= 60) {
-                                                                                                                      necesitaRetimbreEq = true;
-                                                                                                                  }
-                                                                                                              }
-                                                                                                          }
-                                                                                                      }
-
-                                                                                                      return necesitaRetimbreEq || tieneMsgAnomaliaEq;
-                                                                                                  }
-                                                                                                  return false;
-                                                                                              });
-
-                                                                                              if (quedanPendientes.length === 0) {
-                                                                                                  updateParte({ retimbradoReiniciado: true });
-                                                                                                  const docId = (parte as any)?._docId || parteId;
-                                                                                                  if (docId) {
-                                                                                                      try {
-                                                                                                          await updateParteFirestore(docId, { retimbradoReiniciado: true });
-                                                                                                      } catch (err) {
-                                                                                                          console.error('Error al actualizar retimbradoReiniciado en Firestore:', err);
-                                                                                                      }
-                                                                                                  }
-                                                                                                  showToast('Retimbres actualizados. Firmas habilitadas.');
-                                                                                              } else {
-                                                                                                  showToast('Retimbre actualizado. Quedan extintores pendientes.');
-                                                                                              }
-                                                                                          }}
-                                                                                          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold transition-all shadow-sm"
-                                                                                      >
-                                                                                          Reiniciar retimbres
-                                                                                      </button>
-                                                                                  );
-                                                                              })()}
                                                                           </div>
                                                                           <div className="flex items-center gap-1.5">
                                                                               <span className="flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded-lg text-xs font-bold">
