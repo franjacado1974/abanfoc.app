@@ -251,6 +251,7 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [showValidationModal, setShowValidationModal] = useState(false);
   const [sistemasSourceView, setSistemasSourceView] = useState('list');
+  const [isSaving, setIsSaving] = useState(false);
 
   const handleTryCloseDetail = () => {
     if (!selectedCentro) {
@@ -449,7 +450,20 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
 
   useEffect(() => {
     let unsub: (() => void) | null = null;
-    try { unsub = subscribeCentros((items: any[]) => { const mapped = items.map((d: any) => ({ ...d })); setCentros(mapped); localStorage.setItem('firecheck_db_centros', JSON.stringify(mapped)); }); } catch (e) { console.error('subscribeCentros failed', e); }
+    try {
+      unsub = subscribeCentros((items: any[]) => {
+        const uniqueMap = new Map<string, any>();
+        items.forEach((d: any) => {
+          const key = d.id || d._docId;
+          if (key && !uniqueMap.has(key)) {
+            uniqueMap.set(key, { ...d });
+          }
+        });
+        const mapped = Array.from(uniqueMap.values());
+        setCentros(mapped);
+        localStorage.setItem('firecheck_db_centros', JSON.stringify(mapped));
+      });
+    } catch (e) { console.error('subscribeCentros failed', e); }
     return () => { if (unsub) unsub(); };
   }, []);
 
@@ -578,6 +592,7 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSaving) return;
     if (!form.clienteId) return alert('Debes seleccionar un cliente primero.');
     if (!form.customIdPart || !form.customIdPart.trim()) return alert('El código periodicidad es obligatorio.');
     if (!form.nombre.trim()) return alert('El nombre del centro es obligatorio.');
@@ -635,6 +650,7 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
       return; // Detener guardado
     }
 
+    setIsSaving(true);
     let finalId = form.id;
     if (!finalId) { 
       finalId = calculateNextCentroId(form.clienteId, form.customIdPart); 
@@ -646,11 +662,27 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
     }
     const newCentro = { ...form, id: finalId, nombre: form.nombre.toUpperCase(), periodicidad: normalizeSelectedValues(form.periodicidad), mesesRevision: normalizeSelectedValues(form.mesesRevision) };
     try {
-      if (form._docId) { await updateCentro(form._docId, newCentro); const updated = centros.map(c => c._docId === form._docId ? { ...newCentro, _docId: form._docId } : c); saveToDB(updated); }
-      else { const created = await addCentro(newCentro); const withDoc = { ...newCentro, _docId: created._docId }; const updated = form.id ? centros.map(c => c.id === form.id ? withDoc : c) : [...centros, withDoc]; saveToDB(updated); }
-    } catch (err) { console.error('Error guardando centro en Firestore:', err); alert('Error al guardar en Firestore'); return; }
-    setView('list');
-    setForm(emptyCentro);
+      if (form._docId) {
+        await updateCentro(form._docId, newCentro);
+        const updated = centros.map(c => c._docId === form._docId ? { ...newCentro, _docId: form._docId } : c);
+        saveToDB(updated);
+      } else {
+        const created = await addCentro(newCentro);
+        const withDoc = { ...newCentro, _docId: created._docId };
+        const exists = centros.some(c => (c._docId && c._docId === created._docId) || c.id === withDoc.id);
+        const updated = exists
+          ? centros.map(c => (c._docId === created._docId || c.id === withDoc.id) ? withDoc : c)
+          : [...centros, withDoc];
+        saveToDB(updated);
+      }
+      setView('list');
+      setForm(emptyCentro);
+    } catch (err) {
+      console.error('Error guardando centro en Firestore:', err);
+      alert('Error al guardar en Firestore');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleEdit = (centro: Centro) => { 
@@ -2119,7 +2151,7 @@ const renderModals = () => {
             </div>
 
             <div className="pt-4 border-t border-zinc-100 flex items-center justify-end gap-3 shrink-0 bg-white">
-              <button type="submit" disabled={!form.clienteId} className="bg-black text-white px-6 py-3 rounded-xl text-sm font-bold hover:bg-zinc-800 disabled:opacity-50 transition-all flex items-center gap-2 shadow-md shadow-black/10 active:scale-95"><Save className="w-4 h-4" /> {form.id ? 'Guardar Cambios' : 'Registrar Centro'}</button>
+              <button type="submit" disabled={isSaving || !form.clienteId} className="bg-black text-white px-6 py-3 rounded-xl text-sm font-bold hover:bg-zinc-800 disabled:opacity-50 transition-all flex items-center gap-2 shadow-md shadow-black/10 active:scale-95"><Save className="w-4 h-4" /> {isSaving ? 'Guardando...' : (form._docId ? 'Guardar Cambios' : 'Registrar Centro')}</button>
             </div>
           </form>
         </div>
