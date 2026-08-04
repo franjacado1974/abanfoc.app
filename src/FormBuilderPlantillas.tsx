@@ -19,7 +19,7 @@ import {
   Plus, Trash2, Save, ChevronUp, ChevronDown,
   GripVertical, AlertCircle,
   ClipboardList, Edit3, X, Loader, Copy, Image,
-  Table
+  Table, TrendingUp
 } from 'lucide-react';
 import {
   subscribePlantillas, subscribeItemsDePlantilla,
@@ -40,6 +40,7 @@ interface ItemLocal {
   requerido: boolean;
   opciones?: string[];  // Opciones para desplegable y tabla (cabeceras)
   filasInicio?: number; // Filas iniciales para tabla
+  filasNombres?: string[]; // Nombres de las filas (cabecera vertical para tablas, opcional)
   horizontal?: boolean; // true = label a la izquierda, campo a la derecha
   esNuevo?: boolean;    // true si aún no se ha guardado en Firestore
 }
@@ -264,6 +265,7 @@ export default function FormBuilderPlantillas() {
       requerido: false,
       opciones: opcionesCabeceras,
       filasInicio: tablaFilas,
+      filasNombres: [],
     } as any;
     
     try {
@@ -273,6 +275,31 @@ export default function FormBuilderPlantillas() {
     } catch (e) {
       console.error(e);
       mostrarMensaje('error', 'Error al crear la tabla');
+    }
+  };
+
+  const handleCrearGrafico = async () => {
+    if (!plantillaSeleccionada) return;
+    
+    const nuevoOrden = items.length + 1;
+    const nuevoItem = {
+      plantillaId: plantillaSeleccionada,
+      label: 'Ensayo de Caudal y Presión (Gráfico Q-H)',
+      key: `table_${Date.now()}`,
+      orden: nuevoOrden,
+      tipoRespuesta: 'grafico',
+      requerido: false,
+      opciones: ['Caudal (m³/h)', 'L.P.M.', 'Presión (bar)', 'R.P.M.'],
+      filasInicio: 4,
+      filasNombres: ['0%', '50%', '100%', '140%'],
+    } as any;
+    
+    try {
+      await addItemAPlantilla(nuevoItem);
+      mostrarMensaje('ok', 'Gráfico Q-H añadido al checklist');
+    } catch (e) {
+      console.error(e);
+      mostrarMensaje('error', 'Error al crear el gráfico');
     }
   };
 
@@ -416,6 +443,7 @@ export default function FormBuilderPlantillas() {
       seccion: 'bg-zinc-200 text-zinc-800 border-zinc-300',
       tabla: 'bg-indigo-100 text-indigo-700 border-indigo-200',
       seleccion: 'bg-violet-100 text-violet-700 border-violet-200',
+      grafico: 'bg-rose-100 text-rose-700 border-rose-200',
     };
     const labels: Record<string, string> = {
       check: 'Check',
@@ -428,6 +456,7 @@ export default function FormBuilderPlantillas() {
       seccion: 'Sección',
       tabla: 'Tabla',
       seleccion: 'Selección',
+      grafico: 'Gráfico Q-H',
     };
     return (
       <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${estilos[tipo] || 'bg-zinc-100 text-zinc-600 border-zinc-200'}`}>
@@ -453,7 +482,7 @@ export default function FormBuilderPlantillas() {
             <label className="text-[10px] font-semibold text-zinc-500">{item.label}</label>
             <input
               type="number"
-              className="w-full px-3 py-2 bg-white border border-zinc-200 rounded-lg text-xs outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20"
+              className="w-28 px-3 py-2 bg-white border border-zinc-200 rounded-lg text-xs outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20"
               placeholder="0"
               disabled
             />
@@ -522,21 +551,31 @@ export default function FormBuilderPlantillas() {
       case 'seleccion':
         const opcionesSel = item.opciones && item.opciones.length > 0 ? item.opciones : ['Sí', 'No', 'N/A'];
         return (
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-1">
             <label className="text-[10px] font-semibold text-zinc-500">{item.label}</label>
-            <div className="flex gap-1.5 flex-wrap">
-              {opcionesSel.map((opt, i) => (
-                <span
-                  key={i}
-                  className={`px-3 py-1.5 text-xs rounded-lg border text-center font-semibold shadow-sm transition-all select-none ${
-                    i === 0 
-                      ? 'bg-indigo-600 text-white border-indigo-600 font-bold' 
-                      : 'bg-white text-zinc-600 border-zinc-200'
-                  }`}
-                >
-                  {opt}
-                </span>
-              ))}
+            <div className="flex flex-wrap items-center gap-4 mt-1">
+              {opcionesSel.map((opt, i) => {
+                const isSelected = i === 0;
+                return (
+                  <div
+                    key={i}
+                    className={`inline-flex items-center gap-2 py-1 select-none transition-all ${
+                      isSelected ? 'opacity-100' : 'opacity-50'
+                    }`}
+                  >
+                    <div className={`w-4 h-4 rounded-full border flex items-center justify-center transition-all ${
+                      isSelected 
+                        ? 'bg-indigo-600 border-indigo-600 text-white' 
+                        : 'bg-white border-zinc-300 text-transparent'
+                    }`}>
+                      <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
+                    </div>
+                    <span className={`text-xs text-zinc-700 ${isSelected ? 'font-bold text-indigo-900' : 'font-normal'}`}>
+                      {opt}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         );
@@ -547,34 +586,52 @@ export default function FormBuilderPlantillas() {
           </div>
         );
       case 'tabla':
+      case 'grafico':
+        const isGrafico = item.tipoRespuesta === 'grafico';
         const headers = item.opciones || [];
-        const rowsCount = item.filasInicio || 3;
+        const hasVert = Array.isArray(item.filasNombres) && item.filasNombres.length > 0;
+        const rowsCount = (hasVert && item.filasNombres) ? item.filasNombres.length : (item.filasInicio || 3);
+        const displayHeaders = hasVert ? ['Concepto / Ensayo', ...headers] : headers;
+
         return (
-          <div className="flex flex-col gap-1 w-full col-span-full">
+          <div className="flex flex-col gap-1.5 w-full col-span-full">
             <label className="text-[10px] font-semibold text-zinc-500">{item.label}</label>
-            <div className="border border-zinc-200 rounded-lg overflow-hidden w-full bg-white">
+            <div className="border border-zinc-200 rounded-lg overflow-hidden w-full bg-white shadow-sm">
               <table className="w-full text-[10px] text-left border-collapse">
                 <thead>
                   <tr className="bg-black text-white">
-                    {headers.map((h, i) => (
-                      <th key={i} className="px-2 py-1 font-bold border-r border-zinc-800 last:border-r-0 uppercase text-[8px]">{h}</th>
+                    {displayHeaders.map((h, i) => (
+                      <th key={i} className="px-2 py-1.5 font-bold border-r border-zinc-800 last:border-r-0 uppercase text-[8px]">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {Array.from({ length: rowsCount }).map((_, rIdx) => (
-                    <tr key={rIdx} className="border-b border-zinc-100 last:border-b-0">
-                      {headers.map((_, cIdx) => (
-                        <td key={cIdx} className="px-2 py-1 border-r border-zinc-100 last:border-r-0 text-zinc-400">...</td>
-                      ))}
-                    </tr>
-                  ))}
+                  {Array.from({ length: rowsCount }).map((_, rIdx) => {
+                    const rowName = (hasVert && item.filasNombres) ? (item.filasNombres[rIdx] || '') : '';
+                    return (
+                      <tr key={rIdx} className="border-b border-zinc-100 last:border-b-0 hover:bg-zinc-50/50">
+                        {hasVert && (
+                          <td className="px-2 py-1.5 border-r border-zinc-100 font-bold bg-zinc-50 text-zinc-700">{rowName}</td>
+                        )}
+                        {headers.map((_, cIdx) => (
+                          <td key={cIdx} className="px-2 py-1.5 border-r border-zinc-100 last:border-r-0 text-zinc-400">...</td>
+                        ))}
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
-              <div className="px-2 py-1 bg-zinc-50 border-t border-zinc-100 flex justify-end">
-                <span className="text-[8px] bg-white border border-zinc-200 text-indigo-600 px-1.5 py-0.5 rounded font-bold shadow-sm">+ Añadir fila</span>
-              </div>
+              {!hasVert && (
+                <div className="px-2 py-1 bg-zinc-50 border-t border-zinc-100 flex justify-end">
+                  <span className="text-[8px] bg-white border border-zinc-200 text-indigo-600 px-1.5 py-0.5 rounded font-bold shadow-sm">+ Añadir fila</span>
+                </div>
+              )}
             </div>
+            {isGrafico && (
+              <div className="border border-dashed border-rose-300 rounded-lg p-3 bg-rose-50/20 text-center flex flex-col items-center justify-center min-h-[60px] mt-1">
+                <span className="text-[10px] font-bold text-rose-600 uppercase tracking-wide">📈 [Curva de Caudal y Presión (Q-H) se graficará automáticamente en el acta PDF]</span>
+              </div>
+            )}
           </div>
         );
     }
@@ -590,7 +647,7 @@ export default function FormBuilderPlantillas() {
       );
     }
 
-    if (item.tipoRespuesta === 'tabla') {
+    if (item.tipoRespuesta === 'tabla' || item.tipoRespuesta === 'grafico') {
       return renderInputPreview(item);
     }
 
@@ -618,7 +675,7 @@ export default function FormBuilderPlantillas() {
             {innerType === 'numero' && (
               <input
                 type="number"
-                className="w-full px-3 py-1.5 bg-white border border-zinc-200 rounded-lg text-xs outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20"
+                className="w-28 px-3 py-1.5 bg-white border border-zinc-200 rounded-lg text-xs outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20"
                 placeholder="0"
                 disabled
               />
@@ -840,6 +897,13 @@ export default function FormBuilderPlantillas() {
                   <Table className="w-3.5 h-3.5" /> Crear tabla
                 </button>
 
+                <button
+                  onClick={handleCrearGrafico}
+                  className="flex items-center gap-1.5 bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm"
+                >
+                  <TrendingUp className="w-3.5 h-3.5" /> Crear Gráfico Q-H
+                </button>
+
                 <div className="flex-1" />
 
                 <button
@@ -956,6 +1020,7 @@ export default function FormBuilderPlantillas() {
                             <option value="desplegable">🔽 Desplegable</option>
                             <option value="seleccion">🔘 Selección (Botones)</option>
                             <option value="tabla">📊 Tabla</option>
+                            <option value="grafico">📈 Gráfico Q-H</option>
                             <option value="seccion">📁 Sección / Separador</option>
                           </select>
 
@@ -1016,17 +1081,26 @@ export default function FormBuilderPlantillas() {
                             </div>
                           )}
 
-                          {item.tipoRespuesta === 'tabla' && (
+                          {(item.tipoRespuesta === 'tabla' || item.tipoRespuesta === 'grafico') && (
                             <div className="pl-14 pr-2 space-y-2">
                               <div>
-                                <label className="text-[10px] font-semibold text-zinc-500 mb-1 block">Cabeceras de la tabla (separadas por comas)</label>
+                                <label className="text-[10px] font-semibold text-zinc-500 mb-1 block">
+                                  {item.tipoRespuesta === 'grafico' ? 'Cabeceras de la tabla del Gráfico (ej: Caudal (m³/h), Presión (bar))' : 'Cabeceras de la tabla (separadas por comas)'}
+                                </label>
                                 <OpcionesInput 
                                   opciones={item.opciones || []} 
                                   onUpdate={(opts) => handleUpdateItem(item.id, { opciones: opts })} 
                                 />
                               </div>
+                              <div>
+                                <label className="text-[10px] font-semibold text-zinc-500 mb-1 block">Cabeceras verticales / Filas predefinidas (separadas por comas, opcional)</label>
+                                <OpcionesInput 
+                                  opciones={item.filasNombres || []} 
+                                  onUpdate={(opts) => handleUpdateItem(item.id, { filasNombres: opts })} 
+                                />
+                              </div>
                               <div className="flex items-center gap-2">
-                                <label className="text-[10px] font-semibold text-zinc-500">Filas Iniciales:</label>
+                                <label className="text-[10px] font-semibold text-zinc-500">Filas Iniciales (si no hay predefinidas):</label>
                                 <input
                                   type="number"
                                   min={1}

@@ -1,0 +1,7 @@
+/learn para que aprenda el comportamiento y lo guarde en la memoria permanente.
+
+que lea:
+
+documentos.md 
+.agents/AGENTS.md
+

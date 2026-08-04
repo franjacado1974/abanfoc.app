@@ -214,12 +214,88 @@ export default function EquipoFormulario({
     // Inicializar formData con el equipo existente
     useEffect(() => {
         if (equipo) {
-            setFormData(equipo);
+            const cleaned = { ...equipo };
+            const isInvalidText = (v: any) => {
+                if (v === undefined || v === null || v === '') return false;
+                const s = String(v).trim().toLowerCase();
+                return s === 'true' || s === 'false' || s === 'sí' || s === 'no' || s === 'ok' || s === 'correcto' || s === 'incorrecto';
+            };
+            if (isInvalidText(cleaned.tipo)) {
+                cleaned.tipo = !isInvalidText(cleaned.nombre) ? cleaned.nombre : (!isInvalidText(cleaned.clase) ? cleaned.clase : (!isInvalidText(cleaned.modelo) ? cleaned.modelo : (!isInvalidText(cleaned.pesoCapacidad) ? cleaned.pesoCapacidad : 'Equipo sin tipo')));
+            }
+            if (isInvalidText(cleaned.nombre)) {
+                cleaned.nombre = cleaned.tipo || cleaned.clase || cleaned.modelo || cleaned.pesoCapacidad || 'Equipo sin tipo';
+            }
+            if (isInvalidText(cleaned.tipo)) {
+                cleaned.tipo = cleaned.nombre;
+            }
+            setFormData(cleaned);
         }
     }, [equipo]);
 
     const handleChange = (key: string, value: any) => {
-        setFormData(prev => ({ ...prev, [key]: value }));
+        setFormData(prev => {
+            const updated = { ...prev, [key]: value };
+            
+            // Auto-gestionar anomalías en el campo de Observaciones
+            const currentItem = plantillaItems.find(it => it.key === key);
+            const notasItem = plantillaItems.find(item => {
+                const lbl = (item.label || '').toLowerCase();
+                return lbl.includes('anomal') || ((lbl.includes('notas') || lbl.includes('observaciones')) && !plantillaItems.some(i => (i.label||'').toLowerCase().includes('anomal')));
+            });
+            const notasKey = notasItem?.key || 'anomalias';
+
+            if (notasKey && currentItem && key !== notasKey && key !== 'anomalias') {
+                const isAnomalia = value === false || value === 'false' || (
+                    typeof value === 'string' && (
+                        value.toUpperCase().trim().includes('NO CORRECTO') ||
+                        value.toUpperCase().trim().includes('NO CONFORME') ||
+                        value.toUpperCase().trim() === 'INCORRECTO' ||
+                        value.toUpperCase().trim() === 'NO' ||
+                        value.toUpperCase().includes('"NO CORRECTO"') ||
+                        value.toUpperCase().includes('"NO CONFORME"') ||
+                        value.toUpperCase().includes('"INCORRECTO"')
+                    )
+                );
+                const labelToUse = currentItem.label || '';
+                if (labelToUse) {
+                    const notasActuales = typeof (updated as any)[notasKey] === 'string' 
+                        ? ((updated as any)[notasKey] as string) 
+                        : '';
+                    const escapedLabel = labelToUse.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    const regexCheck = new RegExp(escapedLabel + '(?:,\\s*|\\s*:\\s*|\\s+-\\s*|\\s+)mal\\b', 'i');
+                    const regexRemove = new RegExp(escapedLabel + '(?:,\\s*|\\s*:\\s*|\\s+-\\s*|\\s+)mal\\b', 'gi');
+                    
+                    if (isAnomalia) {
+                        if (!regexCheck.test(notasActuales)) {
+                            const textoAnomaliaMal = `${labelToUse}, MAL`;
+                            const nuevoTexto = notasActuales.trim() 
+                                ? notasActuales.trim() + ', ' + textoAnomaliaMal 
+                                : textoAnomaliaMal;
+                            (updated as any)[notasKey] = nuevoTexto;
+                        }
+                    } else {
+                        if (notasActuales) {
+                            let limpiado = notasActuales.replace(regexRemove, '');
+                            limpiado = limpiado
+                                .split('\n')
+                                .map(line => {
+                                    return line
+                                        .split(',')
+                                        .map(part => part.trim())
+                                        .filter(part => part !== '')
+                                        .join(', ');
+                                })
+                                .filter(line => line.trim() !== '')
+                                .join('\n');
+                            (updated as any)[notasKey] = limpiado;
+                        }
+                    }
+                }
+            }
+
+            return updated;
+        });
     };
 
     const handleSave = async () => {
@@ -238,29 +314,58 @@ export default function EquipoFormulario({
                 
                 if (value !== undefined && value !== null) {
                     const strVal = String(value);
+                    const isBoolOrCheck = item.tipoRespuesta === 'check' || typeof value === 'boolean' || strVal.trim().toLowerCase() === 'true' || strVal.trim().toLowerCase() === 'false';
+
                     if (label === 'orden de lista' || label === 'orden') {
                         equipoToSave.codigo = strVal;
-                    } else if (label.includes('nombre') || label.includes('tipo')) {
-                        equipoToSave.nombre = strVal;
-                    } else if (label.includes('ubicación') || label.includes('ubicacion') || label.includes('cobertura')) {
+                    } else if (
+                        !isBoolOrCheck &&
+                        (label === 'nombre' || label === 'nombre del equipo' || label === 'nombre/tipo' || label === 'nombre / tipo' || label === 'tipo' || label === 'tipo de equipo')
+                    ) {
+                        if (label === 'tipo' || label === 'tipo de equipo') {
+                            equipoToSave.tipo = strVal;
+                            if (!equipoToSave.nombre || equipoToSave.nombre.trim().toLowerCase() === 'true' || equipoToSave.nombre.trim().toLowerCase() === 'false') {
+                                equipoToSave.nombre = strVal;
+                            }
+                        } else {
+                            equipoToSave.nombre = strVal;
+                        }
+                    } else if (
+                        !isBoolOrCheck &&
+                        (label.includes('ubicación') || label.includes('ubicacion') || label.includes('cobertura'))
+                    ) {
                         equipoToSave.ubicacion = strVal.toUpperCase();
                         (equipoToSave as any)[item.key] = strVal.toUpperCase();
-                    } else if (label.includes('marca')) {
+                    } else if (!isBoolOrCheck && label.includes('marca')) {
                         equipoToSave.marca = strVal.toUpperCase();
                         (equipoToSave as any)[item.key] = strVal.toUpperCase();
-                    } else if (label.includes('modelo')) {
+                    } else if (!isBoolOrCheck && label.includes('modelo')) {
                         equipoToSave.modelo = strVal.toUpperCase();
                         (equipoToSave as any)[item.key] = strVal.toUpperCase();
                     } else if (label.includes('fabricaci')) {
                         equipoToSave.fechaFabricacion = strVal;
-                    } else if (label.includes('retimbre')) {
+                    } else if (label.includes('retimbre') && !isBoolOrCheck) {
                         equipoToSave.ultimoRetimbre = strVal;
-                    } else if (label.includes('hidra') || label.includes('prueba')) {
+                    } else if ((label.includes('hidra') || label.includes('prueba')) && !isBoolOrCheck) {
                         equipoToSave.pruebaHidraulica = strVal;
                     }
                 }
             });
 
+            const isInvalidText = (v: any) => {
+                if (v === undefined || v === null || v === '') return false;
+                const s = String(v).trim().toLowerCase();
+                return s === 'true' || s === 'false' || s === 'sí' || s === 'no' || s === 'ok' || s === 'correcto' || s === 'incorrecto';
+            };
+            if (isInvalidText(equipoToSave.tipo)) {
+                equipoToSave.tipo = !isInvalidText(equipoToSave.nombre) ? equipoToSave.nombre : (!isInvalidText(equipoToSave.clase) ? equipoToSave.clase : (!isInvalidText(equipoToSave.modelo) ? equipoToSave.modelo : (!isInvalidText(equipoToSave.pesoCapacidad) ? equipoToSave.pesoCapacidad : 'Equipo sin tipo')));
+            }
+            if (isInvalidText(equipoToSave.nombre)) {
+                equipoToSave.nombre = equipoToSave.tipo || equipoToSave.clase || equipoToSave.modelo || equipoToSave.pesoCapacidad || 'Equipo sin tipo';
+            }
+            if (isInvalidText(equipoToSave.tipo)) {
+                equipoToSave.tipo = equipoToSave.nombre;
+            }
             if (equipoToSave.ubicacion) equipoToSave.ubicacion = equipoToSave.ubicacion.toUpperCase();
             if (equipoToSave.marca) equipoToSave.marca = equipoToSave.marca.toUpperCase();
             if (equipoToSave.modelo) equipoToSave.modelo = equipoToSave.modelo.toUpperCase();
@@ -632,12 +737,11 @@ export default function EquipoFormulario({
                 (caducado45 && item.key === item45Fab?.key) ||
                 (necesitaPrueba45 && item.key === item45PH?.key)
             ));
-        const isObservationsField = 
-            item.label.toLowerCase().includes('anomal') || 
-            item.label.toLowerCase().includes('observaci') || 
-            item.label.toLowerCase().includes('nota');
-        const isAnoFieldWithMsg = 
-            isObservationsField && typeof value === 'string' && value.trim() !== '';
+        const itemLblLower = (item.label || '').toLowerCase();
+        const isAnomaliaField = itemLblLower.includes('anomal') || item.key === 'anomalias';
+        const isObservacionField = (itemLblLower.includes('observaci') || itemLblLower.includes('nota')) && !isAnomaliaField;
+        const isAnoFieldWithMsg = isAnomaliaField && typeof value === 'string' && value.trim() !== '';
+        const isObsFieldWithMsg = isObservacionField && typeof value === 'string' && value.trim() !== '';
 
         if (item.horizontal || tipo === 'pregunta-horizontal') {
             const isCheck = tipo === 'check';
@@ -932,13 +1036,17 @@ export default function EquipoFormulario({
             case 'texto-largo':
                 return (
                     <div key={item.key} className="flex flex-col gap-1 col-span-2">
-                        <label className="text-xs font-semibold text-slate-600">{item.label}</label>
+                        <label className={`text-xs font-semibold ${
+                            isAnoFieldWithMsg ? 'text-red-700' : isObsFieldWithMsg ? 'text-blue-700' : 'text-slate-600'
+                        }`}>{item.label}</label>
                         <textarea
                             value={typeof value === 'string' ? value : ''}
                             onChange={(e) => handleChange(item.key, e.target.value)}
                             className={`w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 resize-none transition-colors ${
                                 isAnoFieldWithMsg
                                 ? 'bg-red-50 border-red-400 text-red-700 focus:border-red-500 focus:ring-red-500/20'
+                                : isObsFieldWithMsg
+                                ? 'bg-blue-50 border-blue-400 text-blue-700 focus:border-blue-500 focus:ring-blue-500/20'
                                 : 'bg-white border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20'
                             }`}
                             rows={4}

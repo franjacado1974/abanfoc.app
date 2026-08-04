@@ -19,6 +19,13 @@ interface Cliente {
   telefono: string;
   contacto: string;
   correo: string;
+  correoGeneral?: string;
+  correoAdministracion?: string;
+  correoFacturacion?: string;
+  correoMantenimiento?: string;
+  correoCompras?: string;
+  correoPedidos?: string;
+  correoOtro?: string;
   formaPago?: string;
   vencimiento?: string;
   iban?: string;
@@ -44,6 +51,7 @@ interface ExcelClienteRow {
 const emptyCliente: Cliente = {
   id: '', nombre: '', cif: '', direccion: '', poblacion: '', 
   cp: '', provincia: '', telefono: '', contacto: '', correo: '',
+  correoGeneral: '', correoAdministracion: '', correoFacturacion: '', correoMantenimiento: '', correoCompras: '', correoPedidos: '', correoOtro: '',
   formaPago: '', vencimiento: '', iban: '', notas: ''
 };
 
@@ -258,13 +266,13 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
             {!isVisualizador && (
               <div className="flex flex-wrap items-center gap-2">
                 <input type="file" accept=".xlsx, .xls, .csv" className="hidden" ref={fileInputRef} onChange={handleImportExcel} />
-                <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-1.5 bg-white border border-zinc-200 text-zinc-700 px-3.5 py-2 rounded-lg font-medium hover:bg-zinc-50 hover:border-zinc-300 transition-all text-xs shadow-sm" title="Importar Excel">
+                <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-1.5 bg-white border border-zinc-200 text-zinc-700 px-3.5 py-2 rounded-xl font-medium hover:bg-zinc-50 hover:border-zinc-300 transition-all text-xs shadow-sm" title="Importar Excel">
                   <Download className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Importar</span>
                 </button>
-                <button onClick={handleExportExcel} className="flex items-center gap-1.5 bg-white border border-zinc-200 text-zinc-700 px-3.5 py-2 rounded-lg font-medium hover:bg-zinc-50 hover:border-zinc-300 transition-all text-xs shadow-sm" title="Exportar Excel">
+                <button onClick={handleExportExcel} className="flex items-center gap-1.5 bg-white border border-zinc-200 text-zinc-700 px-3.5 py-2 rounded-xl font-medium hover:bg-zinc-50 hover:border-zinc-300 transition-all text-xs shadow-sm" title="Exportar Excel">
                   <Upload className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Exportar</span>
                 </button>
-                <button onClick={handleOpenNewForm} className="flex items-center gap-1.5 bg-black text-white px-4 py-2 rounded-lg font-medium hover:bg-zinc-800 transition-all text-xs shadow-md shadow-black/10">
+                <button onClick={handleOpenNewForm} className="flex items-center gap-1.5 bg-black text-white px-4 py-2 rounded-xl font-medium hover:bg-zinc-800 transition-all text-xs shadow-md shadow-black/10">
                   <Plus className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Nuevo Cliente</span><span className="sm:hidden">Nuevo</span>
                 </button>
               </div>
@@ -279,7 +287,7 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
             </div>
             <input
               type="text"
-              className="w-full pl-10 pr-4 py-2.5 bg-white rounded-lg border border-zinc-200 focus:border-blue-900 focus:ring-2 focus:ring-blue-900/10 outline-none transition-all shadow-sm text-sm text-zinc-900 placeholder-zinc-400"
+              className="w-full pl-10 pr-4 py-2.5 bg-white rounded-xl border border-zinc-200 focus:border-red-500 focus:ring-2 focus:ring-red-500/10 outline-none transition-all shadow-sm text-sm text-zinc-900 placeholder-zinc-400"
               placeholder="Buscar por nombre, CIF o población..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -288,8 +296,8 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
 
           {/* Tabla de Clientes */}
           {clientes.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-zinc-200 p-16 text-center shadow-sm">
-              <div className="w-16 h-16 bg-zinc-100 rounded-2xl flex items-center justify-center mx-auto mb-6">
+            <div className="bg-white rounded-3xl border border-zinc-200 p-16 text-center shadow-sm">
+              <div className="w-16 h-16 bg-zinc-100 rounded-3xl flex items-center justify-center mx-auto mb-6">
                 <Users className="w-8 h-8 text-zinc-400" />
               </div>
               <h3 className="text-xl font-bold text-zinc-900 mb-2">Aún no hay clientes</h3>
@@ -301,15 +309,15 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
               </button>
             </div>
           ) : filteredClientes.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-zinc-200 p-12 text-center shadow-sm">
+            <div className="bg-white rounded-3xl border border-zinc-200 p-12 text-center shadow-sm">
               <Search className="w-8 h-8 text-zinc-400 mx-auto mb-4" />
               <h3 className="text-lg font-bold text-zinc-900 mb-1">No hay resultados</h3>
               <p className="text-zinc-500">No se ha encontrado ningún cliente que coincida con "{searchTerm}".</p>
             </div>
           ) : (
-            <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden overflow-x-auto">
+            <div className="bg-white rounded-3xl border border-zinc-200 shadow-sm overflow-hidden overflow-x-auto">
               {/* Table header */}
-              <div className="hidden md:flex items-center bg-[#f9f7f4] border-b-2 border-zinc-200 px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-zinc-500">
+              <div className="hidden md:flex items-center bg-zinc-50 border-b border-zinc-200/80 px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-zinc-500">
                 <div className="w-24 shrink-0">Código</div>
                 <div className="flex-1 min-w-0">Cliente</div>
                 {!isTecnicoMode && <div className="w-36 shrink-0">CIF / NIF</div>}
@@ -330,7 +338,7 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
                       {/* Mobile view */}
                       <div className="flex md:hidden items-center justify-between mb-2">
                         <span className="text-[10px] font-mono font-bold text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded">{cliente.id}</span>
-                        <button onClick={(e) => { e.stopPropagation(); handleViewDetail(cliente); }} className="p-1.5 text-zinc-400 hover:text-blue-900 hover:bg-blue-50 rounded-lg transition-colors">
+                        <button onClick={(e) => { e.stopPropagation(); handleViewDetail(cliente); }} className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors">
                           <Eye className="w-4 h-4" />
                         </button>
                       </div>
@@ -351,7 +359,7 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
                           <span className="text-[11px] font-mono font-bold text-zinc-500 bg-zinc-100 px-1.5 py-0.5 rounded">{cliente.id}</span>
                         </div>
                         <div className="flex-1 min-w-0 pr-2">
-                          <p className="text-sm font-bold text-zinc-900 truncate group-hover:text-blue-900 transition-colors">{cliente.nombre}</p>
+                          <p className="text-sm font-bold text-zinc-900 truncate group-hover:text-red-600 transition-colors">{cliente.nombre}</p>
                         </div>
                         {!isTecnicoMode && <div className="w-36 shrink-0 text-sm text-zinc-600 truncate pr-2">{cliente.cif || '-'}</div>}
                         <div className="w-44 shrink-0 text-sm text-zinc-600 truncate pr-2 flex items-center gap-1">
@@ -362,7 +370,7 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
                         <div className="w-28 shrink-0 flex items-center justify-end gap-1">
                           <button
                             onClick={(e) => { e.stopPropagation(); handleViewDetail(cliente); }}
-                            className="p-1.5 text-zinc-400 hover:text-blue-900 hover:bg-blue-50 rounded-lg transition-colors"
+                            className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors"
                             title="Ver detalle"
                           >
                             <Eye className="w-4 h-4" />
@@ -371,14 +379,14 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
                             <>
                               <button
                                 onClick={(e) => { e.stopPropagation(); handleEdit(cliente); }}
-                                className="p-1.5 text-zinc-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                                className="p-1.5 text-zinc-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors"
                                 title="Editar"
                               >
                                 <Edit className="w-4 h-4" />
                               </button>
                               <button
                                 onClick={(e) => { e.stopPropagation(); handleDelete(cliente.id); }}
-                                className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors"
                                 title="Eliminar"
                               >
                                 <Trash2 className="w-4 h-4" />
@@ -418,7 +426,7 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
             <div className="space-y-6">
               {/* Header with ID */}
               <div className="flex items-center gap-3 pb-4 border-b border-zinc-200">
-                <div className="w-12 h-12 bg-blue-900 rounded-xl flex items-center justify-center text-white">
+                <div className="w-12 h-12 bg-red-600 rounded-xl flex items-center justify-center text-white">
                   <Building2 className="w-6 h-6" />
                 </div>
                 <div>
@@ -434,7 +442,7 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
                   <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-500">Información General</h4>
                   <div className="space-y-3">
                     <div className="flex items-start gap-3">
-                      <div className="w-8 h-8 bg-zinc-100 rounded-lg flex items-center justify-center text-zinc-500 shrink-0">
+                      <div className="w-8 h-8 bg-zinc-100 rounded-xl flex items-center justify-center text-zinc-500 shrink-0">
                         <Building2 className="w-4 h-4" />
                       </div>
                       <div>
@@ -443,7 +451,7 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
                       </div>
                     </div>
                     <div className="flex items-start gap-3">
-                      <div className="w-8 h-8 bg-zinc-100 rounded-lg flex items-center justify-center text-zinc-500 shrink-0">
+                      <div className="w-8 h-8 bg-zinc-100 rounded-xl flex items-center justify-center text-zinc-500 shrink-0">
                         <Phone className="w-4 h-4" />
                       </div>
                       <div>
@@ -452,12 +460,20 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
                       </div>
                     </div>
                     <div className="flex items-start gap-3">
-                      <div className="w-8 h-8 bg-zinc-100 rounded-lg flex items-center justify-center text-zinc-500 shrink-0">
+                      <div className="w-8 h-8 bg-zinc-100 rounded-xl flex items-center justify-center text-zinc-500 shrink-0">
                         <Mail className="w-4 h-4" />
                       </div>
-                      <div>
-                        <p className="text-xs text-zinc-400 font-medium">Correo Electrónico</p>
-                        <p className="text-sm font-semibold text-zinc-900">{selectedCliente.correo || 'No especificado'}</p>
+                      <div className="w-full">
+                        <p className="text-xs text-zinc-400 font-medium mb-1">Cuentas de Correo</p>
+                        <div className="space-y-1 text-xs">
+                          <p><span className="font-bold text-zinc-500">General:</span> <span className="font-semibold text-zinc-900">{selectedCliente.correoGeneral || selectedCliente.correo || 'No especificado'}</span></p>
+                          {selectedCliente.correoAdministracion && <p><span className="font-bold text-zinc-500">Administración:</span> <span className="font-semibold text-zinc-900">{selectedCliente.correoAdministracion}</span></p>}
+                          {selectedCliente.correoFacturacion && <p><span className="font-bold text-zinc-500">Facturación:</span> <span className="font-semibold text-zinc-900">{selectedCliente.correoFacturacion}</span></p>}
+                          {selectedCliente.correoMantenimiento && <p><span className="font-bold text-zinc-500">Mantenimiento:</span> <span className="font-semibold text-zinc-900">{selectedCliente.correoMantenimiento}</span></p>}
+                          {selectedCliente.correoCompras && <p><span className="font-bold text-zinc-500">Compras:</span> <span className="font-semibold text-zinc-900">{selectedCliente.correoCompras}</span></p>}
+                          {selectedCliente.correoPedidos && <p><span className="font-bold text-zinc-500">Pedidos:</span> <span className="font-semibold text-zinc-900">{selectedCliente.correoPedidos}</span></p>}
+                          {selectedCliente.correoOtro && <p><span className="font-bold text-zinc-500">Otro:</span> <span className="font-semibold text-zinc-900">{selectedCliente.correoOtro}</span></p>}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -467,7 +483,7 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
                   <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-500">Dirección y Contacto</h4>
                   <div className="space-y-3">
                     <div className="flex items-start gap-3">
-                      <div className="w-8 h-8 bg-zinc-100 rounded-lg flex items-center justify-center text-zinc-500 shrink-0">
+                      <div className="w-8 h-8 bg-zinc-100 rounded-xl flex items-center justify-center text-zinc-500 shrink-0">
                         <MapPin className="w-4 h-4" />
                       </div>
                       <div>
@@ -476,7 +492,7 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
                       </div>
                     </div>
                     <div className="flex items-start gap-3">
-                      <div className="w-8 h-8 bg-zinc-100 rounded-lg flex items-center justify-center text-zinc-500 shrink-0">
+                      <div className="w-8 h-8 bg-zinc-100 rounded-xl flex items-center justify-center text-zinc-500 shrink-0">
                         <MapPin className="w-4 h-4" />
                       </div>
                       <div>
@@ -487,7 +503,7 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
                       </div>
                     </div>
                     <div className="flex items-start gap-3">
-                      <div className="w-8 h-8 bg-zinc-100 rounded-lg flex items-center justify-center text-zinc-500 shrink-0">
+                      <div className="w-8 h-8 bg-zinc-100 rounded-xl flex items-center justify-center text-zinc-500 shrink-0">
                         <Users className="w-4 h-4" />
                       </div>
                       <div>
@@ -549,7 +565,7 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
                         return <p className="text-sm text-zinc-500 italic">No hay centros vinculados a este cliente.</p>;
                       }
                       return vinculated.map((c: any) => (
-                        <div key={c.id} className="bg-zinc-50 border border-zinc-200 rounded-lg p-3">
+                        <div key={c.id} className="bg-zinc-50 border border-zinc-200 rounded-xl p-3">
                           <p className="font-bold text-zinc-900 text-sm">{c.nombre}</p>
                           <p className="text-xs text-zinc-500 flex items-center gap-1 mt-1">
                             <MapPin className="w-3 h-3" /> {c.direccion}, {c.poblacion}
@@ -566,7 +582,7 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
                 {!isVisualizador && (
                   <button
                     onClick={() => { setIsDetailOpen(false); handleEdit(selectedCliente); }}
-                    className="flex items-center gap-1.5 bg-zinc-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-zinc-800 transition-colors"
+                    className="flex items-center gap-1.5 bg-zinc-900 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-zinc-800 transition-colors"
                   >
                     <Edit className="w-4 h-4" /> Editar Cliente
                   </button>
@@ -574,14 +590,14 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
                 {!isVisualizador ? (
                   <button
                     onClick={() => navigate('/centros', { state: { search: selectedCliente.id } })}
-                    className="flex items-center gap-1.5 bg-white border border-zinc-200 text-zinc-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-zinc-50 transition-colors"
+                    className="flex items-center gap-1.5 bg-white border border-zinc-200 text-zinc-700 px-4 py-2 rounded-xl text-sm font-medium hover:bg-zinc-50 transition-colors"
                   >
                     <Building2 className="w-4 h-4" /> Ver Centros
                   </button>
                 ) : (
                   <button
                     onClick={() => setShowVinculatedCentros(!showVinculatedCentros)}
-                    className="flex items-center gap-1.5 bg-white border border-zinc-200 text-zinc-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-zinc-50 transition-colors"
+                    className="flex items-center gap-1.5 bg-white border border-zinc-200 text-zinc-700 px-4 py-2 rounded-xl text-sm font-medium hover:bg-zinc-50 transition-colors"
                   >
                     <Building2 className="w-4 h-4" /> {showVinculatedCentros ? 'Ocultar Centros' : 'Ver centros vinculados'}
                   </button>
@@ -605,7 +621,7 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
       </div>
 
       <div className="mb-8">
-        <div className="w-10 h-10 bg-blue-900 text-white rounded-xl flex items-center justify-center mb-4">
+        <div className="w-10 h-10 bg-red-600 text-white rounded-xl flex items-center justify-center mb-4">
           <Building2 className="w-5 h-5" />
         </div>
         <h1 className="text-2xl font-bold text-zinc-900 tracking-tight">
@@ -616,19 +632,19 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
         </p>
       </div>
 
-      <div className="bg-blue-900 text-white p-4 rounded-xl flex flex-col mb-8">
-        <label className="text-[10px] text-blue-300 font-bold mb-1 uppercase">Código de Cliente (Manual)</label>
+      <div className="bg-zinc-900 text-white p-4 rounded-xl flex flex-col mb-8 border border-red-600">
+        <label className="text-[10px] text-red-500 font-bold mb-1 uppercase">Código de Cliente (Manual)</label>
         <input 
           type="text" 
           value={form.id} 
           onChange={e => setForm({...form, id: e.target.value.toUpperCase()})}
           placeholder="CLI 0000"
-          className="bg-transparent border-b border-blue-700 text-lg font-mono font-bold tracking-wider outline-none focus:border-orange-400 transition-colors w-full py-1"
+          className="bg-transparent border-b border-red-600 text-lg font-mono font-bold tracking-wider outline-none focus:border-red-400 transition-colors w-full py-1"
         />
-        <p className="text-[10px] text-blue-300 mt-1">Puedes modificar el código sugerido manualmente.</p>
+        <p className="text-[10px] text-zinc-400 mt-1">Puedes modificar el código sugerido manualmente.</p>
       </div>
 
-      <div className="bg-white p-6 md:p-8 rounded-2xl border border-zinc-200 shadow-sm">
+      <div className="bg-white p-6 md:p-8 rounded-3xl border border-zinc-200 shadow-sm">
         <form className="space-y-5" onSubmit={handleSave}>
           {/* Fila 1 */}
           <div>
@@ -636,7 +652,7 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
             <input 
               required type="text" 
               value={form.nombre} onChange={e => setForm({...form, nombre: e.target.value.toUpperCase()})}
-              className="w-full px-4 py-3 bg-zinc-50/50 rounded-lg border border-zinc-200 focus:bg-white focus:border-blue-900 focus:ring-1 focus:ring-blue-900/10 outline-none transition-all text-zinc-900 placeholder-zinc-400 text-sm" 
+              className="w-full px-4 py-3 bg-white rounded-xl border border-zinc-200 focus:bg-white focus:border-red-500 focus:ring-1 focus:ring-red-500/10 outline-none transition-all text-zinc-900 placeholder-zinc-400 text-sm" 
               placeholder="Nombre completo o Razón social" 
             />
           </div>
@@ -648,7 +664,7 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
               <input 
                 type="text" 
                 value={form.cif} onChange={e => setForm({...form, cif: e.target.value})}
-                className="w-full px-4 py-3 bg-zinc-50/50 rounded-lg border border-zinc-200 focus:bg-white focus:border-blue-900 focus:ring-1 focus:ring-blue-900/10 outline-none transition-all text-zinc-900 placeholder-zinc-400 text-sm" 
+                className="w-full px-4 py-3 bg-white rounded-xl border border-zinc-200 focus:bg-white focus:border-red-500 focus:ring-1 focus:ring-red-500/10 outline-none transition-all text-zinc-900 placeholder-zinc-400 text-sm" 
                 placeholder="B12345678" 
               />
             </div>
@@ -657,31 +673,98 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
               <input 
                 type="tel" 
                 value={form.telefono} onChange={e => setForm({...form, telefono: e.target.value})}
-                className="w-full px-4 py-3 bg-zinc-50/50 rounded-lg border border-zinc-200 focus:bg-white focus:border-blue-900 focus:ring-1 focus:ring-blue-900/10 outline-none transition-all text-zinc-900 placeholder-zinc-400 text-sm" 
+                className="w-full px-4 py-3 bg-white rounded-xl border border-zinc-200 focus:bg-white focus:border-red-500 focus:ring-1 focus:ring-red-500/10 outline-none transition-all text-zinc-900 placeholder-zinc-400 text-sm" 
                 placeholder="Ej. 600 000 000" 
               />
             </div>
           </div>
 
-          {/* Fila 3 */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div>
-              <label className="block text-sm font-semibold text-zinc-900 mb-1.5">CONTACTO (CTACTO)</label>
-              <input 
-                type="text" 
-                value={form.contacto} onChange={e => setForm({...form, contacto: e.target.value})}
-                className="w-full px-4 py-3 bg-zinc-50/50 rounded-lg border border-zinc-200 focus:bg-white focus:border-blue-900 focus:ring-1 focus:ring-blue-900/10 outline-none transition-all text-zinc-900 placeholder-zinc-400 text-sm" 
-                placeholder="Persona de contacto principal" 
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-zinc-900 mb-1.5">CORREO</label>
-              <input 
-                type="email" 
-                value={form.correo} onChange={e => setForm({...form, correo: e.target.value})}
-                className="w-full px-4 py-3 bg-zinc-50/50 rounded-lg border border-zinc-200 focus:bg-white focus:border-blue-900 focus:ring-1 focus:ring-blue-900/10 outline-none transition-all text-zinc-900 placeholder-zinc-400 text-sm" 
-                placeholder="correo@empresa.com" 
-              />
+          {/* Fila 3: Contacto */}
+          <div>
+            <label className="block text-sm font-semibold text-zinc-900 mb-1.5">CONTACTO (CTACTO)</label>
+            <input 
+              type="text" 
+              value={form.contacto} onChange={e => setForm({...form, contacto: e.target.value})}
+              className="w-full px-4 py-3 bg-white rounded-xl border border-zinc-200 focus:bg-white focus:border-red-500 focus:ring-1 focus:ring-red-500/10 outline-none transition-all text-zinc-900 placeholder-zinc-400 text-sm" 
+              placeholder="Persona de contacto principal" 
+            />
+          </div>
+
+          <div className="bg-zinc-50 p-4 rounded-2xl border border-zinc-150 space-y-3 my-4">
+            <h4 className="text-xs font-bold text-zinc-900 uppercase tracking-wider flex items-center gap-1.5">
+              <Mail className="w-4 h-4 text-red-600" /> Cuentas de Correo Electrónico
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-zinc-700 mb-1">General</label>
+                <input 
+                  type="email" 
+                  value={form.correoGeneral || form.correo || ''} 
+                  onChange={e => setForm({...form, correo: e.target.value, correoGeneral: e.target.value})}
+                  className="w-full px-3 py-2 bg-white rounded-xl border border-zinc-200 focus:border-red-500 outline-none text-zinc-900 text-xs" 
+                  placeholder="general@empresa.com" 
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-zinc-700 mb-1">Administración</label>
+                <input 
+                  type="email" 
+                  value={form.correoAdministracion || ''} 
+                  onChange={e => setForm({...form, correoAdministracion: e.target.value})}
+                  className="w-full px-3 py-2 bg-white rounded-xl border border-zinc-200 focus:border-red-500 outline-none text-zinc-900 text-xs" 
+                  placeholder="administracion@empresa.com" 
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-zinc-700 mb-1">Facturación</label>
+                <input 
+                  type="email" 
+                  value={form.correoFacturacion || ''} 
+                  onChange={e => setForm({...form, correoFacturacion: e.target.value})}
+                  className="w-full px-3 py-2 bg-white rounded-xl border border-zinc-200 focus:border-red-500 outline-none text-zinc-900 text-xs" 
+                  placeholder="facturacion@empresa.com" 
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-zinc-700 mb-1">Mantenimiento</label>
+                <input 
+                  type="email" 
+                  value={form.correoMantenimiento || ''} 
+                  onChange={e => setForm({...form, correoMantenimiento: e.target.value})}
+                  className="w-full px-3 py-2 bg-white rounded-xl border border-zinc-200 focus:border-red-500 outline-none text-zinc-900 text-xs" 
+                  placeholder="mantenimiento@empresa.com" 
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-zinc-700 mb-1">Compras</label>
+                <input 
+                  type="email" 
+                  value={form.correoCompras || ''} 
+                  onChange={e => setForm({...form, correoCompras: e.target.value})}
+                  className="w-full px-3 py-2 bg-white rounded-xl border border-zinc-200 focus:border-red-500 outline-none text-zinc-900 text-xs" 
+                  placeholder="compras@empresa.com" 
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-zinc-700 mb-1">Pedidos</label>
+                <input 
+                  type="email" 
+                  value={form.correoPedidos || ''} 
+                  onChange={e => setForm({...form, correoPedidos: e.target.value})}
+                  className="w-full px-3 py-2 bg-white rounded-xl border border-zinc-200 focus:border-red-500 outline-none text-zinc-900 text-xs" 
+                  placeholder="pedidos@empresa.com" 
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-semibold text-zinc-700 mb-1">Otro</label>
+                <input 
+                  type="email" 
+                  value={form.correoOtro || ''} 
+                  onChange={e => setForm({...form, correoOtro: e.target.value})}
+                  className="w-full px-3 py-2 bg-white rounded-xl border border-zinc-200 focus:border-red-500 outline-none text-zinc-900 text-xs" 
+                  placeholder="otro@empresa.com" 
+                />
+              </div>
             </div>
           </div>
 
@@ -693,7 +776,7 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
             <input 
               type="text" 
               value={form.direccion} onChange={e => setForm({...form, direccion: e.target.value})}
-              className="w-full px-4 py-3 bg-zinc-50/50 rounded-lg border border-zinc-200 focus:bg-white focus:border-blue-900 focus:ring-1 focus:ring-blue-900/10 outline-none transition-all text-zinc-900 placeholder-zinc-400 text-sm" 
+              className="w-full px-4 py-3 bg-white rounded-xl border border-zinc-200 focus:bg-white focus:border-red-500 focus:ring-1 focus:ring-red-500/10 outline-none transition-all text-zinc-900 placeholder-zinc-400 text-sm" 
               placeholder="Calle, número, piso..." 
             />
           </div>
@@ -705,7 +788,7 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
               <input 
                 type="text" 
                 value={form.poblacion} onChange={e => setForm({...form, poblacion: e.target.value})}
-                className="w-full px-4 py-3 bg-zinc-50/50 rounded-lg border border-zinc-200 focus:bg-white focus:border-blue-900 focus:ring-1 focus:ring-blue-900/10 outline-none transition-all text-zinc-900 placeholder-zinc-400 text-sm" 
+                className="w-full px-4 py-3 bg-white rounded-xl border border-zinc-200 focus:bg-white focus:border-red-500 focus:ring-1 focus:ring-red-500/10 outline-none transition-all text-zinc-900 placeholder-zinc-400 text-sm" 
                 placeholder="Ej. Madrid" 
               />
             </div>
@@ -714,7 +797,7 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
               <input 
                 type="text" 
                 value={form.cp} onChange={e => setForm({...form, cp: e.target.value})}
-                className="w-full px-4 py-3 bg-zinc-50/50 rounded-lg border border-zinc-200 focus:bg-white focus:border-blue-900 focus:ring-1 focus:ring-blue-900/10 outline-none transition-all text-zinc-900 placeholder-zinc-400 text-sm" 
+                className="w-full px-4 py-3 bg-white rounded-xl border border-zinc-200 focus:bg-white focus:border-red-500 focus:ring-1 focus:ring-red-500/10 outline-none transition-all text-zinc-900 placeholder-zinc-400 text-sm" 
                 placeholder="Ej. 28001" 
               />
             </div>
@@ -723,7 +806,7 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
               <input 
                 type="text" 
                 value={form.provincia} onChange={e => setForm({...form, provincia: e.target.value})}
-                className="w-full px-4 py-3 bg-zinc-50/50 rounded-lg border border-zinc-200 focus:bg-white focus:border-blue-900 focus:ring-1 focus:ring-blue-900/10 outline-none transition-all text-zinc-900 placeholder-zinc-400 text-sm" 
+                className="w-full px-4 py-3 bg-white rounded-xl border border-zinc-200 focus:bg-white focus:border-red-500 focus:ring-1 focus:ring-red-500/10 outline-none transition-all text-zinc-900 placeholder-zinc-400 text-sm" 
                 placeholder="Ej. Madrid" 
               />
             </div>
@@ -734,7 +817,7 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
           {/* Sección Datos Bancarios */}
           <div>
             <h2 className="text-sm font-bold text-zinc-900 mb-3 uppercase tracking-wide flex items-center gap-2">
-              <CreditCard className="w-4 h-4 text-blue-900" />
+              <CreditCard className="w-4 h-4 text-red-600" />
               Datos Bancarios
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -743,7 +826,7 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
                 <input 
                   type="text" 
                   value={form.formaPago || ''} onChange={e => setForm({...form, formaPago: e.target.value})}
-                  className="w-full px-4 py-3 bg-zinc-50/50 rounded-lg border border-zinc-200 focus:bg-white focus:border-blue-900 focus:ring-1 focus:ring-blue-900/10 outline-none transition-all text-zinc-900 placeholder-zinc-400 text-sm" 
+                  className="w-full px-4 py-3 bg-white rounded-xl border border-zinc-200 focus:bg-white focus:border-red-500 focus:ring-1 focus:ring-red-500/10 outline-none transition-all text-zinc-900 placeholder-zinc-400 text-sm" 
                   placeholder="Ej. Transferencia 30 días" 
                 />
               </div>
@@ -752,7 +835,7 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
                 <input 
                   type="text" 
                   value={form.vencimiento || ''} onChange={e => setForm({...form, vencimiento: e.target.value})}
-                  className="w-full px-4 py-3 bg-zinc-50/50 rounded-lg border border-zinc-200 focus:bg-white focus:border-blue-900 focus:ring-1 focus:ring-blue-900/10 outline-none transition-all text-zinc-900 placeholder-zinc-400 text-sm" 
+                  className="w-full px-4 py-3 bg-white rounded-xl border border-zinc-200 focus:bg-white focus:border-red-500 focus:ring-1 focus:ring-red-500/10 outline-none transition-all text-zinc-900 placeholder-zinc-400 text-sm" 
                   placeholder="Ej. Día 5 de cada mes" 
                 />
               </div>
@@ -761,7 +844,7 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
                 <input 
                   type="text" 
                   value={form.iban || ''} onChange={e => setForm({...form, iban: e.target.value.toUpperCase()})}
-                  className="w-full px-4 py-3 bg-zinc-50/50 rounded-lg border border-zinc-200 focus:bg-white focus:border-blue-900 focus:ring-1 focus:ring-blue-900/10 outline-none transition-all text-zinc-900 placeholder-zinc-400 text-sm" 
+                  className="w-full px-4 py-3 bg-white rounded-xl border border-zinc-200 focus:bg-white focus:border-red-500 focus:ring-1 focus:ring-red-500/10 outline-none transition-all text-zinc-900 placeholder-zinc-400 text-sm" 
                   placeholder="ES00 0000..." 
                 />
               </div>
@@ -770,7 +853,7 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
                 <input 
                   type="text" 
                   value={form.notas || ''} onChange={e => setForm({...form, notas: e.target.value})}
-                  className="w-full px-4 py-3 bg-zinc-50/50 rounded-lg border border-zinc-200 focus:bg-white focus:border-blue-900 focus:ring-1 focus:ring-blue-900/10 outline-none transition-all text-zinc-900" 
+                  className="w-full px-4 py-3 bg-white rounded-xl border border-zinc-200 focus:bg-white focus:border-red-500 focus:ring-1 focus:ring-red-500/10 outline-none transition-all text-zinc-900" 
                   placeholder="Observaciones adicionales..." 
                 />
               </div>
@@ -780,7 +863,7 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
           {/* Actions */}
           <div className="pt-6 flex justify-end items-center gap-4">
             {isLoading && <p className="text-sm text-zinc-500">Guardando...</p>}
-            <button type="submit" disabled={isLoading} className="bg-blue-900 text-white px-8 py-3 rounded-lg font-medium hover:bg-blue-800 transition-colors flex items-center gap-2 shadow-lg shadow-black/10 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed text-sm">
+            <button type="submit" disabled={isLoading} className="bg-red-600 text-white px-8 py-3 rounded-xl font-medium hover:bg-blue-800 transition-colors flex items-center gap-2 shadow-lg shadow-black/10 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed text-sm">
               <Save className="w-4 h-4" /> {form.id ? 'Guardar Cambios' : 'Guardar en Base de Datos'}
             </button>
           </div>

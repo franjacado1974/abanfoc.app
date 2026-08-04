@@ -420,114 +420,121 @@ export default function Ajustes() {
     setUsuarios(updated);
     localStorage.setItem('firecheck_db_usuarios', JSON.stringify(updated));
   };
-
   return (
-    <div className="min-h-screen bg-[#DCE1E5]">
+    <div className="min-h-screen bg-[#F8FAFC] px-8 py-6">
       {/* Header */}
-      <div className="sticky top-0 z-40 bg-[#DCE1E5]/90 backdrop-blur-md border-b border-zinc-200/60">
-        <div className="flex items-center gap-3 px-4 sm:px-6 py-4">
-          {view !== 'menu' ? (
-            <button
-              onClick={() => setView('menu')}
-              className="flex items-center gap-2 text-sm font-medium text-zinc-500 hover:text-zinc-900 transition-colors"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              <span>Volver</span>
-            </button>
-          ) : (
-            <button
-              onClick={() => navigate('/')}
-              className="flex items-center gap-2 text-sm font-medium text-zinc-500 hover:text-zinc-900 transition-colors"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              <span>Home</span>
-            </button>
-          )}
-          <h1 className="text-lg font-bold text-zinc-900 flex-1 text-center">
-            {view === 'menu' ? 'Panel de Configuracion' : view === 'tecnicos' ? 'Gestion de Tecnicos' : view === 'usuarios' ? 'Gestion de Usuarios' : view === 'sistemas' ? 'Gestion de Sistemas' : view === 'plantillas' ? 'Editor de Plantillas' : 'Impuestos'}
-          </h1>
-          <div className="w-16" />
-        </div>
+      <div className="mb-6">
+        {view !== 'menu' ? (
+          <button 
+            onClick={() => setView('menu')} 
+            className="flex items-center gap-1.5 text-xs font-semibold text-zinc-500 hover:text-zinc-900 mb-3 transition-colors cursor-pointer"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" /> Volver al menú
+          </button>
+        ) : (
+          <button 
+            onClick={() => navigate('/')} 
+            className="flex items-center gap-1.5 text-xs font-semibold text-zinc-500 hover:text-zinc-900 mb-3 transition-colors cursor-pointer"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" /> Volver al panel
+          </button>
+        )}
+        <h1 className="text-2xl font-black text-zinc-950 tracking-tight">
+          {view === 'menu' ? 'Configuración de Salamandra' : view === 'tecnicos' ? 'Gestión de Técnicos' : view === 'usuarios' ? 'Gestión de Usuarios' : view === 'sistemas' ? 'Gestión de Sistemas' : view === 'plantillas' ? 'Editor de Plantillas' : 'Tipos de Impuestos'}
+        </h1>
+        <p className="text-xs font-semibold text-zinc-500 mt-1">
+          {view === 'menu' 
+            ? 'Administración de técnicos, usuarios, sistemas, plantillas e impuestos de Salamandra.' 
+            : view === 'tecnicos' 
+            ? 'Listado, edición y alta de operarios técnicos asignables.' 
+            : view === 'usuarios' 
+            ? 'Gestión de credenciales, roles y permisos de acceso al sistema.' 
+            : view === 'sistemas' 
+            ? 'Configuración de familias, sistemas contra incendios y checklist asociados.' 
+            : view === 'plantillas' 
+            ? 'Configuración avanzada de las plantillas de revisión de equipos.' 
+            : 'Gestión de los tipos de IVA e impuestos vigentes.'}
+        </p>
       </div>
 
-      <div className={`${view === 'plantillas' ? 'w-full' : 'max-w-2xl mx-auto'} p-4 sm:p-6`}>
+      <div className={view === 'plantillas' ? 'w-full' : view === 'menu' ? 'max-w-5xl' : 'max-w-2xl'}>
         {view === 'menu' && (
-          <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             <button
               onClick={() => navigate('/configuracion-datos')}
-              className="w-full flex items-center gap-4 p-4 rounded-2xl border border-zinc-200 bg-white hover:border-blue-200 hover:bg-blue-50/50 transition-all text-left group"
+              className="w-full flex flex-col items-center justify-center text-center p-6 min-h-[220px] rounded-3xl border border-zinc-200 bg-white hover:border-red-250 hover:bg-red-50/30 transition-all group cursor-pointer shadow-sm hover:shadow-md active:scale-95"
             >
-              <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                <Building2 className="w-6 h-6" />
+              <div className="w-16 h-16 bg-red-100 text-red-650 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform shadow-sm">
+                <Building2 className="w-7 h-7" />
               </div>
               <div>
-                <p className="font-bold text-zinc-800">Gestion de empresa</p>
-                <p className="text-xs text-zinc-500">Datos fiscales, RASIC, logo y firmas.</p>
+                <p className="font-extrabold text-zinc-900 text-base">Gestion de empresa</p>
+                <p className="text-xs text-zinc-500 mt-1.5 max-w-[200px] leading-relaxed">Datos fiscales, RASIC, logo y firmas.</p>
               </div>
             </button>
 
             <button
               onClick={() => setView('tecnicos')}
-              className="w-full flex items-center gap-4 p-4 rounded-2xl border border-zinc-200 bg-white hover:border-emerald-200 hover:bg-emerald-50/50 transition-all text-left group"
+              className="w-full flex flex-col items-center justify-center text-center p-6 min-h-[220px] rounded-3xl border border-zinc-200 bg-white hover:border-emerald-250 hover:bg-emerald-50/30 transition-all group cursor-pointer shadow-sm hover:shadow-md active:scale-95"
             >
-              <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                <Users className="w-6 h-6" />
+              <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform shadow-sm">
+                <Users className="w-7 h-7" />
               </div>
               <div>
-                <p className="font-bold text-zinc-800">Gestion tecnicos</p>
-                <p className="text-xs text-zinc-500">Alta de operarios y tecnicos.</p>
+                <p className="font-extrabold text-zinc-900 text-base">Gestion tecnicos</p>
+                <p className="text-xs text-zinc-500 mt-1.5 max-w-[200px] leading-relaxed">Alta de operarios y tecnicos.</p>
               </div>
             </button>
 
             <button
               onClick={() => setView('usuarios')}
-              className="w-full flex items-center gap-4 p-4 rounded-2xl border border-zinc-200 bg-white hover:border-indigo-200 hover:bg-indigo-50/50 transition-all text-left group"
+              className="w-full flex flex-col items-center justify-center text-center p-6 min-h-[220px] rounded-3xl border border-zinc-200 bg-white hover:border-indigo-250 hover:bg-indigo-50/30 transition-all group cursor-pointer shadow-sm hover:shadow-md active:scale-95"
             >
-              <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                <ShieldCheck className="w-6 h-6" />
+              <div className="w-16 h-16 bg-indigo-100 text-indigo-600 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform shadow-sm">
+                <ShieldCheck className="w-7 h-7" />
               </div>
               <div>
-                <p className="font-bold text-zinc-800">Gestion de usuarios</p>
-                <p className="text-xs text-zinc-500">Asignar roles y permisos del sistema.</p>
+                <p className="font-extrabold text-zinc-900 text-base">Gestion de usuarios</p>
+                <p className="text-xs text-zinc-500 mt-1.5 max-w-[200px] leading-relaxed">Asignar roles y permisos del sistema.</p>
               </div>
             </button>
 
             <button
               onClick={() => setView('sistemas')}
-              className="w-full flex items-center gap-4 p-4 rounded-2xl border border-zinc-200 bg-white hover:border-fuchsia-200 hover:bg-fuchsia-50/50 transition-all text-left group"
+              className="w-full flex flex-col items-center justify-center text-center p-6 min-h-[220px] rounded-3xl border border-zinc-200 bg-white hover:border-fuchsia-250 hover:bg-fuchsia-50/30 transition-all group cursor-pointer shadow-sm hover:shadow-md active:scale-95"
             >
-              <div className="w-12 h-12 bg-fuchsia-100 text-fuchsia-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                <FireExtinguisher className="w-6 h-6" />
+              <div className="w-16 h-16 bg-fuchsia-100 text-fuchsia-600 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform shadow-sm">
+                <FireExtinguisher className="w-7 h-7" />
               </div>
               <div>
-                <p className="font-bold text-zinc-800">Gestion de sistemas</p>
-                <p className="text-xs text-zinc-500">Gestion de sistemas contra incendios.</p>
+                <p className="font-extrabold text-zinc-900 text-base">Gestion de sistemas</p>
+                <p className="text-xs text-zinc-500 mt-1.5 max-w-[200px] leading-relaxed">Gestion de sistemas contra incendios.</p>
               </div>
             </button>
 
             <button
               onClick={() => setView('impuestos')}
-              className="w-full flex items-center gap-4 p-4 rounded-2xl border border-zinc-200 bg-white hover:border-amber-200 hover:bg-amber-50/50 transition-all text-left group"
+              className="w-full flex flex-col items-center justify-center text-center p-6 min-h-[220px] rounded-3xl border border-zinc-200 bg-white hover:border-amber-250 hover:bg-amber-50/30 transition-all group cursor-pointer shadow-sm hover:shadow-md active:scale-95"
             >
-              <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                <Percent className="w-6 h-6" />
+              <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform shadow-sm">
+                <Percent className="w-7 h-7" />
               </div>
               <div>
-                <p className="font-bold text-zinc-800">Impuestos</p>
-                <p className="text-xs text-zinc-500">Configuración del IVA y tipos impositivos.</p>
+                <p className="font-extrabold text-zinc-900 text-base">Impuestos</p>
+                <p className="text-xs text-zinc-500 mt-1.5 max-w-[200px] leading-relaxed">Configuración del IVA y tipos impositivos.</p>
               </div>
             </button>
 
             <button
               onClick={() => setView('plantillas')}
-              className="w-full flex items-center gap-4 p-4 rounded-2xl border border-zinc-200 bg-white hover:border-teal-200 hover:bg-teal-50/50 transition-all text-left group"
+              className="w-full flex flex-col items-center justify-center text-center p-6 min-h-[220px] rounded-3xl border border-zinc-200 bg-white hover:border-teal-250 hover:bg-teal-50/30 transition-all group cursor-pointer shadow-sm hover:shadow-md active:scale-95"
             >
-              <div className="w-12 h-12 bg-teal-100 text-teal-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                <ClipboardList className="w-6 h-6" />
+              <div className="w-16 h-16 bg-teal-100 text-teal-600 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform shadow-sm">
+                <ClipboardList className="w-7 h-7" />
               </div>
               <div>
-                <p className="font-bold text-zinc-800">Plantillas</p>
-                <p className="text-xs text-zinc-500">Gestión de plantillas de checklists.</p>
+                <p className="font-extrabold text-zinc-900 text-base">Plantillas</p>
+                <p className="text-xs text-zinc-500 mt-1.5 max-w-[200px] leading-relaxed">Gestión de plantillas de checklists.</p>
               </div>
             </button>
           </div>
@@ -535,7 +542,7 @@ export default function Ajustes() {
 
         {view === 'tecnicos' && (
           <section className="space-y-6">
-            <form onSubmit={handleAddTecnico} className="bg-white rounded-2xl border border-zinc-200 p-4 flex flex-col gap-3">
+            <form onSubmit={handleAddTecnico} className="bg-white rounded-3xl border border-zinc-200 p-4 flex flex-col gap-3">
               <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
                 {editTecnicoId ? 'Editar Técnico' : 'Nuevo Tecnico'}
               </p>
@@ -543,22 +550,22 @@ export default function Ajustes() {
                 type="text" required placeholder="Nombre"
                 value={nuevoTecnico.nombre}
                 onChange={e => setNuevoTecnico({ ...nuevoTecnico, nombre: e.target.value })}
-                className="w-full px-4 py-2.5 border border-zinc-200 rounded-xl text-sm outline-none focus:border-black"
+                className="w-full px-4 py-2.5 border border-zinc-200 rounded-xl text-sm outline-none focus:border-red-500 focus:ring-2 focus:ring-red-500/10"
               />
               <input
                 type="text" required placeholder="Apellidos"
                 value={nuevoTecnico.apellidos}
                 onChange={e => setNuevoTecnico({ ...nuevoTecnico, apellidos: e.target.value })}
-                className="w-full px-4 py-2.5 border border-zinc-200 rounded-xl text-sm outline-none focus:border-black"
+                className="w-full px-4 py-2.5 border border-zinc-200 rounded-xl text-sm outline-none focus:border-red-500 focus:ring-2 focus:ring-red-500/10"
               />
               <input
                 type="text" placeholder="Nº Habilitación (opcional)"
                 value={nuevoTecnico.habilitacion}
                 onChange={e => setNuevoTecnico({ ...nuevoTecnico, habilitacion: e.target.value })}
-                className="w-full px-4 py-2.5 border border-zinc-200 rounded-xl text-sm outline-none focus:border-black"
+                className="w-full px-4 py-2.5 border border-zinc-200 rounded-xl text-sm outline-none focus:border-red-500 focus:ring-2 focus:ring-red-500/10"
               />
               <div className="flex gap-2">
-                <button type="submit" className="bg-black hover:bg-zinc-800 text-white px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 transition-colors font-medium flex-1">
+                <button type="submit" className="bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 transition-all font-bold shadow-md shadow-red-500/10 hover:shadow-lg hover:shadow-red-500/20 active:scale-95 cursor-pointer flex-1">
                   {editTecnicoId ? (
                     <>
                       <Edit className="w-4 h-4" /> Guardar Cambios
@@ -581,7 +588,7 @@ export default function Ajustes() {
               </div>
             </form>
 
-            <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden">
+            <div className="bg-white border border-zinc-200 rounded-3xl overflow-hidden">
               <p className="px-4 py-3 text-xs font-bold text-zinc-400 uppercase tracking-wider border-b border-zinc-100">
                 Tecnicos registrados ({tecnicos.length})
               </p>
@@ -598,10 +605,10 @@ export default function Ajustes() {
                         )}
                       </div>
                       <div className="flex items-center gap-2">
-                        <button onClick={() => handleEditTecnico(t)} className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg">
+                        <button onClick={() => handleEditTecnico(t)} className="p-1.5 text-red-650 hover:text-blue-800 hover:bg-red-50 rounded-xl">
                           <Edit className="w-4 h-4" />
                         </button>
-                        <button onClick={() => handleDeleteTecnico(t.id)} className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg">
+                        <button onClick={() => handleDeleteTecnico(t.id)} className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-xl">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
@@ -615,7 +622,7 @@ export default function Ajustes() {
 
         {view === 'usuarios' && (
           <section className="space-y-6">
-            <form onSubmit={handleAddUsuario} className="bg-white rounded-2xl border border-zinc-200 p-4 flex flex-col gap-3">
+            <form onSubmit={handleAddUsuario} className="bg-white rounded-3xl border border-zinc-200 p-4 flex flex-col gap-3">
               <div className="flex justify-between items-center">
                 <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Nuevo Usuario</p>
                 <div className="flex gap-3">
@@ -628,25 +635,25 @@ export default function Ajustes() {
                   type="text" required placeholder="Nombre"
                   value={nuevoUsuario.nombre}
                   onChange={e => setNuevoUsuario({ ...nuevoUsuario, nombre: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-zinc-200 rounded-xl text-sm outline-none focus:border-black"
+                  className="w-full px-4 py-2.5 border border-zinc-200 rounded-xl text-sm outline-none focus:border-red-500 focus:ring-2 focus:ring-red-500/10"
                 />
                 <input
                   type="text" required placeholder="Apellidos"
                   value={nuevoUsuario.apellidos}
                   onChange={e => setNuevoUsuario({ ...nuevoUsuario, apellidos: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-zinc-200 rounded-xl text-sm outline-none focus:border-black"
+                  className="w-full px-4 py-2.5 border border-zinc-200 rounded-xl text-sm outline-none focus:border-red-500 focus:ring-2 focus:ring-red-500/10"
                 />
               </div>
               <input
                 type="text" required placeholder="Contrasena"
                 value={nuevoUsuario.password}
                 onChange={e => setNuevoUsuario({ ...nuevoUsuario, password: e.target.value })}
-                className="w-full px-4 py-2.5 border border-zinc-200 rounded-xl text-sm outline-none focus:border-black"
+                className="w-full px-4 py-2.5 border border-zinc-200 rounded-xl text-sm outline-none focus:border-red-500 focus:ring-2 focus:ring-red-500/10"
               />
               <select
                 value={nuevoUsuario.rol}
                 onChange={e => setNuevoUsuario({ ...nuevoUsuario, rol: e.target.value })}
-                className="w-full px-4 py-2.5 border border-zinc-200 rounded-xl text-sm outline-none focus:border-black bg-white"
+                className="w-full px-4 py-2.5 border border-zinc-200 rounded-xl text-sm outline-none focus:border-red-500 focus:ring-2 focus:ring-red-500/10 bg-white"
               >
                 <option value="super-administrador">Super Administrador</option>
                 <option value="administrador">Administrador</option>
@@ -654,12 +661,12 @@ export default function Ajustes() {
                 <option value="visualizador">Visualizador</option>
                 <option value="tecnico">Técnico</option>
               </select>
-              <button type="submit" className="bg-black hover:bg-zinc-800 text-white px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 transition-colors font-medium">
+              <button type="submit" className="bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 transition-all font-bold shadow-md shadow-red-500/10 hover:shadow-lg hover:shadow-red-500/20 active:scale-95 cursor-pointer">
                 <Plus className="w-4 h-4" /> Anadir Usuario
               </button>
             </form>
 
-            <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden">
+            <div className="bg-white border border-zinc-200 rounded-3xl overflow-hidden">
               <p className="px-4 py-3 text-xs font-bold text-zinc-400 uppercase tracking-wider border-b border-zinc-100">
                 Usuarios registrados ({usuarios.length})
               </p>
@@ -671,7 +678,7 @@ export default function Ajustes() {
                     <li key={u.id} className="p-4 flex flex-col gap-2 hover:bg-zinc-50 transition-colors">
                       <div className="flex items-center justify-between">
                         <span className="font-bold text-zinc-900 text-sm">{u.nombre} {u.apellidos}</span>
-                        <button onClick={() => handleDeleteUsuario(u.id)} className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg">
+                        <button onClick={() => handleDeleteUsuario(u.id)} className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-xl">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
@@ -716,7 +723,7 @@ export default function Ajustes() {
             </div>
 
             {/* Lista de sistemas */}
-            <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden">
+            <div className="bg-white border border-zinc-200 rounded-3xl overflow-hidden">
               {sistemas.length === 0 ? (
                 <div className="p-8 text-center text-zinc-400 text-sm">No hay sistemas registrados.</div>
               ) : (
@@ -751,14 +758,14 @@ export default function Ajustes() {
                         <div className="flex items-center gap-2 shrink-0 ml-2">
                           <button
                             onClick={(e) => { e.stopPropagation(); handleEditSistema(sist); }}
-                            className="p-1.5 text-zinc-500 hover:text-zinc-800 hover:bg-zinc-100 rounded-lg transition-colors"
+                            className="p-1.5 text-zinc-500 hover:text-zinc-800 hover:bg-zinc-100 rounded-xl transition-colors"
                             title="Editar"
                           >
                             <Edit className="w-4 h-4" />
                           </button>
                           <button
                             onClick={(e) => { e.stopPropagation(); handleDeleteSistema(sist.id); }}
-                            className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors"
+                            className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-xl transition-colors"
                             title="Eliminar"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -774,18 +781,18 @@ export default function Ajustes() {
                             <h5 className="text-xs font-bold text-zinc-600 uppercase tracking-wider">Tipos de Equipos</h5>
                             <button
                               onClick={() => { setActiveSistemaForTipo(sist.id); setEditTipoId(null); setTipoNombre(''); setIsTipoModalOpen(true); }}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-black hover:bg-zinc-800 text-white rounded-md text-[11px] font-bold transition-colors shadow-sm"
+                              className="inline-flex items-center gap-1.5 px-3 py-2 bg-red-650 hover:bg-red-750 text-white rounded-xl text-[11px] font-bold transition-all shadow-sm cursor-pointer"
                             >
                               <Plus className="w-3 h-3" /> Añadir tipo
                             </button>
                           </div>
 
                           {!sist.tipos || sist.tipos.length === 0 ? (
-                            <p className="text-xs text-zinc-400 italic py-3 text-center bg-white rounded-lg border border-dashed border-zinc-200">No hay tipos registrados en este sistema.</p>
+                            <p className="text-xs text-zinc-400 italic py-3 text-center bg-white rounded-xl border border-dashed border-zinc-200">No hay tipos registrados en este sistema.</p>
                           ) : (
                             <div className="space-y-1.5">
                               {sist.tipos.map(tipo => (
-                                <div key={tipo.id} className="flex items-center justify-between px-3 py-2 bg-white border border-zinc-200 rounded-lg hover:border-zinc-300 transition-colors">
+                                <div key={tipo.id} className="flex items-center justify-between px-3 py-2 bg-white border border-zinc-200 rounded-xl hover:border-zinc-300 transition-colors">
                                   <span className="text-sm font-semibold text-zinc-700">{tipo.nombre}</span>
                                   <div className="flex items-center gap-1">
                                     <button 
@@ -820,7 +827,7 @@ export default function Ajustes() {
 
         {view === 'impuestos' && (
           <section className="space-y-6">
-            <div className="bg-white rounded-2xl border border-zinc-200 p-6">
+            <div className="bg-white rounded-3xl border border-zinc-200 p-6">
               <h2 className="text-lg font-bold text-zinc-900 mb-4">Configuración del IVA</h2>
               <p className="text-sm text-zinc-500 mb-6">Define el porcentaje de IVA que se aplicará por defecto en presupuestos, albaranes y facturas.</p>
               
@@ -857,7 +864,7 @@ export default function Ajustes() {
                       <p className="text-xs text-zinc-500">Cuando se seleccione esta opción en un presupuesto, albarán o factura, se mostrará el texto de exención de IVA por inversión del sujeto pasivo.</p>
                     </div>
                   </div>
-                  <div className="mt-3 p-3 bg-zinc-100 rounded-lg border border-zinc-200">
+                  <div className="mt-3 p-3 bg-zinc-100 rounded-xl border border-zinc-200">
                     <p className="text-xs text-zinc-600 italic">
                       "Factura exenta de IVA por inversión del sujeto pasivo de acuerdo con el artículo 84 letra f-Uno. 2º - Ley 37/1992 - art. 5 Ley 7/2012"
                     </p>
@@ -904,7 +911,7 @@ export default function Ajustes() {
                   <label className="text-sm font-semibold text-zinc-900">Nombre del Sistema</label>
                   <input
                     required autoFocus type="text" value={sistemaNombre} onChange={e => setSistemaNombre(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-zinc-50/50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-fuchsia-500/20 focus:border-fuchsia-500 transition-all text-zinc-900 uppercase"
+                    className="w-full px-4 py-2.5 bg-white border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-fuchsia-500/20 focus:border-fuchsia-500 transition-all text-zinc-900 uppercase"
                     placeholder="Ej: SISTEMA ROCIADORES"
                   />
                 </div>
@@ -958,14 +965,14 @@ export default function Ajustes() {
                   <label className="text-sm font-semibold text-zinc-900">Nombre del Tipo</label>
                   <input
                     required autoFocus type="text" value={tipoNombre} onChange={e => setTipoNombre(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-zinc-50/50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-black/20 focus:border-black transition-all text-zinc-900"
+                    className="w-full px-4 py-2.5 bg-white border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/10 focus:border-red-500 focus:ring-2 focus:ring-red-500/10 transition-all text-zinc-900"
                     placeholder="Ej: Polvo ABC 6Kg"
                   />
                 </div>
               </div>
               <div className="flex gap-3">
                 <button type="button" onClick={() => setIsTipoModalOpen(false)} className="flex-1 px-4 py-2.5 text-zinc-700 bg-zinc-50 hover:bg-zinc-100 rounded-xl font-medium transition-colors">Cancelar</button>
-                <button type="submit" className="flex-1 px-4 py-2.5 text-white bg-black hover:bg-zinc-800 rounded-xl font-medium transition-colors shadow-sm">Guardar</button>
+                <button type="submit" className="flex-1 px-4 py-2.5 text-white bg-red-600 hover:bg-red-700 rounded-xl font-bold transition-all shadow-md shadow-red-500/10 hover:shadow-lg hover:shadow-red-500/20 active:scale-95 cursor-pointer">Guardar</button>
               </div>
             </form>
           </div>

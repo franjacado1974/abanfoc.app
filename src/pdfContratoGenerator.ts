@@ -1,5 +1,5 @@
 import { jsPDF } from 'jspdf';
-import { cargaDatosEmpresa, fetchImageToBase64, getImageFormat } from './pdfGenerator';
+import { fetchImageToBase64, normalizarDatosEmpresa, optimizarImagenParaPDF } from './pdfGenerator';
 
 export const generarContratoPDF = async (
   cliente: any,
@@ -12,17 +12,18 @@ export const generarContratoPDF = async (
     importeAnual: string;
     observaciones: string;
     formaPago?: string;
-  }
+  },
+  empresa?: Record<string, any>
 ) => {
   const doc = new jsPDF('p', 'mm', 'a4');
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const margen = 12;
-  const empData = cargaDatosEmpresa();
-  const logoUrl = empData?.logoUrl || 'https://firebasestorage.googleapis.com/v0/b/app-abanfoc-v1.firebasestorage.app/o/empresa%2Flogo_1780000624676?alt=media&token=b92c0cd7-a0bf-4a96-ab0c-2aa124e52683';
-  const logoBase64 = await fetchImageToBase64(logoUrl);
-  const sealUrl = empData?.selloUrl || 'https://firebasestorage.googleapis.com/v0/b/app-abanfoc-v1.firebasestorage.app/o/empresa%2Fsello_1782150237718?alt=media&token=a9f6f995-9886-426b-b0e3-d3bb523b5d00';
-  const sealBase64 = await fetchImageToBase64(sealUrl);
+  const empData = normalizarDatosEmpresa(empresa, centro?.empresaId);
+  const logoUrl = empData?.logoUrl;
+  const logoBase64 = logoUrl ? await fetchImageToBase64(logoUrl) : null;
+  const sealUrl = empData?.selloUrl;
+  const sealBase64 = sealUrl ? await fetchImageToBase64(sealUrl) : null;
 
   let y = 12;
 
@@ -39,14 +40,14 @@ export const generarContratoPDF = async (
   // Dibujar Logo junto al título (esquina superior derecha)
   if (logoBase64) {
     try {
-      const logoProps = doc.getImageProperties(logoBase64);
+      const { base64: logoOpt, format } = await optimizarImagenParaPDF(logoBase64, 800, 0.75);
+      const logoProps = doc.getImageProperties(logoOpt);
       const maxLogoWidth = 45;
       const maxLogoHeight = 12;
       const logoRatio = logoProps.width / logoProps.height;
       const logoWidth = Math.min(maxLogoWidth, maxLogoHeight * logoRatio);
       const logoHeight = logoWidth / logoRatio;
-      const format = getImageFormat(logoBase64);
-      doc.addImage(logoBase64, format, pageWidth - margen - logoWidth, y + 5, logoWidth, logoHeight);
+      doc.addImage(logoOpt, format, pageWidth - margen - logoWidth, y + 5, logoWidth, logoHeight);
     } catch (e) {
       console.error('Error dibujando logo en cabecera del contrato:', e);
     }
@@ -62,10 +63,12 @@ export const generarContratoPDF = async (
 
   // Cargar datos de la empresa mantenedora
   const empNombre = empData?.nombre || 'ABANFOC S.L.';
-  const empCif = empData?.cif || 'B16794679';
-  const empDir = empData?.direccion || 'C/ America 16B Ático';
-  const empLoc = `${empData?.poblacion || 'Sta. Coloma de Gramanet'}, ${empData?.provincia || 'Barcelona'} ${empData?.cp || '08921'}`;
-  const empTel = empData?.telefono || '651 019 229';
+  const empCif = empData?.cif || '-';
+  const empDir = empData?.direccion || '-';
+  const empLocParts = [empData?.poblacion, empData?.provincia, empData?.cp].filter(p => p && p !== '-');
+  const empLoc = empLocParts.length > 0 ? empLocParts.join(', ') : '-';
+  const empTel = empData?.telefono || '-';
+  const empRasic = empData?.rasic || '-';
 
   // 1. Datos de las Partes
   doc.setFont('helvetica', 'bold');
@@ -74,10 +77,12 @@ export const generarContratoPDF = async (
   doc.text('DATOS DE LAS PARTES', margen, y + 3);
   y += 6;
 
+  const boxHeight = 36;
+
   // Caja para el Mantenedor
   doc.setDrawColor(220, 220, 220);
   doc.setFillColor(248, 250, 252);
-  doc.roundedRect(margen, y, (pageWidth - margen * 2) / 2 - 2, 32, 2, 2, 'FD');
+  doc.roundedRect(margen, y, (pageWidth - margen * 2) / 2 - 2, boxHeight, 2, 2, 'FD');
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7.5);
@@ -86,16 +91,24 @@ export const generarContratoPDF = async (
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7);
   doc.setTextColor(80, 80, 80);
-  doc.text(`Nombre: ${empNombre}`, margen + 4, y + 10);
-  doc.text(`NIF/CIF: ${empCif}`, margen + 4, y + 14);
-  doc.text(`Dirección: ${empDir}`, margen + 4, y + 18);
-  doc.text(`Localidad: ${empLoc}`, margen + 4, y + 22);
-  doc.text(`Teléfono: ${empTel}`, margen + 4, y + 26);
+  doc.text(`Nombre: ${empNombre}`, margen + 4, y + 9.5);
+  doc.text(`NIF/CIF: ${empCif}`, margen + 4, y + 13.5);
+  doc.text(`Dirección: ${empDir}`, margen + 4, y + 17.5);
+  doc.text(`Localidad: ${empLoc}`, margen + 4, y + 21.5);
+  doc.text(`Teléfono: ${empTel}`, margen + 4, y + 25.5);
+  if (empRasic && empRasic !== '-') {
+    doc.text(`Nº RASIC: ${empRasic}`, margen + 4, y + 29.5);
+  }
+
+  // Preparar dirección y ubicación completa del centro / cliente
+  const dirCentroText = centro?.direccion || cliente?.direccion || 'No especificada';
+  const locCentroParts = [centro?.poblacion || cliente?.poblacion, centro?.cp ? `CP: ${centro?.cp}` : (cliente?.cp ? `CP: ${cliente?.cp}` : ''), centro?.provincia || cliente?.provincia].filter(Boolean);
+  const locCentroText = locCentroParts.length > 0 ? locCentroParts.join(', ') : 'No especificada';
 
   // Caja para el Cliente / Centro
   doc.setDrawColor(220, 220, 220);
   doc.setFillColor(248, 250, 252);
-  doc.roundedRect(margen + (pageWidth - margen * 2) / 2 + 2, y, (pageWidth - margen * 2) / 2 - 2, 32, 2, 2, 'FD');
+  doc.roundedRect(margen + (pageWidth - margen * 2) / 2 + 2, y, (pageWidth - margen * 2) / 2 - 2, boxHeight, 2, 2, 'FD');
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7.5);
@@ -104,13 +117,14 @@ export const generarContratoPDF = async (
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7);
   doc.setTextColor(80, 80, 80);
-  doc.text(`Cliente: ${cliente?.nombre || 'No especificado'}`, margen + (pageWidth - margen * 2) / 2 + 6, y + 10);
-  doc.text(`CIF/NIF: ${cliente?.cif || 'No especificado'}`, margen + (pageWidth - margen * 2) / 2 + 6, y + 14);
-  doc.text(`Instalación (Centro): ${centro?.nombre || 'No especificado'}`, margen + (pageWidth - margen * 2) / 2 + 6, y + 18);
-  doc.text(`Dirección centro: ${centro?.direccion || 'No especificada'}`, margen + (pageWidth - margen * 2) / 2 + 6, y + 22);
-  doc.text(`Teléfono: ${cliente?.telefono || centro?.telefono || 'No especificado'}`, margen + (pageWidth - margen * 2) / 2 + 6, y + 26);
+  doc.text(`Cliente: ${cliente?.nombre || 'No especificado'}`, margen + (pageWidth - margen * 2) / 2 + 6, y + 9.5);
+  doc.text(`CIF/NIF: ${cliente?.cif || 'No especificado'}`, margen + (pageWidth - margen * 2) / 2 + 6, y + 13.5);
+  doc.text(`Instalación (Centro): ${centro?.nombre || 'No especificado'}`, margen + (pageWidth - margen * 2) / 2 + 6, y + 17.5);
+  doc.text(`Dirección centro: ${dirCentroText}`, margen + (pageWidth - margen * 2) / 2 + 6, y + 21.5);
+  doc.text(`Ubicación centro: ${locCentroText}`, margen + (pageWidth - margen * 2) / 2 + 6, y + 25.5);
+  doc.text(`Teléfono: ${cliente?.telefono || centro?.telefono || 'No especificado'}`, margen + (pageWidth - margen * 2) / 2 + 6, y + 29.5);
 
-  y += 37;
+  y += boxHeight + 5;
   // --- OBLIGACIONES DE LA EMPRESA MANTENEDORA ---
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9.0);
@@ -123,7 +137,7 @@ export const generarContratoPDF = async (
   doc.setTextColor(70, 70, 70);
 
   const obligacionesEmpresa = [
-    'LA EMPRESA MANTENEDORA: ABANFOC S.L. con CIF B16794679 y nº de registro de agente de seguridad industrial de Catalunya 106001687 se compromete y adquiere las siguientes obligaciones en relación con los aparatos, equipos o sistemas cuyo mantenimiento o reparación les sea encomendado.',
+    `LA EMPRESA MANTENEDORA: ${empNombre} con CIF ${empCif} y nº de registro de agente de seguridad industrial de Catalunya ${empRasic} se compromete y adquiere las siguientes obligaciones en relación con los aparatos, equipos o sistemas cuyo mantenimiento o reparación les sea encomendado.`,
     'a) Revisar, mantener y comprobar los aparatos, equipos o instalaciones de acuerdo con los plazos reglamentarios, utilizando recambios y piezas originales o similares homologados.',
     'b) Facilitar personal competente y suficiente cuando sea requerido para corregir las deficiencias o averías que se produzcan en los aparatos, equipos o sistemas cuyo mantenimiento tiene encomendado.',
     'c) Informar por escrito al titular de los aparatos o sistemas que no ofrezcan garantía de correcto funcionamiento, presenten deficiencias que no puedan ser corregidas durante el mantenimiento o no cumplan las disposiciones vigentes que les sean aplicables. Dicho informe será razonado técnicamente.',
@@ -543,14 +557,14 @@ export const generarContratoPDF = async (
 
   if (sealBase64) {
     try {
-      const sealProps = doc.getImageProperties(sealBase64);
+      const { base64: sealOpt, format } = await optimizarImagenParaPDF(sealBase64, 800, 0.75);
+      const sealProps = doc.getImageProperties(sealOpt);
       const maxSealWidth = 45;
       const maxSealHeight = 27;
       const sealRatio = sealProps.width / sealProps.height;
       const sealWidth = Math.min(maxSealWidth, maxSealHeight * sealRatio);
       const sealHeight = sealWidth / sealRatio;
-      const format = getImageFormat(sealBase64);
-      doc.addImage(sealBase64, format, margen + 18, y + 2, sealWidth, sealHeight);
+      doc.addImage(sealOpt, format, margen + 18, y + 2, sealWidth, sealHeight);
     } catch (e) {
       console.error('Error dibujando el sello en el contrato:', e);
     }

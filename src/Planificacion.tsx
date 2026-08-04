@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Calendar, ChevronLeft, ChevronRight, Building2, FileText, AlertTriangle, CheckCheck } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Calendar, ChevronLeft, ChevronRight, Building2, FileText, AlertTriangle, CheckCheck, ArrowLeft } from 'lucide-react';
 import { addParte, updateParte, subscribePartes } from './firebase';
 
 const MESES = [
@@ -33,6 +34,7 @@ interface Parte {
 
 
 export default function Planificacion() {
+  const navigate = useNavigate();
   const [partes, setPartes] = useState<Parte[]>([]);
   const [tecnicos, setTecnicos] = useState<any[]>([]);
   const [centros, setCentros] = useState<any[]>([]);
@@ -245,7 +247,7 @@ export default function Planificacion() {
       case 'Anual':
         return { color: 'bg-amber-100 text-amber-800 border-amber-200', label: 'Revisión Anual', icon: CheckCheck };
       case 'Trimestral':
-        return { color: 'bg-sky-100 text-sky-800 border-sky-200', label: 'Revisión Trimestral', icon: AlertTriangle };
+        return { color: 'bg-sky-100 text-sky-800 border-zinc-300', label: 'Revisión Trimestral', icon: AlertTriangle };
       case 'Mensual':
         return { color: 'bg-emerald-100 text-emerald-800 border-emerald-200', label: 'Revisión Mensual', icon: Calendar };
       default:
@@ -254,26 +256,38 @@ export default function Planificacion() {
   };
 
   return (
-    <div className="min-h-screen bg-amber-50/40 p-4 md:p-8">
+    <div className="min-h-screen bg-[#F8FAFC] px-8 py-6">
       <div className="max-w-[1600px] mx-auto">
-        <div className="flex items-center gap-4 mb-8">
-          <h1 className="text-2xl md:text-3xl font-bold text-sky-950 flex items-center gap-3">
-            <Calendar className="w-8 h-8 text-sky-500" /> Planificación
-          </h1>
-          <label className="flex items-center gap-2 text-xs font-medium text-zinc-500 cursor-pointer select-none shrink-0 ml-auto">
-            <span className="text-[10px]">Fines de semana</span>
-            <div
-              onClick={() => setShowWeekends(!showWeekends)}
-              className={`relative w-9 h-5 rounded-full transition-all cursor-pointer ${showWeekends ? 'bg-sky-500' : 'bg-zinc-300'}`}
-            >
-              <div className={`absolute w-3.5 h-3.5 bg-white rounded-full top-0.5 transition-all shadow-sm ${showWeekends ? 'left-[18px]' : 'left-[3px]'}`} />
+        {/* Header */}
+        <div className="mb-6">
+          <button 
+            onClick={() => navigate('/')} 
+            className="flex items-center gap-1.5 text-xs font-semibold text-zinc-500 hover:text-zinc-900 mb-3 transition-colors cursor-pointer"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" /> Volver al panel
+          </button>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-black text-zinc-950 tracking-tight flex items-center gap-2">
+                Planificación de Revisiones
+              </h1>
+              <p className="text-xs font-semibold text-zinc-500 mt-1">Calendarización y asignación mensual de mantenimientos preventivos a técnicos.</p>
             </div>
-          </label>
+            <label className="flex items-center gap-2 text-xs font-bold text-zinc-500 cursor-pointer select-none shrink-0">
+              <span className="text-[10px]">Mostrar fines de semana</span>
+              <div
+                onClick={() => setShowWeekends(!showWeekends)}
+                className={`relative w-9 h-5 rounded-full transition-all cursor-pointer ${showWeekends ? 'bg-red-650' : 'bg-zinc-300'}`}
+              >
+                <div className={`absolute w-3.5 h-3.5 bg-white rounded-full top-0.5 transition-all shadow-sm ${showWeekends ? 'left-[18px]' : 'left-[3px]'}`} />
+              </div>
+            </label>
+          </div>
         </div>
 
         <div className="flex flex-col lg:flex-row gap-6 lg:h-[calc(100vh-180px)]">
           {/* BARRA LATERAL IZQUIERDA */}
-          <div onDragOver={onDragOver} onDrop={onDropSidebar} className="w-full lg:w-80 bg-white rounded-3xl p-6 shadow-xl border border-sky-100 flex flex-col shrink-0 h-[400px] lg:h-full">
+          <div onDragOver={onDragOver} onDrop={onDropSidebar} className="w-full lg:w-80 bg-white rounded-3xl p-6 shadow-xl border border-zinc-200/85 flex flex-col shrink-0 h-[400px] lg:h-full">
             {/* FILTRO DE BÚSQUEDA POR MES */}
             <div className="mb-5">
               <div className="relative">
@@ -304,7 +318,7 @@ export default function Planificacion() {
                       const badge = getRevisionBadge(revisionType);
                       const BadgeIcon = badge.icon;
                       return (
-                        <div key={centro._docId || centro.id} draggable onDragStart={(e) => onDragStartCentro(e, centro._docId || centro.id, revisionType)} className="p-3.5 bg-white border-2 border-sky-300 rounded-2xl shadow-md hover:shadow-xl transition-all cursor-grab active:cursor-grabbing">
+                        <div key={centro._docId || centro.id} draggable onDragStart={(e) => onDragStartCentro(e, centro._docId || centro.id, revisionType)} className="p-3.5 bg-white border-2 border-red-200 rounded-3xl shadow-md hover:shadow-xl transition-all cursor-grab active:cursor-grabbing">
                           <div className="flex flex-col gap-2 mb-3">
                             <span className={`w-fit px-2 py-1 text-[10px] font-bold rounded-full border ${badge.color} flex items-center gap-1`}>
                               <BadgeIcon className="w-3 h-3" /> {badge.label}
@@ -332,14 +346,14 @@ export default function Planificacion() {
           </div>
 
             {/* CALENDARIO */}
-          <div className="flex-1 bg-white rounded-3xl shadow-xl border border-sky-100 flex flex-col overflow-hidden h-[600px] lg:h-full">
+          <div className="flex-1 bg-white rounded-3xl shadow-xl border border-zinc-200/85 flex flex-col overflow-hidden h-[600px] lg:h-full">
             {/* Navegación del mes */}
             <div className="px-6 py-4 border-b border-sky-50 flex items-center justify-center gap-4 bg-sky-50/20">
-              <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))} className="p-1 hover:bg-white rounded-full transition-all border border-transparent hover:border-sky-100"><ChevronLeft/></button>
-              <h2 className="text-lg md:text-xl font-bold text-sky-950 min-w-[120px] md:min-w-[150px] text-center capitalize">
+              <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))} className="p-1 hover:bg-white rounded-full transition-all border border-transparent hover:border-zinc-200/85"><ChevronLeft/></button>
+              <h2 className="text-lg md:text-xl font-bold text-zinc-950 min-w-[120px] md:min-w-[150px] text-center capitalize">
                 {new Intl.DateTimeFormat('es-ES', { month: 'long', year: 'numeric' }).format(currentDate)}
               </h2>
-              <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))} className="p-1 hover:bg-white rounded-full transition-all border border-transparent hover:border-sky-100"><ChevronRight/></button>
+              <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))} className="p-1 hover:bg-white rounded-full transition-all border border-transparent hover:border-zinc-200/85"><ChevronRight/></button>
             </div>
             {/* Encabezados de días de la semana - alineados con las columnas del calendario */}
             <div className={`px-2 border-b border-sky-50 ${showWeekends ? 'grid grid-cols-7' : 'grid grid-cols-5'}`}>
@@ -358,7 +372,7 @@ export default function Planificacion() {
                 .map(({ date, currentMonth }, idx) => {
                 const dateStr = formatDate(date);
                 return (
-                  <div key={dateStr + idx} onDragOver={onDragOver} onDrop={(e) => onDrop(e, dateStr)} className={`min-h-[80px] md:min-h-[100px] p-1 md:p-2 border border-sky-50 flex flex-col ${currentMonth ? 'bg-amber-50/20' : 'bg-zinc-50/50 opacity-40'}`}>
+                  <div key={dateStr + idx} onDragOver={onDragOver} onDrop={(e) => onDrop(e, dateStr)} className={`min-h-[80px] md:min-h-[100px] p-1 md:p-2 border border-sky-50 flex flex-col ${currentMonth ? 'bg-amber-50/20' : 'bg-white opacity-40'}`}>
                     <span className="text-xs font-bold text-zinc-400 mb-1">{date.getDate()}</span>
                     <div className="flex-1 space-y-1">
                       {partes.filter(p => p.fechaProgramada === dateStr && p.estado !== 'Cerrado').map(p => {

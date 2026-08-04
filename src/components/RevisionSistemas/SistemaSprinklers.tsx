@@ -19,6 +19,7 @@ interface Props {
     handleDeleteEquipo: (equipoId: string) => void;
     handleCheckChange: (equipoId: string, itemKey: string, value: any, itemName?: string) => void;
     getCheckStats: (eq: EquipoInstalado) => { ok: number; fail: number; pending: number };
+    getEquipoSyncStatus?: (equipoId: string) => string;
 }
 
 const esUbicacionMarcaModelo = (label?: string, key?: string) => {
@@ -42,7 +43,8 @@ export default function SistemaSprinklers({
     setEditEquipo,
     handleDeleteEquipo,
     handleCheckChange,
-    getCheckStats
+    getCheckStats,
+    getEquipoSyncStatus
 }: Props) {
 
     const getResponseColorClass = (value: any, isSelected: boolean) => {
@@ -75,6 +77,16 @@ export default function SistemaSprinklers({
                                 <span className="px-3 py-1 bg-black text-white text-sm font-mono font-bold rounded-lg shadow-md min-w-[36px] text-center shrink-0">
                                     {eq.codigo || (i + 1).toString().padStart(2, '0')}
                                 </span>
+                                                                        {getEquipoSyncStatus && (() => {
+                                                                            const status = getEquipoSyncStatus(eq.id);
+                                                                            if (status === 'saving') {
+                                                                                return <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-full animate-pulse shadow-xs">🟡 Guardando...</span>;
+                                                                            }
+                                                                            if (status === 'offline') {
+                                                                                return <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-700 bg-red-50 border border-red-200/80 px-2 py-0.5 rounded-full shadow-xs">🔴 Sin conexión</span>;
+                                                                            }
+                                                                            return <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-full shadow-xs">🟢 Sincronizado</span>;
+                                                                        })()}
                             </div>
                             <div className="flex items-center gap-1.5">
                             </div>
@@ -481,64 +493,81 @@ export default function SistemaSprinklers({
                                     })}
                                 </div>
                             </div>
-                                                                                              {/* Campo notas debajo del grid, a ancho completo */}
-                                                                  {(() => {
-                                                                      const notesItems = getItemsToUse(sist.id).filter((item: ChecklistItem) => {
-                                                                          const lbl = (item.label || '').toLowerCase();
-                                                                          return lbl.includes('notas') || lbl.includes('observaciones') || lbl.includes('anomal');
-                                                                      });
+                                                                                                                                                                {/* Campos de Anomalías y Observaciones del equipo (Bloque único no duplicado) */}
+                                                                   {(() => {
+                                                                       const notesItems = getItemsToUse(sist.id).filter((item: ChecklistItem) => {
+                                                                           const lbl = (item.label || '').toLowerCase();
+                                                                           return lbl.includes('notas') || lbl.includes('observaciones') || lbl.includes('anomal');
+                                                                       });
 
-                                                                      if (notesItems.length > 0) {
-                                                                          return notesItems.map(item => {
-                                                                              const val = eq[item.key as keyof EquipoInstalado];
-                                                                              const esNoEncontrado = typeof val === 'string' && val.includes('no localizarse');
-                                                                              const tieneValorNotas = typeof val === 'string' && val.trim() !== '' && !esNoEncontrado;
-                                                                              // Detect dynamic system warnings if any
-                                                                              const isExtintor = (sist.tipo || sist.familia || '').toLowerCase().includes('extintor');
-                                                                              const isBie = (sist.tipo || sist.familia || '').toLowerCase().includes('bie') || (sist.tipo || sist.familia || '').toLowerCase().includes('boca');
-                                                                              const isCaseta = (sist.tipo || sist.familia || '').toLowerCase().includes('caseta');
-                                                                              
-                                                                              const esAvisoAutoMsg = typeof val === 'string' && (
-                                                                                  (isExtintor && (val.includes('Extintor caducado') || val.includes('Extintor necesita retimbre') || val.includes('Se aproxima caducidad o retimbrado'))) ||
-                                                                                  (isBie && (val.includes('Equipo caducado') || val.includes('Se necesita realizar prueba'))) ||
-                                                                                  (isCaseta && (val.includes('Manguera 70 mm. caducada') || val.includes('Manguera 70 mm. necesita prueba') || val.includes('Manguera 45 mm. caducada') || val.includes('Manguera 45 mm. necesita prueba')))
-                                                                              );
-                                                                              
-                                                                              const isErrorNotas = esNoEncontrado || algunCheckRojo || esAvisoAutoMsg;
-                                                                              return (
-                                                                                  <div key={item.key} className="px-4 pb-3 mt-4">
-                                                                                      <label className={`text-xs font-semibold mb-1 block ${isErrorNotas ? 'text-red-700' : 'text-slate-600'}`}>Observaciones y anomalías del equipo:</label>
-                                                                                      <textarea
-                                                                                          value={typeof val === 'string' ? val : ''}
-                                                                                          onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value)}
-                                                                                          className={`w-full px-4 py-3 rounded-xl text-sm outline-none focus:ring-2 resize-y min-h-[80px] ${isErrorNotas ? 'bg-red-50 border-2 border-red-400 text-red-800 font-bold focus:border-red-500 focus:ring-red-500/20' : `bg-white border border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20 ${tieneValorNotas ? 'font-bold' : ''}`}`}
-                                                                                          rows={4}
-                                                                                          placeholder="Escribe aquí las anomalías, observaciones o notas..."
-                                                                                      />
-                                                                                  </div>
-                                                                              );
-                                                                          });
-                                                                      } else {
-                                                                          const val = eq.anomalias;
-                                                                          const esNoEncontrado = typeof val === 'string' && val.includes('no localizarse');
-                                                                          const tieneValorNotas = typeof val === 'string' && val.trim() !== '' && !esNoEncontrado;
-                                                                          const isErrorNotas = esNoEncontrado || algunCheckRojo;
-                                                                          return (
-                                                                              <div key="static_notes" className="px-4 pb-3 mt-4">
-                                                                                  <label className={`text-xs font-semibold mb-1 block ${isErrorNotas ? 'text-red-700' : 'text-slate-600'}`}>Observaciones y anomalías del equipo:</label>
-                                                                                  <textarea
-                                                                                      value={typeof val === 'string' ? val : ''}
-                                                                                      onChange={(e) => handleCheckChange(eq.id, 'anomalias', e.target.value)}
-                                                                                      className={`w-full px-4 py-3 rounded-xl text-sm outline-none focus:ring-2 resize-y min-h-[80px] ${isErrorNotas ? 'bg-red-50 border-2 border-red-400 text-red-800 font-bold focus:border-red-500 focus:ring-red-500/20' : `bg-white border border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20 ${tieneValorNotas ? 'font-bold' : ''}`}`}
-                                                                                      rows={4}
-                                                                                      placeholder="Escribe aquí las anomalías, observaciones o notas..."
-                                                                                  />
-                                                                              </div>
-                                                                          );
-                                                                      }
-                                                                  })()}
+                                                                       const rawAnom = eq.anomalias;
+                                                                       const noteItemAnom = notesItems.find(i => (i.label || '').toLowerCase().includes('anomal') || (i.label || '').toLowerCase().includes('nota'));
+                                                                       const valAnom = (typeof rawAnom === 'string' && rawAnom.trim() !== '') 
+                                                                           ? rawAnom 
+                                                                           : (noteItemAnom && typeof eq[noteItemAnom.key as keyof EquipoInstalado] === 'string' ? (eq[noteItemAnom.key as keyof EquipoInstalado] as string) : '');
 
-                            {/* Galería de fotos debajo de las anomalías */}
+                                                                       const rawObs = (eq as any).observaciones;
+                                                                       const noteItemObs = notesItems.find(i => (i.label || '').toLowerCase().includes('observacion'));
+                                                                       const valObs = (typeof rawObs === 'string' && rawObs.trim() !== '') 
+                                                                           ? rawObs 
+                                                                           : (noteItemObs && typeof eq[noteItemObs.key as keyof EquipoInstalado] === 'string' ? (eq[noteItemObs.key as keyof EquipoInstalado] as string) : '');
+
+                                                                       const esNoEncontrado = typeof valAnom === 'string' && valAnom.includes('no localizarse');
+                                                                       const isExtintor = (sist.tipo || sist.familia || '').toLowerCase().includes('extintor');
+                                                                       const isBie = (sist.tipo || sist.familia || '').toLowerCase().includes('bie') || (sist.tipo || sist.familia || '').toLowerCase().includes('boca');
+                                                                       const isCaseta = (sist.tipo || sist.familia || '').toLowerCase().includes('caseta');
+                                                                       
+                                                                       const esAvisoAutoMsg = typeof valAnom === 'string' && (
+                                                                           (isExtintor && (valAnom.includes('Extintor caducado') || valAnom.includes('Extintor necesita retimbre') || valAnom.includes('Se aproxima caducidad o retimbrado'))) ||
+                                                                           (isBie && (valAnom.includes('Equipo caducado') || valAnom.includes('Se necesita realizar prueba'))) ||
+                                                                           (isCaseta && (valAnom.includes('Manguera 70 mm. caducada') || valAnom.includes('Manguera 70 mm. necesita prueba') || valAnom.includes('Manguera 45 mm. caducada') || valAnom.includes('Manguera 45 mm. necesita prueba')))
+                                                                       );
+                                                                       
+                                                                       const isErrorNotas = esNoEncontrado || algunCheckRojo || esAvisoAutoMsg;
+                                                                       const tieneAnomalia = (typeof valAnom === 'string' && valAnom.trim() !== '') || isErrorNotas;
+                                                                       const tieneObservacion = typeof valObs === 'string' && valObs.trim() !== '';
+
+                                                                       const handleAnomaliaChange = (newVal: string) => {
+                                                                           handleCheckChange(eq.id, 'anomalias', newVal);
+                                                                           if (noteItemAnom) {
+                                                                               handleCheckChange(eq.id, noteItemAnom.key, newVal);
+                                                                           }
+                                                                       };
+
+                                                                       const handleObservacionesChange = (newVal: string) => {
+                                                                           handleCheckChange(eq.id, 'observaciones', newVal);
+                                                                           if (noteItemObs) {
+                                                                               handleCheckChange(eq.id, noteItemObs.key, newVal);
+                                                                           }
+                                                                       };
+
+                                                                       return (
+                                                                           <div key="single_notes_block" className="px-4 pb-3 mt-4 space-y-3">
+                                                                               <div>
+                                                                                   <label className={`text-xs font-semibold mb-1 block ${tieneAnomalia ? 'text-red-700 font-bold' : 'text-slate-600'}`}>Anomalías del equipo:</label>
+                                                                                   <textarea
+                                                                                       value={typeof valAnom === 'string' ? valAnom : ''}
+                                                                                       onChange={(e) => handleAnomaliaChange(e.target.value)}
+                                                                                       className={`w-full px-4 py-2.5 rounded-xl text-sm outline-none focus:ring-2 resize-y min-h-[70px] ${tieneAnomalia ? 'bg-red-50 border-2 border-red-400 text-red-800 font-bold focus:border-red-500 focus:ring-red-500/20' : 'bg-white border border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20'}`}
+                                                                                       rows={3}
+                                                                                       placeholder="Escribe aquí las anomalías..."
+                                                                                   />
+                                                                               </div>
+                                                                               <div>
+                                                                                   <label className={`text-xs font-semibold mb-1 block ${tieneObservacion ? 'text-blue-700 font-bold' : 'text-slate-600'}`}>Observaciones del equipo:</label>
+                                                                                   <textarea
+                                                                                       value={typeof valObs === 'string' ? valObs : ''}
+                                                                                       onChange={(e) => handleObservacionesChange(e.target.value)}
+                                                                                       className={`w-full px-4 py-2.5 rounded-xl text-sm outline-none focus:ring-2 resize-y min-h-[60px] ${tieneObservacion ? 'bg-blue-50/70 border-2 border-blue-400 text-blue-900 font-bold focus:border-blue-500 focus:ring-blue-500/20' : 'bg-white border border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20'}`}
+                                                                                       rows={2}
+                                                                                       placeholder="Escribe aquí observaciones adicionales..."
+                                                                                   />
+                                                                               </div>
+                                                                           </div>
+                                                                       );
+                                                                   })()}
+
+                                                                  {/* Galería de fotos debajo de las anomalías */}
                             {(() => {
                                 const currentFotos = Array.isArray((eq as any)['fotos'])
                                     ? (eq as any)['fotos']
@@ -661,38 +690,7 @@ export default function SistemaSprinklers({
                                       >
                                           Revisado OK
                                       </button>
-                                      <button
-                                          type="button"
-                                          onClick={async () => {
-                                              const updatedEquipos = equiposInstalados.map(currEq => {
-                                                  if (currEq.id === eq.id) {
-                                                      return {
-                                                          ...currEq,
-                                                          revisado: true
-                                                      };
-                                                  }
-                                                  return currEq;
-                                              });
-                                              setEquiposInstalados(updatedEquipos);
-                                              saveEquiposProgress(updatedEquipos);
-                                              const equipoModificado = updatedEquipos.find(currEq => currEq.id === eq.id);
-                                              if (equipoModificado) {
-                                                  try { await updateEquipoInstalado(eq.id, equipoModificado as any); } catch (err) { console.error('Error guardando en Firestore:', err); }
-                                              }
-                                              showToast('Guardado');
-                                              // Cambiar estado del parte a "Abierto" si estaba en "Planificado"
-                                              if (parte?.estado === 'Planificado') {
-                                                  updateParte({ estado: 'Abierto' });
-                                                  const storedPartes = JSON.parse(localStorage.getItem('firecheck_db_partes') || '[]');
-                                                  const parteActual = storedPartes.find((p: any) => p.id === parteId);
-                                                  const docId = parteActual?._docId || parteId;
-                                                  try { await updateParteFirestore(docId, { estado: 'Abierto' }); } catch (err) { console.error('Error actualizando estado en Firestore:', err); }
-                                              }
-                                          }}
-                                          className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-semibold transition-all shadow-sm"
-                                      >
-                                          Revisado con anomalía
-                                      </button>
+                                      
                                       <button
                                           type="button"
                                           onClick={async () => {

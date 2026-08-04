@@ -11,9 +11,12 @@ interface EmpresaData {
   _docId?: string;
   nombre: string;
   cif: string;
+  rasic?: string;
   direccion: string;
   codigoPostal: string;
+  cp?: string;
   localidad: string;
+  poblacion?: string;
   provincia: string;
   telefono: string;
   email: string;
@@ -30,6 +33,7 @@ interface EmpresaData {
 const emptyEmpresa: EmpresaData = {
   nombre: '',
   cif: '',
+  rasic: '',
   direccion: '',
   codigoPostal: '',
   localidad: '',
@@ -87,6 +91,10 @@ function EmpresaForm({ empresa, onSave, onCancel }: {
         delete fields.ingenieroFirmaUrl;
       }
 
+      fields.poblacion = fields.localidad;
+      fields.cp = fields.codigoPostal;
+      fields.rasic = fields.rasic || '';
+
       await onSave({ _docId: empresa._docId, ...fields });
     } catch (error) {
       console.error("Error al guardar:", error);
@@ -128,6 +136,16 @@ function EmpresaForm({ empresa, onSave, onCancel }: {
                 onChange={e => setForm({...form, cif: e.target.value.toUpperCase()})}
                 className="w-full pl-9 pr-3 py-2.5 bg-zinc-50 border border-zinc-100 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
                 placeholder="B12345678" />
+            </div>
+          </div>
+          <div>
+            <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider ml-1">RASIC</label>
+            <div className="relative">
+              <CreditCard className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400" />
+              <input type="text" value={form.rasic || ''}
+                onChange={e => setForm({...form, rasic: e.target.value})}
+                className="w-full pl-9 pr-3 py-2.5 bg-zinc-50 border border-zinc-100 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                placeholder="106001687" />
             </div>
           </div>
           <div>
@@ -464,7 +482,8 @@ export default function ConfiguracionEmpresa() {
                   <h3 className="font-bold text-zinc-900 truncate">{emp.nombre || 'Sin nombre'}</h3>
                   <p className="text-xs text-zinc-500 truncate">
                     {emp.cif && <span className="mr-3">{emp.cif}</span>}
-                    {emp.localidad && <span>{emp.localidad}</span>}
+                    {emp.rasic && <span className="mr-3">RASIC: {emp.rasic}</span>}
+                    {(emp.localidad || emp.poblacion) && <span>{emp.localidad || emp.poblacion}</span>}
                   </p>
                   {emp.ingenieroNombre && (
                     <p className="text-[10px] text-zinc-400 mt-0.5">

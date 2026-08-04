@@ -4,7 +4,9 @@ import {
   Users, CalendarDays, FileText, SearchCheck, Wrench,
   HardHat, Calculator, Package, FileCheck, FileDigit, Receipt,
   Settings, Power, ChevronLeft, ChevronRight, LayoutDashboard,
-  Menu, X} from 'lucide-react';
+  Menu, X, Inbox} from 'lucide-react';
+import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { db } from '../firebase';
 import { APP_VERSION } from '../constants';
 
 interface SidebarProps {
@@ -36,7 +38,6 @@ const navItems: NavItem[] = [
   { id: 'pedidos', path: '/pedidos', title: 'Pedidos', Icon: FileText, allowedRoles: ['super-administrador', 'administrador'], section: 'documentacion' },
   { id: 'albaranes', path: '/albaranes', title: 'Albaranes', Icon: FileDigit, allowedRoles: ['super-administrador', 'administrador', 'visualizador'], section: 'documentacion' },
   { id: 'facturas', path: '/facturas', title: 'Facturas', Icon: Receipt, allowedRoles: ['super-administrador', 'administrador'], section: 'documentacion' },
-  { id: 'ajustes', path: '/ajustes', title: 'Configuraciones', Icon: Settings, allowedRoles: ['super-administrador', 'administrador'], section: 'configuracion' },
 ];
 
 export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
@@ -44,7 +45,60 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [displayLogo, setDisplayLogo] = useState(appLogo);
+  const [hasUnreadBuzon, setHasUnreadBuzon] = useState(false);
+
+  // Escuchar cambios en buzon para activar la luz de notificación parpadeante
+  useEffect(() => {
+    try {
+      const q = query(collection(db, 'buzon'), orderBy('createdAt', 'desc'));
+      const unsub = onSnapshot(q, (snapshot) => {
+        const lastSeenStr = localStorage.getItem('firecheck_buzon_last_seen');
+        const lastSeen = lastSeenStr ? parseInt(lastSeenStr, 10) : 0;
+
+        if (location.pathname === '/buzon') {
+          localStorage.setItem('firecheck_buzon_last_seen', String(Date.now()));
+          setHasUnreadBuzon(false);
+          return;
+        }
+
+        let unread = false;
+        snapshot.docs.forEach((d) => {
+          const data = d.data();
+          let docTime = 0;
+          if (data.updatedAt) {
+            docTime = typeof data.updatedAt.toMillis === 'function' ? data.updatedAt.toMillis() : Number(data.updatedAt);
+          } else if (data.createdAt) {
+            docTime = typeof data.createdAt.toMillis === 'function' ? data.createdAt.toMillis() : Number(data.createdAt);
+          }
+
+          if (Array.isArray(data.comentarios) && data.comentarios.length > 0) {
+            data.comentarios.forEach((c: any) => {
+              if (c.id) {
+                const parts = c.id.split('_');
+                if (parts[1]) {
+                  const cTime = parseInt(parts[1], 10);
+                  if (!isNaN(cTime) && cTime > docTime) docTime = cTime;
+                }
+              }
+            });
+          }
+
+          if (docTime > lastSeen) {
+            unread = true;
+          }
+        });
+
+        setHasUnreadBuzon(unread);
+      }, (err) => {
+        console.warn('Error escuchando buzon en Sidebar:', err);
+      });
+      return () => unsub();
+    } catch (err) {
+      console.warn('Error configurando listener buzon en Sidebar:', err);
+    }
+  }, [location.pathname]);
 
   useEffect(() => {
     const loadAndProcessLogo = async () => {
@@ -146,6 +200,12 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
     setMobileOpen(false);
   };
 
+  const handleOpenBuzon = () => {
+    localStorage.setItem('firecheck_buzon_last_seen', String(Date.now()));
+    setHasUnreadBuzon(false);
+    handleNavigate('/buzon');
+  };
+
   const sidebarBgColor = '#000000';
 
   const sidebarContent = (
@@ -158,16 +218,98 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
         {!collapsed && (
           <div className="flex flex-col items-center gap-2 w-full overflow-hidden py-1">
             <img src={displayLogo} alt="Logo" className="h-16 w-16 object-contain" onError={(e) => { (e.target as HTMLImageElement).src = '/favicon.png'; }} />
-            <div className="text-center">
+            <div className="text-center flex flex-col items-center">
               <p className="text-lg font-black tracking-wider text-red-600 leading-tight">ABANFOC</p>
-              <p className="text-xs text-white/90 font-semibold mt-0.5">
+              <p className="text-xs text-white/90 font-semibold mt-0.5 mb-1 flex items-center justify-center gap-1">
                 {APP_VERSION}
               </p>
+              <div className="flex items-center gap-1 mt-0.5">
+                {['super-administrador', 'administrador', 'editor', 'visualizador', 'tecnico'].includes(userRole) && (
+                  <button
+                    type="button"
+                    onClick={handleOpenBuzon}
+                    className={`relative p-1.5 rounded-lg transition-all cursor-pointer ${
+                      isActive('/buzon')
+                        ? 'text-red-600 bg-red-600/10'
+                        : 'text-zinc-400 hover:text-red-500 hover:bg-white/10'
+                    }`}
+                    title="Buzón"
+                  >
+                    <Inbox className="w-4 h-4" strokeWidth={1.75} />
+                    {hasUnreadBuzon && !isActive('/buzon') && (
+                      <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-red-600 rounded-full animate-pulse shadow-[0_0_8px_rgba(220,38,38,0.9)] border border-black" />
+                    )}
+                  </button>
+                )}
+                {['super-administrador', 'administrador'].includes(userRole) && (
+                  <button
+                    type="button"
+                    onClick={() => handleNavigate('/ajustes')}
+                    className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+                      isActive('/ajustes')
+                        ? 'text-red-600 bg-red-600/10'
+                        : 'text-zinc-400 hover:text-red-500 hover:bg-white/10'
+                    }`}
+                    title="Configuraciones"
+                  >
+                    <Settings className="w-4 h-4" strokeWidth={1.75} />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setShowLogoutModal(true)}
+                  className="p-1.5 rounded-lg transition-all cursor-pointer text-zinc-400 hover:text-red-500 hover:bg-white/10"
+                  title="Cerrar Sesión"
+                >
+                  <Power className="w-4 h-4" strokeWidth={1.75} />
+                </button>
+              </div>
             </div>
           </div>
         )}
         {collapsed && (
-          <img src={displayLogo} alt="Logo" className="h-9 w-9 object-contain" onError={(e) => { (e.target as HTMLImageElement).src = '/favicon.png'; }} />
+          <div className="flex flex-col items-center gap-1.5">
+            <img src={displayLogo} alt="Logo" className="h-9 w-9 object-contain" onError={(e) => { (e.target as HTMLImageElement).src = '/favicon.png'; }} />
+            {['super-administrador', 'administrador', 'editor', 'visualizador', 'tecnico'].includes(userRole) && (
+              <button
+                type="button"
+                onClick={handleOpenBuzon}
+                className={`relative p-1.5 rounded-lg transition-all cursor-pointer ${
+                  isActive('/buzon')
+                    ? 'text-red-600 bg-red-600/10'
+                    : 'text-zinc-400 hover:text-red-500 hover:bg-white/10'
+                }`}
+                title="Buzón"
+              >
+                <Inbox className="w-4 h-4" strokeWidth={1.75} />
+                {hasUnreadBuzon && !isActive('/buzon') && (
+                  <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-red-600 rounded-full animate-pulse shadow-[0_0_8px_rgba(220,38,38,0.9)] border border-black" />
+                )}
+              </button>
+            )}
+            {['super-administrador', 'administrador'].includes(userRole) && (
+              <button
+                type="button"
+                onClick={() => handleNavigate('/ajustes')}
+                className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+                  isActive('/ajustes')
+                    ? 'text-red-600 bg-red-600/10'
+                    : 'text-zinc-400 hover:text-red-500 hover:bg-white/10'
+                }`}
+                title="Configuraciones"
+              >
+                <Settings className="w-4 h-4" strokeWidth={1.75} />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setShowLogoutModal(true)}
+              className="p-1.5 rounded-lg transition-all cursor-pointer text-zinc-400 hover:text-red-500 hover:bg-white/10"
+              title="Cerrar Sesión"
+            >
+              <Power className="w-4 h-4" strokeWidth={1.75} />
+            </button>
+          </div>
         )}
       </div>
 
@@ -203,14 +345,14 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
         })}
       </div>
 
-      {/* User Info & Logout */}
+      {/* User Info */}
       <div className={`border-t border-zinc-900 px-3 py-3 shrink-0 ${collapsed ? 'flex flex-col items-center gap-2' : ''}`}>
         <div className="md:hidden mb-3 px-1">
           <p className="text-white/70 text-[9px] font-bold uppercase tracking-widest">Sesión Activa</p>
           <p className="text-white/70 text-[9px] font-medium">{APP_VERSION}</p>
         </div>
         {!collapsed && user && (
-          <div className="flex items-center gap-3 mb-3">
+          <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-red-500/20 rounded-full flex items-center justify-center text-xs font-bold text-red-500 border border-red-500/30">
               {user.nombre.charAt(0)}{user.apellidos.charAt(0)}
             </div>
@@ -221,20 +363,10 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
           </div>
         )}
         {collapsed && user && (
-          <div className="w-8 h-8 bg-red-500/20 rounded-full flex items-center justify-center text-xs font-bold text-red-500 border border-red-500/30 mb-2 -mt-2">
+          <div className="w-8 h-8 bg-red-500/20 rounded-full flex items-center justify-center text-xs font-bold text-red-500 border border-red-500/30">
             {user.nombre.charAt(0)}{user.apellidos.charAt(0)}
           </div>
         )}
-        <button
-          onClick={onLogout}
-          className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-white hover:text-red-500 hover:bg-white/10 transition-all uppercase tracking-wider ${
-            collapsed ? 'justify-center' : ''
-          }`}
-          title="Cerrar Sesión"
-        >
-          <Power className="w-4 h-4" />
-          {!collapsed && <span className="text-[10px]">Cerrar Sesión</span>}
-        </button>
       </div>
 
       {/* Collapse button (desktop) */}
@@ -286,6 +418,39 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
           {sidebarContent}
         </div>
       </aside>
+
+      {/* MODAL FLOTANTE CONFIRMACIÓN DE CERRAR SESIÓN */}
+      {showLogoutModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[9999] animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl w-full max-w-sm shadow-2xl flex flex-col animate-in zoom-in-95 duration-200 overflow-hidden text-left">
+            <div className="px-6 py-5 bg-red-50 border-b border-red-100 text-center">
+              <div className="w-14 h-14 bg-red-100 rounded-2xl flex items-center justify-center mx-auto mb-3 text-red-600 shadow-sm">
+                <Power className="w-7 h-7 stroke-[2.5]" />
+              </div>
+              <h2 className="text-lg font-bold text-red-950">¿Cerrar sesión?</h2>
+              <p className="text-sm text-red-600 mt-1">¿Estás seguro de que quieres cerrar la sesión actual?</p>
+            </div>
+            <div className="p-6 flex flex-col gap-3">
+              <button
+                onClick={() => {
+                  setShowLogoutModal(false);
+                  sessionStorage.removeItem('firecheck_logged_user');
+                  onLogout();
+                }}
+                className="w-full px-4 py-3 rounded-xl font-bold text-white bg-red-600 hover:bg-red-700 transition-colors shadow-sm cursor-pointer"
+              >
+                Sí, cerrar sesión
+              </button>
+              <button
+                onClick={() => setShowLogoutModal(false)}
+                className="w-full px-4 py-3 rounded-xl font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

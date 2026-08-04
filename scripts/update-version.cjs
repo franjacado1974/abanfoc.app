@@ -8,6 +8,9 @@
 const fs = require('fs');
 const path = require('path');
 
+// ── Ejecutar Verificación de Blindaje Obligatorio (AGENTS.md REGLA 6) ────────
+require('./verify-safeguards.cjs');
+
 // ── Calcular fecha actual ──────────────────────────────────────────────────
 const now = new Date();
 const dd = String(now.getDate()).padStart(2, '0');

@@ -21,13 +21,20 @@ export default function Loader() {
 
   return (
     <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-black overflow-hidden select-none">
-      {/* Dark ambient glowing meshes */}
-      <div className="absolute top-[-20%] left-[-20%] w-[80%] h-[80%] rounded-full bg-red-600/15 blur-[150px] pointer-events-none"></div>
-      <div className="absolute bottom-[-20%] right-[-20%] w-[80%] h-[80%] rounded-full bg-orange-600/10 blur-[150px] pointer-events-none"></div>
-      <div className="absolute top-[30%] left-[30%] w-[45%] h-[45%] rounded-full bg-red-950/20 blur-[130px] pointer-events-none"></div>
+      {/* Real Smoke Layer 1 - Crisp, high resolution, moving slowly */}
+      <div 
+        className="absolute inset-0 bg-cover bg-center select-none pointer-events-none mix-blend-screen animate-smoke-1"
+        style={{ backgroundImage: "url('/real_smoke_bg.png')" }}
+      />
+      
+      {/* Real Smoke Layer 2 - Offset, scaling up differently to create depth */}
+      <div 
+        className="absolute inset-0 bg-cover bg-center select-none pointer-events-none mix-blend-screen animate-smoke-2"
+        style={{ backgroundImage: "url('/real_smoke_bg.png')" }}
+      />
 
       {/* Main dark glassmorphic card */}
-      <div className="bg-zinc-950/60 backdrop-blur-xl p-8 sm:p-12 rounded-[2.5rem] border border-zinc-900 flex flex-col items-center w-full max-w-sm sm:max-w-md shadow-2xl text-center">
+      <div className="relative z-10 bg-zinc-950/60 backdrop-blur-xl p-8 sm:p-12 rounded-[2.5rem] border border-zinc-900 flex flex-col items-center w-full max-w-sm sm:max-w-md shadow-2xl text-center">
         {/* Rotating Extinguisher Container */}
         <div className="relative w-28 h-28 sm:w-32 sm:h-32 mb-8 bg-zinc-950 rounded-full flex items-center justify-center border border-zinc-900 shadow-[inset_0_2px_4px_rgba(0,0,0,0.5),0_10px_25px_-5px_rgba(239,68,68,0.15)] overflow-hidden">
           {/* Outer spinning dashed ring */}

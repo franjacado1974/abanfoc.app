@@ -95,6 +95,9 @@ export default function PartesMovil() {
                   <h3 className="font-black text-zinc-900 text-lg leading-tight mb-1">
                     {centro?.nombre || 'Centro Desconocido'}
                   </h3>
+                  <p className="text-[10px] text-zinc-400 font-mono mb-2">
+                    <span className="text-blue-600 font-bold">Parte: {parte.numeroMantenimiento || parte.id}</span>
+                  </p>
                   <div className="flex items-center gap-1.5 text-zinc-500">
                     <Building2 className="w-3.5 h-3.5" />
                     <span className="text-xs font-bold truncate">{cliente?.nombre || 'Cliente'}</span>

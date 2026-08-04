@@ -1,10 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Search, X, Plus, Building2, Calendar, Clock, CheckCircle, FileText, Trash2, Edit, Save, ChevronDown, ArrowLeft } from 'lucide-react';
 import { subscribePedidos, addPedido, updatePedido, deletePedido, subscribeClientes, subscribeCentros, subscribePresupuestos, type Pedido, type Presupuesto, type Cliente, type Centro } from './firebase';
 
 const ESTADOS = [
   { valor: 'Pendiente' as const, color: 'bg-amber-100 text-amber-700 border-amber-200', icono: Clock },
-  { valor: 'En Proceso' as const, color: 'bg-sky-100 text-sky-700 border-sky-200', icono: Clock },
+  { valor: 'En Proceso' as const, color: 'bg-sky-100 text-sky-700 border-zinc-300', icono: Clock },
   { valor: 'Completado' as const, color: 'bg-emerald-100 text-emerald-700 border-emerald-200', icono: CheckCircle },
 ];
 
@@ -12,11 +13,13 @@ const formatMoneda = (valor: number) =>
   new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(valor || 0);
 
 export default function Pedidos() {
+  const navigate = useNavigate();
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
   const [presupuestos, setPresupuestos] = useState<Presupuesto[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [centros, setCentros] = useState<Centro[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('Todos');
   const [view, setView] = useState<'list' | 'form'>('list');
   const [openStatusMenuId, setOpenStatusMenuId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -26,25 +29,19 @@ export default function Pedidos() {
     empresaId: '',
     clienteId: '',
     centroId: '',
-    titulo: '',
     fechaCreacion: new Date().toISOString(),
-    fechaPrevista: '',
-    items: [{ cantidad: 1, concepto: 'Trabajo', descripcion: '', precioUnidad: 0, subtotal: 0 }],
-    estado: 'Pendiente',
-    presupuestoId: '',
+    titulo: '',
     numeroPedido: '',
-    notas: '',
+    items: [],
+    estado: 'Pendiente',
+    presupuestoId: ''
   });
 
-  // Sincronización con Firebase - colección "pedidos"
   useEffect(() => {
-    const unsubPedidos = subscribePedidos(items => {
-      setPedidos(items);
-      localStorage.setItem('firecheck_db_pedidos', JSON.stringify(items));
-    });
-    const unsubClientes = subscribeClientes(items => setClientes(items));
-    const unsubCentros = subscribeCentros(items => setCentros(items));
-    const unsubPresupuestos = subscribePresupuestos(items => setPresupuestos(items));
+    const unsubPedidos = subscribePedidos(setPedidos);
+    const unsubClientes = subscribeClientes(setClientes);
+    const unsubCentros = subscribeCentros(setCentros);
+    const unsubPresupuestos = subscribePresupuestos(setPresupuestos);
     return () => { unsubPedidos(); unsubClientes(); unsubCentros(); unsubPresupuestos(); };
   }, []);
 
@@ -54,14 +51,18 @@ export default function Pedidos() {
   );
 
   const filteredPedidos = useMemo(() => {
-    if (!searchTerm.trim()) return pedidos;
+    let result = pedidos;
+    if (statusFilter !== 'Todos') {
+      result = result.filter(p => p.estado === statusFilter);
+    }
+    if (!searchTerm.trim()) return result;
     const term = searchTerm.toLowerCase();
-    return pedidos.filter(p =>
+    return result.filter(p =>
       p.titulo.toLowerCase().includes(term) ||
       (p.numeroPedido || '').toLowerCase().includes(term) ||
       clientes.find(c => c.id === p.clienteId)?.nombre?.toLowerCase().includes(term)
     );
-  }, [pedidos, searchTerm, clientes]);
+  }, [pedidos, searchTerm, clientes, statusFilter]);
 
   const getEstadoInfo = (estado: string) => ESTADOS.find(e => e.valor === estado) || ESTADOS[0];
 
@@ -165,18 +166,94 @@ export default function Pedidos() {
 
   if (view === 'list') {
     return (
-      <div className="px-4 md:px-8 py-6">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-          <div className="text-center md:text-left">
-            <h1 className="text-2xl font-bold text-zinc-900 tracking-tight flex items-center justify-center md:justify-start gap-3">
-              Pedidos
-              {pedidos.length > 0 && (
-                <span className="px-2.5 py-0.5 bg-blue-100 text-blue-700 text-[10px] font-bold rounded-full">{pedidos.length}</span>
-              )}
-            </h1>
-            <p className="text-sm text-zinc-500 mt-1">Gestiona los trabajos aceptados</p>
+      <div className="min-h-screen bg-[#F8FAFC] px-8 py-6">
+        {/* Header */}
+        <div className="mb-6">
+          <button 
+            onClick={() => navigate('/')} 
+            className="flex items-center gap-1.5 text-xs font-semibold text-zinc-500 hover:text-zinc-900 mb-3 transition-colors cursor-pointer"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" /> Volver al panel
+          </button>
+          <h1 className="text-2xl font-black text-zinc-950 tracking-tight">Pedidos de Clientes</h1>
+          <p className="text-xs font-semibold text-zinc-500 mt-1">Gestión y control de pedidos y trabajos aprobados en ejecución.</p>
+        </div>
+
+        {/* Pestañas + botones */}
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
+          {/* Pestañas */}
+          <div className="flex flex-wrap items-center gap-1.5 bg-zinc-100 p-1.5 rounded-2xl w-fit border border-zinc-200/40">
+            <button
+              onClick={() => setStatusFilter('Todos')}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 cursor-pointer ${
+                statusFilter === 'Todos'
+                  ? 'bg-white text-zinc-950 shadow-sm border border-zinc-200/20 font-extrabold'
+                  : 'text-zinc-500 hover:text-zinc-900 hover:bg-white/50'
+              }`}
+            >
+              <FileText className={`w-4 h-4 ${statusFilter === 'Todos' ? 'text-red-600' : 'text-zinc-400'}`} />
+              Todos
+              <span className={`text-[10px] font-black font-sans px-2 py-0.5 rounded-md transition-colors ${
+                statusFilter === 'Todos' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-zinc-200 text-zinc-500'
+              }`}>
+                {pedidos.length}
+              </span>
+            </button>
+            <button
+              onClick={() => setStatusFilter('Pendiente')}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 cursor-pointer ${
+                statusFilter === 'Pendiente'
+                  ? 'bg-white text-zinc-950 shadow-sm border border-zinc-200/20 font-extrabold'
+                  : 'text-zinc-500 hover:text-zinc-900 hover:bg-white/50'
+              }`}
+            >
+              <Clock className={`w-4 h-4 ${statusFilter === 'Pendiente' ? 'text-red-600' : 'text-zinc-400'}`} />
+              Pendientes
+              <span className={`text-[10px] font-black font-sans px-2 py-0.5 rounded-md transition-colors ${
+                statusFilter === 'Pendiente' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-zinc-250 text-zinc-500'
+              }`}>
+                {pedidos.filter(p => p.estado === 'Pendiente').length}
+              </span>
+            </button>
+            <button
+              onClick={() => setStatusFilter('En Proceso')}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 cursor-pointer ${
+                statusFilter === 'En Proceso'
+                  ? 'bg-white text-zinc-950 shadow-sm border border-zinc-200/20 font-extrabold'
+                  : 'text-zinc-500 hover:text-zinc-900 hover:bg-white/50'
+              }`}
+            >
+              <Clock className={`w-4 h-4 ${statusFilter === 'En Proceso' ? 'text-red-650' : 'text-zinc-400'}`} />
+              En Proceso
+              <span className={`text-[10px] font-black font-sans px-2 py-0.5 rounded-md transition-colors ${
+                statusFilter === 'En Proceso' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-zinc-250 text-zinc-500'
+              }`}>
+                {pedidos.filter(p => p.estado === 'En Proceso').length}
+              </span>
+            </button>
+            <button
+              onClick={() => setStatusFilter('Completado')}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 cursor-pointer ${
+                statusFilter === 'Completado'
+                  ? 'bg-white text-zinc-950 shadow-sm border border-zinc-200/20 font-extrabold'
+                  : 'text-zinc-500 hover:text-zinc-900 hover:bg-white/50'
+              }`}
+            >
+              <CheckCircle className={`w-4 h-4 ${statusFilter === 'Completado' ? 'text-red-600' : 'text-zinc-400'}`} />
+              Completados
+              <span className={`text-[10px] font-black font-sans px-2 py-0.5 rounded-md transition-colors ${
+                statusFilter === 'Completado' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-zinc-250 text-zinc-500'
+              }`}>
+                {pedidos.filter(p => p.estado === 'Completado').length}
+              </span>
+            </button>
           </div>
-          <button onClick={handleNuevo} className="flex items-center gap-1.5 bg-black text-white px-4 py-2 rounded-lg font-medium hover:bg-zinc-800 transition-all text-xs shadow-md">
+
+          {/* Botón de nuevo */}
+          <button 
+            onClick={handleNuevo} 
+            className="flex items-center justify-center gap-1.5 bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-xl font-bold shadow-md shadow-red-500/10 hover:shadow-lg hover:shadow-red-500/20 active:scale-95 transition-all text-xs cursor-pointer w-full lg:w-auto"
+          >
             <Plus className="w-3.5 h-3.5" /> Nuevo Pedido
           </button>
         </div>
@@ -188,7 +265,7 @@ export default function Pedidos() {
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
               {presupuestosAprobados.map(p => (
-                <button key={p.id} onClick={() => handleCrearDesdePresupuesto(p)} className="flex items-center justify-between p-3 bg-white rounded-lg border border-emerald-200 hover:border-emerald-400 hover:bg-emerald-50/50 transition-all text-left">
+                <button key={p.id} onClick={() => handleCrearDesdePresupuesto(p)} className="flex items-center justify-between p-3 bg-white rounded-xl border border-emerald-200 hover:border-emerald-400 hover:bg-emerald-50/50 transition-all text-left">
                   <div className="min-w-0">
                     <p className="text-sm font-bold text-zinc-800 truncate">{p.titulo}</p>
                     <p className="text-[10px] text-zinc-500">{p.nombreCliente} — {formatMoneda(p.total)}</p>
@@ -202,11 +279,11 @@ export default function Pedidos() {
 
         <div className="relative mb-5">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-          <input type="text" className="w-full pl-10 pr-4 py-2.5 bg-white rounded-lg border border-zinc-200 focus:border-blue-900 focus:ring-2 focus:ring-blue-900/10 outline-none text-sm" placeholder="Buscar..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+          <input type="text" className="w-full pl-10 pr-4 py-2.5 bg-white rounded-xl border border-zinc-200 focus:border-red-500 focus:ring-2 focus:ring-red-500/10 outline-none text-sm" placeholder="Buscar..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
         </div>
 
         {filteredPedidos.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-zinc-200 p-16 text-center">
+          <div className="bg-white rounded-3xl border border-zinc-200 p-16 text-center">
             <FileText className="w-16 h-16 text-zinc-200 mx-auto mb-4" />
             <h3 className="text-lg font-bold text-zinc-900 mb-2">{searchTerm ? 'Sin resultados' : 'No hay pedidos'}</h3>
             <p className="text-zinc-500 text-sm">Crea un nuevo pedido o convierte un presupuesto aprobado.</p>
@@ -243,14 +320,14 @@ export default function Pedidos() {
                               e.stopPropagation();
                               setOpenStatusMenuId(openStatusMenuId === (ped.id || ped._docId || '') ? null : (ped.id || ped._docId || ''));
                             }}
-                            className="p-1.5 text-zinc-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg"
+                            className="p-1.5 text-zinc-400 hover:text-red-650 hover:bg-red-50 rounded-xl"
                           >
                             <ChevronDown className="w-4 h-4" />
                           </button>
                           {openStatusMenuId === (ped.id || ped._docId || '') && (
                             <>
                               <div className="fixed inset-0 z-40" onClick={() => setOpenStatusMenuId(null)} />
-                              <div className="absolute right-0 top-full mt-1 bg-white rounded-lg shadow-xl border border-zinc-200 py-1 min-w-[130px] z-50 animate-in fade-in zoom-in-95 duration-100">
+                              <div className="absolute right-0 top-full mt-1 bg-white rounded-xl shadow-xl border border-zinc-200 py-1 min-w-[130px] z-50 animate-in fade-in zoom-in-95 duration-100">
                                 {ESTADOS.filter(e => e.valor !== ped.estado).map(e => {
                                   const Icono = e.icono;
                                   return (
@@ -271,8 +348,8 @@ export default function Pedidos() {
                           )}
                         </div>
                       )}
-                      <button onClick={() => handleEdit(ped)} className="p-1.5 text-zinc-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg"><Edit className="w-4 h-4" /></button>
-                      <button onClick={() => handleDelete(ped)} className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4" /></button>
+                      <button onClick={() => handleEdit(ped)} className="p-1.5 text-zinc-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl"><Edit className="w-4 h-4" /></button>
+                      <button onClick={() => handleDelete(ped)} className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-xl"><Trash2 className="w-4 h-4" /></button>
                     </div>
                   </div>
                 </div>
@@ -293,13 +370,13 @@ export default function Pedidos() {
           <ArrowLeft className="w-4 h-4" /> Volver
         </button>
 
-        <div className="bg-white rounded-2xl shadow-sm border border-zinc-200 p-6 md:p-8">
+        <div className="bg-white rounded-3xl shadow-sm border border-zinc-200 p-6 md:p-8">
           <h2 className="text-lg font-bold text-zinc-900 mb-6">{editingId ? 'Editar Pedido' : 'Nuevo Pedido'}</h2>
           <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="text-xs font-bold text-zinc-500 uppercase">Título *</label>
-                <input type="text" value={form.titulo} onChange={e => setForm({ ...form, titulo: e.target.value })} className="w-full px-4 py-2.5 bg-white border border-zinc-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none" />
+                <input type="text" value={form.titulo} onChange={e => setForm({ ...form, titulo: e.target.value })} className="w-full px-4 py-2.5 bg-white border border-zinc-200 rounded-xl text-sm focus:ring-2 focus:ring-red-500/10 focus:border-red-500 outline-none" />
               </div>
               <div className="space-y-2">
                 <label className="text-xs font-bold text-zinc-500 uppercase">Nº Pedido</label>
@@ -332,7 +409,7 @@ export default function Pedidos() {
             </div>
 
             {form.presupuestoId && (
-              <div className="p-3 bg-blue-50 rounded-xl border border-blue-200 text-xs text-blue-700">
+              <div className="p-3 bg-red-50 rounded-xl border border-blue-200 text-xs text-red-650">
                 Creado desde presupuesto: {presupuestos.find(p => p.id === form.presupuestoId)?.numeroPresupuesto || form.presupuestoId}
               </div>
             )}
@@ -340,7 +417,7 @@ export default function Pedidos() {
             <div>
               <div className="flex items-center justify-between mb-3">
                 <label className="text-xs font-bold text-zinc-500 uppercase">Líneas de trabajo</label>
-                <button type="button" onClick={addItem} className="text-xs font-bold text-blue-600 hover:underline flex items-center gap-1"><Plus className="w-3 h-3" /> Añadir</button>
+                <button type="button" onClick={addItem} className="text-xs font-bold text-red-650 hover:underline flex items-center gap-1"><Plus className="w-3 h-3" /> Añadir</button>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">

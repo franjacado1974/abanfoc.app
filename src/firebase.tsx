@@ -106,6 +106,13 @@ export interface Cliente {
   telefono?: string;
   contacto?: string;
   correo?: string;
+  correoGeneral?: string;
+  correoAdministracion?: string;
+  correoFacturacion?: string;
+  correoMantenimiento?: string;
+  correoCompras?: string;
+  correoPedidos?: string;
+  correoOtro?: string;
 }
 
 export interface Centro {
@@ -131,6 +138,19 @@ export interface Centro {
   precioTrimestralContrato?: string;
   precioMensualContrato?: string;
   comentariosTecnico?: string;
+  comentariosPrivados?: string;
+  formaPago?: string;
+  vencimiento?: string;
+  iban?: string;
+  notas?: string;
+  correo?: string;
+  correoGeneral?: string;
+  correoAdministracion?: string;
+  correoFacturacion?: string;
+  correoMantenimiento?: string;
+  correoCompras?: string;
+  correoPedidos?: string;
+  correoOtro?: string;
 }
 
 export interface Equipo {
@@ -144,7 +164,14 @@ export interface Empresa {
   nombre: string;
   direccion?: string;
   localidad?: string;
+  poblacion?: string;
+  codigoPostal?: string;
+  cp?: string;
   cif?: string;
+  rasic?: string;
+  telefono?: string;
+  email?: string;
+  correo?: string;
   logoUrl?: string;
   selloUrl?: string;
 }
@@ -1277,6 +1304,11 @@ export interface Certificado {
   fechaCreacion: string;
   estado: string;
   tecnicoId?: string;
+  tipoCertificado?: 'revision' | 'instalacion' | 'reparacion' | 'puesta_en_marcha' | 'obligacion_salarial' | 'generico' | string;
+  tituloCertificado?: string;
+  textoCertificado?: string;
+  observaciones?: string;
+  esManual?: boolean;
 }
 
 export async function addCertificado(certificado: Certificado) {
@@ -1331,6 +1363,11 @@ export function subscribeCertificados(callback: (certificados: Certificado[]) =>
           fechaCreacion: data.fechaCreacion || new Date().toISOString(),
           estado: data.estado || '',
           tecnicoId: data.tecnicoId || '',
+          tipoCertificado: data.tipoCertificado || 'revision',
+          tituloCertificado: data.tituloCertificado || '',
+          textoCertificado: data.textoCertificado || '',
+          observaciones: data.observaciones || '',
+          esManual: data.esManual === true,
         } as Certificado;
       });
       callback(items);
@@ -1355,7 +1392,7 @@ export interface ParteFirestore {
   empresaId?: string;
   periodicidad: string;
   mesesRevision: string;
-  estado: 'Planificado' | 'Abierto' | 'En revisión' | 'Descargado (Offline)' | 'Finalizado' | 'Cerrado' | 'Pre-Cerrado';
+  estado: 'Planificado' | 'Abierto' | 'En revisión' | 'Descargado (Offline)' | 'Finalizado' | 'Cerrado' | 'Pre-Cerrado' | 'Retimbrando';
   tipoTrabajo?: string;
   numeroMantenimiento?: string;
   fechaProgramada?: string;
@@ -1367,6 +1404,8 @@ export interface ParteFirestore {
   observacionesTecnico?: string;
   cantidadRetimbrados?: number;
   comentariosPrivados?: string;
+  equiposRetirados?: boolean;
+  retimbrado?: boolean;
 }
 
 export async function generateNumeroMantenimiento(): Promise<string> {
@@ -1837,7 +1876,7 @@ export async function saveImpuestoConfig(config: { iva: number; exento: boolean 
 // CHECKLIST - Firestore CRUD
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type TipoRespuestaChecklist = 'check' | 'texto' | 'texto-largo' | 'numero' | 'fecha' | 'imagen' | 'desplegable' | 'seccion' | 'tabla' | 'seleccion';
+export type TipoRespuestaChecklist = 'check' | 'texto' | 'texto-largo' | 'numero' | 'fecha' | 'imagen' | 'desplegable' | 'seccion' | 'tabla' | 'seleccion' | 'grafico';
 
 export interface ChecklistItem {
   id: string;
@@ -1848,8 +1887,9 @@ export interface ChecklistItem {
   orden: number;           // Orden de aparición
   tipoRespuesta: TipoRespuestaChecklist;  // Tipo de respuesta: 'check' | 'texto' | 'numero' | 'fecha'
   horizontal?: boolean;    // Si se muestra en disposición horizontal (pregunta a la izq, respuesta a la der)
-  opciones?: string[];     // Opciones si es desplegable
+  opciones?: string[];     // Opciones si es desplegable (y cabeceras horizontales para tablas)
   filasInicio?: number;    // Cantidad inicial de filas para tablas
+  filasNombres?: string[];  // Nombres predefinidos de las filas (cabecera vertical para tablas)
 }
 
 // ─── CHECKLIST POR COLECCIÓN DINÁMICA (checklist_{sistemaNombre}) ────────
@@ -2010,4 +2050,237 @@ export async function updateChecklistItemPorSistema(sistemaNombre: string, id: s
   }
 }
 
+// ─── REPARACIONES Y AVERÍAS ──────────────────────────────────────────────────
+export interface ReparacionItem {
+  id: string;
+  _docId?: string;
+  reparacion: string;
+  lugar: string;
+  tecnicoAsignado: string;
+  comercial: string;
+  estado: 'Pendiente' | 'En curso' | 'Parado' | 'Finalizado';
+  fechaCreacion: string;
+  observaciones?: string;
+  nota?: string;
+}
+
+export function subscribeReparaciones(callback: (items: ReparacionItem[]) => void) {
+  try {
+    const col = collection(db, 'reparaciones');
+    const unsub = onSnapshot(col, (snap) => {
+      const items = snap.docs.map(d => {
+        const data = d.data() as any;
+        return {
+          _docId: d.id,
+          id: data?.id ?? d.id,
+          reparacion: data?.reparacion || '',
+          lugar: data?.lugar || '',
+          tecnicoAsignado: data?.tecnicoAsignado || '',
+          comercial: data?.comercial || '',
+          estado: data?.estado || 'Pendiente',
+          fechaCreacion: data?.fechaCreacion || new Date().toISOString(),
+          observaciones: data?.observaciones || '',
+          nota: data?.nota || data?.observaciones || '',
+        } as ReparacionItem;
+      });
+      callback(items);
+    }, (err) => {
+      console.error('subscribeReparaciones error:', err);
+      callback([]);
+    });
+    return unsub;
+  } catch (e) {
+    console.error('subscribeReparaciones error:', e);
+    return () => {};
+  }
+}
+
+export async function addReparacion(data: ReparacionItem) {
+  try {
+    const col = collection(db, 'reparaciones');
+    const docRef = await addDoc(col, data);
+    return { ...data, _docId: docRef.id };
+  } catch (e) {
+    console.error('addReparacion error:', e);
+    throw e;
+  }
+}
+
+export async function updateReparacion(docId: string, data: Partial<ReparacionItem>) {
+  try {
+    const docRef = doc(db, 'reparaciones', docId);
+    await updateDoc(docRef, data as any);
+  } catch (e) {
+    console.error('updateReparacion error:', e);
+    throw e;
+  }
+}
+
+export async function deleteReparacion(docId: string) {
+  try {
+    const docRef = doc(db, 'reparaciones', docId);
+    await deleteDoc(docRef);
+  } catch (e) {
+    console.error('deleteReparacion error:', e);
+    throw e;
+  }
+}
+
+// ─── INSTALACIONES ───────────────────────────────────────────────────────────
+export interface InstalacionItem {
+  id: string;
+  _docId?: string;
+  instalacion: string;
+  lugar: string;
+  tecnicoAsignado: string;
+  comercial: string;
+  estado: 'Pendiente' | 'En curso' | 'Parado' | 'Finalizado';
+  fechaCreacion: string;
+  observaciones?: string;
+  nota?: string;
+}
+
+export function subscribeInstalaciones(callback: (items: InstalacionItem[]) => void) {
+  try {
+    const col = collection(db, 'instalaciones');
+    const unsub = onSnapshot(col, (snap) => {
+      const items = snap.docs.map(d => {
+        const data = d.data() as any;
+        return {
+          _docId: d.id,
+          id: data?.id ?? d.id,
+          instalacion: data?.instalacion || '',
+          lugar: data?.lugar || '',
+          tecnicoAsignado: data?.tecnicoAsignado || '',
+          comercial: data?.comercial || '',
+          estado: data?.estado || 'Pendiente',
+          fechaCreacion: data?.fechaCreacion || new Date().toISOString(),
+          observaciones: data?.observaciones || '',
+          nota: data?.nota || data?.observaciones || '',
+        } as InstalacionItem;
+      });
+      callback(items);
+    }, (err) => {
+      console.error('subscribeInstalaciones error:', err);
+      callback([]);
+    });
+    return unsub;
+  } catch (e) {
+    console.error('subscribeInstalaciones error:', e);
+    return () => {};
+  }
+}
+
+export async function addInstalacion(data: InstalacionItem) {
+  try {
+    const col = collection(db, 'instalaciones');
+    const docRef = await addDoc(col, data);
+    return { ...data, _docId: docRef.id };
+  } catch (e) {
+    console.error('addInstalacion error:', e);
+    throw e;
+  }
+}
+
+export async function updateInstalacion(docId: string, data: Partial<InstalacionItem>) {
+  try {
+    const docRef = doc(db, 'instalaciones', docId);
+    await updateDoc(docRef, data as any);
+  } catch (e) {
+    console.error('updateInstalacion error:', e);
+    throw e;
+  }
+}
+
+export async function deleteInstalacion(docId: string) {
+  try {
+    const docRef = doc(db, 'instalaciones', docId);
+    await deleteDoc(docRef);
+  } catch (e) {
+    console.error('deleteInstalacion error:', e);
+    throw e;
+  }
+}
+
+// ─── REVISIONES ANUALES PERIÓDICAS ───────────────────────────────────────────
+export interface RevisionItem {
+  id: string;
+  _docId?: string;
+  centroId?: string;
+  centroNombre?: string;
+  codigoCentro?: string;
+  empresaMantenedora?: string;
+  ubicacion?: string;
+  mes?: string;
+  estado: 'Planificado' | 'En curso' | 'Parado' | 'Finalizado';
+  fechaCreacion?: string;
+  observaciones?: string;
+  nota?: string;
+}
+
+export function subscribeRevisiones(callback: (items: RevisionItem[]) => void) {
+  try {
+    const col = collection(db, 'revisiones');
+    const unsub = onSnapshot(col, (snap) => {
+      const items = snap.docs.map(d => {
+        const data = d.data() as any;
+        return {
+          _docId: d.id,
+          id: data?.id ?? d.id,
+          centroId: data?.centroId || '',
+          centroNombre: data?.centroNombre || '',
+          codigoCentro: data?.codigoCentro || '',
+          empresaMantenedora: data?.empresaMantenedora || '',
+          ubicacion: data?.ubicacion || '',
+          mes: data?.mes || '',
+          estado: data?.estado || 'Planificado',
+          fechaCreacion: data?.fechaCreacion || new Date().toISOString(),
+          observaciones: data?.observaciones || '',
+          nota: data?.nota || data?.observaciones || '',
+        } as RevisionItem;
+      });
+      callback(items);
+    }, (err) => {
+      console.error('subscribeRevisiones error:', err);
+      callback([]);
+    });
+    return unsub;
+  } catch (e) {
+    console.error('subscribeRevisiones error:', e);
+    return () => {};
+  }
+}
+
+export async function addRevision(data: RevisionItem) {
+  try {
+    const col = collection(db, 'revisiones');
+    const docRef = await addDoc(col, data);
+    return { ...data, _docId: docRef.id };
+  } catch (e) {
+    console.error('addRevision error:', e);
+    throw e;
+  }
+}
+
+export async function updateRevision(docId: string, data: Partial<RevisionItem>) {
+  try {
+    const docRef = doc(db, 'revisiones', docId);
+    await updateDoc(docRef, data as any);
+  } catch (e) {
+    console.error('updateRevision error:', e);
+    throw e;
+  }
+}
+
+export async function deleteRevision(docId: string) {
+  try {
+    const docRef = doc(db, 'revisiones', docId);
+    await deleteDoc(docRef);
+  } catch (e) {
+    console.error('deleteRevision error:', e);
+    throw e;
+  }
+}
+
 export {app, storage, db, analytics};
+

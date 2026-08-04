@@ -1,10 +1,26 @@
 import SistemaExtintores from './components/RevisionSistemas/SistemaExtintores';
 import SistemaBies from './components/RevisionSistemas/SistemaBies';
 import SistemaDeteccion from './components/RevisionSistemas/SistemaDeteccion';
+import SistemaDeteccionAspiracion from './components/RevisionSistemas/SistemaDeteccionAspiracion';
+import SistemaDeteccionMonoxido from './components/RevisionSistemas/SistemaDeteccionMonoxido';
 import SistemaGenerico from './components/RevisionSistemas/SistemaGenerico';
+import SistemaSobrepresionPresurizacion from './components/RevisionSistemas/SistemaSobrepresionPresurizacion';
+import SistemaBombaElectrica from './components/RevisionSistemas/SistemaBombaElectrica';
+import SistemaBombaJockey from './components/RevisionSistemas/SistemaBombaJockey';
+import SistemaBombaDiesel from './components/RevisionSistemas/SistemaBombaDiesel';
+import SistemaAbastecimientoSalaBombas from './components/RevisionSistemas/SistemaAbastecimientoSalaBombas';
+import SistemaCasetas from './components/RevisionSistemas/SistemaCasetas';
+import SistemaExutorios from './components/RevisionSistemas/SistemaExutorios';
+import SistemaHidrantes from './components/RevisionSistemas/SistemaHidrantes';
+import SistemaPuertasRF from './components/RevisionSistemas/SistemaPuertasRF';
+import SistemaSprinklers from './components/RevisionSistemas/SistemaSprinklers';
+import SistemaExtincionGas from './components/RevisionSistemas/SistemaExtincionGas';
+import SistemaExtincionCampanaCocina from './components/RevisionSistemas/SistemaExtincionCampanaCocina';
+import SistemaFuenteAlimentacionAuxiliar from './components/RevisionSistemas/SistemaFuenteAlimentacionAuxiliar';
+import SistemaAlumbradoEmergencia from './components/RevisionSistemas/SistemaAlumbradoEmergencia';
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, Save, Layers, ChevronDown, ChevronUp, Plus, X, CheckCircle2, AlertTriangle, PenLine, RotateCcw, CheckCheck, Lock, MessageSquare } from 'lucide-react';
+import { ArrowLeft, Save, Layers, ChevronDown, ChevronUp, Plus, X, CheckCircle2, AlertTriangle, PenLine, RotateCcw, CheckCheck, Lock, MessageSquare, Unlock, Calendar } from 'lucide-react';
 import { addEquipoInstalado, addAlbaran, updateEquipoInstalado, updateParte as updateParteFirestore, updateCentro, subscribePartes, subscribeCentros, subscribeClientes, subscribeCentroSistemas, subscribeEquiposInstalados, subscribeArticulos, subscribeSistemasCategorias, generateNumeroMantenimiento, type Albaran, type ChecklistItem } from './firebase';
 import { subscribePlantillas, subscribeItemsDePlantilla, type ItemPlantilla } from './plantillas';
 import type { Centro, Parte, Cliente, CentroSistema, EquipoInstalado } from './Centros';
@@ -200,13 +216,105 @@ export function equipoTieneAnomalias(eq: any): boolean {
     return false;
 }
 
+/* ============================================================================
+ * BLINDAJE CRÍTICO (AGENTS.md REGLA 9): NO MODIFICAR ESTA FUNCIÓN
+ * Preserva espacios (tecla Espacio) y saltos de línea (tecla Enter) manuales.
+ * Queda PROHIBIDO usar .map(l => l.trim()).filter(Boolean) en la división inicial.
+ * ============================================================================ */
+export function evaluarAnomaliasPorFecha(eq: any, sistema?: any): string {
+    let rawAnom = typeof eq?.anomalias === 'string' ? eq.anomalias : '';
+    
+    // Capturar saltos de línea al final producidos al pulsar Enter en la textarea
+    const matchEndNewlines = rawAnom.match(/[\r\n]+$/);
+    const endNewlines = matchEndNewlines ? matchEndNewlines[0] : '';
+
+    let lineas = rawAnom.split(/\r?\n/);
+
+    const sistTipo = ((sistema?.tipo || sistema?.familia || '') + ' ' + (eq?.nombre || '') + ' ' + (eq?.tipo || '')).toLowerCase();
+    const isExtintor = sistTipo.includes('extintor');
+    const isBie = sistTipo.includes('bie') || sistTipo.includes('boca');
+
+    const today = new Date();
+
+    let caducado20 = false;
+    const fabStr = eq?.fechaFabricacion || eq?.fabricacion || eq?.item_fab || eq?.fecha_fabricacion || '';
+    if (fabStr) {
+        const dFab = new Date(fabStr);
+        if (!isNaN(dFab.getTime())) {
+            let diffYears = today.getFullYear() - dFab.getFullYear();
+            if (today.getMonth() < dFab.getMonth() || (today.getMonth() === dFab.getMonth() && today.getDate() < dFab.getDate())) {
+                diffYears--;
+            }
+            if (diffYears >= 20) caducado20 = true;
+        }
+    }
+
+    let retimbre5 = false;
+    const retStr = eq?.ultimoRetimbre || eq?.pruebaHidraulica || eq?.retimbre || eq?.item_ret || '';
+    if (retStr) {
+        const dRet = new Date(retStr);
+        if (!isNaN(dRet.getTime())) {
+            let diffYears = today.getFullYear() - dRet.getFullYear();
+            if (today.getMonth() < dRet.getMonth() || (today.getMonth() === dRet.getMonth() && today.getDate() < dRet.getDate())) {
+                diffYears--;
+            }
+            if (diffYears >= 5) retimbre5 = true;
+        }
+    }
+
+    // Limpiar alertas de fecha previas conservando textos y espacios manuales
+    lineas = lineas.filter((l: string) => {
+        const trimmed = l.trim();
+        return (
+            !trimmed.includes("Extintor caducado") &&
+            !trimmed.includes("Extintor necesita retimbr") &&
+            !trimmed.includes("Extintor necesita retimbre") &&
+            !trimmed.includes("Se aproxima caducidad") &&
+            !trimmed.includes("Equipo caducado") &&
+            !trimmed.includes("BIE caducado") &&
+            !trimmed.includes("BIE necesita realizar prueba")
+        );
+    });
+
+    if (isExtintor) {
+        if (caducado20 && !lineas.some((l: string) => l.includes("caducado + de 20 años"))) lineas.push("- Extintor caducado + de 20 años, se debe sustituir por equipo nuevo.");
+        if (retimbre5 && !lineas.some((l: string) => l.includes("retimbrado obligatorio")))  lineas.push("- Extintor necesita retimbrado obligatorio de los 5 años.");
+    } else if (isBie) {
+        if (caducado20 && !lineas.some((l: string) => l.includes("caducado + de 20 años"))) lineas.push("- BIE caducado + de 20 años, se debe sustituir tramo de manguera según normativa.");
+        if (retimbre5 && !lineas.some((l: string) => l.includes("prueba hidráulica")))  lineas.push("- BIE necesita realizar prueba hidráulica obligatoria cada 5 años.");
+    } else {
+        if (caducado20 && !lineas.some((l: string) => l.includes("caducado + de 20 años"))) lineas.push("- Equipo caducado + de 20 años, se debe sustituir por equipo nuevo.");
+        if (retimbre5 && !lineas.some((l: string) => l.includes("retimbrado obligatorio")))  lineas.push("- Equipo necesita retimbrado obligatorio de los 5 años.");
+    }
+
+    const resultadoBase = lineas.join('\n');
+    if (endNewlines && !resultadoBase.endsWith(endNewlines)) {
+        return resultadoBase + endNewlines;
+    }
+    return resultadoBase;
+}
+
 export default function RevisionChecklist() {
     const navigate = useNavigate();
     const location = useLocation();
     const { centroId, parteId } = location.state || {};
 
+    const loggedUser = (() => {
+        try {
+            const session = sessionStorage.getItem('firecheck_logged_user');
+            return session ? JSON.parse(session) : null;
+        } catch { return null; }
+    })();
+    const isTecnico = loggedUser?.rol === 'tecnico';
+
     const [centro, setCentro] = useState<Centro | null>(null);
     const [parte, setParte] = useState<Parte | null>(null);
+
+    const hasComments = Boolean(
+        (parte?.comentariosPrivados && parte.comentariosPrivados.trim().length > 0) ||
+        (centro?.comentariosTecnico && centro.comentariosTecnico.trim().length > 0) ||
+        ((parte as any)?.comentarios && (parte as any).comentarios.trim().length > 0)
+    );
     const [showCommentsModal, setShowCommentsModal] = useState(false);
     const [privateComment, setPrivateComment] = useState('');
     const [publicComment, setPublicComment] = useState('');
@@ -271,6 +379,12 @@ export default function RevisionChecklist() {
             const sistemaCat = categoriasSistema.find(c => {
                 const nombreSist = (sist.tipo || sist.familia || '').toLowerCase().trim();
                 const nombreCat = (c.nombre || '').toLowerCase().trim();
+                const isCocinaA = nombreSist.includes('cocina') || nombreSist.includes('campana');
+                const isCocinaB = nombreCat.includes('cocina') || nombreCat.includes('campana');
+                if (isCocinaA || isCocinaB) return isCocinaA && isCocinaB;
+                const isGasA = (nombreSist.includes('gas') || (nombreSist.includes('extinci') && !nombreSist.includes('extintor'))) && !isCocinaA;
+                const isGasB = (nombreCat.includes('gas') || (nombreCat.includes('extinci') && !nombreCat.includes('extintor'))) && !isCocinaB;
+                if (isGasA || isGasB) return isGasA && isGasB;
                 return nombreCat === nombreSist || nombreCat.includes(nombreSist) || nombreSist.includes(nombreCat);
             });
             const sistemaNombre = sistemaCat?.nombre || sist.tipo || sist.familia || '';
@@ -353,8 +467,18 @@ export default function RevisionChecklist() {
     });
 
     // Estados para pre-cierre y firmas
+    const [showEquiposSinRevisarModal, setShowEquiposSinRevisarModal] = useState(false);
+    const [pendingEquiposCount, setPendingEquiposCount] = useState(0);
+    const [showEquiposFechaInvalidaModal, setShowEquiposFechaInvalidaModal] = useState(false);
+    const [equiposFechaInvalidaCount, setEquiposFechaInvalidaCount] = useState(0);
+    const [showPreguntaRetimbrarModal, setShowPreguntaRetimbrarModal] = useState(false);
+    const [seRetiranEquipos, setSeRetiranEquipos] = useState(false);
+    const [showAvisoRetimbrarModal, setShowAvisoRetimbrarModal] = useState(false);
     const [showPreCierreModal, setShowPreCierreModal] = useState(false);
     const [showFirmasModal, setShowFirmasModal] = useState(false);
+    const [isSending, setIsSending] = useState(false);
+    const [sendProgress, setSendProgress] = useState(0);
+    const [sendCompleted, setSendCompleted] = useState(false);
     const canvasClienteRef = useRef<HTMLCanvasElement>(null);
     const canvasTecnicoRef = useRef<HTMLCanvasElement>(null);
     const [drawingCliente, setDrawingCliente] = useState(false);
@@ -364,19 +488,120 @@ export default function RevisionChecklist() {
     const [nombreClienteFirma, setNombreClienteFirma] = useState('');
     const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+    // ── GESTOR DE SINCRONIZACIÓN INTELIGENTE CON DEBOUNCE POR EQUIPO Y LOCAL-FIRST ─────────
+    const syncTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+    const pendingEquiposRef = useRef<Map<string, EquipoInstalado>>(new Map());
+    const inFlightSyncRef = useRef<Set<string>>(new Set());
+    const lastActiveEquipoIdRef = useRef<string | null>(null);
+    const [eqSyncStates, setEqSyncStates] = useState<Record<string, 'saving' | 'saved' | 'offline'>>({});
+
+    const getEquipoSyncStatus = (eqId: string): 'saving' | 'saved' | 'offline' => {
+        return eqSyncStates[eqId] || 'saved';
+    };
+
+    // Sincroniza inmediatamente un equipo específico en Firestore
+    const flushEquipoSync = async (eqId: string) => {
+        if (syncTimersRef.current[eqId]) {
+            clearTimeout(syncTimersRef.current[eqId]);
+            delete syncTimersRef.current[eqId];
+        }
+        const eqToSync = pendingEquiposRef.current.get(eqId);
+        if (eqToSync) {
+            inFlightSyncRef.current.add(eqId);
+            setEqSyncStates(prev => ({ ...prev, [eqId]: 'saving' }));
+            try {
+                await updateEquipoInstalado(eqId, eqToSync as any);
+                // Solo después de que Firestore confirme la escritura, limpiamos si no se introdujeron nuevos cambios
+                if (pendingEquiposRef.current.get(eqId) === eqToSync) {
+                    pendingEquiposRef.current.delete(eqId);
+                }
+                inFlightSyncRef.current.delete(eqId);
+                setEqSyncStates(prev => ({ ...prev, [eqId]: 'saved' }));
+            } catch (err) {
+                console.error('Error sincronizando equipo en Firestore:', err);
+                inFlightSyncRef.current.delete(eqId);
+                setEqSyncStates(prev => ({ ...prev, [eqId]: 'offline' }));
+            }
+        }
+    };
+
+    // Sincroniza inmediatamente TODOS los equipos con cambios pendientes
+    const flushAllPendingSync = async () => {
+        const pendingIds = Array.from(pendingEquiposRef.current.keys());
+        if (pendingIds.length === 0) return;
+        for (const eqId of pendingIds) {
+            await flushEquipoSync(eqId);
+        }
+    };
+
+    // Listener para vaciar la cola al recuperar cobertura sin duplicidad
+    useEffect(() => {
+        const handleOnline = () => {
+            flushAllPendingSync();
+        };
+        window.addEventListener('online', handleOnline);
+        return () => {
+            window.removeEventListener('online', handleOnline);
+            flushAllPendingSync();
+        };
+    }, []);
+
     // Función para mostrar el toast temporalmente
     const showToast = (message: string) => {
         setToastMessage(message);
         setTimeout(() => setToastMessage(null), 2500);
     };
 
-    // ── Si el parte está Cerrado, redirigir ───────────────────────────
-    useEffect(() => {
-        if (parte?.estado === 'Cerrado') {
-            alert('Este parte está cerrado y no puede ser modificado.');
-            navigate(-1);
+    // ── Función para Re-abrir Parte Cerrado ───────────────────────────
+    const handleReabrirParte = async () => {
+        if (!confirm('¿Estás seguro de que quieres re-abrir este parte de trabajo? El técnico podrá volver a editarlo.')) return;
+        await flushAllPendingSync();
+        try {
+            const docId = (parte as any)?._docId || parte?.id;
+            if (docId) {
+                await updateParteFirestore(docId, { estado: 'Abierto' });
+                updateParte({ estado: 'Abierto' });
+                showToast('Parte re-abierto correctamente');
+            }
+        } catch (err) {
+            console.error('Error re-abriendo parte:', err);
+            alert('No se pudo re-abrir el parte de trabajo.');
         }
-    }, [parte?.estado, navigate]);
+    };
+
+    // ── Función para Cerrar Parte Definitivamente ─────────────────────
+    const handleCerrarParte = async () => {
+        if (!confirm('¿Estás seguro de que deseas CERRAR definitivamente este parte? Pasará a ser de solo lectura y ya no aparecerá en el dispositivo del técnico.')) return;
+        await flushAllPendingSync();
+        try {
+            const docId = (parte as any)?._docId || parte?.id;
+            if (docId) {
+                await updateParteFirestore(docId, { estado: 'Cerrado' });
+                updateParte({ estado: 'Cerrado' });
+                showToast('Parte cerrado correctamente');
+            }
+        } catch (err) {
+            console.error('Error cerrando parte:', err);
+            alert('No se pudo cerrar el parte de trabajo.');
+        }
+    };
+
+    // ── Función para Pre-Cerrar Parte desde Escritorio (Luz Verde) ───
+    const handlePreCerrarParte = async () => {
+        if (!confirm('¿Deseas cambiar el estado de este parte a Pre-cerrado?')) return;
+        await flushAllPendingSync();
+        try {
+            const docId = (parte as any)?._docId || parte?.id;
+            if (docId) {
+                await updateParteFirestore(docId, { estado: 'Pre-Cerrado' });
+                updateParte({ estado: 'Pre-Cerrado' });
+                showToast('Parte en estado Pre-cerrado');
+            }
+        } catch (err) {
+            console.error('Error pre-cerrando parte:', err);
+            alert('No se pudo cambiar el estado a Pre-cerrado.');
+        }
+    };
 
     // ── Carga inicial desde Firestore ──────────────────────────────────────────
     useEffect(() => {
@@ -442,7 +667,7 @@ export default function RevisionChecklist() {
         };
     }, [centroId, parteId, navigate]);
 
-    // Generar numeroMantenimiento si no existe
+// Generar numeroMantenimiento si no existe
     useEffect(() => {
         if (parte && !parte.numeroMantenimiento) {
             generateNumeroMantenimiento().then(num => {
@@ -451,17 +676,43 @@ export default function RevisionChecklist() {
         }
     }, [parte?.id, parte?.numeroMantenimiento]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // 5. Cargar equipos de cada sistema en tiempo real
+    // 5. Cargar equipos de cada sistema en tiempo real con Fusión Inteligente
     useEffect(() => {
         if (!centroId || sistemasDelCentro.length === 0) return;
 
         const unsubs = sistemasDelCentro.map(sist =>
             subscribeEquiposInstalados(centroId, sist.id, (items: EquipoInstalado[]) => {
-                // Mantener todos los datos tal como están en Firestore (centro y parte comparten los mismos equipos)
-                // NO resetear ningún campo: los datos introducidos en el centro deben verse en el parte
+                // Evaluar anomalías de fecha automáticamente para cada equipo en tiempo real
+                const itemsEvaluados = items.map(item => {
+                    const anoActualizada = evaluarAnomaliasPorFecha(item, sist);
+                    if (anoActualizada !== item.anomalias) {
+                        const updatedItem = { ...item, anomalias: anoActualizada };
+                        if (!pendingEquiposRef.current.has(item.id)) {
+                            updateEquipoInstalado(item.id, updatedItem as any).catch(() => {});
+                        }
+                        return updatedItem;
+                    }
+                    return item;
+                });
+
                 setEquiposInstalados(prev => {
-                    const otros = prev.filter(e => e.sistemaId !== sist.id);
-                    return [...otros, ...items];
+                    const otrosSistemas = prev.filter(e => e.sistemaId !== sist.id);
+                    const actualesEsteSistema = prev.filter(e => e.sistemaId === sist.id);
+
+                    const itemsFusionados = itemsEvaluados.map(itemFromFirestore => {
+                        const esPendienteLocal = pendingEquiposRef.current.has(itemFromFirestore.id);
+                        const esEnVuelo = inFlightSyncRef.current.has(itemFromFirestore.id);
+                        const esEquipoActivo = lastActiveEquipoIdRef.current === itemFromFirestore.id;
+                        const equipoLocalActual = actualesEsteSistema.find(e => e.id === itemFromFirestore.id);
+
+                        if ((esPendienteLocal || esEnVuelo || esEquipoActivo) && equipoLocalActual) {
+                            // Preservar incondicionalmente el estado local activo en React
+                            return equipoLocalActual;
+                        }
+                        return itemFromFirestore;
+                    });
+
+                    return [...otrosSistemas, ...itemsFusionados];
                 });
             })
         );
@@ -469,6 +720,7 @@ export default function RevisionChecklist() {
     }, [centroId, sistemasDelCentro.length, parte?.estado]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const saveEquiposProgress = async (currentEquipos: EquipoInstalado[] = equiposInstalados) => {
+        await flushAllPendingSync();
         const allEquipos = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
         const equiposOtrosCentros = allEquipos.filter((eq: EquipoInstalado) => eq.centroId !== centroId);
         const updatedAllEquipos = [...equiposOtrosCentros, ...currentEquipos];
@@ -513,156 +765,79 @@ export default function RevisionChecklist() {
                 // Actualizar el valor del check
                 const updated = { ...eq, [checkKey]: value, revisado: true };
                 
-                // Lógica Extintores (igual que en EquipoFormulario)
+                // Sincronizar fechas y evaluar anomalías por fecha incondicionalmente
                 const sistema = sistemasDelCentro.find(s => s.id === eq.sistemaId);
-                const isExtintor = (sistema?.tipo || sistema?.familia || '').toLowerCase().includes('extintor');
-                if (isExtintor) {
-                    const itemsToUse = checklistItemsPorSistema[eq.sistemaId] || [];
-                    const fabItem = itemsToUse.find(i => (i.label||'').toLowerCase().includes('fabricaci'));
-                    const retItem = itemsToUse.find(i => (i.label||'').toLowerCase().includes('retimbre'));
-                    const anoItem = itemsToUse.find(i => (i.label||'').toLowerCase().includes('anomal') || (i.label||'').toLowerCase().includes('observacion'));
+                const itemsToUseForDates = checklistItemsPorSistema[eq.sistemaId] || getItemsToUse(eq.sistemaId) || [];
+                const fabItem = itemsToUseForDates.find(i => (i.label||'').toLowerCase().includes('fabricaci'));
+                const retItem = itemsToUseForDates.find(i => {
+                    const lbl = (i.label||'').toLowerCase();
+                    return lbl.includes('retimbre') || lbl.includes('hidra') || lbl.includes('prueba');
+                });
 
-                    if (fabItem && checkKey === fabItem.key) {
-                        updated.fechaFabricacion = value ? String(value) : '';
-                    }
-                    if (retItem && checkKey === retItem.key) {
-                        updated.ultimoRetimbre = value ? String(value) : '';
-                    }
-
-                    if (anoItem && fabItem) {
-                        const valFab = updated[fabItem.key as keyof EquipoInstalado] as string;
-                        const valRet = retItem ? updated[retItem.key as keyof EquipoInstalado] as string : null;
-                        let autoMsg = "";
-
-                        if (valFab) {
-                            const today = new Date();
-                            const dateFab = new Date(valFab);
-                            if (!isNaN(dateFab.getTime())) {
-                                const monthsSinceFab = (today.getFullYear() - dateFab.getFullYear()) * 12 + today.getMonth() - dateFab.getMonth();
-                                if (monthsSinceFab >= 240) {
-                                    autoMsg = "Extintor caducado + 20 años";
-                                } else {
-                                    let refDate = dateFab;
-                                    if (valRet) {
-                                        const dr = new Date(valRet);
-                                        if (!isNaN(dr.getTime())) refDate = dr;
-                                    }
-                                    const monthsSinceRef = (today.getFullYear() - refDate.getFullYear()) * 12 + today.getMonth() - refDate.getMonth();
-                                    if (monthsSinceRef >= 60) {
-                                        autoMsg = "Extintor necesita retimbre";
-                                    } else if (monthsSinceFab >= 237 || monthsSinceRef >= 57) {
-                                        autoMsg = "Se aproxima caducidad o retimbrado del equipo";
-                                    }
-                                }
-                            }
-                        }
-
-                        let currentAno = (updated[anoItem.key as keyof EquipoInstalado] as string) || "";
-                        const autoMsgs = ["Extintor caducado + 20 años", "Extintor necesita retimbre", "Se aproxima caducidad o retimbrado del equipo"];
-                        autoMsgs.forEach(m => { currentAno = currentAno.replace(m, '').trim(); });
-                        if (autoMsg) {
-                            currentAno = (currentAno + (currentAno ? "\n" : "") + autoMsg).trim();
-                        }
-                        (updated as any)[anoItem.key] = currentAno;
-                    }
+                if (fabItem && checkKey === fabItem.key) {
+                    updated.fechaFabricacion = value ? String(value) : '';
+                }
+                if (retItem && checkKey === retItem.key) {
+                    updated.ultimoRetimbre = value ? String(value) : '';
+                    updated.pruebaHidraulica = value ? String(value) : '';
                 }
 
-                // Lógica de BIES
-                const isBie = (sistema?.tipo || sistema?.familia || '').toLowerCase().includes('bie') || (sistema?.tipo || sistema?.familia || '').toLowerCase().includes('boca');
-                if (isBie) {
-                    const itemsToUse = checklistItemsPorSistema[eq.sistemaId] || [];
-                    const fabItem = itemsToUse.find(i => (i.label||'').toLowerCase().includes('fabricaci'));
-                    const hidraulicaItem = itemsToUse.find(i => {
-                        const lbl = (i.label||'').toLowerCase();
-                        return lbl.includes('hidra') || lbl.includes('prueba');
-                    });
-                    const anoItem = itemsToUse.find(i => (i.label||'').toLowerCase().includes('anomal') || (i.label||'').toLowerCase().includes('observacion') || (i.label||'').toLowerCase().includes('notas'));
+                // Evaluar y actualizar eq.anomalias conservando notas manuales
+                updated.anomalias = evaluarAnomaliasPorFecha(updated, sistema);
 
-                    if (fabItem && checkKey === fabItem.key) {
-                        updated.fechaFabricacion = value ? String(value) : '';
-                    }
-                    if (hidraulicaItem && checkKey === hidraulicaItem.key) {
-                        updated.pruebaHidraulica = value ? String(value) : '';
-                    }
-
-                    if (anoItem && (fabItem || hidraulicaItem)) {
-                        const valFab = fabItem ? updated[fabItem.key as keyof EquipoInstalado] as string : null;
-                        const valHidra = hidraulicaItem ? updated[hidraulicaItem.key as keyof EquipoInstalado] as string : null;
-                        let autoMsgCaducado = "";
-                        let autoMsgHidra = "";
-
-                        const today = new Date();
-
-                        if (valFab) {
-                            const dateFab = new Date(valFab);
-                            if (!isNaN(dateFab.getTime())) {
-                                let diffYears = today.getFullYear() - dateFab.getFullYear();
-                                if (today.getMonth() < dateFab.getMonth() || (today.getMonth() === dateFab.getMonth() && today.getDate() < dateFab.getDate())) {
-                                    diffYears--;
-                                }
-                                if (diffYears >= 20) {
-                                    autoMsgCaducado = "Equipo caducado + de 20 años se debe sustituir tramo de manguera según normativa.";
-                                }
-                            }
-                        }
-
-                        if (valHidra) {
-                            const dateHidra = new Date(valHidra);
-                            if (!isNaN(dateHidra.getTime())) {
-                                let diffYears = today.getFullYear() - dateHidra.getFullYear();
-                                if (today.getMonth() < dateHidra.getMonth() || (today.getMonth() === dateHidra.getMonth() && today.getDate() < dateHidra.getDate())) {
-                                    diffYears--;
-                                }
-                                if (diffYears >= 5) {
-                                    autoMsgHidra = "Se necesita realizar prueba hidráulica obligatoria cada 5 años.";
-                                }
-                            }
-                        }
-
-                        let currentAno = (updated[anoItem.key as keyof EquipoInstalado] as string) || "";
-                        const msgCaducado = "Equipo caducado + de 20 años se debe sustituir tramo de manguera según normativa.";
-                        const msgHidra = "Se necesita realizar prueba hidráulica obligatoria cada 5 años.";
-                        
-                        currentAno = currentAno.replace(msgCaducado, '').trim();
-                        currentAno = currentAno.replace(msgHidra, '').trim();
-                        currentAno = currentAno.replace(/\n\n+/g, '\n').trim();
-
-                        if (autoMsgCaducado) {
-                            currentAno = (currentAno + (currentAno ? "\n" : "") + autoMsgCaducado).trim();
-                        }
-                        if (autoMsgHidra) {
-                            currentAno = (currentAno + (currentAno ? "\n" : "") + autoMsgHidra).trim();
-                        }
-                        (updated as any)[anoItem.key] = currentAno;
-                    }
+                const anoItem = itemsToUseForDates.find(i => (i.label||'').toLowerCase().includes('anomal') || (i.label||'').toLowerCase().includes('observacion') || (i.label||'').toLowerCase().includes('notas'));
+                if (anoItem && anoItem.key && anoItem.key !== 'anomalias') {
+                    (updated as any)[anoItem.key] = updated.anomalias;
                 }
 
                 
-                // Si es un check booleano y tenemos el label, auto-gestionar anomalías
-                if (typeof value === 'boolean' && checkLabel) {
-                    const itemsToUse = checklistItemsPorSistema[eq.sistemaId] || [];
-                    const notasItem = itemsToUse.find(item => {
-                        const lbl = (item.label || '').toLowerCase();
-                        return lbl.includes('notas') || lbl.includes('observaciones') || lbl.includes('anomal');
-                    });
-                    const notasKey = notasItem?.key || null;
+                /* ============================================================================
+                 * BLINDAJE CRÍTICO (AGENTS.md REGLA 6): NO MODIFICAR ESTA AUTOGENERACIÓN
+                 * Asignación incondicional a updated.anomalias para preguntas 'NO CORRECTO'
+                 * ============================================================================ */
+                const itemsToUseForAuto = checklistItemsPorSistema[eq.sistemaId] || getItemsToUse(eq.sistemaId) || [];
+                const resolvedLabel = checkLabel || itemsToUseForAuto.find(i => i.key === checkKey)?.label || null;
 
-                    if (notasKey) {
-                        const textoAnomalia = `${checkLabel} mal`;
-                        const notasActuales = typeof (updated as any)[notasKey] === 'string' 
-                            ? ((updated as any)[notasKey] as string) 
-                            : '';
+                if (resolvedLabel && checkKey !== 'anomalias' && checkKey !== 'observaciones' && checkKey !== 'notas') {
+                    const valStr = typeof value === 'string' ? value.toUpperCase().trim() : '';
+                    const isFailed = (typeof value === 'boolean' && value === false) ||
+                                     (valStr === 'FALSE') ||
+                                     (valStr === 'NO CORRECTO' || valStr.includes('NO CORRECTO')) ||
+                                     (valStr === 'NO CONFORME' || valStr.includes('NO CONFORME')) ||
+                                     (valStr === 'INCORRECTO') ||
+                                     (valStr === 'NO');
+
+                    const cleanLabel = resolvedLabel.replace(/^[-\s–—•*]+/g, '').trim();
+                    const labelLowerNorm = cleanLabel.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                    const esPreguntaEstadoFinal = labelLowerNorm.includes('quedo') || labelLowerNorm.includes('comprobaciones la instalacion') || labelLowerNorm.includes('instalacion quedo');
+
+                    if (!esPreguntaEstadoFinal) {
+                        const textoAnomalia = `- ${cleanLabel}, NO CORRECTO.`;
                         
-                        if (value === false) {
-                            if (!notasActuales.includes(textoAnomalia)) {
-                                const nuevoTexto = notasActuales.trim() 
-                                    ? notasActuales + ', ' + textoAnomalia 
-                                    : textoAnomalia;
-                                (updated as any)[notasKey] = nuevoTexto;
+                        let lineasActuales = typeof updated.anomalias === 'string' 
+                            ? updated.anomalias.split(/\r?\n/).map(l => l.trim()).filter(Boolean)
+                            : [];
+
+                        if (isFailed) {
+                            const yaExiste = lineasActuales.some(l => l.includes(cleanLabel));
+                            if (!yaExiste) {
+                                lineasActuales.push(textoAnomalia);
+                            } else {
+                                lineasActuales = lineasActuales.map(l => l.includes(cleanLabel) ? textoAnomalia : l);
                             }
                         } else {
-                            const partes = notasActuales.split(', ').filter(p => p.trim() !== textoAnomalia);
-                            (updated as any)[notasKey] = partes.join(', ');
+                            lineasActuales = lineasActuales.filter(l => !l.includes(cleanLabel));
+                        }
+
+                        const resultAnoStr = lineasActuales.join('\n');
+                        updated.anomalias = resultAnoStr;
+
+                        const notasItem = itemsToUseForAuto.find(item => {
+                            const lbl = (item.label || '').toLowerCase();
+                            return lbl.includes('notas') || lbl.includes('observaciones') || lbl.includes('anomal');
+                        });
+                        if (notasItem && notasItem.key && notasItem.key !== 'anomalias') {
+                            (updated as any)[notasItem.key] = resultAnoStr;
                         }
                     }
                 }
@@ -670,25 +845,52 @@ export default function RevisionChecklist() {
                 return updated;
             });
 
-            // Guardar inmediatamente en Firestore el equipo modificado
+            // Sincronización inteligente con debounce por equipo y flush si cambia de equipo
             const equipoModificado = updatedEquipos.find(eq => eq.id === equipoId);
             if (equipoModificado) {
-                updateEquipoInstalado(equipoId, equipoModificado as any).catch(err => 
-                    console.error('Error guardando cambio en Firestore:', err)
-                );
+                // Marcar estado local como guardando/pendiente
+                setEqSyncStates(prev => ({ ...prev, [equipoId]: 'saving' }));
+
+                // Respaldar inmediatamente todo en localStorage para cero pérdida offline
+                try {
+                    const allEquiposStored = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
+                    const otrosCentros = allEquiposStored.filter((e: any) => e.centroId !== centroId);
+                    localStorage.setItem('firecheck_db_equipos_instalados', JSON.stringify([...otrosCentros, ...updatedEquipos]));
+                } catch (e) {}
+
+                // Mejora 1: Si cambia de equipo antes de 2.5s, sincronizar el equipo anterior de forma inmediata
+                if (lastActiveEquipoIdRef.current && lastActiveEquipoIdRef.current !== equipoId) {
+                    flushEquipoSync(lastActiveEquipoIdRef.current);
+                }
+                lastActiveEquipoIdRef.current = equipoId;
+
+                // Guardar última versión en cola
+                pendingEquiposRef.current.set(equipoId, equipoModificado);
+
+                // Cancelar temporizador previo de este equipo
+                if (syncTimersRef.current[equipoId]) {
+                    clearTimeout(syncTimersRef.current[equipoId]);
+                }
+
+                // Programar sincronización en 2.5 segundos tras dejar de teclear
+                syncTimersRef.current[equipoId] = setTimeout(() => {
+                    flushEquipoSync(equipoId);
+                }, 2500);
             }
 
             return updatedEquipos;
         });
     };
 
-    const handleSaveRevision = () => {
+    const handleSaveRevision = async () => {
         if (!parteId) return;
+        await flushAllPendingSync();
 
         // 1. Verificar que todos los equipos han sido procesados (Revisados o No encontrados)
         const equiposSinRevisar = equiposInstalados.filter(eq => !eq.revisado);
         if (equiposSinRevisar.length > 0) {
-            alert(`Atención: Quedan ${equiposSinRevisar.length} equipos sin revisar. Todos los equipos deben marcarse como 'Revisado', 'No encontrado' o ser inspeccionados manualmente antes de finalizar.`);
+            setPendingEquiposCount(equiposSinRevisar.length);
+            setShowEquiposSinRevisarModal(true);
             return;
         }
 
@@ -733,12 +935,13 @@ export default function RevisionChecklist() {
         });
 
         if (equiposFechaInvalida.length > 0) {
-            alert(`Atención: Hay ${equiposFechaInvalida.length} equipos donde la "Fecha de revisión" no coincide con "Hoy" (${hoy}). Asegúrate de pulsar "Hoy" o "Revisar todo como ok" para actualizar las fechas de hoy.`);
+            setEquiposFechaInvalidaCount(equiposFechaInvalida.length);
+            setShowEquiposFechaInvalidaModal(true);
             return;
         }
 
-        // Mostrar modal de pre-cierre
-        setShowPreCierreModal(true);
+        // Mostrar modal de pregunta de retimbrado
+        setShowPreguntaRetimbrarModal(true);
     };
 
     const handleConfirmarPreCierre = () => {
@@ -825,128 +1028,144 @@ export default function RevisionChecklist() {
         }
         if (!centro || !parte) return;
 
-        const firmaCliente = canvasClienteRef.current?.toDataURL('image/png') || '';
-        const firmaTecnico = canvasTecnicoRef.current?.toDataURL('image/png') || '';
+        await flushAllPendingSync();
 
-        // 1. Generar ID correlativo de Albarán para guardar las firmas
-        const albaranesExistentes: Albaran[] = JSON.parse(localStorage.getItem('firecheck_db_albaranes') || '[]');
-        const year = new Date().getFullYear().toString().slice(-2);
-        const prefix = `ALB-${year}-`;
-        const patterned = albaranesExistentes.filter((alb) => alb.id?.startsWith(prefix));
-        let nextNum = 1;
-        if (patterned.length > 0) {
-            const nums = patterned.map((alb) => {
-                const parts = alb.id.split('-');
-                return parseInt(parts[parts.length - 1]);
-            }).filter((n) => !isNaN(n));
-            if (nums.length > 0) nextNum = Math.max(...nums) + 1;
-        }
-        const nextId = `${prefix}${nextNum.toString().padStart(3, '0')}`;
+        setIsSending(true);
+        setSendProgress(15);
+        setSendCompleted(false);
 
-        const numMantenimiento = parte?.numeroMantenimiento || await generateNumeroMantenimiento();
-
-        // Generar items para el albarán basado en los equipos de este centro
-        const conteoPorSistema: Record<string, { cantidad: number, nombre: string }> = {};
-        equiposInstalados.forEach(eq => {
-            const sistId = eq.sistemaId || 'sin-sistema';
-            if (!conteoPorSistema[sistId]) {
-                const sist = sistemasDelCentro.find(s => s.id === sistId);
-                conteoPorSistema[sistId] = {
-                    cantidad: 0,
-                    nombre: (sist as any)?.nombre || (sist as any)?.tipo || (sist as any)?.familia || eq.nombre || eq.clase || 'Equipos varios'
-                };
-            }
-            conteoPorSistema[sistId].cantidad += 1;
-        });
-
-        const per = parte?.periodicidad || 'Revisión';
-        const conceptoStr = per.toLowerCase().includes('revisión') || per.toLowerCase().includes('revision') ? per : `Revisión ${per}`;
-
-        const albaranItems = Object.values(conteoPorSistema).map(sys => {
-            const desc = (sys.nombre || '').trim();
-            const formattedDesc = desc ? desc.charAt(0).toUpperCase() + desc.slice(1).toLowerCase() : '';
-            return {
-                cantidad: sys.cantidad,
-                concepto: conceptoStr,
-                descripcion: formattedDesc,
-                precioUnidad: 0,
-                subtotal: 0
-            };
-        });
-
-        const nuevoAlbaran: Albaran = {
-            id: nextId,
-            centroId: centro?.id || '',
-            clienteId: centro?.clienteId || '',
-            empresaId: centro?.empresaId || '',
-            parteId: parteId,
-            tecnicoId: parte?.tecnicoId || '',
-            numeroMantenimiento: numMantenimiento,
-            fechaCreacion: new Date().toISOString(),
-            facturado: false,
-            items: albaranItems,
-            firmaCliente,
-            firmaTecnico,
-            nombreFirmante: nombreClienteFirma
-        };
-
-        await saveEquiposProgress();
-
-
-
-        // Determinar si hay alguna anomalía para fijar el estado del Certificado
-        const tieneAnomalia = equiposInstalados.some(eq => equipoTieneAnomalias(eq));
-
-        const estadoCertificado = tieneAnomalia ? 'No favorable' : 'Favorable';
-
-
-        // Guardar Certificado localmente para que aparezca en el menú Certificados
         try {
-            const nuevoCertificado = {
-                id: `CERT-${new Date().getFullYear().toString().slice(-2)}-${Math.floor(1000 + Math.random() * 9000)}`,
-                clienteId: centro?.clienteId || parte?.clienteId || '',
+            const firmaCliente = canvasClienteRef.current?.toDataURL('image/png') || '';
+            const firmaTecnico = canvasTecnicoRef.current?.toDataURL('image/png') || '';
+
+            setSendProgress(35);
+
+            // 1. Generar ID correlativo de Albarán para guardar las firmas
+            const albaranesExistentes: Albaran[] = JSON.parse(localStorage.getItem('firecheck_db_albaranes') || '[]');
+            const year = new Date().getFullYear().toString().slice(-2);
+            const prefix = `ALB-${year}-`;
+            const patterned = albaranesExistentes.filter((alb) => alb.id?.startsWith(prefix));
+            let nextNum = 1;
+            if (patterned.length > 0) {
+                const nums = patterned.map((alb) => {
+                    const parts = alb.id.split('-');
+                    return parseInt(parts[parts.length - 1]);
+                }).filter((n) => !isNaN(n));
+                if (nums.length > 0) nextNum = Math.max(...nums) + 1;
+            }
+            const nextId = `${prefix}${nextNum.toString().padStart(3, '0')}`;
+
+            const numMantenimiento = parte?.numeroMantenimiento || await generateNumeroMantenimiento();
+
+            // Generar items para el albarán basado en los equipos de este centro
+            const conteoPorSistema: Record<string, { cantidad: number, nombre: string }> = {};
+            equiposInstalados.forEach(eq => {
+                const sistId = eq.sistemaId || 'sin-sistema';
+                if (!conteoPorSistema[sistId]) {
+                    const sist = sistemasDelCentro.find(s => s.id === sistId);
+                    conteoPorSistema[sistId] = {
+                        cantidad: 0,
+                        nombre: (sist as any)?.nombre || (sist as any)?.tipo || (sist as any)?.familia || eq.nombre || eq.clase || 'Equipos varios'
+                    };
+                }
+                conteoPorSistema[sistId].cantidad += 1;
+            });
+
+            const per = parte?.periodicidad || 'Revisión';
+            const conceptoStr = per.toLowerCase().includes('revisión') || per.toLowerCase().includes('revision') ? per : `Revisión ${per}`;
+
+            const albaranItems = Object.values(conteoPorSistema).map(sys => {
+                const desc = (sys.nombre || '').trim();
+                const formattedDesc = desc ? desc.charAt(0).toUpperCase() + desc.slice(1).toLowerCase() : '';
+                return {
+                    cantidad: sys.cantidad,
+                    concepto: conceptoStr,
+                    descripcion: formattedDesc,
+                    precioUnidad: 0,
+                    subtotal: 0
+                };
+            });
+
+            const nuevoAlbaran: Albaran = {
+                id: nextId,
                 centroId: centro?.id || '',
-                empresaId: centro?.empresaId || parte?.empresaId || '',
+                clienteId: centro?.clienteId || '',
+                empresaId: centro?.empresaId || '',
                 parteId: parteId,
+                tecnicoId: parte?.tecnicoId || '',
                 numeroMantenimiento: numMantenimiento,
                 fechaCreacion: new Date().toISOString(),
-                estado: estadoCertificado
-            };
-
-            const certificadosExistentes = JSON.parse(localStorage.getItem('firecheck_db_certificados') || '[]');
-            certificadosExistentes.push(nuevoCertificado);
-            localStorage.setItem('firecheck_db_certificados', JSON.stringify(certificadosExistentes));
-        } catch (certSaveErr) {
-            console.error('Error al guardar el certificado en local storage:', certSaveErr);
-        }
-
-        try {
-            // Guardar Albarán con las firmas
-            await addAlbaran(nuevoAlbaran);
-            
-            // Cambiar estado a Pre-Cerrado y guardar firmas en el parte
-            const docId = (parte as any)?._docId || parteId;
-            await updateParteFirestore(docId, { 
-                estado: 'Pre-Cerrado', 
-                numeroMantenimiento: numMantenimiento,
+                facturado: false,
+                items: albaranItems,
                 firmaCliente,
                 firmaTecnico,
                 nombreFirmante: nombreClienteFirma
+            };
+
+            setSendProgress(60);
+            await saveEquiposProgress();
+
+            // Determinar si hay alguna anomalía para fijar el estado del Certificado
+            const tieneAnomalia = equiposInstalados.some(eq => equipoTieneAnomalias(eq));
+            const estadoCertificado = tieneAnomalia ? 'No favorable' : 'Favorable';
+
+            // Guardar Certificado localmente para que aparezca en el menú Certificados
+            try {
+                const nuevoCertificado = {
+                    id: `CERT-${new Date().getFullYear().toString().slice(-2)}-${Math.floor(1000 + Math.random() * 9000)}`,
+                    clienteId: centro?.clienteId || parte?.clienteId || '',
+                    centroId: centro?.id || '',
+                    empresaId: centro?.empresaId || parte?.empresaId || '',
+                    parteId: parteId,
+                    numeroMantenimiento: numMantenimiento,
+                    fechaCreacion: new Date().toISOString(),
+                    estado: estadoCertificado
+                };
+
+                const certificadosExistentes = JSON.parse(localStorage.getItem('firecheck_db_certificados') || '[]');
+                certificadosExistentes.push(nuevoCertificado);
+                localStorage.setItem('firecheck_db_certificados', JSON.stringify(certificadosExistentes));
+            } catch (certSaveErr) {
+                console.error('Error al guardar el certificado en local storage:', certSaveErr);
+            }
+
+            setSendProgress(80);
+
+            // Guardar Albarán con las firmas
+            await addAlbaran(nuevoAlbaran);
+            
+            // Cambiar estado a Finalizado y guardar firmas en el parte
+            const docId = (parte as any)?._docId || parteId;
+            await updateParteFirestore(docId, { 
+                estado: 'Finalizado', 
+                numeroMantenimiento: numMantenimiento,
+                firmaCliente,
+                firmaTecnico,
+                nombreFirmante: nombreClienteFirma,
+                equiposRetirados: seRetiranEquipos
             } as any);
 
             // Actualizar localmente
             updateParte({ 
-                estado: 'Pre-Cerrado', 
+                estado: 'Finalizado', 
                 numeroMantenimiento: numMantenimiento,
                 firmaCliente,
                 firmaTecnico,
-                nombreFirmante: nombreClienteFirma
+                nombreFirmante: nombreClienteFirma,
+                equiposRetirados: seRetiranEquipos
             });
 
-            setShowFirmasModal(false);
-            navigate(-1);
+            setSendProgress(100);
+            setSendCompleted(true);
+
+            setTimeout(() => {
+                setIsSending(false);
+                setShowFirmasModal(false);
+                navigate(-1);
+            }, 3000);
         } catch (err) {
             console.error('Error al finalizar el parte:', err);
+            setIsSending(false);
             alert('Error al guardar los datos finales y las firmas.');
         }
     };
@@ -1124,11 +1343,6 @@ export default function RevisionChecklist() {
         return [];
     };
 
-    const sistemaTieneAnomalias = (sistemaId: string) => {
-        const equiposSistema = equiposInstalados.filter((eq) => eq.sistemaId === sistemaId);
-        return equiposSistema.some((eq) => equipoTieneAnomalias(eq));
-    };
-
     const getCheckStats = (eq: EquipoInstalado) => {
         let ok = 0;
         let fail = 0;
@@ -1192,6 +1406,42 @@ export default function RevisionChecklist() {
             </div>
 
             <div className="max-w-5xl mx-auto px-6 py-8">
+                {parte?.estado === 'Cerrado' && (
+                    <div className="mb-6 p-4 bg-orange-50 border border-orange-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-orange-850 shadow-sm animate-in fade-in slide-in-from-top-3 duration-300">
+                        <div className="flex items-center gap-3">
+                            <AlertTriangle className="w-5 h-5 text-orange-650 shrink-0" />
+                            <div className="text-sm font-semibold">
+                                Este parte de trabajo está cerrado y se muestra en modo de solo lectura.
+                            </div>
+                        </div>
+                        {!isTecnico && (
+                            <button
+                                type="button"
+                                onClick={handleReabrirParte}
+                                className="px-4 py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-orange-100 flex items-center gap-1.5 shrink-0"
+                            >
+                                <Unlock className="w-3.5 h-3.5" /> Re-abrir Parte
+                            </button>
+                        )}
+                    </div>
+                )}
+                {parte?.estado !== 'En revisión' && parte?.estado !== 'Cerrado' && parte?.estado !== 'Pre-Cerrado' && (
+                    <div className="mb-6 p-4 bg-sky-50 border border-sky-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-sky-900 shadow-sm animate-in fade-in slide-in-from-top-3 duration-300">
+                        <div className="flex items-center gap-3">
+                            <CheckCircle2 className="w-5 h-5 text-sky-600 shrink-0" />
+                            <div className="text-sm font-semibold">
+                                Pulsa en <span className="font-bold text-green-700">"Empezar revisión"</span> para habilitar la edición de este parte. Puedes desplegar los sistemas para consultar el contenido.
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => handleParteChange({ estado: 'En revisión' })}
+                            className="px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-green-100 flex items-center gap-1.5 shrink-0"
+                        >
+                            <CheckCircle2 className="w-3.5 h-3.5" /> Empezar revisión
+                        </button>
+                    </div>
+                )}
                 {/* Header Card */}
                 <div className="mb-8 bg-white rounded-2xl border border-slate-200 overflow-hidden">
                     <div className="px-6 py-6 border-b border-slate-100 relative">
@@ -1199,14 +1449,22 @@ export default function RevisionChecklist() {
                             Revisión del parte: <span className="text-slate-500 font-mono text-lg">{parte.numeroMantenimiento || parte.id}</span>
                         </h1>
                         
-                        <div className="mt-4">
-                            <div className="text-lg font-bold text-slate-700">
-                                {clientInfo?.nombre || 'Cliente'} - {centro.nombre}
+                        <div className="mt-4 space-y-1">
+                            <div className="text-lg font-bold text-slate-800">
+                                {clientInfo?.nombre || 'Cliente'}
                             </div>
-                            <div className="text-sm text-slate-500 mt-1">
+                            <div className="text-base font-semibold text-slate-600 flex items-center gap-2 flex-wrap">
+                                <span>{centro.nombre}</span>
+                                {(centro.id || centro.customIdPart) && (
+                                    <span className="text-xs font-mono font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                                        {centro.id || centro.customIdPart}
+                                    </span>
+                                )}
+                            </div>
+                            <div className="text-sm text-slate-500">
                                 {centro.direccion}, {centro.poblacion}
                             </div>
-                            <div className="text-sm text-slate-500 mt-1">
+                            <div className="text-sm text-slate-500">
                                 Tipo de revisión: <span className="font-semibold text-slate-700">{parte.periodicidad || 'No definida'}</span>
                             </div>
                         </div>
@@ -1284,6 +1542,18 @@ export default function RevisionChecklist() {
                             const sistemaCat = categoriasSistema.find(c => {
                                 const nombreSist = (sist.tipo || sist.familia || '').toLowerCase().trim();
                                 const nombreCat = (c.nombre || '').toLowerCase().trim();
+                                const isMonoxA = nombreSist.includes('monoxido') || nombreSist.includes('monox');
+                                const isMonoxB = nombreCat.includes('monoxido') || nombreCat.includes('monox');
+                                if (isMonoxA || isMonoxB) return isMonoxA && isMonoxB;
+                                const isAspA = nombreSist.includes('aspiraci') || nombreSist.includes('aspirac');
+                                const isAspB = nombreCat.includes('aspiraci') || nombreCat.includes('aspirac');
+                                if (isAspA || isAspB) return isAspA && isAspB;
+                                const isCocinaA = nombreSist.includes('cocina') || nombreSist.includes('campana');
+                                const isCocinaB = nombreCat.includes('cocina') || nombreCat.includes('campana');
+                                if (isCocinaA || isCocinaB) return isCocinaA && isCocinaB;
+                                const isGasA = (nombreSist.includes('gas') || (nombreSist.includes('extinci') && !nombreSist.includes('extintor'))) && !isCocinaA;
+                                const isGasB = (nombreCat.includes('gas') || (nombreCat.includes('extinci') && !nombreCat.includes('extintor'))) && !isCocinaB;
+                                if (isGasA || isGasB) return isGasA && isGasB;
                                 return nombreCat.includes(nombreSist) || nombreSist.includes(nombreCat);
                             });
                             const imagenUrl = sistemaCat?.imagenUrl;
@@ -1308,12 +1578,35 @@ export default function RevisionChecklist() {
                                                 )}
                                             </div>
                                             <div className="min-w-0">
-                                                <h2 className="text-lg font-semibold text-slate-800 truncate">
-                                                    {sist.familia || sist.tipo}
-                                                </h2>
+                                                {(() => {
+                                                    const tieneAnomaliaSistema = equiposInstalados
+                                                        .filter(eq => String(eq.sistemaId) === String(sist.id))
+                                                        .some(eq => {
+                                                            if (typeof eq.anomalias === 'string' && eq.anomalias.trim() !== '') return true;
+                                                            for (const k of Object.keys(eq)) {
+                                                                if (k.toLowerCase().includes('anomal')) {
+                                                                    const val = eq[k];
+                                                                    if (typeof val === 'string' && val.trim() !== '') return true;
+                                                                }
+                                                            }
+                                                            return false;
+                                                        });
+                                                    return (
+                                                        <h2 className="text-lg font-semibold text-slate-800 truncate flex items-center gap-2">
+                                                            <span>{sist.familia || sist.tipo}</span>
+                                                            {tieneAnomaliaSistema && (
+                                                                <span title="Este sistema contiene equipos con anomalías">
+                                                                    <AlertTriangle className="w-5 h-5 text-amber-500 fill-amber-100 shrink-0" />
+                                                                </span>
+                                                            )}
+                                                        </h2>
+                                                    );
+                                                })()}
                                                 <p className="text-xs text-slate-400 mt-0.5">
                                                     {(() => {
-                                                        const equiposSistema = equiposInstalados.filter(eq => eq.sistemaId === sist.id);
+                                                        const equiposSistema = equiposInstalados
+                                                          .filter(eq => eq.sistemaId === sist.id)
+                                                          .sort((a, b) => (a.codigo || '').localeCompare(b.codigo || '', undefined, { numeric: true, sensitivity: 'base' }));
                                                         const numEquipos = equiposSistema.length;
                                                         
                                                         // Buscar el campo "Referencia instalación" en el primer equipo
@@ -1334,6 +1627,76 @@ export default function RevisionChecklist() {
                                                         return `${referenciaTexto}${numEquipos} equipo${numEquipos !== 1 ? 's' : ''}`;
                                                     })()}
                                                 </p>
+                                                {/* Luces de colores para el estado de cada equipo con número y navegación directa */}
+                                                {(() => {
+                                                     const equiposSistema = equiposInstalados
+                                                         .filter(eq => eq.sistemaId === sist.id)
+                                                         .sort((a, b) => (a.codigo || '').localeCompare(b.codigo || '', undefined, { numeric: true, sensitivity: 'base' }));
+                                                     if (equiposSistema.length === 0) return null;
+                                                     return (
+                                                         <div className="flex items-center gap-1.5 mt-2 flex-wrap" onClick={(e) => e.stopPropagation()}>
+                                                             {equiposSistema.map((eq, idx) => {
+                                                                  const itemsToUse = getItemsToUse(sist.id);
+                                                                  
+                                                                  // Buscar si tiene campo de fecha de revisión y si es el día de hoy
+                                                                  const itemFechaRevision = itemsToUse.find((item) => {
+                                                                      const labelLower = (item.label || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                                                                      return labelLower.includes('fecha de revision');
+                                                                  });
+                                                                  
+                                                                  const hoyStr = new Date().toISOString().split('T')[0];
+                                                                  const valFecha = itemFechaRevision ? eq[itemFechaRevision.key as keyof EquipoInstalado] : null;
+                                                                  const fechaEsHoy = typeof valFecha === 'string' && valFecha.trim() === hoyStr;
+                                                                  
+                                                                  // Si tiene campo fecha de revisión, debe ser hoy. Si no, usamos eq.revisado.
+                                                                  const isRevisado = itemFechaRevision ? fechaEsHoy : eq.revisado;
+                                                                  
+                                                                  let colorClass = 'bg-amber-500 shadow-[0_0_6px_rgba(245,158,11,0.6)] text-white'; // Amarillo (Fecha no actual / Pendiente)
+                                                                  let titleText = 'Fecha no actual';
+                                                                  
+                                                                  if (isRevisado) {
+                                                                      colorClass = 'bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.6)] text-white'; // Verde (Revisado hoy)
+                                                                      titleText = 'Revisado hoy (OK)';
+                                                                  }
+                                                                  
+                                                                  const numeroEquipo = idx + 1;
+                                                                 
+                                                                 return (
+                                                                     <span
+                                                                         key={eq.id}
+                                                                         role="button"
+                                                                         onClick={(e) => {
+                                                                             e.stopPropagation();
+                                                                             // Asegurar que el sistema está abierto en el acordeón
+                                                                             setOpenSistemas(prev => ({ ...prev, [sist.id]: true }));
+                                                                             // Desplazar suavemente dejando la cabecera del equipo completamente visible debajo de la barra pegajosa (offset 160px)
+                                                                             setTimeout(() => {
+                                                                                 const el = document.getElementById(`equipo-${eq.id}`);
+                                                                                 if (el) {
+                                                                                     const headerOffset = 160;
+                                                                                     const elementPosition = el.getBoundingClientRect().top;
+                                                                                     const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
+                                                                                     window.scrollTo({
+                                                                                         top: offsetPosition,
+                                                                                         behavior: 'smooth'
+                                                                                     });
+                                                                                     el.classList.add('ring-2', 'ring-indigo-500', 'ring-offset-2');
+                                                                                     setTimeout(() => {
+                                                                                         el.classList.remove('ring-2', 'ring-indigo-500', 'ring-offset-2');
+                                                                                     }, 2000);
+                                                                                 }
+                                                                             }, 120);
+                                                                         }}
+                                                                         className={`min-w-[14px] h-[14px] px-0.5 rounded-full ${colorClass} flex items-center justify-center text-[9px] font-bold leading-none transition-all hover:scale-110 active:scale-95 cursor-pointer select-none`}
+                                                                         title={`${eq.codigo || `Equipo ${numeroEquipo}`}: ${titleText} (Haz clic para ir al equipo)`}
+                                                                     >
+                                                                         {numeroEquipo}
+                                                                     </span>
+                                                                 );
+                                                             })}
+                                                         </div>
+                                                     );
+                                                 })()}
                                             </div>
                                         </button>
                                         <div className="flex items-center gap-1.5 shrink-0">
@@ -1358,11 +1721,6 @@ export default function RevisionChecklist() {
                                                     <ChevronDown className="w-3.5 h-3.5" />
                                                 </button>
                                             </div>
-                                            {sistemaTieneAnomalias(sist.id) && (
-                                                <span title="Este sistema tiene anomalías">
-                                                    <AlertTriangle className="w-5 h-5 text-amber-500" />
-                                                </span>
-                                            )}
                                         </div>
 
 
@@ -1377,30 +1735,32 @@ export default function RevisionChecklist() {
                                         )}
 
                                         {/* Botones de acción del sistema - parte superior */}
-                                        <div className="mb-5 flex flex-wrap gap-2">
-                                            <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    setRevisarTodoConfirm({ isOpen: true, sistemaId: sist.id });
-                                                }}
-                                                className="inline-flex items-center gap-2 px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl text-sm font-semibold transition-all shadow-sm shadow-green-200"
-                                            >
-                                                <CheckCheck className="w-4 h-4" /> Revisar todo como ok
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    setAddEquipo(prev => ({ ...prev, isOpen: true, sistemaId: sist.id }));
-                                                }}
-                                                className="inline-flex items-center gap-2 px-4 py-2.5 bg-black hover:bg-slate-800 text-white rounded-xl text-sm font-semibold transition-all shadow-sm"
-                                            >
-                                                <Plus className="w-4 h-4" /> Añadir equipo
-                                            </button>
-                                        </div>
+                                        {(parte.estado === 'En revisión' || parte.estado === 'Pre-Cerrado') && (
+                                            <div className="mb-5 flex flex-wrap gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setRevisarTodoConfirm({ isOpen: true, sistemaId: sist.id });
+                                                    }}
+                                                    className="inline-flex items-center gap-2 px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl text-sm font-semibold transition-all shadow-sm shadow-green-200"
+                                                >
+                                                    <CheckCheck className="w-4 h-4" /> Revisar todo como ok
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setAddEquipo(prev => ({ ...prev, isOpen: true, sistemaId: sist.id }));
+                                                    }}
+                                                    className="inline-flex items-center gap-2 px-4 py-2.5 bg-black hover:bg-slate-800 text-white rounded-xl text-sm font-semibold transition-all shadow-sm"
+                                                >
+                                                    <Plus className="w-4 h-4" /> Añadir equipo
+                                                </button>
+                                            </div>
+                                        )}
 
-                                        <div className="space-y-4">
+                                        <div className={`space-y-4 ${(parte.estado !== 'En revisión' && parte.estado !== 'Pre-Cerrado') ? 'pointer-events-none select-none opacity-95' : ''}`}>
                                             {(() => {
                                                 const filteredEqs = equiposInstalados
                                                     .filter(eq => eq.sistemaId === sist.id)
@@ -1415,7 +1775,23 @@ export default function RevisionChecklist() {
                                                         const sistLower = (sist.tipo || sist.familia || '').toLowerCase();
                                                         const isExtintor = sistLower.includes('extintor');
                                                         const isBie = sistLower.includes('bie') || sistLower.includes('boca');
-                                                        const isDeteccion = sistLower.includes('detecci');
+                                                        const isDeteccionMonoxido = sistLower.includes('monoxido') || sistLower.includes('monóxido') || sistLower.includes('monox');
+                                                        const isDeteccionAspiracion = sistLower.includes('aspiraci') || sistLower.includes('aspirac');
+                                                        const isDeteccion = sistLower.includes('detecci') && !isDeteccionMonoxido && !isDeteccionAspiracion;
+                                                        const isSobrepresion = sistLower.includes('sobrepresi') || sistLower.includes('presuriza');
+                                                        const isBombaElectrica = sistLower.includes('bomba electrica') || sistLower.includes('bomba eléctrica');
+                                                        const isBombaJockey = sistLower.includes('bomba jockey') || sistLower.includes('jockey');
+                                                        const isBombaDiesel = sistLower.includes('bomba diesel') || sistLower.includes('diesel');
+                                                        const isAbastecimiento = sistLower.includes('abastecimiento') || sistLower.includes('sala de bombas');
+                                                        const isCasetas = sistLower.includes('caseta');
+                                                        const isExutorios = sistLower.includes('exutorio');
+                                                        const isHidrantes = sistLower.includes('hidrante');
+                                                        const isPuertasRF = sistLower.includes('puerta rf') || sistLower.includes('puertas rf') || sistLower.includes('cortafuego');
+                                                        const isSprinklers = sistLower.includes('sprinkler') || sistLower.includes('rociador');
+                                                        const isExtincionCampanaCocina = sistLower.includes('campana') || sistLower.includes('cocina');
+                                                        const isExtincionGas = (sistLower.includes('gas') || (sistLower.includes('extinci') && !isExtintor)) && !isExtincionCampanaCocina;
+                                                        const isFuenteAlimentacionAuxiliar = sistLower.includes('fuente') || (sistLower.includes('alimentaci') && sistLower.includes('auxiliar')) || (sistLower.includes('alimentac') && sistLower.includes('auxiliar'));
+                                                        const isAlumbradoEmergencia = sistLower.includes('alumbrado') || sistLower.includes('emergencia');
 
                                                         const commonProps = {
                                                             sist,
@@ -1431,19 +1807,36 @@ export default function RevisionChecklist() {
                                                             setEditEquipo,
                                                             handleDeleteEquipo,
                                                             handleCheckChange,
-                                                            getCheckStats
+                                                            getCheckStats,
+                                                            getEquipoSyncStatus
                                                         };
 
                                                         if (isExtintor) return <SistemaExtintores {...commonProps} />;
                                                         if (isBie) return <SistemaBies {...commonProps} />;
+                                                        if (isDeteccionMonoxido) return <SistemaDeteccionMonoxido {...commonProps} />;
+                                                        if (isDeteccionAspiracion) return <SistemaDeteccionAspiracion {...commonProps} />;
                                                         if (isDeteccion) return <SistemaDeteccion {...commonProps} />;
+                                                        if (isSobrepresion) return <SistemaSobrepresionPresurizacion {...commonProps} />;
+                                                        if (isBombaElectrica) return <SistemaBombaElectrica {...commonProps} />;
+                                                        if (isBombaJockey) return <SistemaBombaJockey {...commonProps} />;
+                                                        if (isBombaDiesel) return <SistemaBombaDiesel {...commonProps} />;
+                                                        if (isAbastecimiento) return <SistemaAbastecimientoSalaBombas {...commonProps} />;
+                                                        if (isCasetas) return <SistemaCasetas {...commonProps} />;
+                                                        if (isExutorios) return <SistemaExutorios {...commonProps} />;
+                                                        if (isHidrantes) return <SistemaHidrantes {...commonProps} />;
+                                                        if (isPuertasRF) return <SistemaPuertasRF {...commonProps} />;
+                                                        if (isSprinklers) return <SistemaSprinklers {...commonProps} />;
+                                                        if (isExtincionCampanaCocina) return <SistemaExtincionCampanaCocina {...commonProps} />;
+                                                        if (isExtincionGas) return <SistemaExtincionGas {...commonProps} />;
+                                                        if (isFuenteAlimentacionAuxiliar) return <SistemaFuenteAlimentacionAuxiliar {...commonProps} />;
+                                                        if (isAlumbradoEmergencia) return <SistemaAlumbradoEmergencia {...commonProps} />;
                                                         return <SistemaGenerico {...commonProps} />;
                                                     })()
                                                 );
                                             })()}
                                         </div>
 
-                                        {equiposInstalados.some(eq => eq.sistemaId === sist.id) && (
+                                        {(parte.estado === 'En revisión' || parte.estado === 'Pre-Cerrado') && equiposInstalados.some(eq => eq.sistemaId === sist.id) && (
                                             <div className="mt-4 flex flex-wrap gap-2">
                                                 <button
                                                     type="button"
@@ -1465,26 +1858,74 @@ export default function RevisionChecklist() {
                     )}
                 </div>
 
-                {/* Bottom Actions */}
-                <div className="mt-10 pt-6 border-t border-slate-200 flex flex-col sm:flex-row justify-end gap-3">
+                {parte.estado === 'Cerrado' && (
+                    <div className="mb-6 p-4 bg-orange-50 border border-orange-200 rounded-2xl flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 bg-orange-100 rounded-full">
+                                <Lock className="w-5 h-5 text-orange-600" />
+                            </div>
+                            <div>
+                                <h3 className="text-sm font-bold text-orange-900">Parte Cerrado</h3>
+                                <p className="text-xs text-orange-700">Esta revisión está finalizada y es de solo lectura.</p>
+                            </div>
+                        </div>
+                        {!isTecnico && (
+                            <button
+                                onClick={handleReabrirParte}
+                                className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white text-sm font-semibold rounded-xl transition-colors shadow-sm"
+                            >
+                                Reabrir parte
+                            </button>
+                        )}
+                    </div>
+                )}
+
+                <div className="mt-10 pt-6 border-t border-slate-200 flex flex-row items-center justify-between sm:justify-end gap-1.5 sm:gap-3">
                     <button
+                        type="button"
                         onClick={handleOpenComments}
-                        className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-white bg-zinc-700 hover:bg-zinc-800 shadow-lg shadow-zinc-200 transition-all text-sm sm:w-auto"
+                        className="relative flex-1 sm:flex-initial inline-flex items-center justify-center gap-1 sm:gap-2 px-1.5 py-2.5 sm:px-5 sm:py-2.5 rounded-xl font-semibold text-white bg-purple-600 hover:bg-purple-700 shadow-md shadow-purple-200 transition-all text-[11px] sm:text-sm text-center leading-tight"
                     >
-                        <MessageSquare className="w-4 h-4" /> Comentarios
+                        <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> Comentarios
+                        {hasComments && (
+                            <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-red-600 border-2 border-white"></span>
+                            </span>
+                        )}
                     </button>
-                    <button
-                        onClick={handlePauseRevision}
-                        className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-white bg-slate-600 hover:bg-slate-700 shadow-lg shadow-slate-200 transition-all text-sm sm:w-auto"
-                    >
-                        <Save className="w-4 h-4" /> Guardar datos
-                    </button>
-                    <button
-                        onClick={handleSaveRevision}
-                        className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-white bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all text-sm sm:w-auto"
-                    >
-                        <Lock className="w-4 h-4" /> Pre-cerrar
-                    </button>
+                    {(parte.estado === 'En revisión' || parte.estado === 'Pre-Cerrado') && (
+                        <>
+                            <button
+                                onClick={handlePauseRevision}
+                                className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1 sm:gap-2 px-1.5 py-2.5 sm:px-5 sm:py-2.5 rounded-xl font-semibold text-white bg-emerald-600 hover:bg-emerald-700 shadow-md shadow-emerald-200 transition-all text-[11px] sm:text-sm text-center leading-tight"
+                            >
+                                <Save className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> Guardar datos
+                            </button>
+                            <button
+                                onClick={isTecnico ? handleSaveRevision : handlePreCerrarParte}
+                                className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1 sm:gap-2 px-1.5 py-2.5 sm:px-5 sm:py-2.5 rounded-xl font-semibold text-white bg-indigo-600 hover:bg-indigo-700 shadow-md shadow-indigo-200 transition-all text-[11px] sm:text-sm text-center leading-tight"
+                            >
+                                <Lock className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> {isTecnico ? 'Finalizar parte' : 'Pre-cerrar'}
+                            </button>
+                            {!isTecnico && (
+                                <button
+                                    onClick={handleCerrarParte}
+                                    className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1 sm:gap-2 px-1.5 py-2.5 sm:px-5 sm:py-2.5 rounded-xl font-semibold text-white bg-black hover:bg-zinc-900 shadow-md shadow-zinc-800 transition-all text-[11px] sm:text-sm text-center leading-tight"
+                                >
+                                    <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> Cerrar
+                                </button>
+                            )}
+                        </>
+                    )}
+                    {parte.estado === 'Cerrado' && !isTecnico && (
+                        <button
+                            onClick={handleReabrirParte}
+                            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1 sm:gap-2 px-1.5 py-2.5 sm:px-5 sm:py-2.5 rounded-xl font-semibold text-white bg-amber-500 hover:bg-amber-600 shadow-md shadow-amber-200 transition-all text-[11px] sm:text-sm text-center leading-tight"
+                        >
+                            <Unlock className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> Re-abrir
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -1591,6 +2032,127 @@ export default function RevisionChecklist() {
                 />
             )}
 
+            {/* MODAL EQUIPOS SIN REVISAR */}
+            {showEquiposSinRevisarModal && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[200]">
+                    <div className="bg-white rounded-3xl w-full max-w-sm shadow-2xl flex flex-col animate-in fade-in zoom-in-95 duration-200 overflow-hidden">
+                        <div className="px-6 py-5 bg-amber-50 border-b border-amber-100 text-center">
+                            <div className="w-14 h-14 bg-amber-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                                <AlertTriangle className="w-7 h-7 text-amber-600" />
+                            </div>
+                            <h2 className="text-lg font-bold text-amber-900">Equipos pendientes por revisar</h2>
+                            <p className="text-sm text-amber-700 mt-1">
+                                Atención: Quedan <strong className="font-bold">{pendingEquiposCount}</strong> {pendingEquiposCount === 1 ? 'equipo sin revisar' : 'equipos sin revisar'}.
+                            </p>
+                        </div>
+                        <div className="p-6 flex flex-col gap-3">
+                            <button
+                                onClick={() => setShowEquiposSinRevisarModal(false)}
+                                className="w-full px-4 py-3 rounded-xl font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors"
+                            >
+                                Volver a la revisión
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setShowEquiposSinRevisarModal(false);
+                                    const hoy = new Date().toISOString().split('T')[0];
+                                    const equiposFechaInvalida = equiposInstalados.filter(eq => {
+                                        const itemsDelSistema = checklistItemsPorSistema[eq.sistemaId] || [];
+                                        const itemFechaRev = itemsDelSistema.find(item => (item.label || '').toLowerCase().includes('fecha de revisi'));
+                                        if (!itemFechaRev) return false;
+                                        const val = eq[itemFechaRev.key as keyof EquipoInstalado];
+                                        return val !== hoy;
+                                    });
+
+                                    if (equiposFechaInvalida.length > 0) {
+                                        setEquiposFechaInvalidaCount(equiposFechaInvalida.length);
+                                        setShowEquiposFechaInvalidaModal(true);
+                                    } else {
+                                        setShowPreguntaRetimbrarModal(true);
+                                    }
+                                }}
+                                className="w-full px-4 py-3 rounded-xl font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors shadow-sm"
+                            >
+                                Finalizar parte
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* MODAL FECHA DE REVISIÓN DESACTUALIZADA */}
+            {showEquiposFechaInvalidaModal && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[200]">
+                    <div className="bg-white rounded-3xl w-full max-w-sm shadow-2xl flex flex-col animate-in fade-in zoom-in-95 duration-200 overflow-hidden">
+                        <div className="px-6 py-5 bg-amber-50 border-b border-amber-100 text-center">
+                            <div className="w-14 h-14 bg-amber-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                                <Calendar className="w-7 h-7 text-amber-600" />
+                            </div>
+                            <h2 className="text-lg font-bold text-amber-900">Fechas de revisión pendientes</h2>
+                            <p className="text-sm text-amber-700 mt-1">
+                                Atención: Hay <strong className="font-bold">{equiposFechaInvalidaCount}</strong> {equiposFechaInvalidaCount === 1 ? 'equipo' : 'equipos'} donde la "Fecha de revisión" no coincide con la fecha de hoy ({new Date().toISOString().split('T')[0]}).
+                            </p>
+                        </div>
+                        <div className="p-6 flex flex-col gap-3">
+                            <button
+                                onClick={() => setShowEquiposFechaInvalidaModal(false)}
+                                className="w-full px-4 py-3 rounded-xl font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors"
+                            >
+                                Volver al parte
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setShowEquiposFechaInvalidaModal(false);
+                                    setShowPreguntaRetimbrarModal(true);
+                                }}
+                                className="w-full px-4 py-3 rounded-xl font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors shadow-sm"
+                            >
+                                Finalizar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* MODAL PREGUNTA RETIMBRAR */}
+            {showPreguntaRetimbrarModal && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[200]">
+                    <div className="bg-white rounded-3xl w-full max-w-sm shadow-2xl flex flex-col animate-in fade-in zoom-in-95 duration-200 overflow-hidden">
+                        <div className="px-6 py-5 bg-indigo-50 border-b border-indigo-100 text-center">
+                            <div className="w-14 h-14 bg-indigo-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                                <RotateCcw className="w-7 h-7 text-indigo-600" />
+                            </div>
+                            <h2 className="text-lg font-bold text-indigo-900">¿Se retiran equipos para retimbrar o recargar en esta revisión?</h2>
+                            <p className="text-sm text-indigo-600 mt-1">Indica si se retiran equipos para su retimbrado o recarga durante esta inspección.</p>
+                        </div>
+                        <div className="p-6 flex flex-col gap-3">
+                            <button
+                                onClick={() => {
+                                    setSeRetiranEquipos(true);
+                                    setShowAvisoRetimbrarModal(true);
+                                    setShowPreguntaRetimbrarModal(false);
+                                    handleConfirmarPreCierre();
+                                }}
+                                className="w-full px-4 py-3 rounded-xl font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors shadow-sm"
+                            >
+                                Sí
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setSeRetiranEquipos(false);
+                                    setShowAvisoRetimbrarModal(false);
+                                    setShowPreguntaRetimbrarModal(false);
+                                    handleConfirmarPreCierre();
+                                }}
+                                className="w-full px-4 py-3 rounded-xl font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors"
+                            >
+                                No
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* MODAL PRE-CIERRE */}
             {showPreCierreModal && (
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[200]">
@@ -1599,7 +2161,7 @@ export default function RevisionChecklist() {
                             <div className="w-14 h-14 bg-indigo-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
                                 <PenLine className="w-7 h-7 text-indigo-600" />
                             </div>
-                            <h2 className="text-lg font-bold text-indigo-900">¿Pre-cerrar la revisión?</h2>
+                            <h2 className="text-lg font-bold text-indigo-900">¿Finalizar la revisión?</h2>
                             <p className="text-sm text-indigo-600 mt-1">Se solicitarán las firmas del cliente y del técnico para finalizar el parte.</p>
                         </div>
                         <div className="p-6 flex flex-col gap-3">
@@ -1749,6 +2311,42 @@ export default function RevisionChecklist() {
                 );
             })()}
 
+            {/* VENTANA FLOTANTE CONFIRMACIÓN RETIMBRADO/RECARGA EN FIRMAS */}
+            {showFirmasModal && showAvisoRetimbrarModal && seRetiranEquipos && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[220]">
+                    <div className="bg-white rounded-3xl w-full max-w-sm shadow-2xl flex flex-col animate-in fade-in zoom-in-95 duration-200 overflow-hidden border border-red-100">
+                        <div className="px-6 py-5 bg-red-50 border-b border-red-100 text-center">
+                            <div className="w-14 h-14 bg-red-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                                <AlertTriangle className="w-7 h-7 text-red-600" />
+                            </div>
+                            <h2 className="text-lg font-bold text-red-900">¿Se retiran equipos para retimbrar o recargar?</h2>
+                            <p className="text-sm text-red-600 mt-1">Has indicado que SÍ se van a retirar equipos durante esta revisión.</p>
+                        </div>
+                        <div className="p-6 flex flex-col gap-3">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setShowAvisoRetimbrarModal(false);
+                                }}
+                                className="w-full px-4 py-3 rounded-xl font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors shadow-sm"
+                            >
+                                Sí, es correcto
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setSeRetiranEquipos(false);
+                                    setShowAvisoRetimbrarModal(false);
+                                }}
+                                className="w-full px-4 py-3 rounded-xl font-bold text-red-700 bg-red-100 hover:bg-red-200 transition-colors"
+                            >
+                                No (Cambiar a NO)
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* MODAL COMENTARIOS */}
             {showCommentsModal && (
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[200]">
@@ -1775,6 +2373,7 @@ export default function RevisionChecklist() {
                                 <textarea
                                     value={privateComment}
                                     onChange={(e) => setPrivateComment(e.target.value)}
+                                    readOnly={parte.estado === 'Cerrado'}
                                     rows={4}
                                     placeholder="Escribe aquí los comentarios internos o privados..."
                                     className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all text-sm font-normal text-slate-700 bg-slate-50/50"
@@ -1791,6 +2390,7 @@ export default function RevisionChecklist() {
                                 <textarea
                                     value={publicComment}
                                     onChange={(e) => setPublicComment(e.target.value)}
+                                    readOnly={parte.estado === 'Cerrado'}
                                     rows={4}
                                     placeholder="Escribe aquí las observaciones públicas que deben aparecer en el acta..."
                                     className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all text-sm font-normal text-slate-700 bg-slate-50/50"
@@ -1804,14 +2404,16 @@ export default function RevisionChecklist() {
                                 onClick={() => setShowCommentsModal(false)}
                                 className="px-5 py-2.5 rounded-xl font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors text-sm w-full sm:w-auto"
                             >
-                                Cancelar
+                                {parte.estado === 'Cerrado' ? 'Cerrar' : 'Cancelar'}
                             </button>
-                            <button
-                                onClick={handleSaveComments}
-                                className="px-5 py-2.5 rounded-xl font-bold text-white bg-red-600 hover:bg-red-700 transition-colors shadow-lg shadow-red-200 text-sm w-full sm:w-auto"
-                            >
-                                Guardar comentarios
-                            </button>
+                            {parte.estado !== 'Cerrado' && (
+                                <button
+                                    onClick={handleSaveComments}
+                                    className="px-5 py-2.5 rounded-xl font-bold text-white bg-red-600 hover:bg-red-700 transition-colors shadow-lg shadow-red-200 text-sm w-full sm:w-auto"
+                                >
+                                    Guardar comentarios
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -1822,6 +2424,39 @@ export default function RevisionChecklist() {
                 <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-[300] flex items-center gap-2 bg-slate-900 text-white px-5 py-3 rounded-2xl shadow-xl font-medium text-sm animate-in slide-in-from-bottom-5 fade-in duration-300">
                     <CheckCircle2 className="w-5 h-5 text-green-400" />
                     {toastMessage}
+                </div>
+            )}
+            {/* OVERLAY DE ENVÍO Y SINCRONIZACIÓN A FIREBASE */}
+            {isSending && (
+                <div className="fixed inset-0 bg-black/75 backdrop-blur-md flex items-center justify-center p-4 z-[300] animate-in fade-in duration-200">
+                    <div className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl flex flex-col items-center text-center animate-in zoom-in-95 duration-200">
+                        {!sendCompleted ? (
+                            <>
+                                <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center mb-4 relative overflow-hidden">
+                                    <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                                </div>
+                                <h3 className="text-lg font-bold text-slate-800">Sincronizando datos...</h3>
+                                <p className="text-xs text-slate-500 mt-1 mb-5">Guardando firmas y actualizando parte en Firebase</p>
+                                
+                                {/* Barra de progreso */}
+                                <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden mb-2 p-0.5 border border-slate-200">
+                                    <div 
+                                        className="bg-gradient-to-r from-indigo-500 to-indigo-600 h-full rounded-full transition-all duration-300 shadow-sm"
+                                        style={{ width: `${sendProgress}%` }}
+                                    ></div>
+                                </div>
+                                <span className="text-[11px] font-bold text-indigo-600 font-mono">{sendProgress}%</span>
+                            </>
+                        ) : (
+                            <div className="animate-in zoom-in-95 duration-300 py-2">
+                                <div className="w-16 h-16 bg-green-100 rounded-2xl flex items-center justify-center mx-auto mb-4 text-green-600 shadow-md">
+                                    <CheckCircle2 className="w-10 h-10 stroke-[2.5]" />
+                                </div>
+                                <h3 className="text-lg font-bold text-slate-800">Parte finalizado pendiente de supervisar por el responsable</h3>
+                                <p className="text-xs text-slate-500 mt-2">La revisión ha sido firmada y sincronizada correctamente.</p>
+                            </div>
+                        )}
+                    </div>
                 </div>
             )}
         </div>

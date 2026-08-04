@@ -116,3 +116,39 @@ body {
   animation: pulse-glow 3s ease-in-out infinite;
 }
 
+/* Real smoke animations */
+@keyframes smoke-drift-1 {
+  0% {
+    transform: translate(0, 0) scale(1) rotate(0deg);
+    opacity: 0.15;
+  }
+  50% {
+    opacity: 0.55;
+  }
+  100% {
+    transform: translate(-3%, -5%) scale(1.18) rotate(4deg);
+    opacity: 0.1;
+  }
+}
+
+@keyframes smoke-drift-2 {
+  0% {
+    transform: translate(0, 0) scale(1.25) rotate(180deg);
+    opacity: 0.1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+  100% {
+    transform: translate(3%, -6%) scale(1.08) rotate(176deg);
+    opacity: 0.05;
+  }
+}
+
+.animate-smoke-1 {
+  animation: smoke-drift-1 7s ease-in-out infinite alternate;
+}
+
+.animate-smoke-2 {
+  animation: smoke-drift-2 9s ease-in-out infinite alternate;
+}

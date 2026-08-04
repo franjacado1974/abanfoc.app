@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
-  ArrowLeft, Calendar, MapPin, Search, X,
-  ChevronRight, Layers, Clock
+  ArrowLeft, Calendar, Search, X,
+  ChevronRight, Layers, Clock, Filter
 } from 'lucide-react';
 import { subscribePartes, subscribeCentroSistemas, subscribeClientes, subscribeCentros, updateParte } from './firebase';
 import { useNavigate } from 'react-router-dom';
@@ -35,6 +35,7 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
   const [searchTerm, setSearchTerm] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [estadoFilter, setEstadoFilter] = useState('TODOS');
 
   // Suscripción en tiempo real a partes desde Firestore
   useEffect(() => {
@@ -88,7 +89,6 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
   // Filtrar partes asignados a este técnico (excluir Cerrado y Finalizado)
   const partesDelTecnico = partes.filter(p =>
     p.estado !== 'Cerrado' &&
-    p.estado !== 'Finalizado' &&
     (tecnicoLogueado ? (p.tecnicoId === tecnicoLogueado.id || p.tecnicoId === tecnicoLogueado._docId) : true)
   ).sort((a, b) => {
     const fa = a.fechaProgramada || a.fechaCreacion || '';
@@ -96,8 +96,23 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
     return fa.localeCompare(fb);
   });
 
-  // Filtrar por buscador (fecha o nombre de centro)
+  // Filtrar por estado, buscador (fecha o nombre de centro) y rango de fechas
   const partesFiltrados = partesDelTecnico.filter(p => {
+    if (estadoFilter !== 'TODOS') {
+      const st = (p.estado || '').trim();
+      if (estadoFilter === 'Abierto') {
+        if (st !== 'Abierto' && st !== 'Planificado' && st !== '') return false;
+      } else if (estadoFilter === 'En revisión') {
+        if (st !== 'En revisión' && st !== 'En curso') return false;
+      } else if (estadoFilter === 'Finalizado') {
+        if (st !== 'Finalizado') return false;
+      } else if (estadoFilter === 'Pre-Cerrado') {
+        if (st !== 'Pre-Cerrado') return false;
+      } else if (estadoFilter === 'Cerrado') {
+        if (st !== 'Cerrado') return false;
+      }
+    }
+
     let matchesSearch = true;
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase().trim();
@@ -138,13 +153,17 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
   const getEstadoBadge = (estado: string) => {
     switch (estado) {
       case 'Planificado':
-        return 'bg-blue-100 text-blue-700';
+        return 'bg-zinc-200 text-zinc-700 border border-zinc-300';
       case 'Abierto':
+      case 'En curso':
+      case 'En revisión':
         return 'bg-amber-100 text-amber-700';
       case 'Descargado (Offline)':
         return 'bg-sky-100 text-sky-700';
       case 'Finalizado':
-        return 'bg-emerald-100 text-emerald-700';
+        return 'bg-blue-100 text-blue-700 border border-blue-200';
+      case 'Pre-Cerrado':
+        return 'bg-emerald-100 text-emerald-700 border border-emerald-200';
       case 'Cerrado':
         return 'bg-zinc-900 text-white';
       default:
@@ -174,9 +193,9 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
 
   // ─── VISTA LISTA DE PARTES ─────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-[#DCE1E5]">
-      {/* Header */}
-      <header className="sticky top-0 z-20 bg-white/90 backdrop-blur-md border-b border-zinc-200 shadow-sm">
+    <div className="min-h-screen bg-zinc-50 pb-12">
+      {/* Header Fijo */}
+      <header className="sticky top-0 z-20 bg-white/95 backdrop-blur border-b border-zinc-200 shadow-sm">
         <div className="flex items-center gap-3 px-4 py-3">
           <button
             onClick={onBack}
@@ -195,9 +214,9 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
           </div>
         </div>
 
-        {/* Buscador y Rango de fechas */}
+        {/* Buscador, Filtro de Estado y Rango de fechas */}
         <div className="px-4 pb-3 flex flex-col gap-2">
-          <div className="flex items-center gap-2 bg-zinc-50 px-3 py-2 rounded-xl border border-zinc-200">
+          <div className="flex items-center gap-2 bg-white px-3 py-2.5 rounded-xl border border-red-500/80 shadow-sm">
             <Calendar className="w-4 h-4 text-zinc-400 shrink-0" />
             <input 
               type="date" 
@@ -221,14 +240,31 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
               </button>
             )}
           </div>
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Filter className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 pointer-events-none z-10" />
+              <select
+                value={estadoFilter}
+                onChange={e => setEstadoFilter(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 bg-white border border-red-500/80 rounded-xl text-sm outline-none focus:border-red-600 focus:ring-2 focus:ring-red-500/10 transition-all shadow-sm text-zinc-950 appearance-none font-medium cursor-pointer"
+              >
+                <option value="TODOS">Todos los estados</option>
+                <option value="Abierto">Abierto / Planificado</option>
+                <option value="En revisión">En revisión / En curso</option>
+                <option value="Finalizado">Parte Finalizado / Firmado</option>
+                <option value="Pre-Cerrado">Pre-cerrado</option>
+                <option value="Cerrado">Cerrado</option>
+              </select>
+            </div>
+          </div>
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
             <input
               type="text"
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
               placeholder="Buscar por cliente, centro o fecha..."
-              className="w-full pl-9 pr-9 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm outline-none focus:border-violet-400 focus:bg-white transition-all"
+              className="w-full pl-10 pr-9 py-2.5 bg-white border border-red-500/80 rounded-xl text-sm outline-none focus:border-red-600 focus:ring-2 focus:ring-red-500/10 transition-all shadow-sm text-zinc-950"
             />
             {searchTerm && (
               <button
@@ -266,12 +302,14 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
                 <button
                   key={parte.id}
                   onClick={() => handleAbrirParte(parte)}
-                  className={`w-full bg-white rounded-2xl border-2 transition-all text-left shadow-sm hover:shadow-md active:scale-[0.98] ${
+                  className={`w-full bg-white rounded-3xl border transition-all text-left shadow-sm hover:shadow-md hover:border-zinc-350 active:scale-[0.98] ${
                     isPlanificado
-                      ? 'border-blue-200 hover:border-blue-400'
+                      ? 'border-zinc-200 hover:border-zinc-400'
                       : parte.estado === 'Abierto'
                       ? 'border-amber-200 hover:border-amber-400'
                       : parte.estado === 'Finalizado'
+                      ? 'border-blue-200 hover:border-blue-400'
+                      : parte.estado === 'Pre-Cerrado'
                       ? 'border-emerald-200 hover:border-emerald-400'
                       : parte.estado === 'Cerrado'
                       ? 'border-zinc-300 hover:border-zinc-500'
@@ -289,6 +327,9 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
                         <h3 className="text-base font-black text-zinc-900 truncate leading-tight mt-0.5">
                           {centro?.nombre || 'Centro desconocido'}
                         </h3>
+                        <p className="text-[10px] text-zinc-400 font-mono mt-0.5">
+                          <span className="text-blue-600 font-bold">Parte: {parte.numeroMantenimiento || parte.id}</span>
+                        </p>
                       </div>
                       {parte.retirarExtintoresRetimbrado && !parte.retimbradoReiniciado && (
                         <span 
@@ -299,7 +340,7 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
                         </span>
                       )}
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase shrink-0 mt-0.5 ${getEstadoBadge(parte.estado)}`}>
-                        {parte.estado === 'Descargado (Offline)' ? 'Offline' : parte.estado}
+                        {parte.estado === 'Descargado (Offline)' ? 'Offline' : parte.estado === 'Finalizado' ? 'Parte Finalizado' : parte.estado === 'Pre-Cerrado' ? 'Pre-cerrado' : parte.estado}
                       </span>
                     </div>
 
@@ -327,11 +368,9 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
                     <div className="min-w-0">
                       <p className="text-xs font-semibold text-zinc-500 truncate">{cliente?.nombre || '—'}</p>
                       <p className="text-sm font-bold text-zinc-900 truncate">{centro?.nombre || 'Centro desconocido'}</p>
-                      {centro?.poblacion && (
-                        <p className="text-[11px] text-zinc-400 flex items-center gap-1 mt-0.5">
-                          <MapPin className="w-3 h-3" />{centro.poblacion}
-                        </p>
-                      )}
+                      <p className="text-[10px] text-zinc-400 font-mono mt-0.5">
+                        <span className="text-blue-600 font-bold">Parte: {parte.numeroMantenimiento || parte.id}</span>{centro?.poblacion ? ` - ${centro.poblacion}` : ''}
+                      </p>
                     </div>
                     <div className="w-24 text-center">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-purple-600 bg-purple-50 px-2 py-1 rounded-md inline-block whitespace-nowrap">
@@ -360,7 +399,7 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
                         </span>
                       )}
                       <span className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase ${getEstadoBadge(parte.estado)}`}>
-                        {parte.estado === 'Descargado (Offline)' ? 'Offline' : parte.estado}
+                        {parte.estado === 'Descargado (Offline)' ? 'Offline' : parte.estado === 'Finalizado' ? 'Parte Finalizado' : parte.estado === 'Pre-Cerrado' ? 'Pre-cerrado' : parte.estado}
                       </span>
                       <ChevronRight className="w-5 h-5 text-zinc-400" />
                     </div>

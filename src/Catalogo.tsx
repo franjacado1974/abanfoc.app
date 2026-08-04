@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { Package, Wrench, Plus, Search, Edit, Trash2, X, Download, Upload, Image as ImageIcon, Copy } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Package, Wrench, Plus, Search, Edit, Trash2, X, Download, Upload, Image as ImageIcon, Copy, ArrowLeft } from 'lucide-react';
 import ConfirmationModal from './ConfirmationModal';
 import * as XLSX from 'xlsx';
 import { 
@@ -37,6 +38,7 @@ interface CatalogoProps {
 }
 
 export default function Catalogo({ isTecnicoMode = false }: CatalogoProps) {
+  const navigate = useNavigate();
   const [tab, setTab] = useState<'articulos' | 'servicios'>('articulos');
   const [articulos, setArticulos] = useState<Articulo[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -395,52 +397,61 @@ export default function Catalogo({ isTecnicoMode = false }: CatalogoProps) {
     };
 
   return (
-    <div className="min-h-screen bg-blue-50/40 p-4 md:p-6">
+    <div className="min-h-screen bg-[#F8FAFC] px-8 py-6">
       <div className="w-full">
         {/* Header */}
-        <div className="mb-6 text-center">
-          <h1 className="text-2xl font-bold text-zinc-900 tracking-tight">Catálogo</h1>
-          <p className="text-sm text-zinc-500 mt-1">{articulos.length} artículos en el inventario.</p>
+        <div className="mb-6">
+          <button 
+            onClick={() => navigate('/')} 
+            className="flex items-center gap-1.5 text-xs font-semibold text-zinc-500 hover:text-zinc-900 mb-3 transition-colors cursor-pointer"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" /> Volver al panel
+          </button>
+          <h1 className="text-2xl font-black text-zinc-950 tracking-tight">Catálogo de Artículos y Servicios</h1>
+          <p className="text-xs font-semibold text-zinc-500 mt-1">Gestión del inventario de equipos revisables y tarifas de servicios asociados.</p>
         </div>
 
         {/* Pestañas + botones */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
-          <div className="flex items-center gap-1 bg-zinc-100 p-1 rounded-xl w-fit">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+          {/* Pestañas */}
+          <div className="flex items-center gap-1.5 bg-zinc-100 p-1.5 rounded-2xl w-fit border border-zinc-200/40">
             <button
               onClick={() => setTab('articulos')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 cursor-pointer ${
                 tab === 'articulos'
-                  ? 'bg-white text-zinc-900 shadow-sm'
-                  : 'text-zinc-500 hover:text-zinc-700'
+                  ? 'bg-white text-zinc-950 shadow-sm border border-zinc-200/20 font-extrabold'
+                  : 'text-zinc-500 hover:text-zinc-900 hover:bg-white/50'
               }`}
             >
-              <Package className="w-4 h-4" />
+              <Package className={`w-4 h-4 ${tab === 'articulos' ? 'text-red-600' : 'text-zinc-400'}`} />
               Artículos
-              <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${
-                tab === 'articulos' ? 'bg-zinc-100 text-zinc-600' : 'bg-zinc-200 text-zinc-500'
+              <span className={`text-[10px] font-black font-sans px-2 py-0.5 rounded-md transition-colors ${
+                tab === 'articulos' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-zinc-200 text-zinc-500'
               }`}>
                 {articulos.filter(a => a.revisable).length}
               </span>
             </button>
             <button
               onClick={() => setTab('servicios')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 cursor-pointer ${
                 tab === 'servicios'
-                  ? 'bg-white text-zinc-900 shadow-sm'
-                  : 'text-zinc-500 hover:text-zinc-700'
+                  ? 'bg-white text-zinc-950 shadow-sm border border-zinc-200/20 font-extrabold'
+                  : 'text-zinc-500 hover:text-zinc-900 hover:bg-white/50'
               }`}
             >
-              <Wrench className="w-4 h-4" />
+              <Wrench className={`w-4 h-4 ${tab === 'servicios' ? 'text-red-650' : 'text-zinc-400'}`} />
               Servicios
-              <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${
-                tab === 'servicios' ? 'bg-zinc-100 text-zinc-600' : 'bg-zinc-200 text-zinc-500'
+              <span className={`text-[10px] font-black font-sans px-2 py-0.5 rounded-md transition-colors ${
+                tab === 'servicios' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-zinc-200 text-zinc-500'
               }`}>
                 {articulos.filter(a => !a.revisable).length}
               </span>
             </button>
           </div>
+
+          {/* Botones de acción */}
           {!isTecnicoMode && (
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2 w-full sm:w-auto">
               <input 
                 type="file" 
                 ref={fileInputRef} 
@@ -450,26 +461,26 @@ export default function Catalogo({ isTecnicoMode = false }: CatalogoProps) {
               />
               <button 
                 onClick={() => fileInputRef.current?.click()}
-                className="flex items-center gap-1.5 bg-white border border-zinc-200 text-zinc-700 px-3.5 py-2 rounded-lg font-medium hover:bg-zinc-50 hover:border-zinc-300 transition-all text-xs shadow-sm"
+                className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-white border border-zinc-200 hover:border-zinc-300 text-zinc-700 hover:text-zinc-950 px-3.5 py-2.5 rounded-xl font-bold transition-all text-xs shadow-sm cursor-pointer hover:shadow"
                 title="Importar Excel"
               >
-                <Download className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Importar</span>
+                <Download className="w-3.5 h-3.5 text-zinc-450" />
+                Importar
               </button>
               <button 
                 onClick={handleExport}
-                className="flex items-center gap-1.5 bg-white border border-zinc-200 text-zinc-700 px-3.5 py-2 rounded-lg font-medium hover:bg-zinc-50 hover:border-zinc-300 transition-all text-xs shadow-sm"
+                className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-white border border-zinc-200 hover:border-zinc-300 text-zinc-700 hover:text-zinc-950 px-3.5 py-2.5 rounded-xl font-bold transition-all text-xs shadow-sm cursor-pointer hover:shadow"
                 title="Exportar a Excel"
               >
-                <Upload className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Exportar</span>
+                <Upload className="w-3.5 h-3.5 text-zinc-450" />
+                Exportar
               </button>
               <button 
                 onClick={() => handleOpenModal()}
-                className="flex items-center gap-1.5 bg-black text-white px-4 py-2 rounded-lg font-medium hover:bg-zinc-800 transition-all text-xs shadow-md shadow-black/10"
+                className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-xl font-bold shadow-md shadow-red-500/10 hover:shadow-lg hover:shadow-red-500/20 active:scale-95 transition-all text-xs cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Nuevo {tab === 'articulos' ? 'Artículo' : 'Servicio'}</span><span className="sm:hidden">Nuevo</span>
+                Nuevo {tab === 'articulos' ? 'Artículo' : 'Servicio'}
               </button>
             </div>
           )}
@@ -482,7 +493,7 @@ export default function Catalogo({ isTecnicoMode = false }: CatalogoProps) {
           </div>
           <input
             type="text"
-            className="w-full pl-10 pr-4 py-2.5 bg-white rounded-lg border border-zinc-200 focus:border-blue-900 focus:ring-2 focus:ring-blue-900/10 outline-none transition-all shadow-sm text-sm text-zinc-900 placeholder-zinc-400"
+            className="w-full pl-10 pr-4 py-2.5 bg-white rounded-xl border border-zinc-200 focus:border-red-500 focus:ring-2 focus:ring-red-500/10 outline-none transition-all shadow-sm text-sm text-zinc-900 placeholder-zinc-400"
             placeholder="Buscar por código, nombre o familia..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -490,8 +501,8 @@ export default function Catalogo({ isTecnicoMode = false }: CatalogoProps) {
         </div>
 
         {/* Lista de Artículos */}
-        <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden overflow-x-auto">
-          <div className={`${isTecnicoMode ? 'hidden' : 'hidden md:flex'} items-center bg-[#f9f7f4] border-b-2 border-zinc-200 px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-zinc-500`}>
+        <div className="bg-white rounded-3xl border border-zinc-200 shadow-sm overflow-hidden overflow-x-auto">
+          <div className={`${isTecnicoMode ? 'hidden' : 'hidden md:flex'} items-center bg-zinc-50 border-b border-zinc-200/80 px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-zinc-500`}>
             <div className="w-24 shrink-0">Código</div>
             <div className="flex-1 min-w-0">Artículo</div>
             <div className="w-36 shrink-0">Familia</div>
@@ -505,7 +516,7 @@ export default function Catalogo({ isTecnicoMode = false }: CatalogoProps) {
             {filteredArticulos.length === 0 ? (
               <div className="p-12 text-center">
                 <Package className="w-12 h-12 text-blue-200 mx-auto mb-3" />
-                <p className="text-blue-900/50 font-medium">No hay artículos registrados</p>
+                <p className="text-red-600/50 font-medium">No hay artículos registrados</p>
               </div>
             ) : (
               filteredArticulos.map(a => {
@@ -527,9 +538,9 @@ export default function Catalogo({ isTecnicoMode = false }: CatalogoProps) {
                       
                       <div className="flex items-start gap-3">
                         {a.fotoUrl ? (
-                          <img src={a.fotoUrl} alt={a.nombre} className="w-14 h-14 rounded-lg object-cover border border-zinc-200 shrink-0 bg-white img-no-bg" />
+                          <img src={a.fotoUrl} alt={a.nombre} className="w-14 h-14 rounded-xl object-cover border border-zinc-200 shrink-0 bg-white img-no-bg" />
                         ) : (
-                          <div className="w-14 h-14 rounded-lg bg-zinc-100 border border-zinc-200 shrink-0 flex items-center justify-center">
+                          <div className="w-14 h-14 rounded-xl bg-zinc-100 border border-zinc-200 shrink-0 flex items-center justify-center">
                             <Package className="w-6 h-6 text-zinc-400" />
                           </div>
                         )}
@@ -539,7 +550,7 @@ export default function Catalogo({ isTecnicoMode = false }: CatalogoProps) {
                         </div>
                       </div>
 
-                      <div className="flex flex-col gap-1 mt-1 p-2.5 bg-blue-50/50 rounded-xl border border-blue-100/50">
+                      <div className="flex flex-col gap-1 mt-1 p-2.5 bg-red-50/50 rounded-xl border border-blue-100/50">
                         {!isTecnicoMode && (
                           <div className="flex items-center justify-between">
                             <span className="text-xs text-zinc-500 font-medium">Precio Compra</span>
@@ -547,20 +558,20 @@ export default function Catalogo({ isTecnicoMode = false }: CatalogoProps) {
                           </div>
                         )}
                         <div className="flex items-center justify-between">
-                          <span className="text-xs text-blue-900 font-medium">Precio Venta</span>
-                          <span className="text-sm font-bold text-blue-700">{formatMoneda(a.precioVenta)}</span>
+                          <span className="text-xs text-red-600 font-medium">Precio Venta</span>
+                          <span className="text-sm font-bold text-red-650">{formatMoneda(a.precioVenta)}</span>
                         </div>
                       </div>
 
                       {!isTecnicoMode && (
                         <div className="flex items-center justify-end gap-1.5 mt-2">
-                          <button onClick={() => handleDuplicate(a)} className="flex-1 py-2 text-zinc-600 bg-zinc-100 hover:bg-emerald-50 hover:text-emerald-700 rounded-lg text-[11px] font-bold transition-colors flex items-center justify-center gap-1.5">
+                          <button onClick={() => handleDuplicate(a)} className="flex-1 py-2 text-zinc-600 bg-zinc-100 hover:bg-emerald-50 hover:text-emerald-700 rounded-xl text-[11px] font-bold transition-colors flex items-center justify-center gap-1.5">
                             <Copy className="w-3.5 h-3.5" /> Copiar
                           </button>
-                          <button onClick={() => handleOpenModal(a)} className="flex-1 py-2 text-zinc-600 bg-zinc-100 hover:bg-blue-50 hover:text-blue-700 rounded-lg text-[11px] font-bold transition-colors flex items-center justify-center gap-1.5">
+                          <button onClick={() => handleOpenModal(a)} className="flex-1 py-2 text-zinc-600 bg-zinc-100 hover:bg-red-50 hover:text-red-650 rounded-xl text-[11px] font-bold transition-colors flex items-center justify-center gap-1.5">
                             <Edit className="w-3.5 h-3.5" /> Editar
                           </button>
-                          <button onClick={() => handleDelete(a.id)} className="px-3 py-2 text-red-600 bg-red-50 hover:bg-red-100 rounded-lg text-[11px] font-bold transition-colors flex items-center justify-center">
+                          <button onClick={() => handleDelete(a.id)} className="px-3 py-2 text-red-600 bg-red-50 hover:bg-red-100 rounded-xl text-[11px] font-bold transition-colors flex items-center justify-center">
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
@@ -574,13 +585,13 @@ export default function Catalogo({ isTecnicoMode = false }: CatalogoProps) {
                       </div>
                       <div className="flex-1 min-w-0 pr-2 flex items-center gap-3">
                         {a.fotoUrl ? (
-                          <img src={a.fotoUrl} alt={a.nombre} className="w-8 h-8 rounded-lg object-cover border border-zinc-200 shrink-0 bg-white img-no-bg" />
+                          <img src={a.fotoUrl} alt={a.nombre} className="w-8 h-8 rounded-xl object-cover border border-zinc-200 shrink-0 bg-white img-no-bg" />
                         ) : (
-                          <div className="w-8 h-8 rounded-lg bg-zinc-100 border border-zinc-200 shrink-0 flex items-center justify-center">
+                          <div className="w-8 h-8 rounded-xl bg-zinc-100 border border-zinc-200 shrink-0 flex items-center justify-center">
                             <Package className="w-4 h-4 text-zinc-400" />
                           </div>
                         )}
-                        <p className="text-sm font-bold text-zinc-900 truncate group-hover:text-blue-900 transition-colors">{a.nombre}</p>
+                        <p className="text-sm font-bold text-zinc-900 truncate group-hover:text-red-600 transition-colors">{a.nombre}</p>
                       </div>
                       <div className="w-36 shrink-0 text-sm text-zinc-600 truncate pr-2">{a.familia || '-'}</div>
                       {!isTecnicoMode && <div className="w-28 shrink-0 text-sm text-zinc-600 text-right pr-2">{formatMoneda(a.precioCompra)}</div>}
@@ -592,13 +603,13 @@ export default function Catalogo({ isTecnicoMode = false }: CatalogoProps) {
                       </div>
                       {!isTecnicoMode && (
                         <div className="w-28 shrink-0 flex items-center justify-end gap-1">
-                          <button onClick={() => handleDuplicate(a)} className="p-1.5 text-zinc-400 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors" title="Duplicar">
+                          <button onClick={() => handleDuplicate(a)} className="p-1.5 text-zinc-400 hover:text-emerald-700 hover:bg-emerald-50 rounded-xl transition-colors" title="Duplicar">
                             <Copy className="w-4 h-4" />
                           </button>
-                          <button onClick={() => handleOpenModal(a)} className="p-1.5 text-zinc-400 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors" title="Editar">
+                          <button onClick={() => handleOpenModal(a)} className="p-1.5 text-zinc-400 hover:text-red-650 hover:bg-red-50 rounded-xl transition-colors" title="Editar">
                             <Edit className="w-4 h-4" />
                           </button>
-                          <button onClick={() => handleDelete(a.id)} className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors" title="Borrar">
+                          <button onClick={() => handleDelete(a.id)} className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-xl transition-colors" title="Borrar">
                             <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
@@ -616,11 +627,11 @@ export default function Catalogo({ isTecnicoMode = false }: CatalogoProps) {
       {isModalOpen && (
         <div className="fixed inset-0 bg-blue-950/20 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div className="px-6 py-4 border-b border-blue-100 flex items-center justify-between bg-blue-50/30">
+            <div className="px-6 py-4 border-b border-blue-100 flex items-center justify-between bg-red-50/30">
               <h2 className="text-xl font-bold text-blue-950">
                 {editingArticulo ? 'Editar Artículo' : 'Nuevo Artículo'}
               </h2>
-              <button onClick={handleCloseModal} className="p-2 text-blue-400 hover:text-blue-700 hover:bg-white rounded-xl transition-colors">
+              <button onClick={handleCloseModal} className="p-2 text-blue-400 hover:text-red-650 hover:bg-white rounded-xl transition-colors">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -628,11 +639,11 @@ export default function Catalogo({ isTecnicoMode = false }: CatalogoProps) {
             <form onSubmit={handleSave} className="p-6 space-y-4">
               <div className="flex flex-col items-center gap-3">
                 <label className="text-sm font-medium text-blue-950 w-full">Foto del Artículo</label>
-                <div className="relative w-full h-40 bg-blue-50/50 border-2 border-dashed border-blue-200 rounded-xl flex items-center justify-center overflow-hidden hover:bg-blue-50 transition-colors group cursor-pointer">
+                <div className="relative w-full h-40 bg-red-50/50 border-2 border-dashed border-blue-200 rounded-xl flex items-center justify-center overflow-hidden hover:bg-red-50 transition-colors group cursor-pointer">
                   {fotoPreview ? (
                     <img src={fotoPreview} alt="Vista previa" className="w-full h-full object-contain p-2 img-no-bg" />
                   ) : (
-                    <div className="flex flex-col items-center text-blue-400 group-hover:text-blue-600 transition-colors">
+                    <div className="flex flex-col items-center text-blue-400 group-hover:text-red-650 transition-colors">
                       <ImageIcon className="w-8 h-8 mb-2" />
                       <span className="text-sm font-medium">Subir Imagen</span>
                     </div>
@@ -654,7 +665,7 @@ export default function Catalogo({ isTecnicoMode = false }: CatalogoProps) {
                     type="text"
                     value={formData.codigo}
                     onChange={e => setFormData({...formData, codigo: e.target.value})}
-                    className="w-full px-4 py-2.5 bg-blue-50/50 border border-blue-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-blue-950"
+                    className="w-full px-4 py-2.5 bg-red-50/50 border border-blue-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/10 focus:border-red-500 transition-all text-blue-950"
                     placeholder="Ej: EXT-001"
                   />
                 </div>
@@ -665,7 +676,7 @@ export default function Catalogo({ isTecnicoMode = false }: CatalogoProps) {
                       value={formData.familiaId || (formData.familia ? '__current__' : '')}
                       disabled={isFamiliasLoading || selectFamiliaOptions.length === 0}
                       onChange={e => handleFamiliaChange(e.target.value)}
-                      className="w-full px-4 py-2.5 bg-blue-50/50 border border-blue-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-blue-950 disabled:opacity-60 disabled:cursor-not-allowed"
+                      className="w-full px-4 py-2.5 bg-red-50/50 border border-blue-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/10 focus:border-red-500 transition-all text-blue-950 disabled:opacity-60 disabled:cursor-not-allowed"
                     >
                       <option value="">
                         {isFamiliasLoading ? 'Cargando familias...' : '-- Selecciona familia --'}
@@ -689,7 +700,7 @@ export default function Catalogo({ isTecnicoMode = false }: CatalogoProps) {
                   type="text"
                   value={formData.nombre}
                   onChange={e => setFormData({...formData, nombre: e.target.value})}
-                  className="w-full px-4 py-2.5 bg-blue-50/50 border border-blue-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-blue-950"
+                  className="w-full px-4 py-2.5 bg-red-50/50 border border-blue-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/10 focus:border-red-500 transition-all text-blue-950"
                   placeholder="Ej: Extintor Polvo ABC 6kg"
                 />
               </div>
@@ -704,7 +715,7 @@ export default function Catalogo({ isTecnicoMode = false }: CatalogoProps) {
                     min="0"
                     value={formData.precioCompra}
                     onChange={e => setFormData({...formData, precioCompra: e.target.value})}
-                    className="w-full px-4 py-2.5 bg-blue-50/50 border border-blue-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-blue-950"
+                    className="w-full px-4 py-2.5 bg-red-50/50 border border-blue-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/10 focus:border-red-500 transition-all text-blue-950"
                     placeholder="0.00"
                   />
                 </div>
@@ -717,7 +728,7 @@ export default function Catalogo({ isTecnicoMode = false }: CatalogoProps) {
                     min="0"
                     value={formData.precioVenta}
                     onChange={e => setFormData({...formData, precioVenta: e.target.value})}
-                    className="w-full px-4 py-2.5 bg-blue-50/50 border border-blue-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-blue-950"
+                    className="w-full px-4 py-2.5 bg-red-50/50 border border-blue-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/10 focus:border-red-500 transition-all text-blue-950"
                     placeholder="0.00"
                   />
                 </div>
@@ -729,13 +740,13 @@ export default function Catalogo({ isTecnicoMode = false }: CatalogoProps) {
                    type="checkbox"
                    checked={formData.revisable}
                    onChange={e => setFormData({...formData, revisable: e.target.checked})}
-                   className="w-4 h-4 text-blue-600"
+                   className="w-4 h-4 text-red-650"
                  />
                </div>
 
-              <div className="mt-2 p-3 bg-blue-50 rounded-xl border border-blue-200/50 flex justify-between items-center">
-                <span className="text-xs font-medium text-blue-700">Precio Final (IVA 21%)</span>
-                <span className="text-lg font-bold text-blue-900">
+              <div className="mt-2 p-3 bg-red-50 rounded-xl border border-blue-200/50 flex justify-between items-center">
+                <span className="text-xs font-medium text-red-650">Precio Final (IVA 21%)</span>
+                <span className="text-lg font-bold text-red-600">
                   {formData.precioVenta ? formatMoneda(parseFloat(formData.precioVenta) * 1.21) : formatMoneda(0)}
                 </span>
               </div>
@@ -744,7 +755,7 @@ export default function Catalogo({ isTecnicoMode = false }: CatalogoProps) {
                 <button
                   type="button"
                   onClick={handleCloseModal}
-                  className="flex-1 px-4 py-2.5 text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-xl font-medium transition-colors"
+                  className="flex-1 px-4 py-2.5 text-red-650 bg-red-50 hover:bg-red-100 rounded-xl font-medium transition-colors"
                 >
                   Cancelar
                 </button>
@@ -765,11 +776,11 @@ export default function Catalogo({ isTecnicoMode = false }: CatalogoProps) {
       {viewArticuloModal && (
         <div className="fixed inset-0 bg-blue-950/20 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div className="px-6 py-4 border-b border-blue-100 flex items-center justify-between bg-blue-50/30">
+            <div className="px-6 py-4 border-b border-blue-100 flex items-center justify-between bg-red-50/30">
               <h2 className="text-xl font-bold text-blue-950">
                 Información del Artículo
               </h2>
-              <button onClick={() => setViewArticuloModal(null)} className="p-2 text-blue-400 hover:text-blue-700 hover:bg-white rounded-xl transition-colors">
+              <button onClick={() => setViewArticuloModal(null)} className="p-2 text-blue-400 hover:text-red-650 hover:bg-white rounded-xl transition-colors">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -811,8 +822,8 @@ export default function Catalogo({ isTecnicoMode = false }: CatalogoProps) {
                 </div>
 
                 <div>
-                  <label className="text-xs font-bold text-blue-900 uppercase tracking-wider block mb-1">Precio Venta</label>
-                  <p className="text-xl font-bold text-blue-700">
+                  <label className="text-xs font-bold text-red-600 uppercase tracking-wider block mb-1">Precio Venta</label>
+                  <p className="text-xl font-bold text-red-650">
                     {formatMoneda(viewArticuloModal.precioVenta)}
                   </p>
                 </div>

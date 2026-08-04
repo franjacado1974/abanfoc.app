@@ -24,7 +24,10 @@ import Planificacion from './Planificacion';
 import Partes from './Partes';
 import RevisionChecklist from './RevisionChecklist';
 import Revisiones from './Revisiones';
+import Reparaciones from './Reparaciones';
+import Instalaciones from './Instalaciones';
 import Ajustes from './Ajustes';
+import Buzon from './Buzon';
 import Sidebar from './components/Sidebar';
 import { 
   verifyUser,
@@ -147,13 +150,15 @@ function ProtectedRoute({ allowedRoles, user, children }: { allowedRoles: string
 
 function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: () => void }) {
   const handleLogout = () => {
-    if (confirm('Estas seguro de que quieres cerrar la sesion?')) {
-      sessionStorage.removeItem('firecheck_logged_user');
-      onLogout();
-    }
+    sessionStorage.removeItem('firecheck_logged_user');
+    onLogout();
   };
 
   const navigate = useNavigate();
+  const isUserChus = loggedUser && (
+    (loggedUser.nombre || '').toLowerCase().includes('chus') ||
+    (loggedUser.apellidos || '').toLowerCase().includes('chus')
+  );
   const LOGO_URL = "/favicon.png";
 
   const [appLogo] = useState(() => {
@@ -171,6 +176,8 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
     let albaranes = 0;
     let certificados = 0;
     let pedidos = 0;
+    let partes = 0;
+    let pendientes = 0;
     try {
       const savedClientes = localStorage.getItem('firecheck_db_clientes');
       if (savedClientes) {
@@ -201,7 +208,6 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
         albaranes = Array.isArray(parsed) ? parsed.length : 0;
       }
 
-
       const savedCertificados = localStorage.getItem('firecheck_db_certificados');
       if (savedCertificados) {
         const parsed = JSON.parse(savedCertificados);
@@ -213,8 +219,17 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
         const parsed = JSON.parse(savedPedidos);
         pedidos = Array.isArray(parsed) ? parsed.length : 0;
       }
+
+      const savedPartes = localStorage.getItem('firecheck_db_partes');
+      if (savedPartes) {
+        const parsed = JSON.parse(savedPartes);
+        if (Array.isArray(parsed)) {
+          partes = parsed.length;
+          pendientes = parsed.filter((p: any) => p.estado !== 'Cerrado' && p.estado !== 'Finalizado').length;
+        }
+      }
     } catch { /* ignore */ }
-    return { clientes, centros, catalogo, albaranes, certificados, pedidos, partes: 0, pendientes: 0 };
+    return { clientes, centros, catalogo, albaranes, certificados, pedidos, partes, pendientes };
   };
 
   const [stats, setStats] = useState(() => getStats());
@@ -268,7 +283,6 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
       }));
     } catch (e) { console.error('subscribePedidos failed', e); }
 
-    // Other caches for subsequent menus
     try {
       unsubs.push(subscribeTecnicos((items) => {
         localStorage.setItem('firecheck_db_tecnicos', JSON.stringify(items));
@@ -296,12 +310,14 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
     try {
       unsubs.push(subscribePartes((items) => {
         localStorage.setItem('firecheck_db_partes', JSON.stringify(items));
+        updateStats();
       }));
     } catch (e) { console.error('subscribePartes failed', e); }
 
     try {
       unsubs.push(subscribePresupuestos((items) => {
         localStorage.setItem('firecheck_db_presupuestos', JSON.stringify(items));
+        updateStats();
       }));
     } catch (e) { console.error('subscribePresupuestos failed', e); }
 
@@ -312,152 +328,464 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
     };
   }, []);
 
+  const [formattedDate, setFormattedDate] = useState('');
+  const [recentPartes, setRecentPartes] = useState<any[]>([]);
+  const [clientesMap, setClientesMap] = useState<Record<string, string>>({});
+  const [centrosMap, setCentrosMap] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    const options: Intl.DateTimeFormatOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+    const dateStr = new Date().toLocaleDateString('es-ES', options);
+    setFormattedDate(dateStr.charAt(0).toUpperCase() + dateStr.slice(1));
+
+    try {
+      const savedClientes = localStorage.getItem('firecheck_db_clientes');
+      if (savedClientes) {
+        const parsed = JSON.parse(savedClientes);
+        if (Array.isArray(parsed)) {
+          const map: Record<string, string> = {};
+          parsed.forEach((c: any) => {
+            map[c.id] = c.nombreFiscal || c.nombre || 'Cliente Desconocido';
+          });
+          setClientesMap(map);
+        }
+      }
+    } catch (e) { console.error(e); }
+
+    try {
+      const savedCentros = localStorage.getItem('firecheck_db_centros');
+      if (savedCentros) {
+        const parsed = JSON.parse(savedCentros);
+        if (Array.isArray(parsed)) {
+          const map: Record<string, string> = {};
+          parsed.forEach((c: any) => {
+            map[c.id] = c.nombre || 'Centro Desconocido';
+          });
+          setCentrosMap(map);
+        }
+      }
+    } catch (e) { console.error(e); }
+
+    try {
+      const savedPartes = localStorage.getItem('firecheck_db_partes');
+      if (savedPartes) {
+        const parsed = JSON.parse(savedPartes);
+        if (Array.isArray(parsed)) {
+          const sorted = [...parsed].sort((a: any, b: any) => {
+            const dateA = a.fechaCreacion || '';
+            const dateB = b.fechaCreacion || '';
+            return dateB.localeCompare(dateA);
+          });
+          setRecentPartes(sorted.slice(0, 4));
+        }
+      }
+    } catch (e) { console.error(e); }
+  }, [stats]);
+
+  const getStatusBadge = (estado: string) => {
+    const styles: Record<string, string> = {
+      'Planificado': 'bg-zinc-100 text-zinc-700 border border-zinc-300',
+      'Abierto': 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+      'En revisión': 'bg-amber-50 text-amber-700 border border-amber-200',
+      'Descargado (Offline)': 'bg-zinc-100 text-zinc-700 border border-zinc-200',
+      'Finalizado': 'bg-blue-50 text-blue-700 border border-blue-200',
+      'Cerrado': 'bg-slate-100 text-slate-700 border border-slate-200',
+      'Pre-Cerrado': 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+    };
+    return styles[estado] || 'bg-zinc-50 text-zinc-600 border border-zinc-200';
+  };
+
   return (
-    <div className="flex h-screen bg-[#DCE1E5]">
+    <div className="flex h-screen bg-[#F8FAFC]">
       <Sidebar user={loggedUser} onLogout={handleLogout} appLogo={appLogo} />
       
       <main className="flex-1 overflow-y-auto">
-        {/* Top Bar */}
-        <div className="sticky top-0 z-40 bg-[#DCE1E5]/80 backdrop-blur-md border-b border-zinc-200/60">
-          <div className="flex items-center justify-center px-6 py-4">
-            <div className="text-center">
-              <h1 className="text-xl font-bold text-zinc-900">Inicio</h1>
-              <p className="text-xs text-zinc-500 mt-0.5">Bienvenido, {loggedUser.nombre}</p>
+        {/* Top Sticky Bar */}
+        <div className="sticky top-0 z-40 bg-[#F8FAFC]/80 backdrop-blur-md border-b border-zinc-200/60">
+          <div className="flex items-center justify-between px-8 py-4">
+            <div>
+              <h1 className="text-xl font-black text-zinc-950 tracking-tight">Inicio</h1>
+              <p className="text-xs font-semibold text-zinc-500 mt-0.5">{formattedDate}</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-bold bg-red-50 text-red-600 border border-red-200/60 px-3 py-1.5 rounded-full uppercase tracking-wider">
+                {loggedUser.rol}
+              </span>
             </div>
           </div>
         </div>
 
-        <div className="p-6">
-          {/* Metric Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
-            <div className="bg-white rounded-xl border border-zinc-200 p-3 flex items-center gap-3 hover:shadow-sm transition-all cursor-pointer" onClick={() => navigate('/clientes')}>
-              <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600 shrink-0">
-                <Users className="w-4 h-4" />
+        <div className="p-8 max-w-[1600px] mx-auto animate-in">
+          {/* Welcome Hero Banner */}
+          <div className="bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-950 text-white rounded-3xl p-6 md:p-8 shadow-xl border border-zinc-800 relative overflow-hidden mb-8">
+            <div className="absolute right-0 top-0 w-80 h-80 bg-red-600/10 rounded-full blur-[100px] pointer-events-none" />
+            <div className="absolute left-1/3 bottom-0 w-60 h-60 bg-orange-600/5 rounded-full blur-[80px] pointer-events-none" />
+            
+            <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+              <div className="max-w-xl">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="bg-red-600 text-white text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-md">
+                    Salamandra Control
+                  </span>
+                  <span className="text-zinc-500 text-[10px] font-semibold">• Activo</span>
+                </div>
+                <h2 className="text-2xl md:text-3xl font-extrabold text-white tracking-tight">
+                  ¡Hola, {loggedUser.nombre}! 👋
+                </h2>
+                <p className="text-sm text-zinc-400 mt-2 leading-relaxed">
+                  Bienvenido al panel administrativo de ABANFOC. Desde aquí puedes supervisar el inventario de sistemas, planificar revisiones trimestrales y anuales, y dar soporte a los técnicos en campo.
+                </p>
+                <div className="flex flex-wrap gap-2 mt-4">
+                  <span className="bg-zinc-800/80 hover:bg-zinc-800 text-zinc-300 text-xs px-3.5 py-1.5 rounded-xl font-bold border border-zinc-700/50 transition-colors">
+                    {stats.clientes} Clientes Activos
+                  </span>
+                  <span className="bg-zinc-800/80 hover:bg-zinc-800 text-zinc-300 text-xs px-3.5 py-1.5 rounded-xl font-bold border border-zinc-700/50 transition-colors">
+                    {stats.centros} Centros Registrados
+                  </span>
+                  <span className="bg-zinc-800/80 hover:bg-zinc-800 text-zinc-300 text-xs px-3.5 py-1.5 rounded-xl font-bold border border-zinc-700/50 transition-colors">
+                    {stats.pendientes} Partes Pendientes
+                  </span>
+                </div>
               </div>
-              <div>
-                <p className="text-lg font-bold text-blue-900 leading-none">{stats.clientes}</p>
-                <p className="text-[10px] text-zinc-500 mt-0.5">Clientes</p>
-              </div>
-            </div>
 
-            <div className="bg-white rounded-xl border border-zinc-200 p-3 flex items-center gap-3 hover:shadow-sm transition-all cursor-pointer" onClick={() => navigate('/centros')}>
-              <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0">
-                <Building2 className="w-4 h-4" />
-              </div>
-              <div>
-                <p className="text-lg font-bold text-emerald-900 leading-none">{stats.centros}</p>
-                <p className="text-[10px] text-zinc-500 mt-0.5">Centros</p>
-              </div>
-            </div>
+              {isUserChus && (
+                <div className="hidden lg:flex items-center justify-center shrink-0 w-48 h-48 relative select-none" style={{ transform: 'translateY(6px)' }}>
+                  <style>{`
+                    @keyframes flyLeftToRight {
+                      0% { transform: translate3d(-30px, 40px, 0) scale(0.6); opacity: 0; }
+                      15% { opacity: 0.9; }
+                      85% { opacity: 0.9; }
+                      100% { transform: translate3d(210px, 10px, 0) scale(0.7); opacity: 0; }
+                    }
+                    @keyframes flyRightToLeft {
+                      0% { transform: translate3d(210px, 60px, 0) scale(0.5) scaleX(-1); opacity: 0; }
+                      15% { opacity: 0.8; }
+                      85% { opacity: 0.8; }
+                      100% { transform: translate3d(-30px, 30px, 0) scale(0.6) scaleX(-1); opacity: 0; }
+                    }
+                  `}</style>
 
-            <div className="bg-white rounded-xl border border-zinc-200 p-3 flex items-center gap-3 hover:shadow-sm transition-all cursor-pointer" onClick={() => navigate('/pedidos')}>
-              <div className="w-8 h-8 rounded-lg bg-sky-50 flex items-center justify-center text-sky-600 shrink-0">
-                <FileText className="w-4 h-4" />
-              </div>
-              <div>
-                <p className="text-lg font-bold text-sky-900 leading-none">{stats.pedidos}</p>
-                <p className="text-[10px] text-zinc-500 mt-0.5">Pedidos</p>
-              </div>
-            </div>
+                  <img 
+                    src="/arbol.png" 
+                    alt="Árbol colorido" 
+                    className="h-44 w-44 object-contain"
+                  />
 
-            <div className="bg-white rounded-xl border border-zinc-200 p-3 flex items-center gap-3 hover:shadow-sm transition-all cursor-pointer" onClick={() => navigate('/partes_trabajo')}>
-              <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center text-amber-600 shrink-0">
-                <Clock className="w-4 h-4" />
-              </div>
-              <div>
-                <p className="text-lg font-bold text-amber-900 leading-none">0</p>
-                <p className="text-[10px] text-zinc-500 mt-0.5">Pendientes</p>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-xl border border-zinc-200 p-3 flex items-center gap-3 hover:shadow-sm transition-all cursor-pointer" onClick={() => navigate('/partes')}>
-              <div className="w-8 h-8 rounded-lg bg-violet-50 flex items-center justify-center text-violet-600 shrink-0">
-                <FileText className="w-4 h-4" />
-              </div>
-              <div>
-                <p className="text-lg font-bold text-violet-900 leading-none">0</p>
-                <p className="text-[10px] text-zinc-500 mt-0.5">Partes</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Secondary metrics row */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-            <div className="bg-white rounded-xl border border-zinc-200 p-3 flex items-center gap-3 hover:border-orange-200 transition-all cursor-pointer" onClick={() => navigate('/catalogo')}>
-              <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center text-orange-600 shrink-0">
-                <Package className="w-4 h-4" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-base font-bold text-zinc-900 leading-none">{stats.catalogo}</p>
-                <p className="text-[10px] text-zinc-500 mt-0.5">Catálogo</p>
-              </div>
-            </div>
-            <div className="bg-white rounded-xl border border-zinc-200 p-3 flex items-center gap-3 hover:border-cyan-200 transition-all cursor-pointer" onClick={() => navigate('/certificados')}>
-              <div className="w-8 h-8 rounded-lg bg-cyan-50 flex items-center justify-center text-cyan-600 shrink-0">
-                <FileCheck className="w-4 h-4" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-base font-bold text-zinc-900 leading-none">{stats.certificados}</p>
-                <p className="text-[10px] text-zinc-500 mt-0.5">Certificados</p>
-              </div>
-            </div>
-            <div className="bg-white rounded-xl border border-zinc-200 p-3 flex items-center gap-3 hover:border-violet-200 transition-all cursor-pointer" onClick={() => navigate('/albaranes')}>
-              <div className="w-8 h-8 rounded-lg bg-violet-50 flex items-center justify-center text-violet-600 shrink-0">
-                <FileDigit className="w-4 h-4" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-base font-bold text-zinc-900 leading-none">{stats.albaranes}</p>
-                <p className="text-[10px] text-zinc-500 mt-0.5">Albaranes</p>
-              </div>
-            </div>
-            <div className="bg-white rounded-xl border border-zinc-200 p-3 flex items-center gap-3 hover:border-rose-200 transition-all cursor-pointer" onClick={() => navigate('/facturas')}>
-              <div className="w-8 h-8 rounded-lg bg-rose-50 flex items-center justify-center text-rose-600 shrink-0">
-                <Receipt className="w-4 h-4" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-base font-bold text-zinc-900 leading-none">{stats.albaranes - Math.floor(stats.albaranes * 0.4)}</p>
-                <p className="text-[10px] text-zinc-500 mt-0.5">Pend. Factura</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Quick Access Grid */}
-          <div className="mb-6">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-zinc-500 mb-4">Acceso Rapido</h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
-              {[
-                { label: 'Planificacion', icon: CalendarDays, path: '/partes_trabajo', color: 'amber' },
-                { label: 'Partes', icon: FileText, path: '/partes', color: 'sky' },
-                { label: 'Revisiones', icon: SearchCheck, path: '/revisiones', color: 'indigo' },
-                { label: 'Reparaciones', icon: Wrench, path: '/reparaciones', color: 'red' },
-                { label: 'Instalaciones', icon: HardHat, path: '/instalaciones', color: 'teal' },
-                { label: 'Presupuestos', icon: Calculator, path: '/presupuestos', color: 'orange' },
-              ].map((item) => {
-                const colorMap: Record<string, string> = {
-                  amber: 'bg-amber-50 border-amber-200 text-amber-700 hover:border-amber-300',
-                  sky: 'bg-sky-50 border-sky-200 text-sky-700 hover:border-sky-300',
-                  indigo: 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:border-indigo-300',
-                  red: 'bg-red-50 border-red-200 text-red-700 hover:border-red-300',
-                  teal: 'bg-teal-50 border-teal-200 text-teal-700 hover:border-teal-300',
-                  orange: 'bg-orange-50 border-orange-200 text-orange-700 hover:border-orange-300',
-                };
-                const iconColorMap: Record<string, string> = {
-                  amber: 'text-amber-600', sky: 'text-sky-600', indigo: 'text-indigo-600',
-                  red: 'text-red-600', teal: 'text-teal-600', orange: 'text-orange-600',
-                };
-                return (
-                  <button
-                    key={item.path}
-                    onClick={() => navigate(item.path)}
-                    className={`flex items-center gap-3 p-3.5 rounded-xl border ${colorMap[item.color] || 'bg-white border-zinc-200'} transition-all text-left`}
+                  {/* Pájaros blancos volando */}
+                  <svg 
+                    viewBox="0 0 20 12" 
+                    className="absolute w-6 h-4 pointer-events-none select-none z-20"
+                    style={{
+                      animation: 'flyLeftToRight 8s linear infinite',
+                      animationDelay: '1s'
+                    }}
                   >
-                    <div className={`${iconColorMap[item.color] || 'text-zinc-600'}`}>
-                      <item.icon className="w-5 h-5" />
-                    </div>
-                    <span className="text-sm font-bold">{item.label}</span>
-                  </button>
-                );
-              })}
+                    <path d="M 0,4 C 5,-2 8,4 10,7 C 12,4 15,-2 20,4 C 15,5 12,8 10,12 C 8,8 5,5 0,4 Z" fill="#ffffff" />
+                  </svg>
+
+                  <svg 
+                    viewBox="0 0 20 12" 
+                    className="absolute w-5 h-3 pointer-events-none select-none z-20"
+                    style={{
+                      animation: 'flyRightToLeft 11s linear infinite',
+                      animationDelay: '5s'
+                    }}
+                  >
+                    <path d="M 0,4 C 5,-2 8,4 10,7 C 12,4 15,-2 20,4 C 15,5 12,8 10,12 C 8,8 5,5 0,4 Z" fill="#ffffff" opacity="0.95" />
+                  </svg>
+
+                  {/* Margaritas a ras del suelo */}
+                  <div className="absolute bottom-2 left-0 right-0 flex justify-center gap-1 text-base filter drop-shadow-[0_1px_3px_rgba(0,0,0,0.4)]">
+                    <span>🌼</span>
+                    <span>🌼</span>
+                    <span>🌼</span>
+                    <span>🌼</span>
+                    <span>🌼</span>
+                    <span>🌼</span>
+                    <span>🌼</span>
+                    <span>🌼</span>
+                    <span>🌼</span>
+                  </div>
+                </div>
+              )}
+
+              <div className="hidden md:flex items-center justify-center shrink-0 w-32 h-32 rounded-2xl bg-zinc-900/50 border border-zinc-800 backdrop-blur-sm relative group overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-tr from-red-600/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                <img 
+                  src="/salamandra-orange.png" 
+                  alt="salamandra" 
+                  className="h-20 w-20 object-contain drop-shadow-[0_0_15px_rgba(239,68,68,0.2)] transition-transform duration-500 group-hover:scale-110" 
+                  onError={(e) => { (e.target as HTMLImageElement).src = appLogo; }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Primary Metric Cards Grid */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
+            {/* Clientes */}
+            <div 
+              className="bg-white border border-zinc-200/80 shadow-sm rounded-2xl p-4 flex flex-col justify-between hover:shadow-md hover:-translate-y-0.5 hover:border-zinc-300 transition-all duration-300 group cursor-pointer"
+              onClick={() => navigate('/clientes')}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-500/10">
+                  <Users className="w-5 h-5" />
+                </div>
+                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider group-hover:text-blue-600 transition-colors">Ver todos</span>
+              </div>
+              <div>
+                <p className="text-2xl font-black text-zinc-950 tracking-tight leading-none">{stats.clientes}</p>
+                <p className="text-xs font-bold text-zinc-500 mt-1.5">Clientes</p>
+              </div>
+            </div>
+
+            {/* Centros */}
+            <div 
+              className="bg-white border border-zinc-200/80 shadow-sm rounded-2xl p-4 flex flex-col justify-between hover:shadow-md hover:-translate-y-0.5 hover:border-zinc-300 transition-all duration-300 group cursor-pointer"
+              onClick={() => navigate('/centros')}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white shadow-md shadow-emerald-500/10">
+                  <Building2 className="w-5 h-5" />
+                </div>
+                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider group-hover:text-emerald-600 transition-colors">Ver todos</span>
+              </div>
+              <div>
+                <p className="text-2xl font-black text-zinc-950 tracking-tight leading-none">{stats.centros}</p>
+                <p className="text-xs font-bold text-zinc-500 mt-1.5">Centros</p>
+              </div>
+            </div>
+
+            {/* Pedidos */}
+            <div 
+              className="bg-white border border-zinc-200/80 shadow-sm rounded-2xl p-4 flex flex-col justify-between hover:shadow-md hover:-translate-y-0.5 hover:border-zinc-300 transition-all duration-300 group cursor-pointer"
+              onClick={() => navigate('/pedidos')}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-sky-500 to-blue-600 flex items-center justify-center text-white shadow-md shadow-sky-500/10">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider group-hover:text-sky-600 transition-colors">Ver todos</span>
+              </div>
+              <div>
+                <p className="text-2xl font-black text-zinc-950 tracking-tight leading-none">{stats.pedidos}</p>
+                <p className="text-xs font-bold text-zinc-500 mt-1.5">Pedidos</p>
+              </div>
+            </div>
+
+            {/* Pendientes */}
+            <div 
+              className="bg-white border border-zinc-200/80 shadow-sm rounded-2xl p-4 flex flex-col justify-between hover:shadow-md hover:-translate-y-0.5 hover:border-zinc-300 transition-all duration-300 group cursor-pointer"
+              onClick={() => navigate('/partes_trabajo')}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <div className={`w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-white shadow-md shadow-amber-500/10 ${stats.pendientes > 0 ? 'animate-pulse' : ''}`}>
+                  <Clock className="w-5 h-5" />
+                </div>
+                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider group-hover:text-amber-600 transition-colors">Revisar</span>
+              </div>
+              <div>
+                <p className="text-2xl font-black text-zinc-950 tracking-tight leading-none">{stats.pendientes}</p>
+                <p className="text-xs font-bold text-zinc-500 mt-1.5">Partes Pendientes</p>
+              </div>
+            </div>
+
+            {/* Total Partes */}
+            <div 
+              className="bg-white border border-zinc-200/80 shadow-sm rounded-2xl p-4 flex flex-col justify-between hover:shadow-md hover:-translate-y-0.5 hover:border-zinc-300 transition-all duration-300 group cursor-pointer"
+              onClick={() => navigate('/partes')}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white shadow-md shadow-violet-500/10">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider group-hover:text-violet-600 transition-colors">Historial</span>
+              </div>
+              <div>
+                <p className="text-2xl font-black text-zinc-950 tracking-tight leading-none">{stats.partes}</p>
+                <p className="text-xs font-bold text-zinc-500 mt-1.5">Total Partes</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Secondary Metrics Row */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            {/* Catálogo */}
+            <div 
+              className="bg-[#FFFDF9] border border-orange-200/60 shadow-sm rounded-2xl p-4 flex items-center gap-4 hover:border-orange-300 hover:shadow-sm transition-all duration-200 cursor-pointer"
+              onClick={() => navigate('/catalogo')}
+            >
+              <div className="w-10 h-10 rounded-xl bg-orange-100/70 flex items-center justify-center text-orange-600 shrink-0">
+                <Package className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-lg font-extrabold text-zinc-900 leading-none">{stats.catalogo}</p>
+                <p className="text-[11px] font-bold text-zinc-500 mt-1.5">Artículos en Catálogo</p>
+              </div>
+            </div>
+
+            {/* Certificados */}
+            <div 
+              className="bg-[#F6FCFE] border border-cyan-200/60 shadow-sm rounded-2xl p-4 flex items-center gap-4 hover:border-cyan-300 hover:shadow-sm transition-all duration-200 cursor-pointer"
+              onClick={() => navigate('/certificados')}
+            >
+              <div className="w-10 h-10 rounded-xl bg-cyan-100/70 flex items-center justify-center text-cyan-600 shrink-0">
+                <FileCheck className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-lg font-extrabold text-zinc-900 leading-none">{stats.certificados}</p>
+                <p className="text-[11px] font-bold text-zinc-500 mt-1.5">Certificados Emitidos</p>
+              </div>
+            </div>
+
+            {/* Albaranes */}
+            <div 
+              className="bg-[#FAFAFE] border border-violet-200/60 shadow-sm rounded-2xl p-4 flex items-center gap-4 hover:border-violet-300 hover:shadow-sm transition-all duration-200 cursor-pointer"
+              onClick={() => navigate('/albaranes')}
+            >
+              <div className="w-10 h-10 rounded-xl bg-violet-100/70 flex items-center justify-center text-violet-600 shrink-0">
+                <FileDigit className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-lg font-extrabold text-zinc-900 leading-none">{stats.albaranes}</p>
+                <p className="text-[11px] font-bold text-zinc-500 mt-1.5">Albaranes de Entrega</p>
+              </div>
+            </div>
+
+            {/* Pendiente Facturación */}
+            <div 
+              className="bg-[#FFF9FA] border border-rose-200/60 shadow-sm rounded-2xl p-4 flex items-center gap-4 hover:border-rose-300 hover:shadow-sm transition-all duration-200 cursor-pointer"
+              onClick={() => navigate('/facturas')}
+            >
+              <div className="w-10 h-10 rounded-xl bg-rose-100/70 flex items-center justify-center text-rose-600 shrink-0">
+                <Receipt className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-lg font-extrabold text-zinc-900 leading-none">{stats.albaranes - Math.floor(stats.albaranes * 0.4)}</p>
+                <p className="text-[11px] font-bold text-zinc-500 mt-1.5">Pendiente Facturación</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Access and Activity Grid */}
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 mb-8">
+            {/* Quick Access List */}
+            <div className="xl:col-span-1 bg-white border border-zinc-200/80 shadow-sm rounded-3xl p-6 flex flex-col justify-between">
+              <div>
+                <h3 className="text-sm font-black uppercase tracking-wider text-zinc-400 mb-4">
+                  Accesos Rápidos Directos
+                </h3>
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { label: 'Planificación', icon: CalendarDays, path: '/partes_trabajo', color: 'amber' },
+                    { label: 'Partes', icon: FileText, path: '/partes', color: 'sky' },
+                    { label: 'Revisiones', icon: SearchCheck, path: '/revisiones', color: 'indigo' },
+                    { label: 'Reparaciones', icon: Wrench, path: '/reparaciones', color: 'red' },
+                    { label: 'Instalaciones', icon: HardHat, path: '/instalaciones', color: 'teal' },
+                    { label: 'Presupuestos', icon: Calculator, path: '/presupuestos', color: 'orange' },
+                  ].map((item) => {
+                    const colorStyles: Record<string, string> = {
+                      amber: 'hover:border-amber-300 hover:bg-amber-50/30 text-amber-950',
+                      sky: 'hover:border-sky-300 hover:bg-sky-50/30 text-sky-950',
+                      indigo: 'hover:border-indigo-300 hover:bg-indigo-50/30 text-indigo-950',
+                      red: 'hover:border-red-300 hover:bg-red-50/30 text-red-950',
+                      teal: 'hover:border-teal-300 hover:bg-teal-50/30 text-teal-950',
+                      orange: 'hover:border-orange-300 hover:bg-orange-50/30 text-orange-950',
+                    };
+                    const iconColorStyles: Record<string, string> = {
+                      amber: 'text-amber-600 bg-amber-50',
+                      sky: 'text-sky-600 bg-sky-50',
+                      indigo: 'text-indigo-600 bg-indigo-50',
+                      red: 'text-red-600 bg-red-50',
+                      teal: 'text-teal-600 bg-teal-50',
+                      orange: 'text-orange-600 bg-orange-50',
+                    };
+                    return (
+                      <button
+                        key={item.path}
+                        onClick={() => navigate(item.path)}
+                        className={`flex flex-col items-start gap-2.5 p-4 rounded-2xl border border-zinc-200/80 bg-white transition-all text-left group hover:-translate-y-0.5 hover:shadow-sm ${colorStyles[item.color] || ''}`}
+                      >
+                        <div className={`p-2 rounded-xl shrink-0 ${iconColorStyles[item.color] || 'text-zinc-600 bg-zinc-50'}`}>
+                          <item.icon className="w-5 h-5" />
+                        </div>
+                        <span className="text-xs font-extrabold tracking-tight">{item.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="mt-6 pt-5 border-t border-zinc-100 flex items-center justify-between text-xs text-zinc-400">
+                <span>Versión del Software</span>
+                <span className="font-bold bg-zinc-100 text-zinc-600 px-2 py-0.5 rounded-md">{APP_VERSION}</span>
+              </div>
+            </div>
+
+            {/* Recent Work Orders Feed */}
+            <div className="xl:col-span-2 bg-white border border-zinc-200/80 shadow-sm rounded-3xl p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-black uppercase tracking-wider text-zinc-400">
+                  Últimos Partes de Trabajo Creados
+                </h3>
+                <button 
+                  onClick={() => navigate('/partes')}
+                  className="text-xs font-bold text-red-600 hover:text-red-700 transition-colors flex items-center gap-1"
+                >
+                  Ver todos los partes →
+                </button>
+              </div>
+
+              {recentPartes.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <div className="w-12 h-12 rounded-full bg-zinc-50 border border-zinc-100 flex items-center justify-center text-zinc-300 mb-3">
+                    <FileText className="w-6 h-6" />
+                  </div>
+                  <h4 className="text-xs font-bold text-zinc-700">Sin partes de trabajo</h4>
+                  <p className="text-[11px] text-zinc-450 mt-1 max-w-xs">No se han encontrado partes de trabajo registrados recientemente en el sistema.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {recentPartes.map((parte) => {
+                    const clientName = clientesMap[parte.clienteId] || 'Cliente cargando...';
+                    const centerName = centrosMap[parte.centroId] || 'Centro cargando...';
+                    const dateFormatted = parte.fechaCreacion 
+                      ? new Date(parte.fechaCreacion).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' })
+                      : parte.fechaProgramada || 'S/D';
+
+                    return (
+                      <div 
+                        key={parte.id}
+                        onClick={() => navigate('/partes')}
+                        className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-2xl border border-zinc-100 hover:border-zinc-200 hover:bg-zinc-50/55 transition-all cursor-pointer group"
+                      >
+                        <div className="flex items-start gap-3 min-w-0">
+                          <div className="w-9 h-9 rounded-xl bg-zinc-50 border border-zinc-100 flex items-center justify-center text-zinc-500 shrink-0 group-hover:bg-red-50 group-hover:text-red-600 transition-colors">
+                            <FileText className="w-4 h-4" />
+                          </div>
+                          <div className="min-w-0">
+                            <h4 className="text-xs font-black text-zinc-950 truncate leading-tight">
+                              {clientName}
+                            </h4>
+                            <p className="text-[11px] text-zinc-500 truncate mt-1">
+                              📍 {centerName}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between sm:justify-end gap-4 shrink-0 border-t sm:border-t-0 pt-2 sm:pt-0 border-zinc-50">
+                          <div className="text-left sm:text-right">
+                            <span className="text-[10px] font-bold text-zinc-450 uppercase block">Creado</span>
+                            <span className="text-[11px] font-extrabold text-zinc-700 mt-0.5 block">{dateFormatted}</span>
+                          </div>
+                          <span className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-full ${getStatusBadge(parte.estado)}`}>
+                            {parte.estado}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -466,18 +794,30 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
   );
 }
 
-function PlaceholderPage({ title, bgColor = "bg-zinc-50" }: { title: string, bgColor?: string }) {
+function PlaceholderPage(props: { title: string; [key: string]: any }) {
+  const { title } = props;
   const navigate = useNavigate();
   return (
-    <div className="flex h-screen bg-[#DCE1E5]">
-      <div className={`flex-1 overflow-y-auto ${bgColor}`}>
-        <div className="p-6">
-          <button onClick={() => navigate('/')} className="text-sm font-medium text-zinc-500 hover:text-black mb-6 flex items-center gap-2 transition-colors">
-            <ArrowLeft className="w-4 h-4" /> Volver a Inicio
-          </button>
-          <h1 className="text-2xl font-bold text-zinc-900">{title}</h1>
-          <p className="text-zinc-500 mt-2">Esta seccion esta en construccion y se implementara proximamente.</p>
+    <div className="min-h-screen bg-[#F8FAFC] px-8 py-6 flex flex-col">
+      <div className="mb-6">
+        <button 
+          onClick={() => navigate('/')} 
+          className="flex items-center gap-1.5 text-xs font-semibold text-zinc-500 hover:text-zinc-900 mb-3 transition-colors cursor-pointer"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" /> Volver al panel
+        </button>
+        <h1 className="text-2xl font-black text-zinc-950 tracking-tight">{title}</h1>
+        <p className="text-xs font-semibold text-zinc-500 mt-1">Módulo en desarrollo para el sistema Salamandra.</p>
+      </div>
+
+      <div className="bg-white rounded-3xl border border-zinc-200/80 p-12 text-center shadow-sm flex-1 flex flex-col items-center justify-center min-h-[350px]">
+        <div className="w-16 h-16 rounded-2xl bg-red-50 border border-red-100 flex items-center justify-center text-red-650 mb-4 animate-pulse">
+          <Clock className="w-8 h-8" />
         </div>
+        <h3 className="text-base font-black text-zinc-900">Sección en Construcción</h3>
+        <p className="text-xs text-zinc-500 mt-2 max-w-md mx-auto leading-relaxed">
+          Esta funcionalidad está siendo desarrollada actualmente y se implementará en una próxima actualización del sistema ABANFOC.
+        </p>
       </div>
     </div>
   );
@@ -485,7 +825,7 @@ function PlaceholderPage({ title, bgColor = "bg-zinc-50" }: { title: string, bgC
 
 function PageLayout({ user, onLogout, appLogo, children }: { user: Usuario | null; onLogout: () => void; appLogo: string; children: React.ReactNode }) {
   return (
-    <div className="flex h-screen bg-[#DCE1E5]">
+    <div className="flex h-screen bg-[#F8FAFC]">
       <Sidebar user={user} onLogout={onLogout} appLogo={appLogo} />
       <div className="flex-1 overflow-y-auto">
         {children}
@@ -493,7 +833,6 @@ function PageLayout({ user, onLogout, appLogo, children }: { user: Usuario | nul
     </div>
   );
 }
-
 export default function App() {
   const {
     needRefresh: [needRefresh, setNeedRefresh],
@@ -673,6 +1012,8 @@ export default function App() {
     if (stored) setAvailableUsers(JSON.parse(stored));
   };
 
+
+
   if (!loggedUser) {
     return (
       <>
@@ -756,7 +1097,7 @@ export default function App() {
         } />
         <Route path="/instalaciones" element={
           <ProtectedRoute allowedRoles={['super-administrador', 'administrador']} user={loggedUser}>
-            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><PlaceholderPage title="Instalaciones" bgColor="bg-zinc-50" /></PageLayout>
+            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Instalaciones /></PageLayout>
           </ProtectedRoute>
         } />
         <Route path="/revisiones" element={
@@ -766,7 +1107,7 @@ export default function App() {
         } />
         <Route path="/reparaciones" element={
           <ProtectedRoute allowedRoles={['super-administrador', 'administrador']} user={loggedUser}>
-            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><PlaceholderPage title="Reparaciones y Averias" bgColor="bg-zinc-50" /></PageLayout>
+            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Reparaciones /></PageLayout>
           </ProtectedRoute>
         } />
         <Route path="/catalogo" element={
@@ -797,6 +1138,11 @@ export default function App() {
         <Route path="/revision-checklist" element={
           <ProtectedRoute allowedRoles={['super-administrador', 'administrador', 'editor']} user={loggedUser}>
             <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><RevisionChecklist /></PageLayout>
+          </ProtectedRoute>
+        } />
+        <Route path="/buzon" element={
+          <ProtectedRoute allowedRoles={['super-administrador', 'administrador', 'editor', 'visualizador', 'tecnico']} user={loggedUser}>
+            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Buzon /></PageLayout>
           </ProtectedRoute>
         } />
         <Route path="/ajustes" element={

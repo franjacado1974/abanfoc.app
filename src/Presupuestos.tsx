@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, X, Download, Edit, Send, Trash2, Save, Package, Wrench, Type, Calculator, CheckCircle, Clock, Ban, ChevronDown, FileText } from 'lucide-react';
-import { subscribePresupuestos, addPresupuesto, updatePresupuesto, deletePresupuesto, subscribeClientes, subscribeArticulos, subscribeCentros, subscribeImpuestos } from './firebase';
+import { useNavigate } from 'react-router-dom';
+import { Search, X, Download, Edit, Send, Trash2, Save, Package, Wrench, Type, Calculator, CheckCircle, Clock, Ban, ChevronDown, FileText, ArrowLeft, Plus } from 'lucide-react';
+import { subscribePresupuestos, addPresupuesto, updatePresupuesto, deletePresupuesto, subscribeClientes, subscribeArticulos, subscribeCentros, subscribeImpuestos, subscribeEmpresas } from './firebase';
 import type { Presupuesto, PresupuestoLinea, Cliente, Articulo, Centro } from './firebase';
 import { generarPresupuestoPDF } from './pdfGenerator';
 
 const ESTADOS: { valor: Presupuesto['estado']; etiqueta: string; color: string; bg: string; icono: React.ElementType }[] = [
   { valor: 'Borrador', etiqueta: 'Borrador', color: 'text-zinc-600', bg: 'bg-zinc-100', icono: FileText },
-  { valor: 'Enviado', etiqueta: 'Enviado', color: 'text-sky-600', bg: 'bg-sky-100', icono: Send },
+  { valor: 'Enviado', etiqueta: 'Enviado', color: 'text-red-600', bg: 'bg-sky-100', icono: Send },
   { valor: 'En espera', etiqueta: 'En espera', color: 'text-amber-600', bg: 'bg-amber-100', icono: Clock },
   { valor: 'Aprobado', etiqueta: 'Aprobado', color: 'text-emerald-600', bg: 'bg-emerald-100', icono: CheckCircle },
   { valor: 'Rechazado', etiqueta: 'Rechazado', color: 'text-red-600', bg: 'bg-red-100', icono: Ban },
@@ -90,7 +91,7 @@ function EstadoMenu({
     <div className="relative inline-block">
       <button 
         onClick={handleClick}
-        className="p-1.5 text-zinc-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-all" 
+        className="p-1.5 text-zinc-400 hover:text-orange-600 hover:bg-orange-50 rounded-xl transition-all" 
         title="Cambiar estado"
       >
         <ChevronDown className="w-3.5 h-3.5" />
@@ -111,7 +112,7 @@ function EstadoMenu({
                     handleCambiarEstado(p, e.valor);
                     setOpenStatusMenuId(null);
                   }}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-all hover:scale-105 ${e.color} ${e.bg} hover:opacity-80`}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all hover:scale-105 ${e.color} ${e.bg} hover:opacity-80`}
                 >
                   <Icono className="w-4 h-4" /> {e.etiqueta}
                 </button>
@@ -125,11 +126,13 @@ function EstadoMenu({
 }
 
 export default function Presupuestos() {
+  const navigate = useNavigate();
   const [presupuestos, setPresupuestos] = useState<Presupuesto[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [articulos, setArticulos] = useState<Articulo[]>([]);
   const [servicios, setServicios] = useState<Articulo[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('Todos');
   const [showForm, setShowForm] = useState(false);
   const [editingPresupuesto, setEditingPresupuesto] = useState<Presupuesto | null>(null);
   const [showDetail, setShowDetail] = useState<Presupuesto | null>(null);
@@ -154,6 +157,7 @@ export default function Presupuestos() {
   const [formIvaExento, setFormIvaExento] = useState(false);
   const [formCentroId, setFormCentroId] = useState('');
   const [centros, setCentros] = useState<Centro[]>([]);
+  const [empresas, setEmpresas] = useState<any[]>([]);
   
   // Definimos una interfaz extendida para las líneas del formulario
   interface EditablePresupuestoLinea extends PresupuestoLinea {
@@ -213,6 +217,9 @@ export default function Presupuestos() {
         localStorage.setItem('firecheck_impuestos_config', JSON.stringify({ iva: config.iva, exento: config.exento }));
       }
     });
+    const unsub6 = subscribeEmpresas(items => {
+      try { setEmpresas(Array.isArray(items) ? items : []); } catch {}
+    });
 
     // Cargar desde localStorage como fallback
     try {
@@ -223,21 +230,25 @@ export default function Presupuestos() {
       }
     } catch {}
 
-    return () => { try { unsub1(); } catch {} try { unsub2(); } catch {} try { unsub3(); } catch {} try { unsub4(); } catch {} try { unsub5(); } catch {} };
+    return () => { try { unsub1(); } catch {} try { unsub2(); } catch {} try { unsub3(); } catch {} try { unsub4(); } catch {} try { unsub5(); } catch {} try { unsub6(); } catch {} };
   }, []);
 
   // Filtrar presupuestos
   const filteredPresupuestos = useMemo(() => {
-    if (!searchTerm.trim()) return presupuestos;
+    let result = presupuestos;
+    if (statusFilter !== 'Todos') {
+      result = result.filter(p => p.estado === statusFilter);
+    }
+    if (!searchTerm.trim()) return result;
     const term = searchTerm.toLowerCase().trim();
-    return presupuestos.filter(p =>
+    return result.filter(p =>
       p.titulo.toLowerCase().includes(term) ||
       (p.nombreCliente || '').toLowerCase().includes(term) ||
       p.fechaCreacion.includes(term) ||
       p.id.toLowerCase().includes(term) ||
       (p.numeroPresupuesto || '').toLowerCase().includes(term)
     );
-  }, [presupuestos, searchTerm]);
+  }, [presupuestos, searchTerm, statusFilter]);
 
   // Calcular totales del formulario
   const formSubtotal = useMemo(() =>
@@ -391,6 +402,11 @@ export default function Presupuestos() {
 
   // Descargar PDF
   const handleDescargar = (p: Presupuesto) => {
+    let empresaSeleccionada: any = undefined;
+    const empId = (p as any).empresaId || centros.find(c => (c as any)._docId === (p as any).centroId || c.id === (p as any).centroId)?.empresaId;
+    if (empId) {
+      empresaSeleccionada = empresas.find(e => (e as any)._docId === empId || (e as any).id === empId || ((e as any).nombre && typeof (e as any).nombre === 'string' && (e as any).nombre.trim().toLowerCase() === empId.trim().toLowerCase()));
+    }
     generarPresupuestoPDF({
       titulo: p.titulo,
       numeroPresupuesto: p.numeroPresupuesto,
@@ -410,51 +426,147 @@ export default function Presupuestos() {
       iva: p.iva,
       total: p.total,
       notas: p.notas,
-    });
+    }, empresaSeleccionada);
   };
 
   // Obtener info del estado
   const getEstadoInfo = (estado: Presupuesto['estado']) => ESTADOS.find(e => e.valor === estado) || ESTADOS[0];
 
   return (
-    <div className="min-h-screen bg-zinc-50 p-4 md:p-6">
+    <div className="min-h-screen bg-[#F8FAFC] px-8 py-6">
       <div className="w-full">
-        {/* HEADER */}
-        <div className="mb-10 flex flex-col items-center text-center space-y-6">
-          <div>
-            <h1 className="text-2xl md:text-4xl font-bold text-zinc-900 tracking-tight">Presupuestos</h1>
-            <p className="text-sm text-zinc-500 mt-1">{filteredPresupuestos.length} presupuesto{filteredPresupuestos.length !== 1 ? 's' : ''}</p>
+        {/* Header */}
+        <div className="mb-6">
+          <button 
+            onClick={() => navigate('/')} 
+            className="flex items-center gap-1.5 text-xs font-semibold text-zinc-500 hover:text-zinc-900 mb-3 transition-colors cursor-pointer"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" /> Volver al panel
+          </button>
+          <h1 className="text-2xl font-black text-zinc-950 tracking-tight">Presupuestos Comerciales</h1>
+          <p className="text-xs font-semibold text-zinc-500 mt-1">Creación, envío y control de ofertas y presupuestos comerciales.</p>
+        </div>
+
+        {/* Pestañas + buscador y botón */}
+        <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4 mb-6">
+          {/* Pestañas */}
+          <div className="flex flex-wrap items-center gap-1.5 bg-zinc-100 p-1.5 rounded-2xl w-fit border border-zinc-200/40">
+            <button
+              onClick={() => setStatusFilter('Todos')}
+              className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
+                statusFilter === 'Todos'
+                  ? 'bg-white text-zinc-950 shadow-sm border border-zinc-200/20 font-extrabold'
+                  : 'text-zinc-500 hover:text-zinc-900 hover:bg-white/50'
+              }`}
+            >
+              Todos
+              <span className={`text-[9px] font-black font-sans px-1.5 py-0.5 rounded transition-colors ${
+                statusFilter === 'Todos' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-zinc-200 text-zinc-500'
+              }`}>
+                {presupuestos.length}
+              </span>
+            </button>
+            <button
+              onClick={() => setStatusFilter('Borrador')}
+              className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
+                statusFilter === 'Borrador'
+                  ? 'bg-white text-zinc-950 shadow-sm border border-zinc-200/20 font-extrabold'
+                  : 'text-zinc-500 hover:text-zinc-900 hover:bg-white/50'
+              }`}
+            >
+              Borradores
+              <span className={`text-[9px] font-black font-sans px-1.5 py-0.5 rounded transition-colors ${
+                statusFilter === 'Borrador' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-zinc-200 text-zinc-500'
+              }`}>
+                {presupuestos.filter(p => p.estado === 'Borrador').length}
+              </span>
+            </button>
+            <button
+              onClick={() => setStatusFilter('Enviado')}
+              className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
+                statusFilter === 'Enviado'
+                  ? 'bg-white text-zinc-950 shadow-sm border border-zinc-200/20 font-extrabold'
+                  : 'text-zinc-500 hover:text-zinc-900 hover:bg-white/50'
+              }`}
+            >
+              Enviados
+              <span className={`text-[9px] font-black font-sans px-1.5 py-0.5 rounded transition-colors ${
+                statusFilter === 'Enviado' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-zinc-250 text-zinc-500'
+              }`}>
+                {presupuestos.filter(p => p.estado === 'Enviado').length}
+              </span>
+            </button>
+            <button
+              onClick={() => setStatusFilter('En espera')}
+              className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
+                statusFilter === 'En espera'
+                  ? 'bg-white text-zinc-950 shadow-sm border border-zinc-200/20 font-extrabold'
+                  : 'text-zinc-500 hover:text-zinc-900 hover:bg-white/50'
+              }`}
+            >
+              En espera
+              <span className={`text-[9px] font-black font-sans px-1.5 py-0.5 rounded transition-colors ${
+                statusFilter === 'En espera' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-zinc-250 text-zinc-500'
+              }`}>
+                {presupuestos.filter(p => p.estado === 'En espera').length}
+              </span>
+            </button>
+            <button
+              onClick={() => setStatusFilter('Aprobado')}
+              className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
+                statusFilter === 'Aprobado'
+                  ? 'bg-white text-zinc-950 shadow-sm border border-zinc-200/20 font-extrabold'
+                  : 'text-zinc-500 hover:text-zinc-900 hover:bg-white/50'
+              }`}
+            >
+              Aprobados
+              <span className={`text-[9px] font-black font-sans px-1.5 py-0.5 rounded transition-colors ${
+                statusFilter === 'Aprobado' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-zinc-250 text-zinc-500'
+              }`}>
+                {presupuestos.filter(p => p.estado === 'Aprobado').length}
+              </span>
+            </button>
+            <button
+              onClick={() => setStatusFilter('Rechazado')}
+              className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
+                statusFilter === 'Rechazado'
+                  ? 'bg-white text-zinc-950 shadow-sm border border-zinc-200/20 font-extrabold'
+                  : 'text-zinc-500 hover:text-zinc-900 hover:bg-white/50'
+              }`}
+            >
+              Rechazados
+              <span className={`text-[9px] font-black font-sans px-1.5 py-0.5 rounded transition-colors ${
+                statusFilter === 'Rechazado' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-zinc-250 text-zinc-500'
+              }`}>
+                {presupuestos.filter(p => p.estado === 'Rechazado').length}
+              </span>
+            </button>
           </div>
 
-          <div className="flex flex-col sm:flex-row items-center gap-4 w-full justify-center">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full xl:w-auto">
             {/* Buscador */}
-            <div className="relative w-full max-w-md">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+            <div className="relative flex-1 sm:flex-none sm:w-64">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
               <input
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Buscar por título, cliente, fecha..."
-                className="w-full pl-10 pr-4 py-2.5 bg-white border border-zinc-200 rounded-xl text-sm text-zinc-700 placeholder-zinc-400 focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all shadow-sm"
+                placeholder="Buscar presupuestos..."
+                className="w-full pl-10 pr-4 py-2.5 bg-white border border-zinc-200/80 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-red-500/10 focus:border-red-500 transition-all text-zinc-950 shadow-sm animate-none"
               />
-              {searchTerm && (
-                <button onClick={() => setSearchTerm('')} className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 text-zinc-400 hover:text-zinc-600 rounded">
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
             </div>
             <button
               onClick={handleNuevo}
-              className="flex items-center gap-2 px-6 py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-bold shadow-lg shadow-orange-200 transition-all active:scale-95 shrink-0"
+              className="flex items-center justify-center gap-2 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold shadow-md shadow-red-500/10 hover:shadow-lg hover:shadow-red-500/20 active:scale-95 transition-all text-xs cursor-pointer"
             >
-              +Nuevo
+              <Plus className="w-3.5 h-3.5" /> Nuevo Presupuesto
             </button>
           </div>
         </div>
 
         {/* LISTA DE PRESUPUESTOS */}
         {filteredPresupuestos.length === 0 ? (
-          <div className="text-center py-20 bg-white rounded-2xl border border-zinc-200 border-dashed">
+          <div className="text-center py-20 bg-white rounded-3xl border border-zinc-200 border-dashed">
             <Calculator className="w-16 h-16 text-zinc-200 mx-auto mb-4" />
             <h3 className="text-lg font-bold text-zinc-900 mb-2">
               {searchTerm ? 'Sin resultados' : 'No hay presupuestos'}
@@ -484,7 +596,7 @@ export default function Presupuestos() {
                   const EstadoIcono = estadoInfo.icono;
                   const nombreCentro = centros.find(c => c._docId === p.centroId || c.id === p.centroId)?.nombre || '';
                   return (
-                    <tr key={p.id} className="hover:bg-zinc-50/50 transition-colors">
+                    <tr key={p.id} className="hover:bg-white transition-colors">
                       <td className="px-4 py-3">
                         <p className="text-xs font-mono font-bold text-zinc-800">PDV-{p.numeroPresupuesto || p.id}</p>
                       </td>
@@ -509,16 +621,16 @@ export default function Presupuestos() {
                       <td className="px-4 py-3 text-right font-black text-zinc-900">{formatMoneda(p.total)}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-center gap-1">
-                          <button onClick={() => handleEditar(p)} className="p-1.5 text-zinc-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-all" title="Editar">
+                          <button onClick={() => handleEditar(p)} className="p-1.5 text-zinc-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-all" title="Editar">
                             <Edit className="w-3.5 h-3.5" />
                           </button>
-                          <button onClick={() => handleCambiarEstado(p, 'Enviado')} className="p-1.5 text-zinc-400 hover:text-sky-600 hover:bg-sky-50 rounded-lg transition-all" title="Enviar">
+                          <button onClick={() => handleCambiarEstado(p, 'Enviado')} className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-sky-50 rounded-xl transition-all" title="Enviar">
                             <Send className="w-3.5 h-3.5" />
                           </button>
-                          <button onClick={() => handleDescargar(p)} className="p-1.5 text-zinc-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all" title="Descargar">
+                          <button onClick={() => handleDescargar(p)} className="p-1.5 text-zinc-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all" title="Descargar">
                             <Download className="w-3.5 h-3.5" />
                           </button>
-                          <button onClick={() => handleEliminar(p)} className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all" title="Eliminar">
+                          <button onClick={() => handleEliminar(p)} className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all" title="Eliminar">
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                           {/* Menú de estado en ventana horizontal */}
@@ -543,7 +655,7 @@ export default function Presupuestos() {
       {showDetail && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="px-6 py-4 border-b border-zinc-100 flex items-center justify-between bg-zinc-50/50 shrink-0">
+            <div className="px-6 py-4 border-b border-zinc-100 flex items-center justify-between bg-white shrink-0">
               <h2 className="text-lg font-bold text-zinc-900">{showDetail.titulo}</h2>
               <button onClick={() => setShowDetail(null)} className="p-2 text-zinc-400 hover:text-black hover:bg-white rounded-xl transition-colors">
                 <X className="w-5 h-5" />
@@ -585,7 +697,7 @@ export default function Presupuestos() {
                     </thead>
                     <tbody>
                       {showDetail.lineas.map((l, i) => (
-                        <tr key={l.id} className={i % 2 === 0 ? 'bg-white' : 'bg-zinc-50/50'}>
+                        <tr key={l.id} className={i % 2 === 0 ? 'bg-white' : 'bg-white'}>
                           <td className="px-3 py-2 text-zinc-800 font-medium">{l.concepto}{l.codigo ? <span className="text-zinc-400 font-mono ml-1">({l.codigo})</span> : ''}</td>
                           <td className="px-3 py-2 text-center text-zinc-600">{l.cantidad}</td>
                           <td className="px-3 py-2 text-right text-zinc-600">{formatMoneda(l.precioUnidad)}</td>
@@ -614,13 +726,13 @@ export default function Presupuestos() {
 
               {/* Usuario */}
               {showDetail.usuarioRealizado && (
-                <div className="bg-blue-50 rounded-xl p-4 border border-blue-100">
-                  <p className="text-xs font-bold text-blue-600 uppercase mb-1">Realizado por</p>
-                  <p className="text-sm font-semibold text-blue-900">{showDetail.usuarioRealizado}</p>
+                <div className="bg-red-50 rounded-xl p-4 border border-blue-100">
+                  <p className="text-xs font-bold text-red-650 uppercase mb-1">Realizado por</p>
+                  <p className="text-sm font-semibold text-red-600">{showDetail.usuarioRealizado}</p>
                 </div>
               )}
             </div>
-            <div className="px-6 py-4 bg-zinc-50/50 border-t border-zinc-100 flex justify-end shrink-0">
+            <div className="px-6 py-4 bg-white border-t border-zinc-100 flex justify-end shrink-0">
               <button onClick={() => setShowDetail(null)} className="px-6 py-2.5 rounded-xl font-bold text-zinc-500 hover:bg-zinc-100 transition-colors">Cerrar</button>
             </div>
           </div>
@@ -632,7 +744,7 @@ export default function Presupuestos() {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col max-h-[95vh]">
             {/* Header */}
-            <div className="px-6 py-4 border-b border-zinc-100 flex items-center justify-between bg-zinc-50/50 shrink-0">
+            <div className="px-6 py-4 border-b border-zinc-100 flex items-center justify-between bg-white shrink-0">
               <h2 className="text-lg font-bold text-zinc-900">
                 {editingPresupuesto ? 'Editar presupuesto' : 'Nuevo presupuesto'}
               </h2>
@@ -660,7 +772,7 @@ export default function Presupuestos() {
                     className="w-full px-4 py-2.5 bg-white border border-zinc-200 rounded-xl text-sm text-zinc-800 focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all"
                   />
                   {clienteDropdownOpen && (
-                    <div className="absolute z-20 mt-2 w-full rounded-2xl border border-zinc-200 bg-white shadow-xl overflow-hidden">
+                    <div className="absolute z-20 mt-2 w-full rounded-3xl border border-zinc-200 bg-white shadow-xl overflow-hidden">
                       <div className="max-h-64 overflow-y-auto">
                         {filteredClientes.length === 0 ? (
                           <div className="px-4 py-3 text-sm text-zinc-500">No hay clientes que coincidan.</div>
@@ -725,10 +837,10 @@ export default function Presupuestos() {
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-xs font-bold text-zinc-500 uppercase">Líneas del presupuesto</h3>
                   <div className="flex items-center gap-2">
-                    <button onClick={() => setShowCatalogo('articulo')} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-zinc-600 bg-zinc-100 hover:bg-zinc-200 rounded-lg transition-colors">
+                    <button onClick={() => setShowCatalogo('articulo')} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-zinc-600 bg-zinc-100 hover:bg-zinc-200 rounded-xl transition-colors">
                       <Package className="w-3.5 h-3.5" /> Añadir artículo
                     </button>
-                    <button onClick={() => setShowCatalogo('servicio')} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-zinc-600 bg-zinc-100 hover:bg-zinc-200 rounded-lg transition-colors">
+                    <button onClick={() => setShowCatalogo('servicio')} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-zinc-600 bg-zinc-100 hover:bg-zinc-200 rounded-xl transition-colors">
                       <Wrench className="w-3.5 h-3.5" /> Añadir servicio
                     </button>
                   </div>
@@ -756,7 +868,7 @@ export default function Presupuestos() {
                                 <img src={l.fotoUrl} alt={l.concepto} className="w-8 h-8 rounded-md object-cover border border-zinc-200 shrink-0 bg-white img-no-bg" />
                               ) : (
                                 l.tipo === 'articulo' ? <Package className="w-3.5 h-3.5 text-orange-500" /> :
-                                l.tipo === 'servicio' ? <Wrench className="w-3.5 h-3.5 text-blue-500" /> :
+                                l.tipo === 'servicio' ? <Wrench className="w-3.5 h-3.5 text-red-600" /> :
                                 <Type className="w-3.5 h-3.5 text-zinc-400" />
                               )}
                             </td>
@@ -774,7 +886,7 @@ export default function Presupuestos() {
                                   setFormLineas(prev => prev.map(li => li.id === l.id ? { ...li, cantidad: nuevaCant, subtotal: nuevaCant * li.precioUnidad } : li));
                                 }}
                                 min={0}
-                                className="w-16 px-2 py-1 text-center text-zinc-800 bg-zinc-50 border border-zinc-200 rounded-lg text-xs focus:ring-1 focus:ring-orange-500/20 focus:border-orange-500 outline-none"
+                                className="w-16 px-2 py-1 text-center text-zinc-800 bg-zinc-50 border border-zinc-200 rounded-xl text-xs focus:ring-1 focus:ring-orange-500/20 focus:border-orange-500 outline-none"
                               />
                             </td>
                             <td className="px-3 py-2 text-right">
@@ -792,7 +904,7 @@ export default function Presupuestos() {
                                   setFormLineas(prev => prev.map(li => li.id === l.id ? { ...li, precioUnidad: nuevoPrecio, precioUnidadInput: undefined, subtotal: li.cantidad * nuevoPrecio } : li));
                                 }}
                                 min={0}
-                                className="w-24 px-2 py-1 text-right text-zinc-800 bg-zinc-50 border border-zinc-200 rounded-lg text-xs focus:ring-1 focus:ring-orange-500/20 focus:border-orange-500 outline-none"
+                                className="w-24 px-2 py-1 text-right text-zinc-800 bg-zinc-50 border border-zinc-200 rounded-xl text-xs focus:ring-1 focus:ring-orange-500/20 focus:border-orange-500 outline-none"
                               />
                             </td>
                             <td className="px-3 py-2 text-right font-bold text-zinc-800">{formatMoneda(l.cantidad * l.precioUnidad)}</td>
@@ -819,14 +931,14 @@ export default function Presupuestos() {
                     value={formNewLinea.concepto}
                     onChange={(e) => setFormNewLinea(prev => ({ ...prev, concepto: e.target.value }))}
                     placeholder="Concepto (línea manual)..."
-                    className="flex-1 px-3 py-1.5 bg-white border border-zinc-200 rounded-lg text-xs text-zinc-800 focus:ring-1 focus:ring-orange-500/20 focus:border-orange-500 outline-none"
+                    className="flex-1 px-3 py-1.5 bg-white border border-zinc-200 rounded-xl text-xs text-zinc-800 focus:ring-1 focus:ring-orange-500/20 focus:border-orange-500 outline-none"
                   />
                   <input
                     type="number"
                     value={formNewLinea.cantidad}
                     onChange={(e) => setFormNewLinea(prev => ({ ...prev, cantidad: Math.max(1, Number(e.target.value)) }))}
                     min={1}
-                    className="w-16 px-2 py-1.5 text-center bg-white border border-zinc-200 rounded-lg text-xs text-zinc-800 focus:ring-1 focus:ring-orange-500/20 focus:border-orange-500 outline-none"
+                    className="w-16 px-2 py-1.5 text-center bg-white border border-zinc-200 rounded-xl text-xs text-zinc-800 focus:ring-1 focus:ring-orange-500/20 focus:border-orange-500 outline-none"
                     placeholder="Cant"
                   />
                   <input
@@ -835,13 +947,13 @@ export default function Presupuestos() {
                     value={formatDecimalInput(formNewLinea.precioUnidad)}
                     onChange={(e) => setFormNewLinea(prev => ({ ...prev, precioUnidad: Math.max(0, parseDecimal(e.target.value)) }))}
                     min={0}
-                    className="w-24 px-2 py-1.5 text-right bg-white border border-zinc-200 rounded-lg text-xs text-zinc-800 focus:ring-1 focus:ring-orange-500/20 focus:border-orange-500 outline-none"
+                    className="w-24 px-2 py-1.5 text-right bg-white border border-zinc-200 rounded-xl text-xs text-zinc-800 focus:ring-1 focus:ring-orange-500/20 focus:border-orange-500 outline-none"
                     placeholder="0,00"
                   />
                   <button
                     onClick={handleAddManual}
                     disabled={!formNewLinea.concepto.trim()}
-                    className="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 disabled:bg-zinc-300 text-white rounded-lg text-xs font-bold transition-colors"
+                    className="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 disabled:bg-zinc-300 text-white rounded-xl text-xs font-bold transition-colors"
                   >
                     Añadir
                   </button>
@@ -856,7 +968,7 @@ export default function Presupuestos() {
                     <button
                       type="button"
                       onClick={() => { setFormIvaExento(false); setFormIva(getDefaultIva()); }}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
                         !formIvaExento 
                           ? 'bg-orange-500 text-white shadow-sm' 
                           : 'bg-zinc-200 text-zinc-600 hover:bg-zinc-300'
@@ -867,7 +979,7 @@ export default function Presupuestos() {
                     <button
                       type="button"
                       onClick={() => { setFormIvaExento(true); setFormIva(0); }}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
                         formIvaExento 
                           ? 'bg-orange-500 text-white shadow-sm' 
                           : 'bg-zinc-200 text-zinc-600 hover:bg-zinc-300'
@@ -878,7 +990,7 @@ export default function Presupuestos() {
                   </div>
                 </div>
                 {formIvaExento && (
-                  <div className="p-3 bg-amber-50 rounded-lg border border-amber-200">
+                  <div className="p-3 bg-amber-50 rounded-xl border border-amber-200">
                     <p className="text-[11px] text-amber-800 italic leading-relaxed">
                       Factura exenta de IVA por inversión del sujeto pasivo de acuerdo con el artículo 84 letra f-Uno. 2º - Ley 37/1992 - art. 5 Ley 7/2012
                     </p>
@@ -921,7 +1033,7 @@ export default function Presupuestos() {
             </div>
 
             {/* Footer */}
-            <div className="px-6 py-4 bg-zinc-50/50 border-t border-zinc-100 flex items-center justify-between gap-3 shrink-0">
+            <div className="px-6 py-4 bg-white border-t border-zinc-100 flex items-center justify-between gap-3 shrink-0">
               <button onClick={() => setShowForm(false)} className="px-6 py-2.5 rounded-xl font-bold text-zinc-500 hover:bg-zinc-100 transition-colors">
                 Cancelar
               </button>
@@ -937,9 +1049,9 @@ export default function Presupuestos() {
       {showCatalogo && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
-            <div className="px-6 py-4 border-b border-zinc-100 flex items-center justify-between bg-zinc-50/50 shrink-0">
+            <div className="px-6 py-4 border-b border-zinc-100 flex items-center justify-between bg-white shrink-0">
               <h2 className="text-lg font-bold text-zinc-900 flex items-center gap-2">
-                {showCatalogo === 'articulo' ? <Package className="w-5 h-5 text-orange-500" /> : <Wrench className="w-5 h-5 text-blue-500" />}
+                {showCatalogo === 'articulo' ? <Package className="w-5 h-5 text-orange-500" /> : <Wrench className="w-5 h-5 text-red-600" />}
                 {showCatalogo === 'articulo' ? 'Seleccionar artículo' : 'Seleccionar servicio'}
               </h2>
               <button onClick={() => { setShowCatalogo(null); setCatalogoSearch(''); }} className="p-2 text-zinc-400 hover:text-black hover:bg-white rounded-xl transition-colors">
@@ -955,7 +1067,7 @@ export default function Presupuestos() {
                   value={catalogoSearch}
                   onChange={(e) => setCatalogoSearch(e.target.value)}
                   placeholder="Buscar por nombre, código o familia..."
-                  className="w-full pl-9 pr-8 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-xs text-zinc-700 placeholder-zinc-400 focus:ring-1 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all"
+                  className="w-full pl-9 pr-8 py-2 bg-zinc-50 border border-zinc-200 rounded-xl text-xs text-zinc-700 placeholder-zinc-400 focus:ring-1 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all"
                 />
                 {catalogoSearch && (
                   <button onClick={() => setCatalogoSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-zinc-400 hover:text-zinc-600">

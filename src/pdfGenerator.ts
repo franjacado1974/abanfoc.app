@@ -19,19 +19,152 @@ const formatM = (valor: any) => {
 };
 
 // ============ DATOS DE EMPRESA MANTENEDORA (guardados en localStorage) ============
-export function cargaDatosEmpresa(): Record<string, any> | null {
+export function cargaDatosEmpresa(empresaId?: any): Record<string, any> | null {
   try {
-    const saved = localStorage.getItem('firecheck_db_empresa');
+    const savedEmpresas = typeof localStorage !== 'undefined' ? localStorage.getItem('firecheck_db_empresas') : null;
+    let parsed: any[] = [];
+    if (savedEmpresas) {
+      const raw = JSON.parse(savedEmpresas);
+      if (Array.isArray(raw)) parsed = raw;
+    }
+
+    if (empresaId !== undefined && empresaId !== null && empresaId !== '') {
+      if (typeof empresaId === 'object') {
+        const targetDocId = empresaId._docId || empresaId.id;
+        const targetNombre = empresaId.nombre && typeof empresaId.nombre === 'string' ? empresaId.nombre.trim().toLowerCase() : '';
+        const found = parsed.find((e: any) => 
+          (targetDocId && (e._docId === targetDocId || e.id === targetDocId)) ||
+          (targetNombre && e.nombre && typeof e.nombre === 'string' && e.nombre.trim().toLowerCase() === targetNombre)
+        );
+        if (found) return found as Record<string, any>;
+        return empresaId as Record<string, any>;
+      } else if (typeof empresaId === 'string') {
+        const targetStr = empresaId.trim().toLowerCase();
+        const found = parsed.find((e: any) => 
+          e._docId === empresaId || 
+          e.id === empresaId || 
+          (e.nombre && typeof e.nombre === 'string' && e.nombre.trim().toLowerCase() === targetStr)
+        );
+        if (found) return found as Record<string, any>;
+        return null;
+      }
+    }
+
+    if (parsed.length > 0) {
+      return parsed[0] as Record<string, any>;
+    }
+    const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('firecheck_db_empresa') : null;
     if (saved) return JSON.parse(saved) as Record<string, any>;
   } catch (e) { console.error("Error loading company data from localStorage:", e); }
   return null;
 }
 
+export function normalizarDatosEmpresa(empresaInput?: any, empresaIdFallback?: string): Record<string, any> {
+  let emp = typeof empresaInput === 'string' ? cargaDatosEmpresa(empresaInput) : empresaInput;
+  if (!emp && typeof empresaIdFallback === 'string' && empresaIdFallback) {
+    emp = cargaDatosEmpresa(empresaIdFallback);
+  }
+
+  const targetLookup = (emp && typeof emp === 'object' ? (emp._docId || emp.id || emp.nombre) : null) || empresaIdFallback;
+  const fullEmp = targetLookup ? cargaDatosEmpresa(targetLookup) : null;
+
+  const getField = (keys: string[], defaultVal = ''): string => {
+    const checkObj = (obj: any): string => {
+      if (!obj || typeof obj !== 'object') return '';
+      for (const k of keys) {
+        if (obj[k] !== undefined && obj[k] !== null && String(obj[k]).trim() !== '' && String(obj[k]).trim() !== '-') {
+          return String(obj[k]).trim();
+        }
+      }
+      for (const key of Object.keys(obj)) {
+        const lower = key.toLowerCase();
+        for (const target of keys) {
+          if (lower === target.toLowerCase()) {
+            const val = obj[key];
+            if (val !== undefined && val !== null && String(val).trim() !== '' && String(val).trim() !== '-') {
+              return String(val).trim();
+            }
+          }
+        }
+      }
+      return '';
+    };
+
+    const fromEmp = checkObj(emp);
+    if (fromEmp) return fromEmp;
+    const fromFull = checkObj(fullEmp);
+    if (fromFull) return fromFull;
+    return defaultVal;
+  };
+
+  const nombre = getField(['nombre', 'razonSocial', 'empresa'], 'ABANFOC S.L.');
+  const isDefaultAbanfoc = !nombre || nombre.toUpperCase().includes('ABANFOC');
+
+  const cif = getField(['cif', 'CIF', 'Cif', 'nif', 'NIF', 'Nif', 'cif_nif', 'cifNif'], isDefaultAbanfoc ? 'B16794679' : '');
+  const rasic = getField(['rasic', 'RASIC', 'Rasic', 'num_rasic', 'numRasic', 'rasicNum', 'registro', 'registroIndustrial', 'registro_industrial', 'n_rasic', 'nRasic', 'numero_rasic', 'numeroRasic'], isDefaultAbanfoc ? '106001687' : '');
+  const direccion = getField(['direccion', 'DIRECCION', 'Direccion', 'dir', 'domicilio', 'calle', 'direccion_empresa'], isDefaultAbanfoc ? 'C/ America 16B Ático' : '');
+  const poblacion = getField(['poblacion', 'POBLACION', 'Poblacion', 'localidad', 'LOCALIDAD', 'Localidad', 'ciudad', 'municipio'], isDefaultAbanfoc ? 'Sta. Coloma de Gramanet' : '');
+  const provincia = getField(['provincia', 'PROVINCIA', 'Provincia'], isDefaultAbanfoc ? 'Barcelona' : '');
+  const cp = getField(['cp', 'CP', 'codigoPostal', 'codigo_postal', 'cod_postal', 'c_p', 'codPostal'], isDefaultAbanfoc ? '08921' : '');
+  const telefono = getField(['telefono', 'TELEFONO', 'Telefono', 'tel', 'TEL', 'tlf', 'TLF', 'phone', 'tel1', 'telefono1', 'telf', 'movil', 'movil1', 'contacto_telefono', 'telefonoContacto', 'numeroTelefono'], isDefaultAbanfoc ? '651 019 229' : '');
+  const email = getField(['correo', 'CORREO', 'Correo', 'email', 'EMAIL', 'Email', 'mail', 'correo_electronico', 'correoElectronico', 'emailContacto'], isDefaultAbanfoc ? 'info@abanfoc.com' : '');
+  const web = getField(['web', 'WEB', 'Web', 'pagina_web', 'url', 'sitio_web', 'webEmpresa'], isDefaultAbanfoc ? 'www.abanfoc.com' : '');
+  
+  const logoUrl = getField(['logoUrl', 'logo', 'logo_url', 'logoBase64', 'imagenLogo', 'logo_empresa'], isDefaultAbanfoc ? (typeof localStorage !== 'undefined' ? localStorage.getItem('firecheck_db_logo') || '' : '') : '');
+  const selloUrl = getField(['selloUrl', 'sello', 'selloBase64', 'sello_url', 'imagenSello', 'sello_empresa']);
+  const ingenieroFirmaUrl = getField(['ingenieroFirmaUrl', 'firmaIngenieroBase64', 'firmaUrl', 'firma_ingeniero_url', 'firmaIngeniero', 'firmaTecnicoTitulado']);
+
+  const ingenieroNombre = getField(['ingenieroNombre', 'tecnicoNombre', 'nombreIngeniero', 'ingeniero_nombre', 'tecnico_nombre', 'tecnicoTituladoNombre']);
+  const ingenieroApellidos = getField(['ingenieroApellidos', 'tecnicoApellidos', 'apellidosIngeniero', 'ingeniero_apellidos', 'tecnico_apellidos', 'tecnicoTituladoApellidos']);
+  const ingenieroNif = getField(['ingenieroNif', 'nifTecnico', 'tecnicoNif', 'ingeniero_nif', 'nif_tecnico', 'dni_tecnico', 'dniIngeniero', 'nifTecnicoTitulado']);
+  const ingenieroColegiado = getField(['ingenieroColegiado', 'numTecnicoTitulado', 'numColegiado', 'colegiado', 'num_colegiado', 'n_colegiado', 'numeroColegiado', 'colegiadoNum']);
+  
+  const rawTecnicoTitulado = getField(['tecnicoTitulado', 'responsableTecnico']);
+  const tecnicoTitulado = (ingenieroNombre && ingenieroApellidos)
+    ? `${ingenieroNombre} ${ingenieroApellidos}`
+    : (rawTecnicoTitulado || ingenieroNombre || 'Técnico Titulado de la Empresa');
+
+  return {
+    ...(fullEmp && typeof fullEmp === 'object' ? fullEmp : {}),
+    ...(emp && typeof emp === 'object' ? emp : {}),
+    _docId: (emp && typeof emp === 'object' ? emp._docId || emp.id : null) || (fullEmp && typeof fullEmp === 'object' ? fullEmp._docId || fullEmp.id : null),
+    id: (emp && typeof emp === 'object' ? emp.id || emp._docId : null) || (fullEmp && typeof fullEmp === 'object' ? fullEmp.id || fullEmp._docId : null),
+    nombre,
+    cif,
+    rasic,
+    direccion,
+    poblacion,
+    localidad: poblacion,
+    provincia,
+    cp,
+    codigoPostal: cp,
+    telefono,
+    correo: email,
+    email,
+    web,
+    logoUrl: logoUrl || null,
+    selloUrl: selloUrl || null,
+    selloBase64: selloUrl || null,
+    ingenieroFirmaUrl: ingenieroFirmaUrl || null,
+    firmaIngenieroBase64: ingenieroFirmaUrl || null,
+    ingenieroNombre,
+    ingenieroApellidos,
+    ingenieroNif,
+    ingenieroColegiado,
+    tecnicoTitulado,
+    nifTecnico: ingenieroNif,
+    numTecnicoTitulado: ingenieroColegiado,
+    isDefaultAbanfoc
+  };
+}
+
 export const guardarDatosEmpresa = (data: any) => {
-  localStorage.setItem('firecheck_db_empresa', JSON.stringify(data));
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem('firecheck_db_empresa', JSON.stringify(data));
+  }
 };
 
-export const obtenerDatosEmpresa = () => cargaDatosEmpresa();
+export const obtenerDatosEmpresa = (id?: string) => cargaDatosEmpresa(id);
 
 export function tieneFechaInvalida(eq: any): boolean {
   if (!eq) return false;
@@ -137,10 +270,29 @@ export function tieneFechaInvalida(eq: any): boolean {
   return false;
 }
 
-export function equipoTieneAnomalias(eq: any): boolean {
+export function equipoTieneObservaciones(eq: any, checkItemsDeSistema: any[] = []): boolean {
+  if (!eq) return false;
+  if (eq.observaciones && typeof eq.observaciones === 'string' && eq.observaciones.trim() !== '') {
+    return true;
+  }
+  for (const k of Object.keys(eq)) {
+    if (k === 'observaciones' || k === 'anomalias') continue;
+    const val = eq[k];
+    if (typeof val === 'string' && val.trim() !== '') {
+      const item = checkItemsDeSistema.find(it => it.key === k);
+      const lbl = (item?.label || k).toLowerCase();
+      if (lbl.includes('observaci') && !lbl.includes('anomal')) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+export function equipoTieneAnomalias(eq: any, checkItemsDeSistema: any[] = []): boolean {
   if (!eq) return false;
 
-  // REGLA 1: El campo directo "anomalias" ("Observaciones y anomalías del equipo:") tiene texto → rojo → NO FAVORABLE
+  // REGLA 1: El campo directo "anomalias" ("Anomalías") tiene texto → rojo → NO FAVORABLE
   if (eq.anomalias && typeof eq.anomalias === 'string' && eq.anomalias.trim() !== '') {
     return true;
   }
@@ -148,6 +300,7 @@ export function equipoTieneAnomalias(eq: any): boolean {
   // Revisar todos los campos dinámicos del equipo
   for (const k of Object.keys(eq)) {
     const kLower = k.toLowerCase();
+    if (kLower === 'observaciones') continue;
 
     // Ignorar claves de metadatos conocidas
     if (
@@ -189,30 +342,40 @@ export function equipoTieneAnomalias(eq: any): boolean {
     }
 
     const val = eq[k];
+    const item = checkItemsDeSistema.find(it => it.key === k);
+    const lbl = (item?.label || kLower).toLowerCase();
 
-    // REGLA 2a: Campo dinámico cuya clave contiene "anomal" ("Observaciones y anomalías del equipo:" con clave dinámica) tiene texto → rojo → NO FAVORABLE
-    if (kLower.includes('anomal')) {
+    // Si es explícitamente el campo de solo Observaciones, NO es una anomalía
+    if (lbl.includes('observaci') && !lbl.includes('anomal')) {
+      continue;
+    }
+
+    // REGLA 2a: Campo dinámico cuya clave contiene "anomal" o "nota" tiene texto → rojo → NO FAVORABLE
+    if (lbl.includes('anomal') || lbl.includes('nota')) {
       if (typeof val === 'string' && val.trim() !== '') {
         return true;
       }
-      // Si no tiene texto, ignorar aunque la clave sea de anomalías
       continue;
     }
 
     // REGLA 2b: Pregunta de checklist con respuesta boolean false → equivale a "NO CORRECTO" en UI → NO FAVORABLE
-    if (val === false || val === 'false') {
+    if (val === false || (typeof val === 'string' && val.trim().toLowerCase() === 'false')) {
       return true;
     }
 
-    // REGLA 2c: Pregunta de checklist con respuesta explícita "NO CORRECTO", "INCORRECTO" o "NO CONFORME" → NO FAVORABLE
+    // REGLA 2c: Pregunta de checklist con respuesta explícita "NO CORRECTO", "INCORRECTO", "NO CONFORME", "DEFECTUOSO", "MAL" o "NO" → NO FAVORABLE
     if (typeof val === 'string') {
       const valUpper = val.toUpperCase().trim();
       if (
         valUpper === 'NO CORRECTO' ||
         valUpper.includes('NO CORRECTO') ||
         valUpper === 'INCORRECTO' ||
+        valUpper.includes('INCORRECTO') ||
         valUpper === 'NO CONFORME' ||
-        valUpper.includes('NO CONFORME')
+        valUpper.includes('NO CONFORME') ||
+        valUpper === 'DEFECTUOSO' ||
+        valUpper === 'MAL' ||
+        valUpper === 'NO'
       ) {
         return true;
       }
@@ -329,10 +492,11 @@ export function determinarSiFechaEsInvalida(
 
 export const fetchImageToBase64 = async (urlOrBase64: string | null | undefined): Promise<string | null> => {
   if (!urlOrBase64) return null;
+  let rawResult: string | null = null;
+
   if (urlOrBase64.startsWith('data:')) {
-    return urlOrBase64;
-  }
-  if (urlOrBase64.startsWith('http')) {
+    rawResult = urlOrBase64;
+  } else if (urlOrBase64.startsWith('http')) {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 4000);
@@ -340,7 +504,7 @@ export const fetchImageToBase64 = async (urlOrBase64: string | null | undefined)
       clearTimeout(timeoutId);
       if (response.ok) {
         const blob = await response.blob();
-        return await new Promise<string | null>((resolve) => {
+        rawResult = await new Promise<string | null>((resolve) => {
           const reader = new FileReader();
           reader.onloadend = () => {
             if (typeof reader.result === 'string') {
@@ -357,44 +521,110 @@ export const fetchImageToBase64 = async (urlOrBase64: string | null | undefined)
       console.error("Error fetching image via fetch():", e);
     }
     // Fallback si falla el fetch (ej. CORS)
-    try {
-      return await new Promise<string | null>((resolve) => {
-        const img = new Image();
-        img.crossOrigin = 'Anonymous';
-        const timeoutId = setTimeout(() => {
-          img.src = '';
-          resolve(null);
-        }, 4000);
-        img.onload = () => {
-          clearTimeout(timeoutId);
-          const canvas = document.createElement('canvas');
-          canvas.width = img.width;
-          canvas.height = img.height;
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            ctx.drawImage(img, 0, 0);
-            try {
-              resolve(canvas.toDataURL('image/jpeg', 0.8));
-            } catch (err) {
-              console.error("Error converting canvas to base64:", err);
+    if (!rawResult) {
+      try {
+        rawResult = await new Promise<string | null>((resolve) => {
+          const img = new Image();
+          img.crossOrigin = 'Anonymous';
+          const timeoutId = setTimeout(() => {
+            img.src = '';
+            resolve(null);
+          }, 4000);
+          img.onload = () => {
+            clearTimeout(timeoutId);
+            let width = img.naturalWidth || img.width;
+            let height = img.naturalHeight || img.height;
+            const maxWidth = 800;
+            if (width > maxWidth) {
+              height = Math.round((height * maxWidth) / width);
+              width = maxWidth;
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              ctx.drawImage(img, 0, 0, width, height);
+              try {
+                resolve(canvas.toDataURL('image/jpeg', 0.75));
+              } catch (err) {
+                console.error("Error converting canvas to base64:", err);
+                resolve(null);
+              }
+            } else {
               resolve(null);
             }
-          } else {
+          };
+          img.onerror = () => {
+            clearTimeout(timeoutId);
             resolve(null);
-          }
-        };
-        img.onerror = () => {
-          clearTimeout(timeoutId);
-          resolve(null);
-        };
-        img.src = urlOrBase64;
-      });
-    } catch (fallbackErr) {
-      console.error("Error in fallback image loading:", fallbackErr);
-      return null;
+          };
+          img.src = urlOrBase64;
+        });
+      } catch (fallbackErr) {
+        console.error("Error in fallback image loading:", fallbackErr);
+        return null;
+      }
     }
+  } else {
+    rawResult = urlOrBase64;
   }
-  return urlOrBase64;
+
+  if (rawResult && rawResult.startsWith('data:')) {
+    const opt = await optimizarImagenParaPDF(rawResult, 800, 0.75);
+    return opt.base64;
+  }
+  return rawResult;
+};
+
+export const removeWhiteBackground = (base64Img: string, maxWidth: number = 400): Promise<string> => {
+  if (typeof window === 'undefined' || !base64Img || !base64Img.startsWith('data:')) {
+    return Promise.resolve(base64Img);
+  }
+  return new Promise((resolve) => {
+    try {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        try {
+          let width = img.naturalWidth || img.width;
+          let height = img.naturalHeight || img.height;
+          if (!width || !height) return resolve(base64Img);
+
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return resolve(base64Img);
+
+          ctx.drawImage(img, 0, 0, width, height);
+          const imgData = ctx.getImageData(0, 0, width, height);
+          const data = imgData.data;
+          for (let i = 0; i < data.length; i += 4) {
+            const r = data[i];
+            const g = data[i + 1];
+            const b = data[i + 2];
+            if (r > 225 && g > 225 && b > 225) {
+              data[i + 3] = 0;
+            }
+          }
+          ctx.putImageData(imgData, 0, 0);
+          resolve(canvas.toDataURL('image/png'));
+        } catch {
+          resolve(base64Img);
+        }
+      };
+      img.onerror = () => resolve(base64Img);
+      img.src = base64Img;
+    } catch {
+      resolve(base64Img);
+    }
+  });
 };
 
 export const getImageFormat = (base64: string | null | undefined): string => {
@@ -403,6 +633,102 @@ export const getImageFormat = (base64: string | null | undefined): string => {
   if (base64.startsWith('data:image/jpeg') || base64.startsWith('data:image/jpg')) return 'JPEG';
   if (base64.startsWith('data:image/webp')) return 'WEBP';
   return 'PNG';
+};
+
+export const optimizarImagenParaPDF = async (
+  base64Data: string | null | undefined,
+  maxWidth: number = 800,
+  quality: number = 0.75,
+  forceJpegForSignature: boolean = false
+): Promise<{ base64: string; format: string }> => {
+  if (!base64Data || typeof base64Data !== 'string' || (!base64Data.startsWith('data:image') && !base64Data.startsWith('data:application'))) {
+    return { base64: base64Data || '', format: 'PNG' };
+  }
+
+  const formatDetectado = getImageFormat(base64Data);
+
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return { base64: base64Data, format: formatDetectado };
+  }
+
+  return new Promise((resolve) => {
+    try {
+      const img = new Image();
+      img.crossOrigin = 'Anonymous';
+      img.onload = () => {
+        try {
+          let width = img.naturalWidth || img.width;
+          let height = img.naturalHeight || img.height;
+
+          if (!width || !height) {
+            resolve({ base64: base64Data, format: formatDetectado });
+            return;
+          }
+
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+
+          if (!ctx) {
+            resolve({ base64: base64Data, format: formatDetectado });
+            return;
+          }
+
+          let outputMime = forceJpegForSignature
+            ? 'image/jpeg'
+            : (formatDetectado === 'JPEG' ? 'image/jpeg' : 'image/png');
+          let outputFormat = forceJpegForSignature ? 'JPEG' : formatDetectado;
+
+          if (outputMime === 'image/jpeg') {
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(0, 0, width, height);
+          }
+
+          ctx.drawImage(img, 0, 0, width, height);
+
+          const compressedDataUrl = canvas.toDataURL(outputMime, quality);
+          resolve({ base64: compressedDataUrl, format: outputFormat });
+        } catch (e) {
+          resolve({ base64: base64Data, format: formatDetectado });
+        }
+      };
+
+      img.onerror = () => {
+        resolve({ base64: base64Data, format: formatDetectado });
+      };
+
+      img.src = base64Data;
+    } catch (e) {
+      resolve({ base64: base64Data, format: formatDetectado });
+    }
+  });
+};
+
+export const dibujarFirmaAjustada = async (doc: jsPDF, base64Image: string | null | undefined, boxX: number, boxY: number, boxW: number, boxH: number) => {
+  if (!base64Image || typeof base64Image !== 'string' || (!base64Image.startsWith('data:image') && !base64Image.startsWith('data:application'))) return;
+  try {
+    const { base64: firmaOpt, format } = await optimizarImagenParaPDF(base64Image, 600, 0.7, true);
+    const props = doc.getImageProperties(firmaOpt);
+    if (!props || !props.width || !props.height) return;
+    const ratio = props.width / props.height;
+    let imgW = boxW;
+    let imgH = imgW / ratio;
+    if (imgH > boxH) {
+      imgH = boxH;
+      imgW = imgH * ratio;
+    }
+    const offsetX = boxX + (boxW - imgW) / 2;
+    const offsetY = boxY + (boxH - imgH) / 2;
+    doc.addImage(firmaOpt, format, offsetX, offsetY, imgW, imgH);
+  } catch (err) {
+    console.error("Error dibujando firma ajustada:", err);
+  }
 };
 
 export const generarActaExtintoresPDF = async (
@@ -416,18 +742,22 @@ export const generarActaExtintoresPDF = async (
   firmaCliente?: string,
   firmaTecnico?: string,
   nombreFirmante?: string,
-  checklistItemsPorSistema?: Record<string, { key: string; label: string; tipoRespuesta?: string }[]>,
+  checklistItemsPorSistema?: Record<string, any[]>,
   empresa?: Record<string, any>,
   noSave?: boolean,
   observacionesTecnico?: string
 ) => {
   const doc = new jsPDF('landscape');
   const pageWidth = doc.internal.pageSize.getWidth();
-  const empData = empresa || cargaDatosEmpresa() || {};
+  const empData = normalizarDatosEmpresa(empresa, centro?.empresaId);
 
-  const firmaIngenieroBase64 = await fetchImageToBase64(empData?.ingenieroFirmaUrl);
-  const logoData = await fetchImageToBase64(empData?.logoUrl) || await fetchImageToBase64(localStorage.getItem('firecheck_db_logo'));
-  const selloEmpresaBase64 = await fetchImageToBase64(empData?.selloUrl);
+  const firmaIngenieroBase64Raw = await fetchImageToBase64(empData?.ingenieroFirmaUrl || empData?.firmaIngenieroBase64 || empData?.firmaUrl);
+  const logoDataRaw = await fetchImageToBase64(empData?.logoUrl);
+  const selloEmpresaBase64Raw = await fetchImageToBase64(empData?.selloUrl);
+
+  const { base64: logoData } = await optimizarImagenParaPDF(logoDataRaw, 800, 0.75);
+  const { base64: firmaIngenieroBase64 } = await optimizarImagenParaPDF(firmaIngenieroBase64Raw, 600, 0.7, true);
+  const { base64: selloEmpresaBase64 } = await optimizarImagenParaPDF(selloEmpresaBase64Raw, 800, 0.75);
 
   // Cargar categorías de sistemas para obtener iconos correctos
   let categoriasSistema: any[] = [];
@@ -686,12 +1016,13 @@ export const generarActaExtintoresPDF = async (
     y += 5;
 
     const empNombre = empData?.nombre || 'ABANFOC S.L.';
-    const empCif = empData?.cif || 'B16794679';
-    const empRasic = empData?.rasic || '106001687';
-    const empDir = empData?.direccion || 'C/ America 16B Ático';
-    const empLoc = `${empData?.poblacion || 'Sta. Coloma de Gramanet'}${empData?.provincia ? ', ' + empData.provincia : ''}${empData?.cp ? ' - ' + empData.cp : ''}`;
-    const empTel = empData?.telefono || '651 019 229';
-    const empMail = empData?.correo || empData?.email || 'info@abanfoc.com';
+    const empCif = empData?.cif || '-';
+    const empRasic = empData?.rasic || '-';
+    const empDir = empData?.direccion || '-';
+    const empLocParts = [empData?.poblacion, empData?.provincia, empData?.cp].filter(p => p && p !== '-');
+    const empLoc = empLocParts.length > 0 ? empLocParts.join(', ') : '-';
+    const empTel = empData?.telefono || '-';
+    const empMail = empData?.correo || empData?.email || '-';
 
     const empLines = [
       { label: 'Empresa:', value: empNombre },
@@ -794,19 +1125,544 @@ export const generarActaExtintoresPDF = async (
   };
 
   const getMark = (val: any) => {
-    if (val === true || val === 'true') return 'TICK';
-    if (val === false || val === 'false') return 'X';
+    if (val === true || (typeof val === 'string' && val.trim().toLowerCase() === 'true')) return 'TICK';
+    if (val === false || (typeof val === 'string' && val.trim().toLowerCase() === 'false')) return 'X';
     if (typeof val === 'string' || typeof val === 'number') {
         const str = val.toString().trim();
+        if (str.toLowerCase() === 'true') return 'TICK';
+        if (str.toLowerCase() === 'false') return 'X';
         return str !== '' ? str : '-';
     }
     return '-';
+  };
+
+  const drawPumpCurveChart = (
+    doc: any,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    points: { x: number; y: number }[],
+    currNominalCaudal?: number,
+    currNominalPresion?: number
+  ) => {
+    // Buscar nominales en Abastecimiento
+    const eqAbast = equiposTodos.find(e => {
+      const sist = sistemas.find(s => s.id === e.sistemaId);
+      const name = (sist?.nombre || '').toUpperCase();
+      return name.includes('ABAST') || name.includes('SALA DE BOMBAS');
+    });
+
+    let nominalCaudal = 0;
+    let nominalPresion = 0;
+
+    if (eqAbast) {
+      // Buscar claves nominales dinámicamente si tenemos checklistItemsPorSistema
+      let caudalNominalKey = '';
+      let presionNominalKey = '';
+
+      if (checklistItemsPorSistema) {
+        const abastSistId = Object.keys(checklistItemsPorSistema).find(sId => {
+          const sist = sistemas.find(s => s.id === sId);
+          const sName = (sist?.nombre || '').toUpperCase();
+          return sName.includes('ABAST') || sName.includes('SALA DE BOMBAS');
+        });
+
+        if (abastSistId) {
+          const items = checklistItemsPorSistema[abastSistId];
+          const caudalItem = items.find(i => {
+            const lbl = (i.label || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            return lbl.includes('caudal') && lbl.includes('nominal');
+          });
+          if (caudalItem) caudalNominalKey = caudalItem.key;
+
+          const presionItem = items.find(i => {
+            const lbl = (i.label || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            return lbl.includes('presion') && lbl.includes('nominal');
+          });
+          if (presionItem) presionNominalKey = presionItem.key;
+        }
+      }
+
+      if (caudalNominalKey && eqAbast[caudalNominalKey]) {
+        nominalCaudal = parseFloat(String(eqAbast[caudalNominalKey]).replace(',', '.'));
+      }
+      if (presionNominalKey && eqAbast[presionNominalKey]) {
+        nominalPresion = parseFloat(String(eqAbast[presionNominalKey]).replace(',', '.'));
+      }
+
+      // Fallback: buscar por texto de clave
+      if (!nominalCaudal || isNaN(nominalCaudal)) {
+        for (const k of Object.keys(eqAbast)) {
+          if (k.toLowerCase().includes('caudal') && !k.toLowerCase().includes('jockey') && !k.toLowerCase().includes('electric')) {
+            const val = parseFloat(String(eqAbast[k]).replace(',', '.'));
+            if (!isNaN(val) && val > 0) {
+              nominalCaudal = val;
+              break;
+            }
+          }
+        }
+      }
+      if (!nominalPresion || isNaN(nominalPresion)) {
+        for (const k of Object.keys(eqAbast)) {
+          if (k.toLowerCase().includes('presion') && !k.toLowerCase().includes('jockey') && !k.toLowerCase().includes('electric')) {
+            const val = parseFloat(String(eqAbast[k]).replace(',', '.'));
+            if (!isNaN(val) && val > 0) {
+              nominalPresion = val;
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    const refNomCaudal = currNominalCaudal || nominalCaudal;
+    const refNomPresion = currNominalPresion || nominalPresion;
+
+    const sortedPoints = [...points].sort((a, b) => a.x - b.x);
+    const maxCaudal = Math.max(...sortedPoints.map(p => p.x), 0);
+    const referenceCaudal = maxCaudal > 0 ? maxCaudal : (refNomCaudal || 100);
+    const maxX = referenceCaudal * 1.25;
+
+    const maxPresion = Math.max(...sortedPoints.map(p => p.y), 0);
+    const referencePresion = Math.max(maxPresion, refNomPresion || 10);
+    const maxY = referencePresion * 1.5;
+
+    const roundMaxX = Math.ceil(maxX / 10) * 10;
+    const roundMaxY = Math.ceil(maxY / 2) * 2;
+
+    const paddingLeft = 14;
+    const paddingRight = 14;
+    const paddingTop = 7;
+    const paddingBottom = 10;
+
+    const chartW = width - paddingLeft - paddingRight; // 269 - 28 = 241
+    const chartH = (height - 6.5) - paddingTop - paddingBottom; // height - 23.5
+
+    // 1. Dibujar fondo blanco y borde exterior de todo el bloque
+    doc.setFillColor(255, 255, 255);
+    doc.setDrawColor(220, 220, 220);
+    doc.setLineWidth(0.3);
+    doc.rect(x, y, width, height, 'FD');
+
+    // 2. Dibujar la cabecera (rectángulo relleno en color burdeos, altura 6.5mm)
+    doc.setFillColor(128, 0, 32);
+    doc.rect(x, y, width, 6.5, 'F');
+
+    // Separación de cabecera
+    doc.setDrawColor(128, 0, 32);
+    doc.setLineWidth(0.3);
+    doc.line(x, y + 6.5, x + width, y + 6.5);
+
+    // Texto de la cabecera
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.5);
+    doc.setTextColor(255, 255, 255);
+    doc.text("12.1 GRÁFICO DE LA CURVA DE RENDIMIENTO EN CAUDAL Y PRESIÓN", x + 3, y + 4.3);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(6.5);
+    doc.setTextColor(100, 100, 100);
+
+    for (let i = 0; i <= 5; i++) {
+      const valY = (roundMaxY / 5) * i;
+      const py = y + 6.5 + paddingTop + chartH - (chartH * (valY / roundMaxY));
+      if (i > 0 && i < 5) {
+        doc.setDrawColor(240, 240, 240);
+        doc.line(x + paddingLeft, py, x + paddingLeft + chartW, py);
+      }
+      doc.text(valY.toFixed(1), x + paddingLeft - 2, py + 1.5, { align: 'right' });
+    }
+
+    for (let i = 0; i <= 5; i++) {
+      const valX = (roundMaxX / 5) * i;
+      const px = x + paddingLeft + (chartW * (valX / roundMaxX));
+      if (i > 0 && i < 5) {
+        doc.setDrawColor(240, 240, 240);
+        doc.line(px, y + 6.5 + paddingTop, px, y + 6.5 + paddingTop + chartH);
+      }
+      doc.text(valX.toFixed(0), px, y + 6.5 + paddingTop + chartH + 6.5, { align: 'center' });
+    }
+
+    // Dibujar punto nominal en verde si existe
+    const scaleX = (val: number) => x + paddingLeft + (chartW * (val / roundMaxX));
+    const scaleY = (val: number) => y + 6.5 + paddingTop + chartH - (chartH * (val / roundMaxY));
+
+    if (refNomCaudal > 0) {
+      const px = scaleX(refNomCaudal);
+      doc.setDrawColor(16, 185, 129); // Verde
+      doc.setLineWidth(0.4);
+      if (typeof doc.setLineDashPattern === 'function') doc.setLineDashPattern([2, 2], 0);
+      else if (typeof doc.setLineDash === 'function') doc.setLineDash([2, 2], 0);
+      doc.line(px, y + 6.5 + paddingTop, px, y + 6.5 + paddingTop + chartH);
+      
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(5.5);
+      doc.setTextColor(16, 185, 129);
+      doc.text(`Q Nom: ${refNomCaudal} m3/h`, px + 1.5, y + 6.5 + paddingTop + 8);
+    }
+    if (refNomPresion > 0) {
+      const py = scaleY(refNomPresion);
+      doc.setDrawColor(16, 185, 129);
+      doc.setLineWidth(0.4);
+      if (typeof doc.setLineDashPattern === 'function') doc.setLineDashPattern([2, 2], 0);
+      else if (typeof doc.setLineDash === 'function') doc.setLineDash([2, 2], 0);
+      doc.line(x + paddingLeft, py, x + paddingLeft + chartW, py);
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(5.5);
+      doc.setTextColor(16, 185, 129);
+      doc.text(`P Nom: ${refNomPresion} bar`, x + paddingLeft + chartW - 2, py - 1.5, { align: 'right' });
+    }
+    if (refNomCaudal > 0 && refNomPresion > 0) {
+      doc.setFillColor(16, 185, 129);
+      doc.circle(scaleX(refNomCaudal), scaleY(refNomPresion), 0.8, 'FD'); // Más discreto
+    }
+    
+    // Restaurar línea sólida
+    if (typeof doc.setLineDashPattern === 'function') doc.setLineDashPattern([], 0);
+    else if (typeof doc.setLineDash === 'function') doc.setLineDash([], 0);
+
+    doc.setDrawColor(100, 110, 120);
+    doc.setLineWidth(0.5);
+    doc.line(x + paddingLeft, y + 6.5 + paddingTop, x + paddingLeft, y + 6.5 + paddingTop + chartH);
+    doc.line(x + paddingLeft, y + 6.5 + paddingTop + chartH, x + paddingLeft + chartW, y + 6.5 + paddingTop + chartH);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(6);
+    doc.setTextColor(80, 80, 80);
+    doc.text('Presión (bar)', x + 2, y + 6.5 + paddingTop - 2.5);
+    doc.text('Q (m³/h)', x + paddingLeft + chartW + 1.5, y + 6.5 + paddingTop + chartH + 1.5, { align: 'left' });
+
+    doc.setDrawColor(128, 0, 32);
+    doc.setLineWidth(0.5); // Línea del gráfico más fina
+
+    // Dibujar curva suavizada usando interpolación cúbica de Hermite (segmentos pequeños de línea)
+    const nPts = sortedPoints.length;
+    const mPts: number[] = Array(nPts).fill(0);
+    for (let i = 0; i < nPts; i++) {
+      if (i === 0) {
+        mPts[i] = (sortedPoints[1].y - sortedPoints[0].y) / (sortedPoints[1].x - sortedPoints[0].x);
+      } else if (i === nPts - 1) {
+        mPts[i] = (sortedPoints[nPts-1].y - sortedPoints[nPts-2].y) / (sortedPoints[nPts-1].x - sortedPoints[nPts-2].x);
+      } else {
+        const slopeLeft = (sortedPoints[i].y - sortedPoints[i-1].y) / (sortedPoints[i].x - sortedPoints[i-1].x);
+        const slopeRight = (sortedPoints[i+1].y - sortedPoints[i].y) / (sortedPoints[i+1].x - sortedPoints[i].x);
+        mPts[i] = (slopeLeft + slopeRight) / 2;
+      }
+    }
+
+    for (let i = 0; i < nPts - 1; i++) {
+      const p0 = sortedPoints[i];
+      const p1 = sortedPoints[i + 1];
+      const dx = p1.x - p0.x;
+      
+      let lastX = scaleX(p0.x);
+      let lastY = scaleY(p0.y);
+      const steps = 30; // 30 segmentos para máxima suavidad
+      for (let j = 1; j <= steps; j++) {
+        const t = j / steps;
+        // Funciones base de Hermite
+        const h00 = 2 * Math.pow(t, 3) - 3 * Math.pow(t, 2) + 1;
+        const h10 = Math.pow(t, 3) - 2 * Math.pow(t, 2) + t;
+        const h01 = -2 * Math.pow(t, 3) + 3 * Math.pow(t, 2);
+        const h11 = Math.pow(t, 3) - Math.pow(t, 2);
+        
+        const interpolatedX = p0.x + t * dx;
+        const interpolatedY = h00 * p0.y + h10 * dx * mPts[i] + h01 * p1.y + h11 * dx * mPts[i+1];
+        
+        const currX = scaleX(interpolatedX);
+        const currY = scaleY(interpolatedY);
+        doc.line(lastX, lastY, currX, currY);
+        lastX = currX;
+        lastY = currY;
+      }
+    }
+
+    doc.setFillColor(128, 0, 32);
+    sortedPoints.forEach(p => {
+      doc.circle(scaleX(p.x), scaleY(p.y), 0.8, 'FD'); // Puntos más discretos (0.8 en lugar de 1.5)
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(5.5); // Texto más discreto (5.5 en lugar de 6.5)
+      doc.setTextColor(128, 0, 32);
+      doc.text(`${p.y.toFixed(1)}`, scaleX(p.x), scaleY(p.y) - 2.5, { align: 'center' }); // Offset ajustado a 2.5
+    });
   };
 
   const drawnTablePages = new Set<number>();
 
   const renderSection = async (title: string, equipos: any[], isBie: boolean, currentY: number, iconoBase64?: string, sistemaId?: string) => {
     if (equipos.length === 0) return currentY;
+    const nombreSistemaUpper = title.toUpperCase();
+    const esExtintor = nombreSistemaUpper.includes('EXTINTOR');
+    const esBie = nombreSistemaUpper.includes('BIE') || nombreSistemaUpper.includes('BOCA');
+    const esPuertasRF = nombreSistemaUpper.includes('PUERTA') || nombreSistemaUpper.includes('CORTAFUEGO') || nombreSistemaUpper.includes('RF');
+    const esCasetas = nombreSistemaUpper.includes('CASETA') || nombreSistemaUpper.includes('DOTACION') || nombreSistemaUpper.includes('DOTACIÓN');
+    const esHidrante = nombreSistemaUpper.includes('HIDRANTE') && !esCasetas;
+    const esSistemaVerticalPuro = !esExtintor && !esBie && !esPuertasRF && !esHidrante && !esCasetas;
+
+    const repetirHeaderPorEquipo = nombreSistemaUpper.includes('DETECCI') || nombreSistemaUpper.includes('ROCIADOR') || nombreSistemaUpper.includes('PUESTO') || nombreSistemaUpper.includes('SPRINKLER') || nombreSistemaUpper.includes('BOMBA') || nombreSistemaUpper.includes('DIESEL') || nombreSistemaUpper.includes('GASOIL') || nombreSistemaUpper.includes('ELECTRICA') || nombreSistemaUpper.includes('JOCKEY') || nombreSistemaUpper.includes('ABASTECIMIENTO') || esSistemaVerticalPuro;
+
+    const renderAnomaliasParaEquipos = async (eqsToRender: any[], startY: number, showSinAnomalias: boolean = true) => {
+      let finalY = startY + 5;
+      const equiposConAnotaciones = eqsToRender.filter(eq => equipoTieneAnomalias(eq, checkItemsDeSistema) || equipoTieneObservaciones(eq, checkItemsDeSistema));
+      const anomalias = equiposConAnotaciones;
+
+      if (anomalias.length === 0 && !showSinAnomalias) {
+        return finalY;
+      }
+
+      // Pintar el título "Anomalías y observaciones:"
+      if (finalY > 265) {
+        doc.addPage();
+        const newPageNum = (doc.internal as any).getNumberOfPages();
+        if (!drawnTablePages.has(newPageNum)) {
+          drawTableHeader(newPageNum);
+          drawnTablePages.add(newPageNum);
+        }
+        finalY = 34;
+      }
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(0, 0, 0);
+      doc.text('Anomalías y observaciones:', 14, finalY);
+      doc.setFont("helvetica", "normal");
+      finalY += 7;
+
+      if (anomalias.length === 0) {
+        doc.setTextColor(5, 150, 105);
+        doc.text('Sin anomalías ni observaciones. Los equipos se encuentran en correcto estado de funcionamiento.', 14, finalY);
+        doc.setTextColor(0, 0, 0);
+        finalY += 6;
+      } else {
+        for (const eq of anomalias) {
+          // Verificar si necesitamos una nueva página
+          if (finalY > 170) {
+            doc.addPage();
+            const newPageNum = (doc.internal as any).getNumberOfPages();
+            if (!drawnTablePages.has(newPageNum)) {
+              drawTableHeader(newPageNum);
+              drawnTablePages.add(newPageNum);
+            }
+            finalY = 34;
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(10);
+            doc.setTextColor(0, 0, 0);
+            doc.text('Anomalías y observaciones (continuación):', 14, finalY);
+            doc.setFont("helvetica", "normal");
+            finalY += 7;
+          }
+
+          // 1. Obtener texto de anomalías (en ROJO)
+          const anomaliasItem = checkItemsDeSistema.find(item => {
+            const lbl = (item.label || '').toLowerCase();
+            return lbl.includes('anomal') || ((lbl.includes('notas') || lbl.includes('observaci')) && !checkItemsDeSistema.some(i => (i.label||'').toLowerCase().includes('anomal')));
+          });
+          const anomaliasValue = anomaliasItem && eq[anomaliasItem.key] ? String(eq[anomaliasItem.key]).trim() : '';
+          
+          // Identificar qué comprobaciones específicas fallaron
+          const checksFallados = checkItems
+            .filter(item => eq[item.key] === false || (typeof eq[item.key] === 'string' && String(eq[item.key]).trim().toLowerCase() === 'false'))
+            .map(item => item.label || '');
+          
+          let rawText = '';
+          if (eq.anomalias && eq.anomalias.trim() !== '') {
+            rawText = eq.anomalias;
+          } else {
+            const fallosStr = checksFallados.length > 0 ? `Falló en: ${checksFallados.join(', ')}.` : '';
+            const dateWarning = tieneFechaInvalida(eq) ? 'Fecha de fabricación/retimbrado caducada o próxima a caducar.' : '';
+            if (anomaliasValue) {
+              rawText = fallosStr 
+                ? `${fallosStr} ${anomaliasValue}` 
+                : (dateWarning ? `${dateWarning} ${anomaliasValue}` : anomaliasValue);
+            } else {
+              rawText = fallosStr || dateWarning || '';
+            }
+          }
+
+          let anomaliasLines: string[] = [];
+          const firstSplit = rawText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+          firstSplit.forEach(chunk => {
+            const subSplit = chunk.split(/,\s*(?=\d+\.\d+)/).map(s => s.trim()).filter(Boolean);
+            anomaliasLines.push(...subSplit);
+          });
+          
+          // 2. Obtener texto de observaciones (en NEGRO / NO ROJO)
+          const observacionesItem = checkItemsDeSistema.find(item => {
+            const lbl = (item.label || '').toLowerCase();
+            return lbl.includes('observaci') && !lbl.includes('anomal');
+          });
+          const obsDirecto = eq.observaciones && typeof eq.observaciones === 'string' ? eq.observaciones.trim() : '';
+          const obsDinamico = observacionesItem && eq[observacionesItem.key] ? String(eq[observacionesItem.key]).trim() : '';
+          const textObservacion = obsDirecto || obsDinamico || '';
+          const obsLines = textObservacion.split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean);
+
+          // Si hay anomalías u observaciones para este equipo, imprimir el encabezado EQUIPO Nº X una vez y debajo cada ítem con guión
+          if (anomaliasLines.length > 0 || obsLines.length > 0) {
+            const pageWidth = (doc.internal.pageSize as any).getWidth ? (doc.internal.pageSize as any).getWidth() : doc.internal.pageSize.width;
+            const maxTextWidth = pageWidth - 28;
+
+            // 1) Imprimir número de equipo en MAYÚSCULA como encabezado del bloque
+            const numEquipoStr = `EQUIPO Nº ${String(eq.codigo || eq.numero || 'S/N').toUpperCase()}${eq.placa ? ` (${String(eq.placa).toUpperCase()})` : ''}`;
+            const headerLines: string[] = doc.splitTextToSize(numEquipoStr, maxTextWidth);
+
+            headerLines.forEach((hLine) => {
+              if (finalY > 170) {
+                doc.addPage();
+                const newPageNum = (doc.internal as any).getNumberOfPages();
+                if (!drawnTablePages.has(newPageNum)) {
+                  drawTableHeader(newPageNum);
+                  drawnTablePages.add(newPageNum);
+                }
+                finalY = 34;
+                doc.setFont("helvetica", "bold");
+                doc.setFontSize(10);
+                doc.setTextColor(0, 0, 0);
+                doc.text('Anomalías y observaciones (continuación):', 14, finalY);
+                doc.setFont("helvetica", "normal");
+                finalY += 7;
+              }
+
+              doc.setFont("helvetica", "bold");
+              doc.setTextColor(0, 0, 0);
+              doc.text(hLine, 14, finalY);
+              doc.setFont("helvetica", "normal");
+              finalY += 5.5;
+            });
+
+            // 2) Imprimir todas las anomalías debajo con guión y en ROJO
+            if (anomaliasLines.length > 0) {
+              doc.setTextColor(anomalyTextColor[0], anomalyTextColor[1], anomalyTextColor[2]);
+              anomaliasLines.forEach((lineText, idx) => {
+                const cleanLine = lineText.replace(/^anomal[íi]a(?:s)?:\s*/i, '').replace(/^[-\s–—•*]+/g, '').trim();
+                const fullString = `- ${cleanLine}`;
+                const wrappedLines: string[] = doc.splitTextToSize(fullString, maxTextWidth - 4);
+
+                wrappedLines.forEach((wLine) => {
+                  if (finalY > 170) {
+                    doc.addPage();
+                    const newPageNum = (doc.internal as any).getNumberOfPages();
+                    if (!drawnTablePages.has(newPageNum)) {
+                      drawTableHeader(newPageNum);
+                      drawnTablePages.add(newPageNum);
+                    }
+                    finalY = 34;
+                    doc.setFont("helvetica", "bold");
+                    doc.setFontSize(10);
+                    doc.setTextColor(0, 0, 0);
+                    doc.text('Anomalías y observaciones (continuación):', 14, finalY);
+                    doc.setFont("helvetica", "normal");
+                    finalY += 7;
+                    doc.setTextColor(anomalyTextColor[0], anomalyTextColor[1], anomalyTextColor[2]);
+                  }
+
+                  doc.text(wLine, 16, finalY);
+                  finalY += 5.5;
+                });
+
+                if (idx < anomaliasLines.length - 1) {
+                  finalY += 1.0;
+                }
+              });
+            }
+
+            // 3) Imprimir todas las observaciones debajo con guión y en AZUL
+            if (obsLines.length > 0) {
+              doc.setTextColor(0, 82, 204);
+              obsLines.forEach((lineText: string, idx: number) => {
+                const cleanLine = lineText.replace(/^observaci[óo]n(?:es)?:\s*/i, '').replace(/^[-\s–—•*]+/g, '').trim();
+                const fullString = `- ${idx === 0 && anomaliasLines.length === 0 ? 'Observaciones: ' : (idx === 0 && anomaliasLines.length > 0 ? 'Observación: ' : '')}${cleanLine}`;
+                const wrappedLines: string[] = doc.splitTextToSize(fullString, maxTextWidth - 4);
+
+                wrappedLines.forEach((wLine) => {
+                  if (finalY > 170) {
+                    doc.addPage();
+                    const newPageNum = (doc.internal as any).getNumberOfPages();
+                    if (!drawnTablePages.has(newPageNum)) {
+                      drawTableHeader(newPageNum);
+                      drawnTablePages.add(newPageNum);
+                    }
+                    finalY = 34;
+                    doc.setFont("helvetica", "bold");
+                    doc.setFontSize(10);
+                    doc.setTextColor(0, 0, 0);
+                    doc.text('Anomalías y observaciones (continuación):', 14, finalY);
+                    doc.setFont("helvetica", "normal");
+                    finalY += 7;
+                    doc.setTextColor(0, 82, 204);
+                  }
+
+                  doc.text(wLine, 16, finalY);
+                  finalY += 5.5;
+                });
+
+                if (idx < obsLines.length - 1) {
+                  finalY += 1.0;
+                }
+              });
+              doc.setTextColor(0, 0, 0);
+            }
+
+            // Separación final después de todas las anotaciones de este equipo
+            finalY += 3.0;
+          }
+
+          // Si hay fotos, añadirlas todas (hasta 4 en la misma línea)
+          const currentFotos = (Array.isArray(eq.fotos) ? eq.fotos : (eq.foto && typeof eq.foto === 'string' && eq.foto.trim() !== '' ? [eq.foto] : [])).filter(Boolean);
+
+          if (currentFotos.length > 0) {
+            const fitImage = async (rawImg: string, xStart: number) => {
+              try {
+                const base64Raw = rawImg.startsWith('data:') ? rawImg : await fetchImageToBase64(rawImg);
+                if (!base64Raw) return 0;
+                const { base64: imageData, format } = await optimizarImagenParaPDF(base64Raw, 800, 0.75);
+                const imgProps = doc.getImageProperties(imageData);
+                const maxWidth = 40;
+                const maxHeight = 30;
+                const imgRatio = imgProps.width / imgProps.height;
+                let imgWidth = maxWidth;
+                let imgHeight = imgWidth / imgRatio;
+                
+                if (imgHeight > maxHeight) {
+                  imgHeight = maxHeight;
+                  imgWidth = imgHeight * imgRatio;
+                }
+                
+                const yPos = finalY;
+                doc.addImage(imageData, format, xStart, yPos, imgWidth, imgHeight);
+                return imgHeight;
+              } catch (err) {
+                console.error("Error drawing equipment photo in anomalies section:", err);
+                return 0;
+              }
+            };
+
+            if (finalY + 32 > 275) {
+              doc.addPage();
+              const newPageNum = (doc.internal as any).getNumberOfPages();
+              if (!drawnTablePages.has(newPageNum)) {
+                drawTableHeader(newPageNum);
+                drawnTablePages.add(newPageNum);
+              }
+              finalY = 34;
+            }
+
+            let maxImgHeight = 0;
+            const fotosProcesar = currentFotos.slice(0, 4);
+            for (let fIdx = 0; fIdx < fotosProcesar.length; fIdx++) {
+              const fotoUrl = fotosProcesar[fIdx];
+              const xStart = 14 + fIdx * 45;
+              const h = await fitImage(fotoUrl, xStart);
+              if (h > maxImgHeight) maxImgHeight = h;
+            }
+            
+            finalY += maxImgHeight + 5;
+          }
+        }
+      }
+      return finalY;
+    };
+
 
     if (currentY > 130) {
       doc.addPage();
@@ -817,15 +1673,6 @@ export const generarActaExtintoresPDF = async (
       }
       currentY = 34;
     }
-
-    const titleUpper = title.toUpperCase();
-    const esPuertasRF = titleUpper.includes('PUERTA') || 
-                        titleUpper.includes('CORTAFUEGO') || 
-                        titleUpper.includes('RF');
-    const esCasetas = titleUpper.includes('CASETA') || 
-                      titleUpper.includes('DOTACION') ||
-                      titleUpper.includes('DOTACIÓN');
-    const esHidrante = titleUpper.includes('HIDRANTE') && !esCasetas;
 
     const checkItemsDeSistema = (checklistItemsPorSistema && sistemaId && checklistItemsPorSistema[sistemaId]) ? checklistItemsPorSistema[sistemaId] : [];
 
@@ -842,6 +1689,7 @@ export const generarActaExtintoresPDF = async (
     };
 
     const findItem = (keywords: string[]) => checkItemsDeSistema.find(item => {
+      if (item.tipoRespuesta === 'check') return false;
       const lbl = normalize(item.label || '');
       return keywords.some(k => {
         const normK = normalize(k);
@@ -851,6 +1699,7 @@ export const generarActaExtintoresPDF = async (
       });
     });
 
+    const itemUbicacion = findItem(['ubicacion', 'ubicación', 'cobertura', 'nivel planta', 'planta']);
     const itemPlaca = findItem(['placa', 'industria']);
     const itemClase = findItem(['clase']);
     const itemTipo = findItem(['tipo']);
@@ -863,7 +1712,10 @@ export const generarActaExtintoresPDF = async (
     const itemDiametro = findItem(['diametro', 'diam', 'ø']);
 
     // Casetas
-    const findItemByCond = (cond: (lbl: string) => boolean) => checkItemsDeSistema.find(item => cond(normalize(item.label || '')));
+    const findItemByCond = (cond: (lbl: string) => boolean) => checkItemsDeSistema.find(item => {
+      if (item.tipoRespuesta === 'check') return false;
+      return cond(normalize(item.label || ''));
+    });
 
     const itemTipoCaseta = findItemByCond(lbl => lbl.includes('tipo de caseta') || lbl.includes('tipo caseta') || lbl.includes('tipo de armario') || lbl.includes('tipo armario'));
     const item70Fab = findItemByCond(lbl => lbl.includes('tramo 70') || (lbl.includes('70 mm') && lbl.includes('fabricaci')));
@@ -889,12 +1741,12 @@ export const generarActaExtintoresPDF = async (
               'Nº',
               'Ubicación',
               'Tipo',
-              item70Fab?.label ? item70Fab.label.replace('Tramo', '\nTramo') : 'Fecha fabricación\nTramo 70 mm.',
-              item70PH?.label ? item70PH.label.replace('Tramo', '\nTramo') : 'Última P.H.\nTramo 70 mm.',
-              item45FabA?.label ? item45FabA.label.replace('Tramo', '\nTramo') : 'Fecha fabricación\nTramo (A) 45 mm.',
-              item45PHA?.label ? item45PHA.label.replace('Tramo', '\nTramo') : 'Última P.H\nTramo (A) 45 mm.',
-              item45FabB?.label ? item45FabB.label.replace('Tramo', '\nTramo') : 'Fecha fabricación\nTramo (B) 45 mm.',
-              item45PHB?.label ? item45PHB.label.replace('Tramo', '\nTramo') : 'Última P.H\nTramo (B) 45 mm.'
+              'Fabricación\nTramo\n70 mm.',
+              'Última P.H.\nTramo\n70 mm.',
+              'Fabricación\nTramo (A)\n45 mm.',
+              'Última P.H.\nTramo (A)\n45 mm.',
+              'Fabricación\nTramo (B)\n45 mm.',
+              'Última P.H.\nTramo (B)\n45 mm.'
             ] :
             ['Nº', 'Nivel planta y ubicación', 'Placa', 'Tipo', 'Fabricante', 'Fecha\nFabricación', 'Último\nRetimbre']
           )
@@ -902,6 +1754,7 @@ export const generarActaExtintoresPDF = async (
       );
 
     const fixedItemsKeys = [
+        itemUbicacion?.key,
         itemPlaca?.key, itemClase?.key, itemTipo?.key, itemLongitud?.key,
         itemFabricante?.key, itemFechaFab?.key, itemRetimbre?.key, itemPruebaH?.key,
         itemSalidaBocas?.key, itemDiametro?.key,
@@ -922,7 +1775,8 @@ export const generarActaExtintoresPDF = async (
                          lbl.includes('fecha revision') ||    // Exclude from PDF
                          item.tipoRespuesta === 'imagen' ||
                          item.tipoRespuesta === 'seccion' ||
-                         item.tipoRespuesta === 'titulo'; // Excluir campos de imagen y secciones explícitamente
+                         item.tipoRespuesta === 'titulo' ||
+                         item.tipoRespuesta === 'grafico'; // Excluir campos de imagen, secciones y graficos explícitamente
 
       return !isNotas && !isFixed && !isExcluded;
     });
@@ -954,8 +1808,20 @@ export const generarActaExtintoresPDF = async (
         ]);
 
     const getVal = (eq: any, item: any, fixedKey: string) => {
-        if (item && eq[item.key] !== undefined && eq[item.key] !== '') return eq[item.key];
-        return eq[fixedKey] || '-';
+        const isValidTextVal = (v: any) => {
+            if (v === undefined || v === null || v === '') return false;
+            const s = String(v).trim().toLowerCase();
+            return s !== 'true' && s !== 'false' && s !== 'sí' && s !== 'no' && s !== 'ok' && s !== 'correcto' && s !== 'incorrecto';
+        };
+        if (item && isValidTextVal(eq[item.key])) return eq[item.key];
+        if (isValidTextVal(eq[fixedKey])) return eq[fixedKey];
+        if (fixedKey === 'nombre' || fixedKey === 'tipo' || fixedKey === 'clase') {
+            const validCandidates = [eq.nombre, eq.tipo, eq.clase, eq.modelo, eq.pesoCapacidad, eq.descripcion];
+            for (const c of validCandidates) {
+                if (isValidTextVal(c)) return c;
+            }
+        }
+        return '-';
     };
 
     const formatMesAno = (val: any) => {
@@ -979,7 +1845,7 @@ export const generarActaExtintoresPDF = async (
       if (isBie) {
         baseRow = [
           padCodigo(eq.codigo),
-          eq.ubicacion || '-',
+          getVal(eq, itemUbicacion, 'ubicacion'),
           getVal(eq, itemPlaca, 'placa'),
           getVal(eq, itemTipo, 'nombre'),
           getVal(eq, itemLongitud, 'longitud'),
@@ -990,14 +1856,14 @@ export const generarActaExtintoresPDF = async (
       } else if (esPuertasRF) {
         baseRow = [
           padCodigo(eq.codigo),
-          eq.ubicacion || '-',
+          getVal(eq, itemUbicacion, 'ubicacion'),
           getVal(eq, itemClase, 'clase'),
           getVal(eq, itemTipo, 'tipo')
         ];
       } else if (esHidrante) {
         baseRow = [
           padCodigo(eq.codigo),
-          eq.ubicacion || '-',
+          getVal(eq, itemUbicacion, 'ubicacion'),
           getVal(eq, itemTipo, 'tipo'),
           getVal(eq, itemSalidaBocas, 'salidaBocas'),
           getVal(eq, itemDiametro, 'diametro'),
@@ -1007,7 +1873,7 @@ export const generarActaExtintoresPDF = async (
       } else if (esCasetas) {
         baseRow = [
           padCodigo(eq.codigo),
-          eq.ubicacion || '-',
+          getVal(eq, itemUbicacion, 'ubicacion'),
           getVal(eq, itemTipoCaseta, 'tipo'),
           formatMesAno(getVal(eq, item70Fab, 'fechaFabricacion70')),
           formatMesAno(getVal(eq, item70PH, 'fechaPH70')),
@@ -1019,7 +1885,7 @@ export const generarActaExtintoresPDF = async (
       } else {
         baseRow = [
           padCodigo(eq.codigo),
-          eq.ubicacion || '-',
+          getVal(eq, itemUbicacion, 'ubicacion'),
           getVal(eq, itemPlaca, 'placa'),
           getVal(eq, itemTipo, 'nombre'),
           getVal(eq, itemFabricante, 'fabricante'),
@@ -1034,74 +1900,73 @@ export const generarActaExtintoresPDF = async (
       ];
     });
 
-    const nombreSistema = title.toUpperCase();
-    const esExtintor = nombreSistema.includes('EXTINTOR');
-    const esBie = nombreSistema.includes('BIE') || nombreSistema.includes('BOCA');
     const usarLayoutVertical = (!esExtintor && !esBie && !esPuertasRF && !esHidrante && !esCasetas) || checkKeys.length > 22;
 
     let finalY = currentY;
 
     if (usarLayoutVertical) {
       // 1. Cabecera de la sección con título e icono
-      if (currentY > 140) {
-        doc.addPage();
-        const newPageNum = (doc.internal as any).getNumberOfPages();
-        if (!drawnTablePages.has(newPageNum)) {
-          drawTableHeader(newPageNum);
-          drawnTablePages.add(newPageNum);
-        }
-        currentY = 34;
-      }
-
-      if (iconoBase64) {
-        try {
-          const imgProps = doc.getImageProperties(iconoBase64);
-          const maxWidth = 12;
-          const maxHeight = 12;
-          const imgRatio = imgProps.width / imgProps.height;
-          let imgWidth = maxWidth;
-          let imgHeight = imgWidth / imgRatio;
-          if (imgHeight > maxHeight) {
-            imgHeight = maxHeight;
-            imgWidth = imgHeight * imgRatio;
+      const dibujarHeaderDeSistema = () => {
+        if (currentY > 140) {
+          doc.addPage();
+          const newPageNum = (doc.internal as any).getNumberOfPages();
+          if (!drawnTablePages.has(newPageNum)) {
+            drawTableHeader(newPageNum);
+            drawnTablePages.add(newPageNum);
           }
-          const xOffset = 14 + (maxWidth - imgWidth) / 2;
-          const yOffset = (currentY + 2) + (maxHeight - imgHeight) / 2;
-          doc.addImage(iconoBase64, 'PNG', xOffset, yOffset, imgWidth, imgHeight);
-        } catch (err) {
-          console.error("Error rendering section icon:", err);
+          currentY = 34;
         }
-      }
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(12);
-      doc.setTextColor(0, 0, 0);
-      doc.text(title, iconoBase64 ? 30 : 14, currentY + 7);
 
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(8.5);
-      doc.setTextColor(0, 0, 0);
-      const textoAnomalias = 'Las anotaciones en ';
-      const textoRojo = 'rojo';
-      const textoO = ' o con una ';
-      const textoX = 'X';
-      const textoFinal = ' indican anomalías que deben corregirse.';
-      const subX = iconoBase64 ? 30 : 14;
-      const subY = currentY + 12;
-      doc.text(textoAnomalias, subX, subY);
-      const w1 = doc.getTextWidth(textoAnomalias);
-      doc.setTextColor(anomalyTextColor[0], anomalyTextColor[1], anomalyTextColor[2]);
-      doc.text(textoRojo, subX + w1, subY);
-      const w2 = doc.getTextWidth(textoRojo);
-      doc.setTextColor(0, 0, 0);
-      doc.text(textoO, subX + w1 + w2, subY);
-      const w3 = doc.getTextWidth(textoO);
-      doc.setTextColor(anomalyTextColor[0], anomalyTextColor[1], anomalyTextColor[2]);
-      doc.text(textoX, subX + w1 + w2 + w3, subY);
-      const w4 = doc.getTextWidth(textoX);
-      doc.setTextColor(0, 0, 0);
-      doc.text(textoFinal, subX + w1 + w2 + w3 + w4, subY);
+        if (iconoBase64) {
+          try {
+            const imgProps = doc.getImageProperties(iconoBase64);
+            const maxWidth = 12;
+            const maxHeight = 12;
+            const imgRatio = imgProps.width / imgProps.height;
+            let imgWidth = maxWidth;
+            let imgHeight = imgWidth / imgRatio;
+            if (imgHeight > maxHeight) {
+              imgHeight = maxHeight;
+              imgWidth = imgHeight * imgRatio;
+            }
+            const xOffset = 14 + (maxWidth - imgWidth) / 2;
+            const yOffset = (currentY + 2) + (maxHeight - imgHeight) / 2;
+            doc.addImage(iconoBase64, 'PNG', xOffset, yOffset, imgWidth, imgHeight);
+          } catch (err) {
+            console.error("Error rendering section icon:", err);
+          }
+        }
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(12);
+        doc.setTextColor(0, 0, 0);
+        doc.text(title, iconoBase64 ? 30 : 14, currentY + 7);
 
-      currentY += 16;
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8.5);
+        doc.setTextColor(0, 0, 0);
+        const textoAnomalias = 'Las anotaciones en ';
+        const textoRojo = 'rojo';
+        const textoO = ' o con una ';
+        const textoX = 'X';
+        const textoFinal = ' indican anomalías que deben corregirse.';
+        const subX = iconoBase64 ? 30 : 14;
+        const subY = currentY + 12;
+        doc.text(textoAnomalias, subX, subY);
+        const w1 = doc.getTextWidth(textoAnomalias);
+        doc.setTextColor(anomalyTextColor[0], anomalyTextColor[1], anomalyTextColor[2]);
+        doc.text(textoRojo, subX + w1, subY);
+        const w2 = doc.getTextWidth(textoRojo);
+        doc.setTextColor(0, 0, 0);
+        doc.text(textoO, subX + w1 + w2, subY);
+        const w3 = doc.getTextWidth(textoO);
+        doc.setTextColor(anomalyTextColor[0], anomalyTextColor[1], anomalyTextColor[2]);
+        doc.text(textoX, subX + w1 + w2 + w3, subY);
+        const w4 = doc.getTextWidth(textoX);
+        doc.setTextColor(0, 0, 0);
+        doc.text(textoFinal, subX + w1 + w2 + w3 + w4, subY);
+
+        currentY += 16;
+      };
 
       // Paso 1: Agrupar checkItemsDeSistema en secciones
       interface SectionData {
@@ -1136,15 +2001,31 @@ export const generarActaExtintoresPDF = async (
 
       // Definir valor de visualización genérico
       const getDisplayValue = (val: any) => {
-        if (val === true || val === 'true') return 'SÍ';
-        if (val === false || val === 'false') return 'NO';
+        if (val === true || (typeof val === 'string' && val.trim().toLowerCase() === 'true')) return 'SÍ';
+        if (val === false || (typeof val === 'string' && val.trim().toLowerCase() === 'false')) return 'NO';
         if (val === undefined || val === null || val === '') return '-';
-        return String(val);
+        const str = String(val).trim();
+        if (str.toLowerCase() === 'true') return 'SÍ';
+        if (str.toLowerCase() === 'false') return 'NO';
+        return str;
       };
 
       // 2. Tablas por cada equipo
-      for (const eq of equipos) {
-        if (currentY > 150) {
+      for (let eqIdx = 0; eqIdx < equipos.length; eqIdx++) {
+        const eq = equipos[eqIdx];
+
+        if (eqIdx === 0) {
+          dibujarHeaderDeSistema();
+        } else if (repetirHeaderPorEquipo) {
+          doc.addPage();
+          const newPageNum = (doc.internal as any).getNumberOfPages();
+          if (!drawnTablePages.has(newPageNum)) {
+            drawTableHeader(newPageNum);
+            drawnTablePages.add(newPageNum);
+          }
+          currentY = 34;
+          dibujarHeaderDeSistema();
+        } else if (currentY > 150) {
           doc.addPage();
           const newPageNum = (doc.internal as any).getNumberOfPages();
           if (!drawnTablePages.has(newPageNum)) {
@@ -1157,25 +2038,50 @@ export const generarActaExtintoresPDF = async (
         // Renderizar las secciones de este equipo
         for (const sec of sectionsList) {
           // Filtrar items fijos y excluidos de esta sección
+          const nombreSistemaUpper = title.toUpperCase();
+
           const filteredSecItems = sec.items.filter(item => {
+            if (!item.label || item.label.trim() === '') return false;
+            // Filtrar ítems que no contengan letras (solo números, puntos, guiones o espacios) ya que son filas vacías/fantasma
+            const hasLetters = /[a-zA-ZáéíóúüñÁÉÍÓÚÜÑ]/.test(item.label);
+            if (!hasLetters) return false;
             const lbl = normalize(item.label || '');
             const isNotas = lbl.includes('notas') || lbl.includes('observaciones') || lbl.includes('anomal');
+            
+            const esExtintor = nombreSistemaUpper.includes('EXTINTOR');
+            const esBie = nombreSistemaUpper.includes('BIE') || nombreSistemaUpper.includes('BOCA');
+            const esPuertasRF = nombreSistemaUpper.includes('PUERTA') || nombreSistemaUpper.includes('CORTAFUEGO') || nombreSistemaUpper.includes('RF');
+            const esCasetas = nombreSistemaUpper.includes('CASETA') || nombreSistemaUpper.includes('DOTACION') || nombreSistemaUpper.includes('DOTACIÓN');
+            const esHidrante = nombreSistemaUpper.includes('HIDRANTE') && !esCasetas;
+            const esSistemaVerticalPuro = !esExtintor && !esBie && !esPuertasRF && !esHidrante && !esCasetas;
+
             const isFixed = fixedItemsKeys.includes(item.key);
+            
+            // Si es un sistema vertical puro (como Bomba Jockey, Detección, Abastecimiento, etc.),
+            // no debemos ocultar los campos de ubicación ni los campos fijos como marca/fabricante/fecha_fab,
+            // ya que estos sistemas no tienen una tabla horizontal inicial donde se muestren dichos campos.
+            const excludeUbicacion = !esSistemaVerticalPuro;
+            
             const isExcluded = lbl.includes('orden de lista') || 
-                               lbl.includes('ubicacion') || 
+                               (excludeUbicacion && lbl.includes('ubicacion')) || 
                                lbl.includes('sin uso') || 
                                lbl.includes('imagen') ||
                                lbl.includes('fecha de revision') ||
                                lbl.includes('fecha revision') ||
                                item.tipoRespuesta === 'imagen';
-            const isDeteccion = title.toUpperCase().includes('DETECCIÓN') || title.toUpperCase().includes('DETECCION');
-            return !isNotas && !(isFixed && !isDeteccion) && !isExcluded;
+                               
+            const bypassFixed = esSistemaVerticalPuro || nombreSistemaUpper.includes('DETECCIÓN') || nombreSistemaUpper.includes('DETECCION');
+            
+            return !isNotas && !(isFixed && !bypassFixed) && !isExcluded;
           });
 
           if (filteredSecItems.length === 0) continue;
 
-          // Verificar si hay espacio suficiente para la sección, si no, salto de página
-          if (currentY > 175) {
+          const secTitleNorm = sec.title.toUpperCase();
+
+          // Estimar la altura que requerirá esta sección y saltar de página solo si no cabe (límite 268mm)
+          const estimatedSectionHeight = (filteredSecItems.length + 2) * 6.5 + 10;
+          if (currentY > 34 && (currentY + estimatedSectionHeight > 268)) {
             doc.addPage();
             const newPageNum = (doc.internal as any).getNumberOfPages();
             if (!drawnTablePages.has(newPageNum)) {
@@ -1185,29 +2091,64 @@ export const generarActaExtintoresPDF = async (
             currentY = 34;
           }
 
-          const secTitleNorm = sec.title.toUpperCase();
-
           if (secTitleNorm.includes('DATOS INSTALACIÓN') || secTitleNorm.includes('DATOS INSTALACION')) {
             // Renderizar Sección 1: Datos de instalación en 6 columnas (3 pares de datos)
             const datosRows: any[] = [];
-            for (let i = 0; i < filteredSecItems.length; i += 3) {
+            let i = 0;
+            while (i < filteredSecItems.length) {
               const item1 = filteredSecItems[i];
-              const val1 = getDisplayValue(eq[item1.key]);
+              const lbl1Norm = (item1.label || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+              const isFullWidthItem = lbl1Norm.includes('tipo de instalacion') || (item1.label || '').trim().startsWith('1.1');
+
+              if (isFullWidthItem) {
+                let val1 = getDisplayValue(eq[item1.key]);
+                if ((val1 === '-' || !val1) && (item1.key === 'ubicacion' || lbl1Norm.includes('ubicacion') || lbl1Norm.includes('cobertura'))) {
+                  val1 = getDisplayValue(eq.ubicacion || eq.cobertura);
+                }
+                datosRows.push([
+                  { content: item1.label || '', colSpan: 2, styles: { fontStyle: 'bold', fillColor: [245, 247, 250] } },
+                  { content: val1, colSpan: 4, styles: { halign: 'left', fontStyle: 'bold' } },
+                  '', '', '', ''
+                ]);
+                i += 1;
+                continue;
+              }
+
+              let val1 = getDisplayValue(eq[item1.key]);
+              if ((val1 === '-' || !val1) && (item1.key === 'ubicacion' || lbl1Norm.includes('ubicacion') || lbl1Norm.includes('cobertura'))) {
+                val1 = getDisplayValue(eq.ubicacion || eq.cobertura);
+              }
               
               let label2 = '';
               let val2 = '';
+              let advance = 1;
+
               if (i + 1 < filteredSecItems.length) {
                 const item2 = filteredSecItems[i + 1];
-                label2 = item2.label || '';
-                val2 = getDisplayValue(eq[item2.key]);
+                const lbl2Norm = (item2.label || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                if (!lbl2Norm.includes('tipo de instalacion') && !(item2.label || '').trim().startsWith('1.1')) {
+                  label2 = item2.label || '';
+                  val2 = getDisplayValue(eq[item2.key]);
+                  if ((val2 === '-' || !val2) && (item2.key === 'ubicacion' || lbl2Norm.includes('ubicacion') || lbl2Norm.includes('cobertura'))) {
+                    val2 = getDisplayValue(eq.ubicacion || eq.cobertura);
+                  }
+                  advance = 2;
+                }
               }
               
               let label3 = '';
               let val3 = '';
-              if (i + 2 < filteredSecItems.length) {
+              if (advance === 2 && i + 2 < filteredSecItems.length) {
                 const item3 = filteredSecItems[i + 2];
-                label3 = item3.label || '';
-                val3 = getDisplayValue(eq[item3.key]);
+                const lbl3Norm = (item3.label || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                if (!lbl3Norm.includes('tipo de instalacion') && !(item3.label || '').trim().startsWith('1.1')) {
+                  label3 = item3.label || '';
+                  val3 = getDisplayValue(eq[item3.key]);
+                  if ((val3 === '-' || !val3) && (item3.key === 'ubicacion' || lbl3Norm.includes('ubicacion') || lbl3Norm.includes('cobertura'))) {
+                    val3 = getDisplayValue(eq.ubicacion || eq.cobertura);
+                  }
+                  advance = 3;
+                }
               }
               
               datosRows.push([
@@ -1218,6 +2159,7 @@ export const generarActaExtintoresPDF = async (
                 label3,
                 val3
               ]);
+              i += advance;
             }
 
             autoTable(doc, {
@@ -1227,11 +2169,11 @@ export const generarActaExtintoresPDF = async (
               bodyStyles: { fontSize: 7, halign: 'left', valign: 'middle', lineWidth: 0.1, lineColor: [200, 200, 200] },
               columnStyles: {
                 0: { halign: 'left', cellWidth: 'auto' },
-                1: { halign: 'center', cellWidth: 18 },
+                1: { halign: 'center', cellWidth: 28 },
                 2: { halign: 'left', cellWidth: 'auto' },
-                3: { halign: 'center', cellWidth: 18 },
+                3: { halign: 'center', cellWidth: 28 },
                 4: { halign: 'left', cellWidth: 'auto' },
-                5: { halign: 'center', cellWidth: 21 }
+                5: { halign: 'center', cellWidth: 31 }
               },
                 head: [
                   [{ content: sec.title, colSpan: 6, styles: { fillColor: [128, 0, 32], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5, halign: 'left' } }]
@@ -1293,20 +2235,38 @@ export const generarActaExtintoresPDF = async (
                       data.cell.styles.fontStyle = 'bold';
                     }
                   }
+
+                  const itemForCol = data.column.index < 2 ? item1 : (data.column.index < 4 ? item2 : item3);
+                  if (itemForCol) {
+                    const lblNorm = (itemForCol.label || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                    const esBombaDieselNum = lblNorm.includes('esta es la bomba') && (lblNorm.includes('numero') || lblNorm.includes('nº') || lblNorm.includes('no.'));
+                    if (lblNorm.includes('cobertura') || esBombaDieselNum || lblNorm.includes('instalaciones que abastece') || lblNorm.includes('se alimenta')) {
+                      data.cell.styles.fillColor = [255, 249, 196]; // amarillo claro #FFF9C4
+                      if (data.column.index % 2 === 1) {
+                        data.cell.styles.fontStyle = 'bold';
+                        data.cell.styles.textColor = [0, 0, 0];
+                      } else {
+                        data.cell.styles.textColor = [0, 0, 0];
+                      }
+                    }
+                  }
                 }
               }
             });
             currentY = (doc as any).lastAutoTable.finalY || currentY;
 
           } else {
-            const normalItems = filteredSecItems.filter(item => item.tipoRespuesta !== 'tabla');
-            const tableItem = filteredSecItems.find(item => item.tipoRespuesta === 'tabla');
+            const normalItems = filteredSecItems.filter(item => item.tipoRespuesta !== 'tabla' && item.tipoRespuesta !== 'grafico');
+            const tableItem = filteredSecItems.find(item => item.tipoRespuesta === 'tabla' || item.tipoRespuesta === 'grafico');
 
             if (normalItems.length > 0) {
               // Cuestionarios normales (Secciones 2 a 9, 11, etc.): Tabla de 2 columnas por filas
               const checkRows: any[] = [];
               for (const item of normalItems) {
                 let rawVal = eq[item.key];
+                if ((rawVal === undefined || rawVal === '' || rawVal === '-') && ((item.label || '').toLowerCase().includes('ubicacion') || (item.label || '').toLowerCase().includes('cobertura'))) {
+                  rawVal = eq.ubicacion || eq.cobertura || rawVal;
+                }
                 const itemOpciones = (item as any).opciones || [];
                 if (rawVal === undefined || rawVal === '') {
                   if (itemOpciones.includes('CORRECTO')) {
@@ -1327,7 +2287,7 @@ export const generarActaExtintoresPDF = async (
                 margin: { top: 40, left: 14, right: 14 },
                 headStyles: { fillColor: [128, 0, 32], textColor: [255, 255, 255], fontSize: 7.5, halign: 'center', valign: 'middle', lineWidth: 0.1, lineColor: [255, 255, 255] },
                 bodyStyles: { fontSize: 7.5, halign: 'left', valign: 'middle', lineWidth: 0.1, lineColor: [200, 200, 200] },
-                columnStyles: (sec.title && (sec.title.toUpperCase().includes('CONCLUSIONES') || sec.title.toUpperCase().includes('CONCLUSIO') || sec.title.includes('11'))) ? {
+                columnStyles: (sec.title && (sec.title.toUpperCase().includes('CONCLUSIONES') || sec.title.toUpperCase().includes('CONCLUSIO'))) ? {
                   0: { halign: 'left' },
                   1: { halign: 'center', cellWidth: 'wrap' }
                 } : {
@@ -1347,9 +2307,29 @@ export const generarActaExtintoresPDF = async (
                   }
                 },
                 didParseCell: function (data: any) {
-                  if (data.section === 'body' && data.column.index === 1) {
-                    const item = normalItems[data.row.index];
-                    if (item && item.tipoRespuesta === 'fecha') {
+                  if (data.section === 'body') {
+                    const itemNorm = normalItems[data.row.index];
+                    if (itemNorm) {
+                      const lblNorm = (itemNorm.label || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                      const esBombaDieselNum = lblNorm.includes('esta es la bomba') && (lblNorm.includes('numero') || lblNorm.includes('nº') || lblNorm.includes('no.'));
+                      const isTipoInstRow = lblNorm.includes('tipo de instalacion') || (itemNorm.label || '').trim().startsWith('1.1');
+                      if (isTipoInstRow && data.column.index === 1) {
+                        data.cell.styles.halign = 'center';
+                        data.cell.styles.fontStyle = 'bold';
+                      }
+                      if (lblNorm.includes('cobertura') || esBombaDieselNum || lblNorm.includes('instalaciones que abastece') || lblNorm.includes('se alimenta')) {
+                        data.cell.styles.fillColor = [255, 249, 196]; // amarillo claro #FFF9C4
+                        if (data.column.index === 1) {
+                          data.cell.styles.fontStyle = 'bold';
+                          data.cell.styles.textColor = [0, 0, 0];
+                        } else {
+                          data.cell.styles.textColor = [0, 0, 0];
+                        }
+                      }
+                    }
+                    if (data.column.index === 1) {
+                      const item = normalItems[data.row.index];
+                      if (item && item.tipoRespuesta === 'fecha') {
                       const esExtintor = title.toUpperCase().includes('EXTINTOR') || (typeof eq.nombre === 'string' ? eq.nombre : '').toUpperCase().includes('EXTINTOR') || (typeof eq.clase === 'string' ? eq.clase : '').toUpperCase().includes('EXTINTOR');
                       const esBie = title.toUpperCase().includes('BIE') || title.toUpperCase().includes('BOCA') || (typeof eq.nombre === 'string' ? eq.nombre : '').toUpperCase().includes('BIE') || (typeof eq.clase === 'string' ? eq.clase : '').toUpperCase().includes('BIE');
                       if (determinarSiFechaEsInvalida(eq, item.key, item.label || '', esBie, esExtintor, itemFechaFab?.key, itemRetimbre?.key || itemPruebaH?.key)) {
@@ -1358,15 +2338,18 @@ export const generarActaExtintoresPDF = async (
                         return;
                       }
                     }
-                    if (data.cell.raw === 'X') {
+                    if (data.cell.raw === 'X' || (typeof data.cell.raw === 'string' && data.cell.raw.trim().toLowerCase() === 'false') || data.cell.raw === false) {
+                      data.cell.text = ['X'];
+                      data.cell.raw = 'X';
                       data.cell.styles.textColor = anomalyTextColor;
                       data.cell.styles.fontStyle = 'bold';
                       data.cell.styles.fontSize = 8.5;
-                    } else if (data.cell.raw === 'TICK') {
+                    } else if (data.cell.raw === 'TICK' || (typeof data.cell.raw === 'string' && data.cell.raw.trim().toLowerCase() === 'true') || data.cell.raw === true) {
                       data.cell.text = [''];
+                      data.cell.raw = 'TICK';
                     } else if (data.cell.raw !== '-') {
                       const rawStr = String(data.cell.raw || '').toUpperCase().trim();
-                      if (rawStr.includes('NO CORRECTO') || rawStr.includes('NO CONFORME')) {
+                      if (rawStr.includes('NO CORRECTO') || rawStr.includes('NO CONFORME') || rawStr.includes('PENDIENTES DE CORREGIR') || rawStr.includes('CON LAS ANOMAL')) {
                         data.cell.styles.textColor = [200, 0, 0];
                         data.cell.styles.fontStyle = 'bold';
                       } else if (rawStr.includes('CORRECTO') || rawStr.includes('CONFORME')) {
@@ -1378,9 +2361,10 @@ export const generarActaExtintoresPDF = async (
                       }
                     }
                   }
+                }
                 },
                 didDrawCell: function (data: any) {
-                  if (data.section === 'body' && data.column.index === 1 && data.cell.raw === 'TICK') {
+                  if (data.section === 'body' && data.column.index === 1 && (data.cell.raw === 'TICK' || data.cell.raw === true || (typeof data.cell.raw === 'string' && data.cell.raw.trim().toLowerCase() === 'true'))) {
                     const { x, y, width, height } = data.cell;
                     const cx = x + width / 2;
                     const cy = y + height / 2;
@@ -1399,8 +2383,13 @@ export const generarActaExtintoresPDF = async (
                 currentY += 6; // Espacio entre el cuestionario y la tabla
               }
               const tableVal = eq[tableItem.key];
-              let tableHeaders: string[] = tableItem.opciones || [];
+              const isGrafico = tableItem.tipoRespuesta === 'grafico';
+              let tableHeaders: string[] = isGrafico ? ['Caudal (m³/h)', 'L.P.M.', 'Presión (bar)', 'R.P.M.'] : (tableItem.opciones || []);
+              const effectiveFilasNombres = isGrafico ? ['0%', '50%', '100%', '140%'] : (tableItem.filasNombres || []);
+              const hasVerticalHeaders = isGrafico || (Array.isArray(tableItem.filasNombres) && tableItem.filasNombres.length > 0);
               let tableRows: string[][] = [];
+              let currentNominalCaudal = 0;
+              let currentNominalPresion = 0;
               try {
                 if (tableVal && typeof tableVal === 'string') {
                   const parsed = JSON.parse(tableVal);
@@ -1412,6 +2401,86 @@ export const generarActaExtintoresPDF = async (
                 console.error("Error parsing table input value:", err);
               }
 
+              // Forzar longitud y etiquetas de fila si es gráfico
+              if (isGrafico) {
+                const targetRows = effectiveFilasNombres.length;
+                const actualCols = tableHeaders.length + 1;
+                while (tableRows.length < targetRows) {
+                  tableRows.push(Array(actualCols).fill(''));
+                }
+
+                // Obtener nominales del equipo actual
+                const currentSistItems = (checklistItemsPorSistema && eq.sistemaId) ? checklistItemsPorSistema[eq.sistemaId] : [];
+                let currentCaudalNominalKey = '';
+                let currentPresionNominalKey = '';
+
+                if (currentSistItems && currentSistItems.length > 0) {
+                  const caudalItem = currentSistItems.find((i: any) => {
+                    const lbl = (i.label || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                    return lbl.includes('caudal') && lbl.includes('nominal');
+                  });
+                  if (caudalItem) currentCaudalNominalKey = caudalItem.key;
+
+                  const presionItem = currentSistItems.find((i: any) => {
+                    const lbl = (i.label || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                    return lbl.includes('presion') && lbl.includes('nominal');
+                  });
+                  if (presionItem) currentPresionNominalKey = presionItem.key;
+                }
+
+                if (currentCaudalNominalKey && eq[currentCaudalNominalKey]) {
+                  currentNominalCaudal = parseFloat(String(eq[currentCaudalNominalKey]).replace(',', '.'));
+                }
+                if (currentPresionNominalKey && eq[currentPresionNominalKey]) {
+                  currentNominalPresion = parseFloat(String(eq[currentPresionNominalKey]).replace(',', '.'));
+                }
+
+                // Encontrar los índices de columna
+                let pdfCaudalColIdx = tableHeaders.findIndex(h => {
+                  const norm = h.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                  return norm.includes('caudal') || norm.includes('flow') || norm.includes('m3') || norm.trim() === 'q' || norm.includes('(q)');
+                });
+                let pdfLpmColIdx = tableHeaders.findIndex(h => {
+                  const norm = h.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\./g, "");
+                  return norm.includes('lpm') || norm.includes('litro');
+                });
+                let pdfPresionColIdx = tableHeaders.findIndex(h => {
+                  const norm = h.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                  return norm.includes('presion') || norm.includes('pressure') || norm.includes('bar') || norm.trim() === 'p' || norm.trim() === 'h' || norm.includes('(p)') || norm.includes('(h)');
+                });
+
+                const rowCaudalIdx = pdfCaudalColIdx !== -1 ? pdfCaudalColIdx + 1 : 1;
+                const rowLpmIdx = pdfLpmColIdx !== -1 ? pdfLpmColIdx + 1 : 2;
+                const rowPresionIdx = pdfPresionColIdx !== -1 ? pdfPresionColIdx + 1 : 3;
+
+                tableRows = tableRows.slice(0, targetRows).map((row, rIdx) => {
+                  let newRow = [...row];
+                  while (newRow.length < actualCols) {
+                    newRow.push('');
+                  }
+                  newRow = newRow.slice(0, actualCols);
+                  newRow[0] = effectiveFilasNombres[rIdx];
+
+                  // Autocalcular Caudal y LPM en base a los nominales actuales
+                  if (rIdx === 0) {
+                    newRow[rowCaudalIdx] = '0';
+                    newRow[rowLpmIdx] = '0';
+                  } else if (rIdx === 1) {
+                    newRow[rowCaudalIdx] = currentNominalCaudal ? String(Math.round((currentNominalCaudal / 2) * 1000) / 1000).replace('.', ',') : '';
+                    newRow[rowLpmIdx] = currentNominalCaudal ? String(Math.round(((currentNominalCaudal / 2) / 0.06) * 10) / 10).replace('.', ',') : '';
+                  } else if (rIdx === 2) {
+                    newRow[rowCaudalIdx] = currentNominalCaudal ? String(Math.round(currentNominalCaudal * 1000) / 1000).replace('.', ',') : '';
+                    newRow[rowLpmIdx] = currentNominalCaudal ? String(Math.round((currentNominalCaudal / 0.06) * 10) / 10).replace('.', ',') : '';
+                    newRow[rowPresionIdx] = currentNominalPresion ? String(Math.round(currentNominalPresion * 1000) / 1000).replace('.', ',') : '';
+                  } else if (rIdx === 3) {
+                    newRow[rowCaudalIdx] = currentNominalCaudal ? String(Math.round((currentNominalCaudal * 1.4) * 1000) / 1000).replace('.', ',') : '';
+                    newRow[rowLpmIdx] = currentNominalCaudal ? String(Math.round(((currentNominalCaudal * 1.4) / 0.06) * 10) / 10).replace('.', ',') : '';
+                  }
+
+                  return newRow;
+                });
+              }
+
               if (tableHeaders.length === 0) {
                 tableHeaders = ['Detalle'];
               }
@@ -1420,13 +2489,44 @@ export const generarActaExtintoresPDF = async (
               }
 
               const formatHeader = (h: string) => {
-                const norm = String(h || '').trim();
+                let norm = String(h || '').trim();
                 
                 if (norm.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes('ubicacion')) {
                   return norm;
                 }
+
+                norm = norm
+                  .replace(/Detector\s+de\s+humo/gi, 'Detector humo')
+                  .replace(/Pulsador\s+de\s+paro/gi, 'Pulsador paro')
+                  .replace(/Pulsador\s+de\s+disparo/gi, 'Pulsador disparo')
+                  .replace(/Retenedor\s+de\s+puerta/gi, 'Retenedor puerta')
+                  .replace(/\s+de\s+la\s+/gi, ' ')
+                  .replace(/\s+de\s+los\s+/gi, ' ')
+                  .replace(/\s+de\s+las\s+/gi, ' ')
+                  .replace(/\s+de\s+/gi, ' ')
+                  .replace(/\s+del\s+/gi, ' ');
+
+                const words = norm.split(/\s+/).filter(Boolean);
+                if (words.length <= 1) {
+                  return norm;
+                }
+                if (words.length === 2) {
+                  return words[0] + '\n' + words[1];
+                }
+
+                let bestSplitIndex = 1;
+                let minDiff = Infinity;
+                for (let i = 1; i < words.length; i++) {
+                  const line1 = words.slice(0, i).join(' ');
+                  const line2 = words.slice(i).join(' ');
+                  const diff = Math.abs(line1.length - line2.length);
+                  if (diff < minDiff) {
+                    minDiff = diff;
+                    bestSplitIndex = i;
+                  }
+                }
                 
-                return norm.replace(/\s+/g, '\n');
+                return words.slice(0, bestSplitIndex).join(' ') + '\n' + words.slice(bestSplitIndex).join(' ');
               };
 
               const colStyles: any = {};
@@ -1435,9 +2535,19 @@ export const generarActaExtintoresPDF = async (
                 if (norm.includes('ubicacion')) {
                   colStyles[index] = { cellWidth: 'auto', halign: 'left' };
                 } else {
-                  colStyles[index] = { cellWidth: 'wrap' };
+                  colStyles[index] = { cellWidth: 'auto', halign: 'center' };
                 }
               });
+
+              if (isGrafico) {
+                doc.addPage();
+                const newPageNum = (doc.internal as any).getNumberOfPages();
+                if (!drawnTablePages.has(newPageNum)) {
+                  drawTableHeader(newPageNum);
+                  drawnTablePages.add(newPageNum);
+                }
+                currentY = 34;
+              }
 
               autoTable(doc, {
                 startY: currentY,
@@ -1462,8 +2572,10 @@ export const generarActaExtintoresPDF = async (
                 },
                 columnStyles: colStyles,
                 head: [
-                  [{ content: normalItems.length > 0 ? tableItem.label : sec.title, colSpan: tableHeaders.length, styles: { fillColor: [128, 0, 32], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5, halign: 'left' } }],
-                  tableHeaders.map(formatHeader)
+                  [{ content: normalItems.length > 0 ? tableItem.label : sec.title, colSpan: hasVerticalHeaders ? tableHeaders.length + 1 : tableHeaders.length, styles: { fillColor: [128, 0, 32], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5, halign: 'left' } }],
+                  hasVerticalHeaders 
+                    ? [(isGrafico ? 'RENDIMIENTO' : 'Concepto'), ...tableHeaders.map(formatHeader)]
+                    : tableHeaders.map(formatHeader)
                 ],
                 body: tableRows,
                 didDrawPage: function (_data: any) {
@@ -1472,13 +2584,102 @@ export const generarActaExtintoresPDF = async (
                     drawTableHeader(absolutePageNum);
                     drawnTablePages.add(absolutePageNum);
                   }
+                },
+                didParseCell: function (data: any) {
+                  if (isGrafico && data.section === 'body') {
+                    if (data.row.index === 2 || (data.row.raw && data.row.raw[0] === '100%')) {
+                      data.cell.styles.fontStyle = 'bold';
+                    }
+                  }
                 }
               });
               currentY = (doc as any).lastAutoTable.finalY || currentY;
+
+              try {
+                let caudalColIdx = tableHeaders.findIndex(h => {
+                  const norm = h.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                  return norm.includes('caudal') || norm.includes('flow') || norm.includes('m3') || norm.trim() === 'q' || norm.includes('(q)');
+                });
+                let presionColIdx = tableHeaders.findIndex(h => {
+                  const norm = h.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                  return norm.includes('presion') || norm.includes('pressure') || norm.includes('bar') || norm.trim() === 'p' || norm.trim() === 'h' || norm.includes('(p)') || norm.includes('(h)');
+                });
+
+                if (caudalColIdx === -1 && presionColIdx === -1) {
+                  caudalColIdx = tableHeaders.findIndex(h => h.toLowerCase().trim().startsWith('q'));
+                  presionColIdx = tableHeaders.findIndex(h => h.toLowerCase().trim().startsWith('p') || h.toLowerCase().trim().startsWith('h'));
+                }
+
+                if (caudalColIdx === -1 && presionColIdx !== -1) {
+                  caudalColIdx = presionColIdx === 0 ? 1 : 0;
+                } else if (presionColIdx === -1 && caudalColIdx !== -1) {
+                  presionColIdx = caudalColIdx === 0 ? 1 : 0;
+                } else if (caudalColIdx === -1 && presionColIdx === -1) {
+                  const firstColLower = (tableHeaders[0] || '').toLowerCase();
+                  if (firstColLower.includes('p') || firstColLower.includes('bar') || firstColLower.includes('h') || firstColLower.includes('pres')) {
+                    caudalColIdx = 1;
+                    presionColIdx = 0;
+                  } else {
+                    caudalColIdx = 0;
+                    presionColIdx = 1;
+                  }
+                }
+
+                if (caudalColIdx !== -1 && presionColIdx !== -1 && tableHeaders[caudalColIdx] !== undefined) {
+                  const rowCaudalIdx = hasVerticalHeaders ? caudalColIdx + 1 : caudalColIdx;
+                  const rowPresionIdx = hasVerticalHeaders ? presionColIdx + 1 : presionColIdx;
+
+                  const dataPoints: { x: number; y: number }[] = [];
+                  tableRows.forEach(row => {
+                    const cVal = parseFloat(String(row[rowCaudalIdx] || '').replace(',', '.'));
+                    const pVal = parseFloat(String(row[rowPresionIdx] || '').replace(',', '.'));
+                    if (!isNaN(cVal) && !isNaN(pVal)) {
+                      dataPoints.push({ x: cVal, y: pVal });
+                    }
+                  });
+
+                  if (isGrafico && dataPoints.length >= 2) {
+                    const chartHeight = 80;
+                    // Margen requerido: 15mm para los textos de nominales + chartHeight + 15mm espaciado
+                    if (currentY + chartHeight + 30 > 270) {
+                      doc.addPage();
+                      const newPageNum = (doc.internal as any).getNumberOfPages();
+                      if (!drawnTablePages.has(newPageNum)) {
+                        drawTableHeader(newPageNum);
+                        drawnTablePages.add(newPageNum);
+                      }
+                      currentY = 48;
+                    } else {
+                      currentY += 5; // Espacio inicial
+                    }
+
+                    // Dibujar los nominales de la sección 1.2 y 1.3
+                    doc.setFont("helvetica", "bold");
+                    doc.setFontSize(8);
+                    doc.setTextColor(60, 60, 60);
+
+                    const caudalStr = String(currentNominalCaudal || '-').replace('.', ',');
+                    const presionStr = String(currentNominalPresion || '-').replace('.', ',');
+
+                    doc.text(`1.2 Caudal nominal (m³/h.): ${caudalStr}`, 14, currentY + 4);
+                    doc.text(`1.3 Presión nominal (bar): ${presionStr}`, 14, currentY + 9);
+
+                    currentY += 15; // Espacio antes del gráfico (incluye el hueco de los textos)
+
+                    drawPumpCurveChart(doc, 14, currentY, 269, chartHeight, dataPoints, currentNominalCaudal, currentNominalPresion);
+                    currentY += chartHeight + 5;
+                  }
+                }
+              } catch (err) {
+                console.error("Error generating pump curve chart:", err);
+              }
             }
           }
         }
-        currentY += 6;
+        if (repetirHeaderPorEquipo) {
+          currentY = await renderAnomaliasParaEquipos([eq], currentY, true);
+        }
+        currentY += 2;
       }
       finalY = currentY;
 
@@ -1530,6 +2731,7 @@ export const generarActaExtintoresPDF = async (
             if (data.row.index === 1 && data.column.index < headersBase.length) {
                data.cell.styles.minCellHeight = 10;
                data.cell.styles.valign = 'middle';
+               data.cell.styles.halign = data.column.index === 1 ? 'left' : 'center';
             }
             if (data.column.index >= headersBase.length) {
                data.cell.text = [''];
@@ -1607,12 +2809,15 @@ export const generarActaExtintoresPDF = async (
                   }
                 }
               }
-              if (data.cell.raw === 'X') {
+              if (data.cell.raw === 'X' || (typeof data.cell.raw === 'string' && data.cell.raw.trim().toLowerCase() === 'false') || data.cell.raw === false) {
+                data.cell.text = ['X'];
+                data.cell.raw = 'X';
                 data.cell.styles.textColor = anomalyTextColor;
                 data.cell.styles.fontStyle = 'bold';
                 data.cell.styles.fontSize = 9;
-              } else if (data.cell.raw === 'TICK') {
+              } else if (data.cell.raw === 'TICK' || (typeof data.cell.raw === 'string' && data.cell.raw.trim().toLowerCase() === 'true') || data.cell.raw === true) {
                 data.cell.text = [''];
+                data.cell.raw = 'TICK';
               } else if (data.cell.raw !== '-') {
                 const rawStr = String(data.cell.raw || '').toUpperCase().trim();
                 if (rawStr.includes('NO CORRECTO') || rawStr.includes('NO CONFORME')) {
@@ -1695,7 +2900,7 @@ export const generarActaExtintoresPDF = async (
               doc.text(cleanLbl, x, y, { angle: 90 });
             }
           }
-          if (data.section === 'body' && data.column.index >= headersBase.length && data.cell.raw === 'TICK') {
+          if (data.section === 'body' && data.column.index >= headersBase.length && (data.cell.raw === 'TICK' || data.cell.raw === true || (typeof data.cell.raw === 'string' && data.cell.raw.trim().toLowerCase() === 'true'))) {
             const { x, y, width, height } = data.cell;
             const cx = x + width / 2;
             const cy = y + height / 2;
@@ -1710,8 +2915,9 @@ export const generarActaExtintoresPDF = async (
       finalY = (doc as any).lastAutoTable.finalY || currentY;
     }
 
-    finalY += 8;
-    const anomalias = equipos.filter(eq => equipoTieneAnomalias(eq));
+    if (!repetirHeaderPorEquipo) {
+      finalY += 8;
+    }
 
     // 1. Si es Casetas, pintar primero el listado de material obligatorio requerido
     if (esCasetas) {
@@ -1759,147 +2965,11 @@ export const generarActaExtintoresPDF = async (
       finalY += 3;
     }
 
-    // 2. Pintar el título "Anomalías y observaciones:" (debajo de la lista en casetas)
-    if (finalY > 275) {
-      doc.addPage();
-      const newPageNum = (doc.internal as any).getNumberOfPages();
-      if (!drawnTablePages.has(newPageNum)) {
-        drawTableHeader(newPageNum);
-        drawnTablePages.add(newPageNum);
-      }
-      finalY = 34;
+    // 2. Pintar el título "Anomalías y observaciones:"
+    if (!repetirHeaderPorEquipo) {
+      finalY = await renderAnomaliasParaEquipos(equipos, finalY, true);
     }
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(10);
-    doc.setTextColor(0, 0, 0);
-    doc.text('Anomalías y observaciones:', 14, finalY);
-    doc.setFont("helvetica", "normal");
-    finalY += 7;
-
-    if (anomalias.length === 0) {
-      doc.setTextColor(5, 150, 105);
-      doc.text('Sin anomalías. Los equipos se encuentran en correcto estado de funcionamiento.', 14, finalY);
-      doc.setTextColor(0, 0, 0);
-      finalY += 6;
-    } else {
-      doc.setTextColor(anomalyTextColor[0], anomalyTextColor[1], anomalyTextColor[2]);
-      for (const eq of anomalias) {
-        // Verificar si necesitamos una nueva página
-        if (finalY > 170) {
-          doc.addPage();
-          const newPageNum = (doc.internal as any).getNumberOfPages();
-          if (!drawnTablePages.has(newPageNum)) {
-            drawTableHeader(newPageNum);
-            drawnTablePages.add(newPageNum);
-          }
-          finalY = 34;
-          doc.setFont("helvetica", "bold");
-          doc.setFontSize(10);
-          doc.setTextColor(0, 0, 0);
-          doc.text('Anomalías y observaciones (continuación):', 14, finalY);
-          doc.setFont("helvetica", "normal");
-          finalY += 7;
-          doc.setTextColor(anomalyTextColor[0], anomalyTextColor[1], anomalyTextColor[2]);
-        }
-
-        // Buscar el valor del campo "Observaciones y anomalías del equipo" en los items del checklist
-        const notasItem = checkItemsDeSistema.find(item => {
-          const lbl = (item.label || '').toLowerCase();
-          return lbl.includes('notas') || lbl.includes('observaciones') || lbl.includes('anomal');
-        });
-        const notasValue = notasItem && eq[notasItem.key] ? String(eq[notasItem.key]).trim() : '';
-        
-        // Identificar qué comprobaciones específicas fallaron
-        const checksFallados = checkItems
-          .filter(item => eq[item.key] === false || eq[item.key] === 'false')
-          .map(item => item.label || '');
-        
-        let textAnomalia = '';
-        if (eq.anomalias && eq.anomalias.trim() !== '') {
-          textAnomalia = eq.anomalias;
-        } else {
-          const fallosStr = checksFallados.length > 0 ? `Falló en: ${checksFallados.join(', ')}.` : '';
-          const dateWarning = tieneFechaInvalida(eq) ? 'Fecha de fabricación/retimbrado caducada o próxima a caducar.' : '';
-          if (notasValue) {
-            textAnomalia = fallosStr 
-              ? `${fallosStr} Observaciones: ${notasValue}` 
-              : (dateWarning ? `${dateWarning} Observaciones: ${notasValue}` : notasValue);
-          } else {
-            textAnomalia = fallosStr || dateWarning || '';
-          }
-        }
-
-        if (textAnomalia.trim() === '') {
-          continue; // Si no hay anomalía real descrita, no pintar nada para este equipo
-        }
-
-        doc.text(`Nº ${eq.codigo} ${eq.placa ? `(${eq.placa})` : ''} — Anomalías: ${textAnomalia}`, 14, finalY);
-        finalY += 5.5;
-
-        // Si hay fotos, añadirlas todas (hasta 4 en la misma línea)
-        const currentFotos = (Array.isArray(eq.fotos) ? eq.fotos : (eq.foto && typeof eq.foto === 'string' && eq.foto.trim() !== '' ? [eq.foto] : [])).filter(Boolean);
-
-        if (currentFotos.length > 0) {
-          const fitImage = (imageData: string, xStart: number) => {
-            try {
-              const imgProps = doc.getImageProperties(imageData);
-              const maxWidth = 40;
-              const maxHeight = 30;
-              const imgRatio = imgProps.width / imgProps.height;
-              let imgWidth = maxWidth;
-              let imgHeight = imgWidth / imgRatio;
-              
-              if (imgHeight > maxHeight) {
-                imgHeight = maxHeight;
-                imgWidth = imgHeight * imgRatio;
-              }
-              
-              const xOffset = xStart + (maxWidth - imgWidth) / 2;
-              doc.addImage(imageData, 'JPEG', xOffset, finalY, imgWidth, imgHeight);
-              return imgHeight;
-            } catch (err) {
-              console.error("Error rendering image:", err);
-              return 0;
-            }
-          };
-
-          for (let idx = 0; idx < currentFotos.length; idx += 4) {
-            // Verificar si necesitamos espacio para la fila de imágenes
-            if (finalY > 150) {
-              doc.addPage();
-              const newPageNum = (doc.internal as any).getNumberOfPages();
-              if (!drawnTablePages.has(newPageNum)) {
-                drawTableHeader(newPageNum);
-                drawnTablePages.add(newPageNum);
-              }
-              finalY = 34;
-            }
-
-            let rowHeight = 0;
-            const imagesInRow = currentFotos.slice(idx, idx + 4);
-
-            for (let i = 0; i < imagesInRow.length; i++) {
-              const foto = imagesInRow[i];
-              try {
-                const imageData = await fetchImageToBase64(foto);
-                if (imageData && imageData.startsWith('data:')) {
-                  const xPos = 14 + i * (40 + 2);
-                  const h = fitImage(imageData, xPos);
-                  if (h > rowHeight) rowHeight = h;
-                }
-              } catch (err) {
-                console.error(`Error adding image ${i} in row to PDF:`, err);
-              }
-            }
-
-            finalY += (rowHeight > 0 ? rowHeight : 30) + 4;
-          }
-        }
-      }
-      doc.setTextColor(0, 0, 0);
-      finalY += 3;
-    }
-
+    
     return finalY + 5;
   };
 
@@ -1914,6 +2984,10 @@ export const generarActaExtintoresPDF = async (
       if (familyOrType.includes('CASETA') || familyOrType.includes('DOTACION') || familyOrType.includes('DOTACIÓN')) return 21;
       if (familyOrType.includes('HIDRANTE')) return 20;
       if (familyOrType.includes('BIE') || familyOrType.includes('BOCA')) return 30;
+      if (familyOrType.includes('ABASTECIMIENTO') || familyOrType.includes('SALA DE BOMBAS')) return 50;
+      if (familyOrType.includes('JOCKEY')) return 51;
+      if (familyOrType.includes('ELECTRICA') || familyOrType.includes('ELÉCTRICA')) return 52;
+      if (familyOrType.includes('GASOIL') || familyOrType.includes('MOTOBOMBA')) return 53;
       return 100;
     };
     const wA = getWeight(a);
@@ -1931,7 +3005,11 @@ export const generarActaExtintoresPDF = async (
     const equiposSistema = equiposTodos.filter(eq => eq.sistemaId === sist.id);
     if (equiposSistema.length === 0) continue;
 
-    const nombreSistema = sist.familia || sist.tipo || 'Sistema';
+    let nombreSistema = sist.nombre || sist.familia || sist.tipo || 'Sistema';
+    const sistNormMonox = nombreSistema.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    if ((sistNormMonox.includes('monoxido') || sistNormMonox.includes('monox')) && !nombreSistema.toUpperCase().includes('(CO)')) {
+      nombreSistema = `${nombreSistema} (CO)`;
+    }
     const esBie = nombreSistema.toUpperCase().includes('BIE') || nombreSistema.toUpperCase().includes('BOCA');
     
     // Buscar si hay una imagen personalizada guardada en localStorage o en el sistema
@@ -1955,6 +3033,26 @@ export const generarActaExtintoresPDF = async (
           const b = normalizarParaIcono(nombreB);
           if (a === b) return true;
           // Reglas específicas por tipo de sistema (orden importante: más específicas primero)
+          const isMonoxA = a.includes('monoxido') || a.includes('monox') || a.includes('(co)');
+          const isMonoxB = b.includes('monoxido') || b.includes('monox') || b.includes('(co)');
+          if (isMonoxA || isMonoxB) {
+            return isMonoxA && isMonoxB;
+          }
+          const isAspiracionA = a.includes('aspiraci') || a.includes('aspirac');
+          const isAspiracionB = b.includes('aspiraci') || b.includes('aspirac');
+          if (isAspiracionA || isAspiracionB) {
+            return isAspiracionA && isAspiracionB;
+          }
+          const isCocinaA = a.includes('cocina') || a.includes('campana');
+          const isCocinaB = b.includes('cocina') || b.includes('campana');
+          if (isCocinaA || isCocinaB) {
+            return isCocinaA && isCocinaB;
+          }
+          const isGasA = (a.includes('gas') || (a.includes('extinci') && !a.includes('extintor'))) && !isCocinaA;
+          const isGasB = (b.includes('gas') || (b.includes('extinci') && !b.includes('extintor'))) && !isCocinaB;
+          if (isGasA || isGasB) {
+            return isGasA && isGasB;
+          }
           if (a.includes('rociador') && b.includes('rociador')) return true;
           if (a.includes('deteccion') && b.includes('deteccion')) return true;
           if (a.includes('extintor') && b.includes('extintor')) return true;
@@ -1964,7 +3062,7 @@ export const generarActaExtintoresPDF = async (
           // para evitar falsos positivos con nombres cortos como "BIE", "RED", etc.
           if (b.length >= 5 && a.includes(b)) return true;
           if (a.length >= 5 && b.includes(a)) return true;
-          const stopWords = ['incendio', 'incendios', 'sistema', 'sistemas', 'proteccion', 'equipo', 'equipos', 'automatica', 'automatico', 'manual', 'manuales', 'red', 'puesto', 'control'];
+          const stopWords = ['incendio', 'incendios', 'sistema', 'sistemas', 'proteccion', 'equipo', 'equipos', 'automatica', 'automatico', 'manual', 'manuales', 'red', 'puesto', 'control', 'bomba', 'bombas', 'grupo', 'grupos', 'sala', 'salas'];
           const palabrasA = a.split(/\s+/).filter(w => w.length > 4 && !stopWords.includes(w));
           const palabrasB = b.split(/\s+/).filter(w => w.length > 4 && !stopWords.includes(w));
           return palabrasA.length > 0 && palabrasB.length > 0 && palabrasA.some(wa => palabrasB.some(wb => wa === wb));
@@ -1984,7 +3082,8 @@ export const generarActaExtintoresPDF = async (
       try {
         const base64Icon = await fetchImageToBase64(customIconUrl);
         if (base64Icon && base64Icon.startsWith('data:')) {
-          icono = base64Icon;
+          const { base64: iconoOpt } = await optimizarImagenParaPDF(base64Icon, 800, 0.75);
+          icono = await removeWhiteBackground(iconoOpt);
         }
       } catch (err) {
         console.error("Error loading custom system icon to base64:", err);
@@ -2070,7 +3169,7 @@ export const generarActaExtintoresPDF = async (
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8.5);
-  doc.setTextColor(60, 60, 60);
+  doc.setTextColor(0, 82, 204);
   const obsTexto = (centro?.comentariosTecnico || observacionesTecnico || centro?.observaciones || 'Sin observaciones adicionales por parte del técnico actuante.');
   const lines = doc.splitTextToSize(obsTexto, pageWidth - 40);
   doc.text(lines, 20, sigY);
@@ -2120,17 +3219,17 @@ export const generarActaExtintoresPDF = async (
     // Imagen de firma si existe
     if (i === 2 && firmaCliente) {
       try {
-        doc.addImage(firmaCliente, 'PNG', bx + 11, by + 10, blockW - 22, 16);
+        await dibujarFirmaAjustada(doc, firmaCliente, bx + 11, by + 10, blockW - 22, 16);
       } catch (_e) { }
     }
     if (i === 1 && firmaTecnico) {
       try {
-        doc.addImage(firmaTecnico, 'PNG', bx + 11, by + 10, blockW - 22, 16);
+        await dibujarFirmaAjustada(doc, firmaTecnico, bx + 11, by + 10, blockW - 22, 16);
       } catch (_e) { }
     }
     if (i === 0 && firmaIngenieroBase64) {
       try {
-        doc.addImage(firmaIngenieroBase64, 'PNG', bx + 11, by + 10, blockW - 22, 16);
+        await dibujarFirmaAjustada(doc, firmaIngenieroBase64, bx + 11, by + 10, blockW - 22, 16);
       } catch (_e) { }
     }
 
@@ -2200,7 +3299,7 @@ export const generarActaExtintoresPDFView = async (
   firmaCliente?: string,
   firmaTecnico?: string,
   nombreFirmante?: string,
-  checklistItemsPorSistema?: Record<string, { key: string; label: string; tipoRespuesta?: string }[]>,
+  checklistItemsPorSistema?: Record<string, any[]>,
   empresa?: Record<string, any>,
   observacionesTecnico?: string
 ): Promise<string> => {
@@ -2246,22 +3345,23 @@ export const generarAlbaranPDF = async (
   const pageWidth = doc.internal.pageSize.getWidth();
 
   // Datos de empresa: usar la empresa pasada como parámetro, o cargar de localStorage
-  const empData = empresa || cargaDatosEmpresa() || {};
+  const empData = normalizarDatosEmpresa(empresa, centro?.empresaId);
 
   // ── CABECERA: Logo + Datos empresa ──
   let headerY = 12;
 
   // Logo a la derecha - cargar desde URL si es necesario
   try {
-    const logoData = await fetchImageToBase64(empData?.logoUrl || localStorage.getItem('firecheck_db_logo'));
-    if (logoData) {
+    const logoRaw = await fetchImageToBase64(empData?.logoUrl);
+    if (logoRaw) {
+      const { base64: logoData, format } = await optimizarImagenParaPDF(logoRaw, 800, 0.75);
       const logoProps = doc.getImageProperties(logoData);
       const maxLogoWidth = 55;
       const maxLogoHeight = 18;
       const logoRatio = logoProps.width / logoProps.height;
       const logoWidth = Math.min(maxLogoWidth, maxLogoHeight * logoRatio);
       const logoHeight = logoWidth / logoRatio;
-      doc.addImage(logoData, 'PNG', pageWidth - 10 - logoWidth, headerY, logoWidth, logoHeight);
+      doc.addImage(logoData, format, pageWidth - 10 - logoWidth, headerY, logoWidth, logoHeight);
     }
   } catch (_e) { }
 
@@ -2428,7 +3528,7 @@ export const generarAlbaranPDF = async (
   doc.setLineWidth(0.2);
   doc.roundedRect(14, finalY + 3, 56, 30, 2, 2);
   if (firmaTecnico) {
-    doc.addImage(firmaTecnico, 'PNG', 15, finalY + 4, 54, 28);
+    await dibujarFirmaAjustada(doc, firmaTecnico, 15, finalY + 4, 54, 28);
   }
   doc.text(`Nombre: ${tecnicoNombre || 'N/A'}`, 14, finalY + 37);
 
@@ -2438,7 +3538,7 @@ export const generarAlbaranPDF = async (
   doc.setLineWidth(0.2);
   doc.roundedRect(80, finalY + 3, 56, 30, 2, 2);
   if (firmaCliente) {
-    doc.addImage(firmaCliente, 'PNG', 81, finalY + 4, 54, 28);
+    await dibujarFirmaAjustada(doc, firmaCliente, 81, finalY + 4, 54, 28);
   }
   doc.text(`Nombre: ${nombreFirmante || 'N/A'}`, 80, finalY + 37);
 
@@ -2452,8 +3552,8 @@ export const generarAlbaranPDF = async (
     doc.setLineWidth(0.2);
     doc.line(14, pageHeight - 18, pageWidth - 14, pageHeight - 18);
     // Línea 1: Nombre empresa en negrita + CIF + RASIC
-    const rasic = empData?.rasic ? `  |  RASIC: ${empData.rasic}` : '';
-    const cifText = empData?.cif ? `CIF: ${empData.cif}` : '';
+    const rasic = empData?.rasic && empData.rasic !== '-' ? `  |  RASIC: ${empData.rasic}` : '';
+    const cifText = empData?.cif && empData.cif !== '-' ? `CIF: ${empData.cif}` : '';
     doc.setFontSize(7.5);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(60, 60, 60);
@@ -2466,8 +3566,8 @@ export const generarAlbaranPDF = async (
     const cifRasic = `  ${cifText}${rasic}`;
     doc.text(cifRasic, 14 + nombreWidth, pageHeight - 13);
     // Línea 2: Dirección y teléfono
-    const dirParts = [empData?.direccion, empData?.localidad, empData?.provincia, empData?.codigoPostal].filter(Boolean).join(', ');
-    const telPart = empData?.telefono ? `  |  Tel: ${empData.telefono}` : '';
+    const dirParts = [empData?.direccion, empData?.poblacion, empData?.provincia, empData?.cp].filter(p => p && p !== '-').join(', ');
+    const telPart = empData?.telefono && empData.telefono !== '-' ? `  |  Tel: ${empData.telefono}` : '';
     doc.setFontSize(7);
     doc.text(`${dirParts}${telPart}`, 14, pageHeight - 8);
   }
@@ -2516,39 +3616,57 @@ export const generarCertificadoPDF = async (
 ) => {
   const doc = new jsPDF('p', 'mm', 'a4');
   const pageWidth = doc.internal.pageSize.getWidth(); // 210 mm
-  const empData = empresa || cargaDatosEmpresa() || {};
+  const empData = normalizarDatosEmpresa(empresa, centro?.empresaId || parte?.empresaId);
   const margen = 14;
 
-  // ── CABECERA: TÍTULO CENTRADO ──
-  let y = 18;
+  const tipoCert = parte?.tipoCertificado || 'revision';
+  const getTituloPorTipo = (t: string) => {
+    if (parte?.tituloCertificado && parte.tituloCertificado.trim() !== '') {
+      return parte.tituloCertificado.toUpperCase();
+    }
+    switch (t) {
+      case 'instalacion': return 'CERTIFICADO DE INSTALACIÓN';
+      case 'reparacion': return 'CERTIFICADO DE REPARACIÓN';
+      case 'puesta_en_marcha': return 'CERTIFICADO DE PUESTA EN MARCHA';
+      case 'obligacion_salarial': return 'CERTIFICADO DE OBLIGACIÓN SALARIAL';
+      case 'generico': return 'CERTIFICADO OFICIAL';
+      default: return 'CERTIFICADO DE REVISIÓN';
+    }
+  };
+  const tituloHeader = getTituloPorTipo(tipoCert);
+  const subtituloHeader = parte?.subtitulo || `Instalaciones y sistemas de protección contra incendios - ${parte?.numeroMantenimiento || parte?.id || '—'}`;
+
+  // ── CABECERA: TÍTULO CENTRADO (10 ptos más arriba) ──
+  let y = 8;
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(16);
   doc.setTextColor(40, 40, 40);
-  doc.text('CERTIFICADO DE REVISIÓN', pageWidth / 2, y + 3, { align: 'center' });
+  doc.text(tituloHeader, pageWidth / 2, y + 3, { align: 'center' });
 
   // Subtítulo y Nº certificado en una línea
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
   doc.setTextColor(100, 100, 100);
-  doc.text(`Revisión de instalaciones y sistemas de protección contra incendios - ${parte?.numeroMantenimiento || parte?.id || '—'}`, pageWidth / 2, y + 9, { align: 'center' });
+  doc.text(subtituloHeader, pageWidth / 2, y + 9, { align: 'center' });
 
   // Línea decorativa bajo la cabecera
-  y += 16;
+  y += 13;
   doc.setDrawColor(128, 0, 32);
   doc.setLineWidth(0.8);
   doc.line(margen, y, pageWidth - margen, y);
   doc.setLineWidth(0.2);
   doc.line(margen, y + 1.5, pageWidth - margen, y + 1.5);
-  y += 8;
+  y += 5;
 
   // ── DATOS DE LA EMPRESA MANTENEDORA (tarjeta con logo a la derecha) ──
   const empNombre = empData?.nombre || 'ABANFOC S.L.';
-  const empCif = empData?.cif || 'B16794679';
-  const empDir = empData?.direccion || 'C/ America 16B Ático';
-  const empLoc = `${empData?.poblacion || 'Sta. Coloma de Gramanet'}, ${empData?.provincia || 'Barcelona'} ${empData?.cp || '08921'}`;
-  const empTel = empData?.telefono || '651 019 229';
-  const empMail = empData?.correo || empData?.email || 'info@abanfoc.com';
-  const empRasic = empData?.rasic || '106001687';
+  const empCif = empData?.cif || '-';
+  const empDir = empData?.direccion || '-';
+  const empLocParts = [empData?.poblacion, empData?.provincia, empData?.cp].filter(p => p && p !== '-');
+  const empLoc = empLocParts.length > 0 ? empLocParts.join(', ') : '-';
+  const empTel = empData?.telefono || '-';
+  const empMail = empData?.correo || empData?.email || '-';
+  const empRasic = empData?.rasic || '-';
 
   const cardEmpH = 39;
   doc.setDrawColor(220, 220, 220);
@@ -2594,19 +3712,20 @@ export const generarCertificadoPDF = async (
 
   // Logo a la derecha dentro de la tarjeta
   try {
-    const logoData = await fetchImageToBase64(empData?.logoUrl || localStorage.getItem('firecheck_db_logo'));
-    if (logoData) {
+    const logoRaw = await fetchImageToBase64(empData?.logoUrl);
+    if (logoRaw) {
+      const { base64: logoData, format } = await optimizarImagenParaPDF(logoRaw, 800, 0.75);
       const logoProps = doc.getImageProperties(logoData);
       const maxLogoWidth = 70;
       const maxLogoHeight = 15;
       const logoRatio = logoProps.width / logoProps.height;
       const logoWidth = Math.min(maxLogoWidth, maxLogoHeight * logoRatio);
       const logoHeight = logoWidth / logoRatio;
-      doc.addImage(logoData, 'PNG', pageWidth - margen - 4 - logoWidth, y + 6, logoWidth, logoHeight);
+      doc.addImage(logoData, format, pageWidth - margen - 4 - logoWidth, y + 6, logoWidth, logoHeight);
     }
   } catch (e) { console.error("Error loading logo for Certificado PDF:", e); }
 
-  y += cardEmpH + 8;
+  y += cardEmpH + 4;
 
   // ── DATOS DE LA INSTALACIÓN (tarjeta) ──
   const cardInstalacionH = 32;
@@ -2650,7 +3769,7 @@ export const generarCertificadoPDF = async (
     doc.text(value, col + 28, ry, { maxWidth: i < 4 ? 60 : 50 });
   });
 
-  y += cardInstalacionH + 8;
+  y += cardInstalacionH + 4;
 
   // ── SISTEMAS Y EQUIPOS REVISADOS ──
   if (sistemas && sistemas.length > 0 && equiposTodos && equiposTodos.length > 0) {
@@ -2677,7 +3796,8 @@ export const generarCertificadoPDF = async (
       eqs.forEach(eq => {
         let fallbackName = 'Equipo';
         const nsUpper = nombreSistema.toUpperCase();
-        if (nsUpper.includes('EXTINTOR')) {
+        const esExtintor = nsUpper.includes('EXTINTOR');
+        if (esExtintor) {
           fallbackName = 'Extintor';
         } else if (nsUpper.includes('BIE') || nsUpper.includes('BOCA')) {
           fallbackName = 'BIE';
@@ -2691,7 +3811,16 @@ export const generarCertificadoPDF = async (
         let detectedAgente = '';
         let detectedCapacidad = '';
         for (const k of Object.keys(eq)) {
-          if (k.toLowerCase() === 'id' || k.toLowerCase() === 'centroid' || k.toLowerCase() === 'sistemaid') continue;
+          const kLower = k.toLowerCase();
+          if (
+            kLower === 'id' ||
+            kLower === 'centroid' ||
+            kLower === 'sistemaid' ||
+            kLower === 'nombre' ||
+            kLower === 'clase' ||
+            kLower === 'codigo' ||
+            kLower === 'ubicacion'
+          ) continue;
           const val = eq[k];
           if (typeof val === 'string') {
             const valUpper = val.toUpperCase().trim();
@@ -2715,34 +3844,46 @@ export const generarCertificadoPDF = async (
           }
         }
 
-        const valName = (val: any) => typeof val === 'string' && val.trim() !== '' && val.toLowerCase() !== 'true' && val.toLowerCase() !== 'false' ? val.trim() : null;
-        const tipoEquipo = valName(eq.nombre) || valName(eq.clase) || valName(eq.agente) || valName(eq.tipo) || valName(eq.marca) || detectedAgente || fallbackName;
+        const valName = (val: any) => typeof val === 'string' && val.trim() !== '' && val.toLowerCase() !== 'true' && val.toLowerCase() !== 'false' ? val.trim() : (typeof val === 'number' && !isNaN(val) ? String(val) : null);
+        
+        let tipoVal = valName(eq.tipo) || valName(eq.agente) || detectedAgente || valName(eq.nombre) || valName(eq.clase) || valName(eq.marca) || fallbackName;
 
-        let capacidad = '';
-        if (eq.capacidad && typeof eq.capacidad === 'string' && eq.capacidad.toLowerCase() !== 'true' && eq.capacidad.toLowerCase() !== 'false') {
-          capacidad = eq.capacidad;
-        } else if (eq.peso && typeof eq.peso === 'string' && eq.peso.toLowerCase() !== 'true' && eq.peso.toLowerCase() !== 'false') {
-          capacidad = eq.peso;
-        } else {
-          capacidad = detectedCapacidad;
+        let cleanTipo = tipoVal.trim();
+        if (esExtintor) {
+          cleanTipo = cleanTipo.replace(/\d+\s*(kg|l|kilos|litros)\.?/gi, '').replace(/\s+/g, ' ').trim();
+          cleanTipo = cleanTipo.replace(/\b(kg|l|kilos|litros)\b/gi, '').replace(/\s+/g, ' ').trim();
+          
+          const ctUpper = cleanTipo.toUpperCase();
+          if (ctUpper.includes('POLVO') || ctUpper.includes('ABC')) {
+            cleanTipo = 'Polvo ABC';
+          } else if (ctUpper.includes('CO2') || ctUpper.includes('ANHIDRIDO')) {
+            cleanTipo = 'CO2';
+          } else if (ctUpper.includes('AGUA')) {
+            cleanTipo = 'Agua';
+          } else if (ctUpper.includes('ESPUMA')) {
+            cleanTipo = 'Espuma';
+          } else if (!cleanTipo || cleanTipo.toLowerCase() === 'extintor') {
+            cleanTipo = detectedAgente || 'Polvo ABC';
+          }
         }
 
-        // Normalizar tipo y capacidad para agrupar exactamente igual
-        let cleanTipo = tipoEquipo.trim();
-        let cleanCap = capacidad.trim();
+        let capVal = '';
+        if (eq.capacidad && typeof eq.capacidad === 'string' && eq.capacidad.toLowerCase() !== 'true' && eq.capacidad.toLowerCase() !== 'false') {
+          capVal = eq.capacidad;
+        } else if (eq.peso && typeof eq.peso === 'string' && eq.peso.toLowerCase() !== 'true' && eq.peso.toLowerCase() !== 'false') {
+          capVal = eq.peso;
+        } else {
+          capVal = detectedCapacidad;
+        }
+        let cleanCap = (capVal || '').trim();
 
-        // Evitar duplicar la capacidad en el tipo
         if (cleanCap && cleanTipo.toLowerCase().includes(cleanCap.toLowerCase())) {
           cleanCap = '';
         }
 
         let clave = cleanCap ? `${cleanTipo} ${cleanCap}.` : `${cleanTipo}.`;
-        
-        // Unificar formato de "kg" y "l" (casing y puntos) para evitar separaciones
         clave = clave.replace(/\s+kg\.?/gi, ' Kg.');
         clave = clave.replace(/\s+l\.?/gi, ' L.');
-        
-        // Limpiar puntos duplicados
         clave = clave.replace(/\.\.+$/, '.');
 
         conteoPorTipo[clave] = (conteoPorTipo[clave] || 0) + 1;
@@ -2759,18 +3900,32 @@ export const generarCertificadoPDF = async (
       };
     });
 
-    // Agrupar en bloques de hasta 8 sistemas (4 por columna)
-    const blocks: { col0: SystemWithHeight[]; col1: SystemWithHeight[]; height: number }[] = [];
-    let cardSistemasH = 12; // Margen superior y título
-    for (let b = 0; b < systemsWithHeight.length; b += 8) {
-      const col0 = systemsWithHeight.slice(b, b + 4);
-      const col1 = systemsWithHeight.slice(b + 4, b + 8);
-      const h0 = col0.reduce((sum, s) => sum + s.height, 0);
-      const h1 = col1.reduce((sum, s) => sum + s.height, 0);
-      const maxHeight = Math.max(h0, h1);
-      blocks.push({ col0, col1, height: maxHeight });
-      cardSistemasH += maxHeight;
-    }
+    // Ordenar de forma estricta: Extintores -> BIEs -> Detección (columna izquierda), Resto a la derecha
+    const sistemasExtintores: SystemWithHeight[] = [];
+    const sistemasBies: SystemWithHeight[] = [];
+    const sistemasDeteccion: SystemWithHeight[] = [];
+    const sistemasResto: SystemWithHeight[] = [];
+
+    systemsWithHeight.forEach(s => {
+      const nsUpper = s.nombreSistema.toUpperCase();
+      if (nsUpper.includes('EXTINTOR')) {
+        sistemasExtintores.push(s);
+      } else if (nsUpper.includes('BIE') || nsUpper.includes('BOCA')) {
+        sistemasBies.push(s);
+      } else if (nsUpper.includes('DETEC') || nsUpper.includes('HUMO') || nsUpper.includes('ASPIRAC')) {
+        sistemasDeteccion.push(s);
+      } else {
+        sistemasResto.push(s);
+      }
+    });
+
+    const col0: SystemWithHeight[] = [...sistemasExtintores, ...sistemasBies, ...sistemasDeteccion];
+    const col1: SystemWithHeight[] = sistemasResto;
+
+    const h0 = col0.reduce((sum, s) => sum + s.height, 0);
+    const h1 = col1.reduce((sum, s) => sum + s.height, 0);
+    const maxHeight = Math.max(h0, h1, 10);
+    const cardSistemasH = maxHeight + 10;
 
     doc.setDrawColor(220, 220, 220);
     doc.setFillColor(250, 251, 252);
@@ -2782,55 +3937,53 @@ export const generarCertificadoPDF = async (
     doc.text('SISTEMAS Y EQUIPOS REVISADOS', pageWidth / 2, y + 6, { align: 'center' });
 
     let currentBlockY = y + 11;
-    blocks.forEach(block => {
-      // Dibujar Columna 0 (Izquierda)
-      let col0_Y = currentBlockY;
-      block.col0.forEach(s => {
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(8);
-        doc.setTextColor(50, 70, 120);
-        doc.text(s.nombreSistema, margen + 8, col0_Y);
-        col0_Y += 5;
 
-        Object.entries(s.conteoPorTipo).forEach(([clave, cantidad]) => {
-          doc.setFont('helvetica', 'normal');
-          doc.setFontSize(7.5);
-          doc.setTextColor(80, 80, 80);
-          doc.text(`• ${clave} — ${cantidad} unidad${cantidad > 1 ? 'es' : ''}`, margen + 14, col0_Y, { maxWidth: (pageWidth / 2) - margen - 12 });
-          col0_Y += 4.5;
-        });
-        col0_Y += 2;
+    // Dibujar Columna 0 (Izquierda: Extintores y BIEs)
+    let col0_Y = currentBlockY;
+    col0.forEach(s => {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+      doc.setTextColor(50, 70, 120);
+      doc.text(s.nombreSistema, margen + 8, col0_Y);
+      col0_Y += 5;
+
+      Object.entries(s.conteoPorTipo).forEach(([clave, cantidad]) => {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7.5);
+        doc.setTextColor(80, 80, 80);
+        doc.text(`• ${clave} — ${cantidad} unidad${cantidad > 1 ? 'es' : ''}`, margen + 14, col0_Y, { maxWidth: (pageWidth / 2) - margen - 12 });
+        col0_Y += 4.5;
       });
-
-      // Dibujar Columna 1 (Derecha)
-      let col1_Y = currentBlockY;
-      block.col1.forEach(s => {
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(8);
-        doc.setTextColor(50, 70, 120);
-        doc.text(s.nombreSistema, pageWidth / 2 + 4, col1_Y);
-        col1_Y += 5;
-
-        Object.entries(s.conteoPorTipo).forEach(([clave, cantidad]) => {
-          doc.setFont('helvetica', 'normal');
-          doc.setFontSize(7.5);
-          doc.setTextColor(80, 80, 80);
-          doc.text(`• ${clave} — ${cantidad} unidad${cantidad > 1 ? 'es' : ''}`, pageWidth / 2 + 10, col1_Y, { maxWidth: (pageWidth / 2) - margen - 12 });
-          col1_Y += 4.5;
-        });
-        col1_Y += 2;
-      });
-
-      currentBlockY += block.height;
+      col0_Y += 2;
     });
 
-    y += cardSistemasH + 8;
+    // Dibujar Columna 1 (Derecha: Resto de equipos)
+    let col1_Y = currentBlockY;
+    col1.forEach(s => {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+      doc.setTextColor(50, 70, 120);
+      doc.text(s.nombreSistema, pageWidth / 2 + 4, col1_Y);
+      col1_Y += 5;
+
+      Object.entries(s.conteoPorTipo).forEach(([clave, cantidad]) => {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7.5);
+        doc.setTextColor(80, 80, 80);
+        doc.text(`• ${clave} — ${cantidad} unidad${cantidad > 1 ? 'es' : ''}`, pageWidth / 2 + 10, col1_Y, { maxWidth: (pageWidth / 2) - margen - 12 });
+        col1_Y += 4.5;
+      });
+      col1_Y += 2;
+    });
+
+    y += cardSistemasH + 4;
   }
 
   // ── RESULTADO DE LA REVISIÓN ──
-  // Confiamos en el estadoCertificado calculado en RevisionChecklist (ya tiene la lógica correcta)
-  const rawEstado = (estadoCertificado || 'Favorable').toLowerCase();
-  const esNegativo = rawEstado.includes('no favorable') || rawEstado.includes('negativo') || rawEstado.includes('no favorabl');
+  // Comprobar si hay anomalías reales en los equipos ("NO CORRECTO", checks en false, o casilla de observaciones en rojo)
+  const hayAnomaliasReal = Array.isArray(equiposTodos) && equiposTodos.some(eq => equipoTieneAnomalias(eq));
+  const rawEstado = (estadoCertificado || parte?.estadoCertificado || parte?.estado || '').toLowerCase();
+  const esNegativo = hayAnomaliasReal || rawEstado.includes('no favorable') || rawEstado.includes('negativo') || rawEstado.includes('no favorabl') || rawEstado.includes('desfavorable') || rawEstado.includes('anomal');
   const estadoLimpio = esNegativo ? 'NO favorable' : 'Favorable';
 
   // Texto de certificación formal
@@ -2841,11 +3994,11 @@ export const generarCertificadoPDF = async (
   const nifTecnico = empData?.ingenieroNif || empData?.nifTecnico || 'N.I.F. no especificado';
   const numTecnico = empData?.ingenieroColegiado || empData?.numTecnicoTitulado || 'N.º de colegiado no especificado';
 
-  const textoCertificacion = 
+  const textoCertificacion = parte?.textoCertificado || parte?.observaciones ||
     `Don ${tecnicoTitulado}, con N.I.F. ${nifTecnico}, Técnico titulado n.º ${numTecnico} y en calidad de responsable técnico ` +
     `de la empresa instaladora y mantenedora de sistemas de protección contra incendios ${empNombre} con N.I.F. ` +
     `${empCif}, autorizada por la Generalitat de Catalunya con n.º de RASIC ${empData?.rasic || '106001687'}, ` +
-    `CERTIFICA que se ha efectuado la revisión de los equipos y sistemas contra incendios en "${nombreCentro}" ` +
+    `CERTIFICA que se ha efectuado la revisión/actuación correspondiente en las instalaciones de "${nombreCentro}" ` +
     `según REAL DECRETO 513/2017 del Reglamento de Instalaciones de Protección Contra Incendios.`;
 
   // Establecer el formato de la fuente antes de medir con splitTextToSize para que el wrap sea correcto
@@ -2886,7 +4039,7 @@ export const generarCertificadoPDF = async (
   y += cardResultH + 8;
 
   // ── FIRMAS (Certificado) ──
-  const firmaIngenieroBase64 = await fetchImageToBase64(empData?.ingenieroFirmaUrl);
+  const firmaIngenieroBase64 = await fetchImageToBase64(empData?.ingenieroFirmaUrl || empData?.firmaIngenieroBase64 || empData?.firmaUrl);
   if (firmaIngenieroBase64 || _firmaTecnico || _firmaCliente) {
     const firmasY = y;
     doc.setFont("helvetica", "bold");
@@ -2916,21 +4069,21 @@ export const generarCertificadoPDF = async (
     doc.setDrawColor(220, 220, 220);
     doc.roundedRect(20, firmasY + 3, 50, 25, 2, 2);
     if (firmaIngenieroBase64) {
-      doc.addImage(firmaIngenieroBase64, 'PNG', 22, firmasY + 4, 46, 23);
+      await dibujarFirmaAjustada(doc, firmaIngenieroBase64, 22, firmasY + 4, 46, 23);
     }
     
     // Firma Técnico
     doc.text('Técnico mantenedor', 80, firmasY);
     doc.roundedRect(80, firmasY + 3, 50, 25, 2, 2);
     if (_firmaTecnico) {
-      doc.addImage(_firmaTecnico, 'PNG', 82, firmasY + 4, 46, 23);
+      await dibujarFirmaAjustada(doc, _firmaTecnico, 82, firmasY + 4, 46, 23);
     }
     
     // Firma Cliente
     doc.text('Conformidad Cliente', 140, firmasY);
     doc.roundedRect(140, firmasY + 3, 50, 25, 2, 2);
     if (_firmaCliente) {
-      doc.addImage(_firmaCliente, 'PNG', 142, firmasY + 4, 46, 23);
+      await dibujarFirmaAjustada(doc, _firmaCliente, 142, firmasY + 4, 46, 23);
     }
 
     // Nombres y cargos debajo de las firmas
@@ -3031,12 +4184,13 @@ export const generarPresupuestoPDF = async (
     iva: number;
     total: number;
     notas?: string;
-  }
+  },
+  empresa?: Record<string, any>
 ) => {
   const doc = new jsPDF('p', 'mm', 'a4');
   const pageWidth = doc.internal.pageSize.getWidth();
   const margen = 20;
-  const empData = cargaDatosEmpresa();
+  const empData = normalizarDatosEmpresa(empresa || cargaDatosEmpresa());
 
   doc.setDrawColor(200, 200, 200);
   doc.setLineWidth(0.3);
@@ -3060,10 +4214,11 @@ export const generarPresupuestoPDF = async (
   y += 8;
 
   const empNombre = empData?.nombre || 'ABANFOC S.L.';
-  const empCif = empData?.cif || 'B16794679';
-  const empDir = empData?.direccion || 'C/ America 16B Ático';
-  const empLoc = `${empData?.poblacion || 'Sta. Coloma de Gramanet'}, ${empData?.provincia || 'Barcelona'} ${empData?.cp || '08921'}`;
-  const empTel = empData?.telefono || '651 019 229';
+  const empCif = empData?.cif || '-';
+  const empDir = empData?.direccion || '-';
+  const empLocParts = [empData?.poblacion, empData?.provincia, empData?.cp].filter(p => p && p !== '-');
+  const empLoc = empLocParts.length > 0 ? empLocParts.join(', ') : '-';
+  const empTel = empData?.telefono || '-';
 
   // Tarjeta de empresa más grande con logo incluido
   const cardEmpH = 32;
@@ -3073,28 +4228,21 @@ export const generarPresupuestoPDF = async (
   
   // Logo dentro de la tarjeta (esquina superior derecha)
   try {
-    // Intentar obtener el logo de varias fuentes
-    let logoData: string | null = null;
-    
-    // 1º Intentar desde localStorage directamente (suele ser base64)
-    const storedLogo = localStorage.getItem('firecheck_db_logo');
-    if (storedLogo) {
-      logoData = storedLogo;
-    }
-    
-    // 2º Intentar desde datos de empresa
-    if (!logoData && empData?.logoUrl) {
-      logoData = await fetchImageToBase64(empData.logoUrl);
+    let logoData: string | null = empData?.logoUrl ? await fetchImageToBase64(empData.logoUrl) : null;
+    if (!logoData) {
+      const storedLogo = localStorage.getItem('firecheck_db_logo');
+      if (storedLogo) logoData = storedLogo;
     }
     
     if (logoData) {
-      const logoProps = doc.getImageProperties(logoData);
+      const { base64: logoDataOpt, format } = await optimizarImagenParaPDF(logoData, 800, 0.75);
+      const logoProps = doc.getImageProperties(logoDataOpt);
       const maxLogoWidth = 55;
       const maxLogoHeight = 14;
       const logoRatio = logoProps.width / logoProps.height;
       const logoWidth = Math.min(maxLogoWidth, maxLogoHeight * logoRatio);
       const logoHeight = logoWidth / logoRatio;
-      doc.addImage(logoData, 'PNG', pageWidth - margen - 4 - logoWidth, y + 3, logoWidth, logoHeight);
+      doc.addImage(logoDataOpt, format, pageWidth - margen - 4 - logoWidth, y + 3, logoWidth, logoHeight);
     }
   } catch (e) { console.error('Error cargando logo en presupuesto:', e); }
 
@@ -3107,7 +4255,7 @@ export const generarPresupuestoPDF = async (
   doc.setTextColor(80, 80, 80);
   doc.text(`${empNombre}  |  CIF: ${empCif}`, margen + 4, y + 13);
   doc.text(`${empDir}  |  ${empLoc}`, margen + 4, y + 19);
-  doc.text(`Tel: ${empTel}  |  RASIC: ${empData?.rasic || '106001687'}`, margen + 4, y + 25);
+  doc.text(`Tel: ${empTel}  |  RASIC: ${empData?.rasic || '-'}`, margen + 4, y + 25);
   y += cardEmpH + 8;
 
   doc.setDrawColor(220, 220, 220);
@@ -3147,7 +4295,8 @@ export const generarPresupuestoPDF = async (
         try {
           const base64 = await fetchImageToBase64(l.fotoUrl);
           if (base64) {
-            imagenesCargadas[(presupuesto.lineas || []).indexOf(l)] = base64;
+            const { base64: base64Opt } = await optimizarImagenParaPDF(base64, 800, 0.75);
+            imagenesCargadas[(presupuesto.lineas || []).indexOf(l)] = base64Opt;
           }
         } catch (e) {}
       }
