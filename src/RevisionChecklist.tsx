@@ -798,7 +798,14 @@ export default function RevisionChecklist() {
                 const itemsToUseForAuto = checklistItemsPorSistema[eq.sistemaId] || getItemsToUse(eq.sistemaId) || [];
                 const resolvedLabel = checkLabel || itemsToUseForAuto.find(i => i.key === checkKey)?.label || null;
 
-                if (resolvedLabel && checkKey !== 'anomalias' && checkKey !== 'observaciones' && checkKey !== 'notas') {
+                const isFieldNotes = checkKey === 'anomalias' || checkKey === 'observaciones' || checkKey === 'notas' ||
+                    (resolvedLabel && (
+                        resolvedLabel.toLowerCase().includes('anomal') || 
+                        resolvedLabel.toLowerCase().includes('observac') || 
+                        resolvedLabel.toLowerCase().includes('nota')
+                    ));
+
+                if (resolvedLabel && !isFieldNotes) {
                     const valStr = typeof value === 'string' ? value.toUpperCase().trim() : '';
                     const isFailed = (typeof value === 'boolean' && value === false) ||
                                      (valStr === 'FALSE') ||
