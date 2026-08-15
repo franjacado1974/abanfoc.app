@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle2, XCircle, X, Pencil, Trash2 } from 'lucide-react';
+import { CheckCircle2, XCircle, Pencil, Trash2 } from 'lucide-react';
 import type { CentroSistema, EquipoInstalado, Parte } from '../../Centros';
 import { updateEquipoInstalado, updateParte as updateParteFirestore, uploadFile, type ChecklistItem } from '../../firebase';
 import TableInput from '../TableInput';
@@ -20,7 +20,15 @@ interface Props {
     handleCheckChange: (equipoId: string, itemKey: string, value: any, itemName?: string) => void;
     getCheckStats: (eq: EquipoInstalado) => { ok: number; fail: number; pending: number };
     getEquipoSyncStatus?: (equipoId: string) => string;
+    handleCopiarEquipo?: (eqToCopy: EquipoInstalado) => void | Promise<void>;
 }
+
+const esCampoUbicacion = (label?: string, key?: string) => {
+    const lbl = (label || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const k = (key || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    return lbl.includes('ubicacion') || lbl.includes('cobertura') || lbl.includes('planta') || lbl.includes('nivel') ||
+           k.includes('ubicacion') || k.includes('cobertura') || k.includes('planta') || k.includes('nivel');
+};
 
 const esUbicacionMarcaModelo = (label?: string, key?: string) => {
     const lbl = (label || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -44,7 +52,8 @@ export default function SistemaBies({
     handleDeleteEquipo,
     handleCheckChange,
     getCheckStats,
-    getEquipoSyncStatus
+    getEquipoSyncStatus,
+    handleCopiarEquipo
 }: Props) {
     return (
         <>
@@ -137,7 +146,7 @@ export default function SistemaBies({
                                                         }
 
                                                         return (
-                                                            <div key={eq.id} className={`rounded-xl border transition-all ${algunCheckRojo ? 'bg-red-50/30 border-red-200' : 'bg-slate-50 border-slate-150'}`}>
+                                                            <div key={eq.id} id={`equipo-${eq.id}`} className={`scroll-mt-44 rounded-xl border transition-all ${algunCheckRojo ? 'bg-red-50/30 border-red-200' : 'bg-slate-50 border-slate-150'}`}>
                                                                 <div className="px-4 py-3 flex flex-wrap items-center justify-between gap-2">
                                                                     <div className="flex flex-wrap items-center gap-2 min-w-0">
                                                                         <span className="px-3 py-1 bg-black text-white text-sm font-mono font-bold rounded-lg shadow-md min-w-[36px] text-center shrink-0">
@@ -327,19 +336,22 @@ export default function SistemaBies({
                                                                         const labelLower = (item.label || '').toLowerCase().replace(/[áéíóú]/g, (c) => ({'á':'a','é':'e','í':'i','ó':'o','ú':'u'})[c] || c);
                                                                         const esNumeroOrden = labelLower.includes('orden');
                                                                         const esUCase = esUbicacionMarcaModelo(item.label, item.key);
+                                                                        const esUbic = esCampoUbicacion(item.label, item.key);
+                                                                        const textoVal = esNumeroOrden ? (eq.codigo || '') : (typeof val === 'string' ? val : '');
+                                                                        const esExcedido40 = esUbic && typeof textoVal === 'string' && textoVal.length > 40;
                                                                         const placeholderTexto = labelLower.includes('referencia') && labelLower.includes('instalacion')
                                                                             ? 'Ejemplo: Area general o zona'
                                                                             : '...';
                                                                         return (
                                                                             <input
                                                                                 type="text"
-                                                                                value={esNumeroOrden ? (eq.codigo || '') : (typeof val === 'string' ? (esUCase ? val.toUpperCase() : val) : '')}
+                                                                                value={esNumeroOrden ? (eq.codigo || '') : (typeof val === 'string' ? val : '')}
                                                                                 onChange={(e) => {
                                                                                     if (!esNumeroOrden) {
-                                                                                        handleCheckChange(eq.id, item.key, esUCase ? e.target.value.toUpperCase() : e.target.value);
+                                                                                        handleCheckChange(eq.id, item.key, e.target.value);
                                                                                     }
                                                                                 }}
-                                                                                className={`w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${esNumeroOrden ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''} ${esUCase ? 'uppercase' : ''}`}
+                                                                                className={`w-full px-2 py-1.5 rounded-lg text-xs outline-none transition-colors ${esExcedido40 ? 'bg-red-50 border-2 border-red-500 text-red-700 font-bold focus:border-red-600 focus:ring-2 focus:ring-red-500/20' : 'bg-white border border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20'} ${esNumeroOrden ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''} ${esUCase ? 'uppercase' : ''}`}
                                                                                 placeholder={placeholderTexto}
                                                                                 readOnly={esNumeroOrden}
                                                                             />
@@ -439,6 +451,9 @@ export default function SistemaBies({
                                                                                   const labelLower = (item.label || '').toLowerCase().replace(/[áéíóú]/g, (c) => ({'á':'a','é':'e','í':'i','ó':'o','ú':'u'})[c] || c);
                                                                                   const esNumeroOrden = labelLower.includes('orden');
                                                                                   const esUCase = esUbicacionMarcaModelo(item.label, item.key);
+                                                                        const esUbic = esCampoUbicacion(item.label, item.key);
+                                                                        const textoVal = esNumeroOrden ? (eq.codigo || '') : (typeof val === 'string' ? val : '');
+                                                                        const esExcedido40 = esUbic && typeof textoVal === 'string' && textoVal.length > 40;
                                                                                   if (esNumeroOrden) console.log('🔍 Campo Nº Orden detectado, eq.codigo =', eq.codigo);
                                                                                   const placeholderTexto = labelLower.includes('referencia') && labelLower.includes('instalacion')
                                                                                       ? 'Ejemplo: Area general o zona'
@@ -449,13 +464,13 @@ export default function SistemaBies({
                                                                                           <label className="text-[10px] font-semibold text-slate-500">{item.label}</label>
                                                                                           <input
                                                                                               type="text"
-                                                                                              value={esNumeroOrden ? (eq.codigo || '') : (typeof val === 'string' ? (esUCase ? val.toUpperCase() : val) : '')}
+                                                                                              value={esNumeroOrden ? (eq.codigo || '') : (typeof val === 'string' ? (val) : '')}
                                                                                               onChange={(e) => {
                                                                                                   if (!esNumeroOrden) {
-                                                                                                      handleCheckChange(eq.id, item.key, esUCase ? e.target.value.toUpperCase() : e.target.value);
+                                                                                                      handleCheckChange(eq.id, item.key, e.target.value);
                                                                                                   }
                                                                                               }}
-                                                                                              className={`w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${esNumeroOrden ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''} ${tieneValorTexto ? 'font-bold' : ''} ${esUCase ? 'uppercase' : ''}`}
+                                                                                              className={`w-full px-2 py-1.5 rounded-lg text-xs outline-none transition-colors ${esExcedido40 ? 'bg-red-50 border-2 border-red-500 text-red-700 font-bold focus:border-red-600 focus:ring-2 focus:ring-red-500/20' : 'bg-white border border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20'} ${esNumeroOrden ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''} ${tieneValorTexto ? 'font-bold' : ''} ${esUCase ? 'uppercase' : ''}`}
                                                                                               placeholder={placeholderTexto}
                                                                                               readOnly={esNumeroOrden}
                                                                                           />
@@ -561,16 +576,10 @@ export default function SistemaBies({
 
                                                                        const handleAnomaliaChange = (newVal: string) => {
                                                                            handleCheckChange(eq.id, 'anomalias', newVal);
-                                                                           if (noteItemAnom) {
-                                                                               handleCheckChange(eq.id, noteItemAnom.key, newVal);
-                                                                           }
                                                                        };
 
                                                                        const handleObservacionesChange = (newVal: string) => {
                                                                            handleCheckChange(eq.id, 'observaciones', newVal);
-                                                                           if (noteItemObs) {
-                                                                               handleCheckChange(eq.id, noteItemObs.key, newVal);
-                                                                           }
                                                                        };
 
                                                                        return (
@@ -617,10 +626,10 @@ export default function SistemaBies({
                                                                                              if (newFotos.length === 0) handleCheckChange(eq.id, 'foto', ''); // Mantenemos retrocompatibilidad vaciando 'foto'
                                                                                              else if (idx === 0) handleCheckChange(eq.id, 'foto', newFotos[0]);
                                                                                          }}
-                                                                                         className="absolute top-0 right-0 p-1 bg-red-500 text-white rounded-bl-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                                                                                         className="absolute top-0 right-0 p-1 bg-red-600 hover:bg-red-700 text-white rounded-bl-lg shadow-md transition-all active:scale-95 flex items-center justify-center cursor-pointer"
                                                                                          title="Eliminar foto"
                                                                                      >
-                                                                                         <X className="w-3 h-3" />
+                                                                                         <Trash2 className="w-3.5 h-3.5" />
                                                                                      </button>
                                                                                  </div>
                                                                              ))}
@@ -802,6 +811,17 @@ export default function SistemaBies({
                                                                                  className="px-4 py-2 bg-slate-400 hover:bg-slate-500 text-white rounded-lg text-xs font-semibold transition-all shadow-sm"
                                                                              >
                                                                                  Limpiar Checks
+                                                                             </button>
+                                                                             <button
+                                                                                 type="button"
+                                                                                 onClick={() => {
+                                                                                     if (handleCopiarEquipo) {
+                                                                                         handleCopiarEquipo(eq);
+                                                                                     }
+                                                                                 }}
+                                                                                 className="px-4 py-2 bg-black hover:bg-zinc-800 text-white rounded-lg text-xs font-semibold transition-all shadow-sm"
+                                                                             >
+                                                                                 Copiar nuevo equipo
                                                                              </button>
                                                                           </div>
                                                                           <div className="flex items-center gap-1.5">

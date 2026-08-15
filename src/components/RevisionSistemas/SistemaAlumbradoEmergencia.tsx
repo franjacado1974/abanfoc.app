@@ -1,3 +1,10 @@
+const esCampoUbicacion = (label?: string, key?: string) => {
+    const lbl = (label || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const k = (key || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    return lbl.includes('ubicacion') || lbl.includes('cobertura') || lbl.includes('planta') || lbl.includes('nivel') ||
+           k.includes('ubicacion') || k.includes('cobertura') || k.includes('planta') || k.includes('nivel');
+};
+
 import React from 'react';
 import { CheckCircle2, XCircle, X, Pencil, Trash2 } from 'lucide-react';
 import type { CentroSistema, EquipoInstalado, Parte } from '../../Centros';
@@ -20,6 +27,7 @@ interface Props {
     handleCheckChange: (equipoId: string, itemKey: string, value: any, itemName?: string) => void;
     getCheckStats: (eq: EquipoInstalado) => { ok: number; fail: number; pending: number };
     getEquipoSyncStatus?: (equipoId: string) => string;
+    handleCopiarEquipo?: (eqToCopy: EquipoInstalado) => void | Promise<void>;
 }
 
 
@@ -39,7 +47,8 @@ export default function SistemaAlumbradoEmergencia({
     handleDeleteEquipo,
     handleCheckChange,
     getCheckStats,
-    getEquipoSyncStatus
+    getEquipoSyncStatus,
+    handleCopiarEquipo
 }: Props) {
     return (
         <>
@@ -219,7 +228,7 @@ export default function SistemaAlumbradoEmergencia({
                                                         type="text"
                                                         value={String(val || '')}
                                                         onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value)}
-                                                        className="text-xs px-3 py-1.5 border border-slate-300 rounded-lg outline-none focus:border-indigo-500 bg-white w-full sm:w-56"
+                                                        className={`text-xs px-3 py-1.5 rounded-lg outline-none w-full sm:w-56 ${esCampoUbicacion(item.label, item.key) && typeof val === 'string' && val.length > 40 ? 'bg-red-50 border-2 border-red-500 text-red-700 font-bold focus:border-red-600 focus:ring-2 focus:ring-red-500/20' : 'border border-slate-300 focus:border-indigo-500 bg-white'}`}
                                                         placeholder="..."
                                                     />
                                                 )}
@@ -469,6 +478,17 @@ export default function SistemaAlumbradoEmergencia({
                                     >
                                         Limpiar Checks
                                     </button>
+                                                                              <button
+                                                                                  type="button"
+                                                                                  onClick={() => {
+                                                                                      if (handleCopiarEquipo) {
+                                                                                          handleCopiarEquipo(eq);
+                                                                                      }
+                                                                                  }}
+                                                                                  className="px-4 py-2 bg-black hover:bg-zinc-800 text-white rounded-lg text-xs font-semibold transition-all shadow-sm"
+                                                                              >
+                                                                                  Copiar nuevo equipo
+                                                                              </button>
                                 </div>
                                 <div className="flex items-center gap-1.5">
                                     <button

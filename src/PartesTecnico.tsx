@@ -1,9 +1,12 @@
 import { useState, useEffect } from 'react';
 import {
   ArrowLeft, Calendar, Search, X,
-  ChevronRight, Layers, Clock, Filter
+  ChevronRight, Layers, Clock, Filter,
+  DownloadCloud, CheckCircle2, RefreshCw, HardDrive, Database
 } from 'lucide-react';
-import { subscribePartes, subscribeCentroSistemas, subscribeClientes, subscribeCentros, updateParte } from './firebase';
+import { subscribePartes, subscribeCentroSistemas, subscribeClientes, subscribeCentros, updateParte, getEquiposInstalados } from './firebase';
+import { getPlantillas } from './plantillas';
+import { saveParteOfflineBundle, getParteOfflineBundle, getOfflineDiagnostics, type OfflineParteBundle } from './offlineDB';
 import { useNavigate } from 'react-router-dom';
 import type { Parte, Centro, Cliente, CentroSistema } from './Centros';
 import type { Tecnico } from './firebase';
@@ -36,6 +39,93 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [estadoFilter, setEstadoFilter] = useState('TODOS');
+  const [downloadingParteId, setDownloadingParteId] = useState<string | null>(null);
+  const [downloadedPartesMap, setDownloadedPartesMap] = useState<Record<string, boolean>>({});
+  const [showDiagModal, setShowDiagModal] = useState(false);
+  const [diagInfo, setDiagInfo] = useState<any>(null);
+
+  // Cargar mapa de partes descargados en IndexedDB
+  useEffect(() => {
+    const checkDownloaded = async () => {
+      const map: Record<string, boolean> = {};
+      for (const p of partes) {
+        try {
+          const bundle = await getParteOfflineBundle(p.id);
+          if (bundle) map[p.id] = true;
+        } catch { /* ignore */ }
+      }
+      setDownloadedPartesMap(map);
+    };
+    if (partes.length > 0) {
+      checkDownloaded();
+    }
+  }, [partes]);
+
+  const handleDescargarParteOffline = async (parteToDownload: Parte, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDownloadingParteId(parteToDownload.id);
+
+    try {
+      const centro = centros.find(c => c._docId === parteToDownload.centroId || c.id === parteToDownload.centroId);
+      const cliente = clientes.find(cl => cl.id === parteToDownload.clienteId);
+      const sistemas = centroSistemas.filter(s => s.centroId === parteToDownload.centroId || (centro && s.centroId === centro.id));
+
+      const equiposInstalados: any[] = [];
+      for (const sist of sistemas) {
+        try {
+          const eqList = await getEquiposInstalados(parteToDownload.centroId, sist.id);
+          equiposInstalados.push(...eqList);
+        } catch (err) {
+          console.warn('Error cargando equipos para offline:', sist.id, err);
+        }
+      }
+
+      let plantillas: any[] = [];
+      try {
+        plantillas = await getPlantillas();
+      } catch { /* ignore */ }
+
+      const bundle: OfflineParteBundle = {
+        parteId: parteToDownload.id,
+        centroId: parteToDownload.centroId,
+        clienteId: parteToDownload.clienteId,
+        parte: parteToDownload,
+        cliente: cliente || null,
+        centro: centro || null,
+        sistemasDelCentro: sistemas,
+        equiposInstalados,
+        checklistItemsPorSistema: {},
+        plantillas,
+        categoriasSistema: [],
+        equiposCatalogo: [],
+        downloadedAt: new Date().toISOString(),
+        syncStatus: 'downloaded'
+      };
+
+      await saveParteOfflineBundle(bundle);
+      try {
+        await updateParte(parteToDownload.id, { estado: 'Descargado (Offline)' } as any);
+      } catch { /* offline mode ignore */ }
+
+      setDownloadedPartesMap(prev => ({ ...prev, [parteToDownload.id]: true }));
+      alert(`✅ Parte "${parteToDownload.numeroMantenimiento || parteToDownload.id}" descargado con éxito en IndexedDB para trabajo Offline.`);
+    } catch (err) {
+      console.error('Error descargando parte offline:', err);
+      alert('Error guardando el parte en IndexedDB.');
+    } finally {
+      setDownloadingParteId(null);
+    }
+  };
+
+  const handleOpenDiag = async () => {
+    try {
+      const diag = await getOfflineDiagnostics();
+      setDiagInfo(diag);
+      setShowDiagModal(true);
+    } catch (err) {
+      alert('Error cargando diagnóstico: ' + err);
+    }
+  };
 
   // Suscripción en tiempo real a partes desde Firestore
   useEffect(() => {
@@ -345,26 +435,57 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
                     </div>
 
                     {/* Fecha programada, recuento de sistemas y periodicidad */}
-                    <div className="flex flex-wrap items-center gap-y-2 gap-x-4 pt-2.5 border-t border-zinc-100">
-                      <span className="flex items-center gap-1.5 text-xs font-bold text-blue-600">
-                        <Calendar className="w-3.5 h-3.5" />
-                        {parte.fechaProgramada
-                          ? parte.fechaProgramada.replace(/-/g, '/')
-                          : 'Sin fecha'}
-                      </span>
-                      <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-purple-600 bg-purple-50 px-2 py-0.5 rounded-md">
-                        {parte.periodicidad || 'Revisión'}
-                      </span>
-                      <span className="flex items-center gap-1.5 text-xs text-zinc-500 font-medium">
-                        <Layers className="w-3.5 h-3.5 text-zinc-400" />
-                        {sistCount} sist.
-                      </span>
-                      <ChevronRight className="w-4 h-4 text-zinc-400 ml-auto" />
+                    <div className="flex flex-wrap items-center justify-between gap-y-2 gap-x-4 pt-2.5 border-t border-zinc-100">
+                      <div className="flex items-center gap-3">
+                        <span className="flex items-center gap-1.5 text-xs font-bold text-blue-600">
+                          <Calendar className="w-3.5 h-3.5" />
+                          {parte.fechaProgramada
+                            ? parte.fechaProgramada.replace(/-/g, '/')
+                            : 'Sin fecha'}
+                        </span>
+                        <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-purple-600 bg-purple-50 px-2 py-0.5 rounded-md">
+                          {parte.periodicidad || 'Revisión'}
+                        </span>
+                        <span className="flex items-center gap-1.5 text-xs text-zinc-500 font-medium">
+                          <Layers className="w-3.5 h-3.5 text-zinc-400" />
+                          {sistCount} sist.
+                        </span>
+                      </div>
+
+                      {/* Botón Descargar Parte Completo Offline */}
+                      <button
+                        type="button"
+                        onClick={(e) => handleDescargarParteOffline(parte, e)}
+                        disabled={downloadingParteId === parte.id}
+                        className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl transition-all ${
+                          downloadedPartesMap[parte.id]
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-300 hover:bg-emerald-100'
+                            : 'bg-sky-50 text-sky-700 border border-sky-300 hover:bg-sky-100 active:scale-95'
+                        }`}
+                        title="Guardar cliente, centro, equipos y plantillas en IndexedDB para trabajar offline sin red"
+                      >
+                        {downloadingParteId === parte.id ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin text-sky-600" />
+                            <span>Descargando...</span>
+                          </>
+                        ) : downloadedPartesMap[parte.id] ? (
+                          <>
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Descargado</span>
+                          </>
+                        ) : (
+                          <>
+                            <DownloadCloud className="w-3.5 h-3.5 text-sky-600" />
+                            <span>Descargar parte</span>
+                          </>
+                        )}
+                      </button>
                     </div>
                   </div>
 
                   {/* Vista desktop */}
-                  <div className="hidden sm:grid grid-cols-[1fr_auto_auto_auto_auto] gap-4 items-center px-5 py-4">
+                  <div className="hidden sm:grid grid-cols-[1fr_auto_auto_auto_auto_auto] gap-4 items-center px-5 py-4">
                     <div className="min-w-0">
                       <p className="text-xs font-semibold text-zinc-500 truncate">{cliente?.nombre || '—'}</p>
                       <p className="text-sm font-bold text-zinc-900 truncate">{centro?.nombre || 'Centro desconocido'}</p>
@@ -389,6 +510,35 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
                         {sistCount} sist.
                       </span>
                     </div>
+                    <div>
+                      <button
+                        type="button"
+                        onClick={(e) => handleDescargarParteOffline(parte, e)}
+                        disabled={downloadingParteId === parte.id}
+                        className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl transition-all ${
+                          downloadedPartesMap[parte.id]
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-300 hover:bg-emerald-100'
+                            : 'bg-sky-50 text-sky-700 border border-sky-300 hover:bg-sky-100 active:scale-95'
+                        }`}
+                      >
+                        {downloadingParteId === parte.id ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin text-sky-600" />
+                            <span>Descargando...</span>
+                          </>
+                        ) : downloadedPartesMap[parte.id] ? (
+                          <>
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Descargado</span>
+                          </>
+                        ) : (
+                          <>
+                            <DownloadCloud className="w-3.5 h-3.5 text-sky-600" />
+                            <span>Descargar</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
                     <div className="flex items-center gap-2">
                       {parte.retirarExtintoresRetimbrado && !parte.retimbradoReiniciado && (
                         <span 
@@ -410,6 +560,58 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
           </div>
         )}
       </div>
+
+      {/* Botón Flotante Diagnóstico Administrador */}
+      {(loggedUser.rol === 'super-administrador' || loggedUser.rol === 'administrador') && (
+        <button
+          onClick={handleOpenDiag}
+          className="fixed bottom-4 right-4 z-40 bg-zinc-900 hover:bg-black text-white text-xs font-bold px-3 py-2 rounded-2xl shadow-xl border border-zinc-700 flex items-center gap-2 cursor-pointer transition-all active:scale-95"
+          title="Panel Diagnóstico Offline IndexedDB"
+        >
+          <Database className="w-4 h-4 text-sky-400" />
+          <span>Diagnóstico DB</span>
+        </button>
+      )}
+
+      {/* Modal Diagnóstico de Emergencia IndexedDB */}
+      {showDiagModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-zinc-200">
+            <div className="flex items-center justify-between mb-4 border-b border-zinc-100 pb-3">
+              <div className="flex items-center gap-2">
+                <HardDrive className="w-5 h-5 text-sky-600" />
+                <h3 className="text-base font-bold text-zinc-900">Diagnóstico IndexedDB (Offline)</h3>
+              </div>
+              <button onClick={() => setShowDiagModal(false)} className="p-1 text-zinc-400 hover:text-zinc-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            {diagInfo && (
+              <div className="space-y-3 text-xs font-mono text-zinc-700">
+                <div className="p-3 bg-zinc-50 rounded-xl border border-zinc-200 space-y-1">
+                  <p><strong>Base de Datos:</strong> {diagInfo.dbName}</p>
+                  <p><strong>Esquema Versión:</strong> v{diagInfo.dbVersion}</p>
+                  <p><strong>Partes Descargados:</strong> {diagInfo.partesCount}</p>
+                  <p><strong>Fotos Binarias (Blobs):</strong> {diagInfo.photosCount}</p>
+                  <p><strong>Cola Pendiente (Idempotente):</strong> {diagInfo.pendingQueueCount}</p>
+                </div>
+                {diagInfo.storageEstimate && (
+                  <div className="p-3 bg-sky-50 rounded-xl border border-sky-200 text-sky-900 space-y-1">
+                    <p><strong>Uso de Almacenamiento:</strong> {(diagInfo.storageEstimate.usage / (1024 * 1024)).toFixed(2)} MB</p>
+                    <p><strong>Cuota Disponible:</strong> {(diagInfo.storageEstimate.quota / (1024 * 1024)).toFixed(0)} MB</p>
+                  </div>
+                )}
+              </div>
+            )}
+            <button
+              onClick={() => setShowDiagModal(false)}
+              className="mt-6 w-full bg-zinc-900 hover:bg-black text-white py-3 rounded-2xl font-bold text-xs shadow-md"
+            >
+              Cerrar Diagnóstico
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

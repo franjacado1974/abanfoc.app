@@ -2,6 +2,5 @@
 
 que lea:
 
-documentos.md 
-.agents/AGENTS.md
+lee: documentos.md, y también: .agents/AGENTS.md
 

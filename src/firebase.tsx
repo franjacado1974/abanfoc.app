@@ -321,56 +321,99 @@ export async function deleteTecnico(id: string) {
 }
 
 export async function verifyUser(username: string, password: string) {
-  try {
-    const col = collection(db, 'usuarios');
-    console.info('verifyUser: buscando usuario', username);
+  const cleanUsername = username.trim().toLowerCase();
+  const cleanPassword = password.trim();
 
-    let q = query(col, where('usuario', '==', username));
-    let snap = await getDocs(q);
-    console.info('verifyUser: resultado busqueda por usuario, docs=', snap.size);
+  if (!cleanUsername || !cleanPassword) return null;
 
-    if (snap.empty) {
-      q = query(col, where('nombre', '==', username));
-      snap = await getDocs(q);
-      console.info('verifyUser: resultado busqueda por nombre, docs=', snap.size);
-    }
+  const checkUserMatch = (data: any, docId?: string) => {
+    if (!data) return null;
+    const uUsuario = (data['usuario'] ?? '').toString().trim().toLowerCase();
+    const uNombre = (data['nombre'] ?? '').toString().trim().toLowerCase();
+    const uApellidos = (data['apellidos'] ?? '').toString().trim().toLowerCase();
+    const uFullName = `${uNombre} ${uApellidos}`.trim().toLowerCase();
+    const uEmail = (data['email'] ?? '').toString().trim().toLowerCase();
 
-    if (snap.empty) {
-      console.warn('verifyUser: usuario no encontrado en Firestore');
-      return null;
-    }
+    const storedPassword = (
+      data['contraseña'] ??
+      data['contrasena'] ??
+      data['password'] ??
+      data['clave'] ??
+      ''
+    ).toString().trim();
 
-    const doc = snap.docs[0];
-    const data: any = doc.data();
-    if (!data) {
-      console.warn('verifyUser: documento sin datos');
-      return null;
-    }
+    // Solo coincide si el nombre/usuario introducido coincide exactamente con el usuario registrado
+    const isUserMatch = (
+      (uUsuario !== '' && uUsuario === cleanUsername) ||
+      (uNombre !== '' && uNombre === cleanUsername) ||
+      (uFullName !== '' && uFullName === cleanUsername) ||
+      (uEmail !== '' && uEmail === cleanUsername)
+    );
 
-    console.info('verifyUser: datos del documento:', JSON.stringify(data));
+    // La contraseña debe coincidir estrictamente con la configurada en Firebase
+    const isPassMatch = storedPassword !== '' && storedPassword === cleanPassword;
 
-    const storedPassword = data['contraseña'] ?? data['password'] ?? data['clave'] ?? '';
-    console.info('verifyUser: contraseña almacenada:', storedPassword, '| introducida:', password);
-
-    if (storedPassword === password) {
+    if (isUserMatch && isPassMatch) {
       const nombre = data['nombre'] ?? data['usuario'] ?? username;
       const apellidos = data['apellidos'] ?? '';
-      const rol = data['rol'] ?? (username === 'superusuario' ? 'super-administrador' : 'administrador');
-      console.info('verifyUser: login exitoso para', nombre, 'rol:', rol);
+      const rol = (data['rol'] ?? 'tecnico').toString().trim().toLowerCase();
       return {
-        id: doc.id,
+        id: docId || data.id || data._docId || 'user_' + Date.now(),
         nombre,
         apellidos,
         rol
       };
     }
+    return null;
+  };
 
-    console.warn('verifyUser: contraseña incorrecta');
-    return null;
+  // 1. Consultar estrictamente en Firestore (colección 'usuarios')
+  try {
+    const col = collection(db, 'usuarios');
+    console.info('verifyUser: buscando usuario en Firestore colección "usuarios":', username);
+
+    const snap = await getDocs(col);
+    if (!snap.empty) {
+      const allUsers = snap.docs.map(doc => ({ _docId: doc.id, ...doc.data() }));
+      try {
+        localStorage.setItem('firecheck_db_usuarios', JSON.stringify(allUsers));
+      } catch (err) {
+        console.warn('No se pudo guardar la lista de usuarios en localStorage:', err);
+      }
+
+      for (const doc of snap.docs) {
+        const match = checkUserMatch(doc.data(), doc.id);
+        if (match) {
+          console.info('verifyUser: login exitoso en Firestore para', match.nombre, 'rol:', match.rol);
+          return match;
+        }
+      }
+    }
   } catch (e) {
-    console.error('verifyUser error:', e);
-    return null;
+    console.warn('verifyUser: Firestore inaccesible o inestable (modo offline):', e);
   }
+
+  // 2. Fallback offline estricto: Consultar en caché local de usuarios de Firestore (firecheck_db_usuarios)
+  try {
+    const stored = localStorage.getItem('firecheck_db_usuarios');
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed)) {
+        for (const u of parsed) {
+          const match = checkUserMatch(u, u._docId || u.id);
+          if (match) {
+            console.info('verifyUser (offline fallback): login exitoso desde memoria local para', match.nombre, 'rol:', match.rol);
+            return match;
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.error('verifyUser fallback error:', e);
+  }
+
+  console.warn('verifyUser: credenciales incorrectas para el usuario:', username);
+  return null;
 }
 
 export const subscribeIngeniero = (onUpdate: (data: any) => void) => {
@@ -715,6 +758,24 @@ export async function deleteEquipoFromSystemCollection(catNombre: string, equipo
   } catch (e) {
     console.error('Error al eliminar equipo de Firestore:', e);
     throw e;
+  }
+}
+
+export async function getEquiposInstalados(centroId: string, sistemaId: string): Promise<any[]> {
+  try {
+    let col = collection(db, 'centros', centroId, 'inventario', sistemaId, 'equipos');
+    let snap = await getDocs(col);
+    if (snap.empty) {
+      col = collection(db, 'centros', centroId, 'sistemas', sistemaId, 'equipos');
+      snap = await getDocs(col);
+    }
+    return snap.docs.map(d => {
+      const data = d.data() as any;
+      return { id: d.id, _docId: d.id, centroId, sistemaId, ...data };
+    });
+  } catch (e) {
+    console.error('getEquiposInstalados error:', e);
+    return [];
   }
 }
 
@@ -1771,14 +1832,16 @@ export async function addEquipoInstalado(equipo: EquipoInstaladoFirestore) {
   }
 }
 
-export async function updateEquipoInstalado(id: string, equipo: Partial<EquipoInstaladoFirestore>) {
+export async function updateEquipoInstalado(id: string, equipo: Partial<EquipoInstaladoFirestore>, fallbackCentroId?: string, fallbackSistemaId?: string) {
   try {
-    if (!equipo.centroId || !equipo.sistemaId) {
-      console.warn('updateEquipoInstalado: faltan centroId o sistemaId');
+    const cId = equipo.centroId || fallbackCentroId;
+    const sId = equipo.sistemaId || fallbackSistemaId;
+    if (!cId || !sId) {
+      console.warn('updateEquipoInstalado: faltan centroId o sistemaId', { id, equipo, cId, sId });
       return { _docId: id, ...equipo };
     }
-    const ref = doc(db, 'centros', equipo.centroId, 'inventario', equipo.sistemaId, 'equipos', id);
-    const cleanData = limpiarUndefined({ ...equipo, updatedAt: new Date().toISOString() });
+    const ref = doc(db, 'centros', cId, 'inventario', sId, 'equipos', id);
+    const cleanData = limpiarUndefined({ ...equipo, centroId: cId, sistemaId: sId, updatedAt: new Date().toISOString() });
     await setDoc(ref, cleanData, { merge: true });
     return { _docId: id, ...equipo };
   } catch (e) {

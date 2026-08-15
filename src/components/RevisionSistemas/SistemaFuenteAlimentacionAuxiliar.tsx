@@ -20,7 +20,15 @@ interface Props {
     handleCheckChange: (equipoId: string, itemKey: string, value: any, itemName?: string) => void;
     getCheckStats: (eq: EquipoInstalado) => { ok: number; fail: number; pending: number };
     getEquipoSyncStatus?: (equipoId: string) => string;
+    handleCopiarEquipo?: (eqToCopy: EquipoInstalado) => void | Promise<void>;
 }
+
+const esCampoUbicacion = (label?: string, key?: string) => {
+    const lbl = (label || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const k = (key || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    return lbl.includes('ubicacion') || lbl.includes('cobertura') || lbl.includes('planta') || lbl.includes('nivel') ||
+           k.includes('ubicacion') || k.includes('cobertura') || k.includes('planta') || k.includes('nivel');
+};
 
 const esUbicacionMarcaModelo = (label?: string, key?: string) => {
     const lbl = (label || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -44,7 +52,8 @@ export default function SistemaFuenteAlimentacionAuxiliar({
     handleDeleteEquipo,
     handleCheckChange,
     getCheckStats,
-    getEquipoSyncStatus
+    getEquipoSyncStatus,
+    handleCopiarEquipo
 }: Props) {
     return (
         <>
@@ -177,7 +186,7 @@ export default function SistemaFuenteAlimentacionAuxiliar({
                                                             type="number"
                                                             value={typeof val === 'number' ? val : ''}
                                                             onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value ? Number(e.target.value) : '')}
-                                                            className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                                                            className={`w-full px-2 py-1.5 rounded-lg text-xs outline-none transition-colors ${esCampoUbicacion(item.label, item.key) && typeof val === 'string' && val.length > 40 ? 'bg-red-50 border-2 border-red-500 text-red-700 font-bold focus:border-red-600 focus:ring-2 focus:ring-red-500/20' : 'bg-white border border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20'}`}
                                                             placeholder="0"
                                                         />
                                                     ) : isFecha ? (
@@ -283,7 +292,7 @@ export default function SistemaFuenteAlimentacionAuxiliar({
                                                             type="text"
                                                             value={typeof val === 'string' ? val : ''}
                                                             onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value)}
-                                                            className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                                                            className={`w-full px-2 py-1.5 rounded-lg text-xs outline-none transition-colors ${esCampoUbicacion(item.label, item.key) && typeof val === 'string' && val.length > 40 ? 'bg-red-50 border-2 border-red-500 text-red-700 font-bold focus:border-red-600 focus:ring-2 focus:ring-red-500/20' : 'bg-white border border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20'}`}
                                                             placeholder="..."
                                                         />
                                                     )}
@@ -714,6 +723,17 @@ export default function SistemaFuenteAlimentacionAuxiliar({
                                     >
                                         Limpiar Checks
                                     </button>
+                                                                              <button
+                                                                                  type="button"
+                                                                                  onClick={() => {
+                                                                                      if (handleCopiarEquipo) {
+                                                                                          handleCopiarEquipo(eq);
+                                                                                      }
+                                                                                  }}
+                                                                                  className="px-4 py-2 bg-black hover:bg-zinc-800 text-white rounded-lg text-xs font-semibold transition-all shadow-sm"
+                                                                              >
+                                                                                  Copiar nuevo equipo
+                                                                              </button>
                                 </div>
                                 <div className="flex items-center gap-1.5">
                                     <span className="flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded-lg text-xs font-bold">

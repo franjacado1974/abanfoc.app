@@ -20,13 +20,36 @@ import SistemaFuenteAlimentacionAuxiliar from './components/RevisionSistemas/Sis
 import SistemaAlumbradoEmergencia from './components/RevisionSistemas/SistemaAlumbradoEmergencia';
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, Save, Layers, ChevronDown, ChevronUp, Plus, X, CheckCircle2, AlertTriangle, PenLine, RotateCcw, CheckCheck, Lock, MessageSquare, Unlock, Calendar } from 'lucide-react';
-import { addEquipoInstalado, addAlbaran, updateEquipoInstalado, updateParte as updateParteFirestore, updateCentro, subscribePartes, subscribeCentros, subscribeClientes, subscribeCentroSistemas, subscribeEquiposInstalados, subscribeArticulos, subscribeSistemasCategorias, generateNumeroMantenimiento, type Albaran, type ChecklistItem } from './firebase';
+import { ArrowLeft, Save, Layers, ChevronDown, ChevronUp, Plus, X, CheckCircle2, AlertTriangle, PenLine, RotateCcw, CheckCheck, Lock, MessageSquare, Unlock, Calendar, Wifi, WifiOff, RefreshCw } from 'lucide-react';
+import { addEquipoInstalado, addAlbaran, updateEquipoInstalado, updateParte as updateParteFirestore, updateCentro, subscribePartes, subscribeCentros, subscribeClientes, subscribeCentroSistemas, subscribeEquiposInstalados, subscribeArticulos, subscribeSistemasCategorias, generateNumeroMantenimiento, uploadFile, type Albaran, type ChecklistItem } from './firebase';
 import { subscribePlantillas, subscribeItemsDePlantilla, type ItemPlantilla } from './plantillas';
+import { getParteOfflineBundle, updateParteOfflineData, getPendingSyncItems, markSyncItemDone, markSyncItemFailed, addPendingSyncItem } from './offlineDB';
 import type { Centro, Parte, Cliente, CentroSistema, EquipoInstalado } from './Centros';
 import ConfirmationModal from './ConfirmationModal';
 import { getIconForSistema } from './Sistemas';
 import EquipoFormulario from './components/EquipoFormulario';
+
+export function esFechaRevisionReciente(val: any, maxDias = 15): boolean {
+    if (!val || typeof val !== 'string') return false;
+    const str = val.trim();
+    if (!str || str === '-') return false;
+    let d: Date | null = null;
+    if (str.includes('/')) {
+        const parts = str.split('/');
+        if (parts.length === 3) {
+            d = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+        }
+    } else {
+        d = new Date(str);
+    }
+    if (!d || isNaN(d.getTime())) return false;
+    const hoy = new Date();
+    const hoyZero = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+    const dZero = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const diffTime = hoyZero.getTime() - dZero.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays >= 0 && diffDays <= maxDias;
+}
 
 export function tieneFechaInvalida(eq: any): boolean {
     if (!eq) return false;
@@ -301,11 +324,13 @@ export default function RevisionChecklist() {
 
     const loggedUser = (() => {
         try {
-            const session = sessionStorage.getItem('firecheck_logged_user');
+            const session = sessionStorage.getItem('firecheck_logged_user') || localStorage.getItem('firecheck_logged_user');
             return session ? JSON.parse(session) : null;
         } catch { return null; }
     })();
-    const isTecnico = loggedUser?.rol === 'tecnico';
+    const userRole = (loggedUser?.rol || '').toLowerCase().trim();
+    const isAdminOrSuper = userRole === 'administrador' || userRole === 'super-administrador' || userRole === 'superadministrador' || userRole === 'admin';
+    const isTecnico = userRole === 'tecnico' || !isAdminOrSuper;
 
     const [centro, setCentro] = useState<Centro | null>(null);
     const [parte, setParte] = useState<Parte | null>(null);
@@ -510,17 +535,29 @@ export default function RevisionChecklist() {
             inFlightSyncRef.current.add(eqId);
             setEqSyncStates(prev => ({ ...prev, [eqId]: 'saving' }));
             try {
-                await updateEquipoInstalado(eqId, eqToSync as any);
+                const targetCentroId = eqToSync.centroId || centroId;
+                const targetSistemaId = eqToSync.sistemaId;
+                await updateEquipoInstalado(eqId, eqToSync as any, targetCentroId, targetSistemaId);
                 // Solo después de que Firestore confirme la escritura, limpiamos si no se introdujeron nuevos cambios
                 if (pendingEquiposRef.current.get(eqId) === eqToSync) {
                     pendingEquiposRef.current.delete(eqId);
                 }
                 inFlightSyncRef.current.delete(eqId);
+                if (lastActiveEquipoIdRef.current === eqId) {
+                    lastActiveEquipoIdRef.current = null;
+                }
                 setEqSyncStates(prev => ({ ...prev, [eqId]: 'saved' }));
             } catch (err) {
                 console.error('Error sincronizando equipo en Firestore:', err);
                 inFlightSyncRef.current.delete(eqId);
+                if (lastActiveEquipoIdRef.current === eqId) {
+                    lastActiveEquipoIdRef.current = null;
+                }
                 setEqSyncStates(prev => ({ ...prev, [eqId]: 'offline' }));
+            }
+        } else {
+            if (lastActiveEquipoIdRef.current === eqId) {
+                lastActiveEquipoIdRef.current = null;
             }
         }
     };
@@ -534,17 +571,144 @@ export default function RevisionChecklist() {
         }
     };
 
-    // Listener para vaciar la cola al recuperar cobertura sin duplicidad
+    const [isOnlineState, setIsOnlineState] = useState(navigator.onLine);
+    const [pendingSyncCount, setPendingSyncCount] = useState(0);
+    const [isSyncingFullParte, setIsSyncingFullParte] = useState(false);
+    const [syncStatusText, setSyncStatusText] = useState<'synced' | 'pending' | 'syncing' | 'error'>('synced');
+
+    // Carga de ultra-baja latencia desde IndexedDB (0 pantallas en blanco)
     useEffect(() => {
-        const handleOnline = () => {
-            flushAllPendingSync();
+        if (!parteId) return;
+        const loadLocalBundle = async () => {
+            try {
+                const bundle = await getParteOfflineBundle(parteId);
+                if (bundle) {
+                    if (bundle.centro) setCentro(bundle.centro);
+                    if (bundle.cliente) setClientes([bundle.cliente]);
+                    if (bundle.parte) setParte(bundle.parte);
+                    if (bundle.sistemasDelCentro && bundle.sistemasDelCentro.length > 0) {
+                        setSistemasDelCentro(bundle.sistemasDelCentro);
+                        setOpenSistemas(prev => {
+                            const next = { ...prev };
+                            bundle.sistemasDelCentro.forEach((s: any) => { if (!(s.id in next)) next[s.id] = false; });
+                            return next;
+                        });
+                    }
+                    if (bundle.equiposInstalados && bundle.equiposInstalados.length > 0) {
+                        setEquiposInstalados(bundle.equiposInstalados);
+                    }
+                    setLoading(false);
+                }
+
+                const pending = await getPendingSyncItems(parteId);
+                setPendingSyncCount(pending.length);
+                if (pending.length > 0) setSyncStatusText('pending');
+            } catch (err) {
+                console.warn('[OfflineDB] Error cargando bundle local:', err);
+            }
         };
-        window.addEventListener('online', handleOnline);
+
+        loadLocalBundle();
+    }, [parteId]);
+
+    // Función de Sincronización Transaccional por Bloques (Idempotente y en segundo plano)
+    const handleSincronizarParteCompleto = async () => {
+        if (!parteId) return;
+        setIsSyncingFullParte(true);
+        setSyncStatusText('syncing');
+
+        try {
+            const pendingItems = await getPendingSyncItems(parteId);
+            if (pendingItems.length === 0) {
+                setSyncStatusText('synced');
+                setPendingSyncCount(0);
+                showToast('✅ El parte está 100% sincronizado.');
+                setIsSyncingFullParte(false);
+                return;
+            }
+
+            let successCount = 0;
+
+            for (const item of pendingItems) {
+                try {
+                    if (item.blockType === 'equipo') {
+                        const payloadToSync = { ...item.payload };
+                        // Convertir y subir cualquier URL de Blob local a Firebase Storage
+                        for (const [key, val] of Object.entries(payloadToSync)) {
+                            if (typeof val === 'string' && val.startsWith('blob:')) {
+                                try {
+                                    const controller = new AbortController();
+                                    const timeoutId = setTimeout(() => controller.abort(), 5000);
+                                    const res = await fetch(val, { signal: controller.signal });
+                                    clearTimeout(timeoutId);
+                                    const blobData = await res.blob();
+                                    const fileObj = new File([blobData], `photo_${Date.now()}.jpg`, { type: 'image/jpeg' });
+                                    const storagePath = `equipos/${centroId}/${payloadToSync.sistemaId || 'sist'}/${item.blockId}/${key}_${Date.now()}`;
+                                    const uploadedUrl = await uploadFile(fileObj, storagePath);
+                                    payloadToSync[key] = uploadedUrl;
+                                } catch (photoErr) {
+                                    console.warn(`[SyncBlob] Error subiendo foto blob en ${key}:`, photoErr);
+                                }
+                            }
+                        }
+                        await updateEquipoInstalado(item.blockId, payloadToSync);
+                    } else if (item.blockType === 'parte') {
+                        const docId = (parte as any)?._docId || parte?.id;
+                        if (docId) {
+                            await updateParteFirestore(docId, item.payload);
+                        }
+                    }
+                    await markSyncItemDone(item.sync_item_uuid);
+                    successCount++;
+                } catch (err: any) {
+                    console.warn(`[SyncBlock] Error en bloque transaccional ${item.sync_item_uuid}:`, err);
+                    await markSyncItemFailed(item.sync_item_uuid, err?.message || 'Error de red');
+                }
+            }
+
+            const remaining = await getPendingSyncItems(parteId);
+            setPendingSyncCount(remaining.length);
+
+            if (remaining.length === 0) {
+                await updateParteOfflineData(parteId, { syncStatus: 'synced' });
+                setSyncStatusText('synced');
+                showToast('✅ Sincronización completada con éxito.');
+            } else {
+                setSyncStatusText('error');
+                showToast(`⚠️ Sincronizados ${successCount} bloques. Quedan ${remaining.length} guardados localmente para reintento.`);
+            }
+        } catch (err) {
+            console.error('Error sincronizando parte completo:', err);
+            setSyncStatusText('error');
+            showToast('⚠️ Sin red. Todos los cambios continúan guardados localmente.');
+        } finally {
+            setIsSyncingFullParte(false);
+        }
+    };
+
+    // Escuchar eventos de red y reintentos automáticos
+    useEffect(() => {
+        const handleOnlineStatus = () => {
+            setIsOnlineState(true);
+            handleSincronizarParteCompleto();
+        };
+        const handleOfflineStatus = () => {
+            setIsOnlineState(false);
+        };
+
+        window.addEventListener('online', handleOnlineStatus);
+        window.addEventListener('offline', handleOfflineStatus);
+
+        // Si el dispositivo está online con WiFi al entrar, sincronizar cola de bloques en segundo plano
+        if (navigator.onLine && parteId) {
+            handleSincronizarParteCompleto();
+        }
+
         return () => {
-            window.removeEventListener('online', handleOnline);
-            flushAllPendingSync();
+            window.removeEventListener('online', handleOnlineStatus);
+            window.removeEventListener('offline', handleOfflineStatus);
         };
-    }, []);
+    }, [parteId]);
 
     // Función para mostrar el toast temporalmente
     const showToast = (message: string) => {
@@ -629,8 +793,9 @@ export default function RevisionChecklist() {
             const found = items.find((p: any) => p.id === parteId || p._docId === parteId) as Parte | undefined;
             if (found) {
                 setParte(found);
-                // Ya NO cambiamos automáticamente a "Abierto" al entrar
-                // El estado solo cambiará cuando se pulse un botón "Revisado"
+                if (parteId) {
+                    updateParteOfflineData(parteId, { parte: found }).catch(() => {});
+                }
             }
             localStorage.setItem('firecheck_db_partes', JSON.stringify(items));
             setLoading(false);
@@ -686,11 +851,7 @@ export default function RevisionChecklist() {
                 const itemsEvaluados = items.map(item => {
                     const anoActualizada = evaluarAnomaliasPorFecha(item, sist);
                     if (anoActualizada !== item.anomalias) {
-                        const updatedItem = { ...item, anomalias: anoActualizada };
-                        if (!pendingEquiposRef.current.has(item.id)) {
-                            updateEquipoInstalado(item.id, updatedItem as any).catch(() => {});
-                        }
-                        return updatedItem;
+                        return { ...item, anomalias: anoActualizada };
                     }
                     return item;
                 });
@@ -702,22 +863,25 @@ export default function RevisionChecklist() {
                     const itemsFusionados = itemsEvaluados.map(itemFromFirestore => {
                         const esPendienteLocal = pendingEquiposRef.current.has(itemFromFirestore.id);
                         const esEnVuelo = inFlightSyncRef.current.has(itemFromFirestore.id);
-                        const esEquipoActivo = lastActiveEquipoIdRef.current === itemFromFirestore.id;
                         const equipoLocalActual = actualesEsteSistema.find(e => e.id === itemFromFirestore.id);
 
-                        if ((esPendienteLocal || esEnVuelo || esEquipoActivo) && equipoLocalActual) {
-                            // Preservar incondicionalmente el estado local activo en React
+                        if ((esPendienteLocal || esEnVuelo) && equipoLocalActual) {
+                            // Preservar estado local solo si hay un cambio en vuelo o guardándose
                             return equipoLocalActual;
                         }
                         return itemFromFirestore;
                     });
 
-                    return [...otrosSistemas, ...itemsFusionados];
+                    const resultEquipos = [...otrosSistemas, ...itemsFusionados];
+                    if (parteId) {
+                        updateParteOfflineData(parteId, { equiposInstalados: resultEquipos }).catch(() => {});
+                    }
+                    return resultEquipos;
                 });
             })
         );
         return () => unsubs.forEach(u => u());
-    }, [centroId, sistemasDelCentro.length, parte?.estado]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [centroId, sistemasDelCentro.length, parte?.estado, parteId]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const saveEquiposProgress = async (currentEquipos: EquipoInstalado[] = equiposInstalados) => {
         await flushAllPendingSync();
@@ -762,8 +926,23 @@ export default function RevisionChecklist() {
             const updatedEquipos = prevEquipos.map(eq => {
                 if (eq.id !== equipoId) return eq;
                 
+                const itemsToUseForCheck = checklistItemsPorSistema[eq.sistemaId] || getItemsToUse(eq.sistemaId) || [];
+                const resolvedLabelForCheck = checkLabel || itemsToUseForCheck.find(i => i.key === checkKey)?.label || null;
+
+                const keyLower = checkKey.toLowerCase();
+                const labelLower = (resolvedLabelForCheck || '').toLowerCase();
+                const isUbicacionField = keyLower === 'ubicacion' || keyLower === 'cobertura' || keyLower.includes('ubicacion') || labelLower.includes('ubicacion') || labelLower.includes('cobertura') || labelLower.includes('nivel planta') || labelLower.includes('planta') || labelLower.includes('nivel');
+
+                let finalVal = value;
+                if (typeof value === 'string' && isUbicacionField) {
+                    finalVal = value.toUpperCase();
+                }
+
                 // Actualizar el valor del check
-                const updated = { ...eq, [checkKey]: value, revisado: true };
+                const updated = { ...eq, [checkKey]: finalVal, revisado: true };
+                if (isUbicacionField && typeof finalVal === 'string') {
+                    updated.ubicacion = finalVal;
+                }
                 
                 // Sincronizar fechas y evaluar anomalías por fecha incondicionalmente
                 const sistema = sistemasDelCentro.find(s => s.id === eq.sistemaId);
@@ -785,9 +964,14 @@ export default function RevisionChecklist() {
                 // Evaluar y actualizar eq.anomalias conservando notas manuales
                 updated.anomalias = evaluarAnomaliasPorFecha(updated, sistema);
 
-                const anoItem = itemsToUseForDates.find(i => (i.label||'').toLowerCase().includes('anomal') || (i.label||'').toLowerCase().includes('observacion') || (i.label||'').toLowerCase().includes('notas'));
+                const anoItem = itemsToUseForDates.find(i => (i.label||'').toLowerCase().includes('anomal') || (i.label||'').toLowerCase().includes('notas'));
                 if (anoItem && anoItem.key && anoItem.key !== 'anomalias') {
                     (updated as any)[anoItem.key] = updated.anomalias;
+                }
+
+                const obsItem = itemsToUseForDates.find(i => (i.label||'').toLowerCase().includes('observacion'));
+                if (obsItem && obsItem.key && obsItem.key !== 'observaciones' && checkKey === 'observaciones') {
+                    (updated as any)[obsItem.key] = value;
                 }
 
                 
@@ -874,15 +1058,15 @@ export default function RevisionChecklist() {
                 // Guardar última versión en cola
                 pendingEquiposRef.current.set(equipoId, equipoModificado);
 
-                // Cancelar temporizador previo de este equipo
-                if (syncTimersRef.current[equipoId]) {
-                    clearTimeout(syncTimersRef.current[equipoId]);
+                if (parteId) {
+                    updateParteOfflineData(parteId, { equiposInstalados: updatedEquipos }).catch(() => {});
+                    addPendingSyncItem(parteId, 'equipo', equipoId, equipoModificado).catch(() => {});
                 }
 
-                // Programar sincronización en 2.5 segundos tras dejar de teclear
+                // Programar sincronización en 600ms tras dejar de teclear
                 syncTimersRef.current[equipoId] = setTimeout(() => {
                     flushEquipoSync(equipoId);
-                }, 2500);
+                }, 600);
             }
 
             return updatedEquipos;
@@ -1227,6 +1411,84 @@ export default function RevisionChecklist() {
         setIsConfirmModalOpen(true);
     };
 
+    const handleCopiarEquipo = async (eqToCopy: EquipoInstalado) => {
+        try {
+            const sistemaId = eqToCopy.sistemaId;
+            const equiposDelSistema = equiposInstalados.filter(e => e.sistemaId === sistemaId);
+            const itemsToUse = checklistItemsPorSistema[sistemaId] || getItemsToUse(sistemaId) || [];
+
+            // Buscar clave dinámica de "Orden de lista" si existe
+            const itemOrden = itemsToUse.find((it: any) => it.label?.toLowerCase().trim() === 'orden de lista');
+            const ordenKey = itemOrden?.key;
+
+            let siguienteNumero = 1;
+            if (equiposDelSistema.length > 0) {
+                const numeros = equiposDelSistema
+                    .map(e => {
+                        const val = ordenKey ? (e as any)[ordenKey] || e.codigo : e.codigo;
+                        return parseInt(val || '0', 10);
+                    })
+                    .filter(n => !isNaN(n));
+                siguienteNumero = numeros.length > 0 ? Math.max(...numeros) + 1 : equiposDelSistema.length + 1;
+            }
+            const nextCodigo = siguienteNumero.toString().padStart(2, '0');
+
+            let newId = '';
+            try {
+                newId = `EQ-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+            } catch {
+                newId = `EQ-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+            }
+
+            const newEq: EquipoInstalado = {
+                ...eqToCopy,
+                id: newId,
+                codigo: nextCodigo,
+                placa: ''
+            };
+            delete (newEq as any)._docId;
+
+            if (ordenKey) {
+                (newEq as any)[ordenKey] = nextCodigo;
+            }
+
+            // Limpiar claves dinámicas que contengan "placa"
+            itemsToUse.forEach((item: any) => {
+                const lbl = (item.label || '').toLowerCase();
+                const k = (item.key || '').toLowerCase();
+                if (lbl.includes('placa') || k.includes('placa')) {
+                    (newEq as any)[item.key] = '';
+                }
+            });
+
+            const updatedEquipos = [...equiposInstalados, newEq];
+            setEquiposInstalados(updatedEquipos);
+            saveEquiposProgress(updatedEquipos);
+
+            if (parteId) {
+                await updateParteOfflineData(parteId, { equiposInstalados: updatedEquipos });
+                if (newEq.id) {
+                    await addPendingSyncItem(parteId, 'equipo', newEq.id, newEq);
+                }
+            }
+
+            try {
+                if (navigator.onLine) {
+                    await addEquipoInstalado(newEq as any);
+                    showToast('Equipo copiado');
+                } else {
+                    showToast('Equipo copiado en local (Offline)');
+                }
+            } catch (err) {
+                console.warn('Guardado offline para equipo copiado:', err);
+                showToast('Equipo copiado en local (Offline)');
+            }
+        } catch (err) {
+            console.error('Error al copiar nuevo equipo:', err);
+            showToast('Error al copiar equipo');
+        }
+    };
+
     const handleConfirmarRevisarTodo = async () => {
         const sistId = revisarTodoConfirm.sistemaId;
         if (!sistId) return;
@@ -1400,15 +1662,60 @@ export default function RevisionChecklist() {
     return (
         <div className="min-h-screen bg-slate-50">
             {/* Top Navigation Bar */}
-            <div className="sticky top-0 z-20 bg-white/80 backdrop-blur-md border-b border-slate-200 px-6 py-3">
-                <div className="max-w-5xl mx-auto flex items-center justify-between">
+            <div className="sticky top-0 z-20 bg-white/90 backdrop-blur-md border-b border-slate-200 px-4 sm:px-6 py-2.5 shadow-sm">
+                <div className="max-w-5xl mx-auto flex items-center justify-between gap-2">
                     <button
                         onClick={() => navigate(-1)}
-                        className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-slate-800 transition-colors px-3 py-1.5 rounded-lg hover:bg-slate-100"
+                        className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors px-2.5 py-1.5 rounded-xl hover:bg-slate-100"
                     >
                         <ArrowLeft className="w-4 h-4" /> Volver
                     </button>
-                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-widest">Revisión técnica</span>
+
+                    <div className="flex items-center gap-2">
+                        {/* Insignia Estado de Red */}
+                        {isOnlineState ? (
+                            <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full">
+                                <Wifi className="w-3 h-3 text-emerald-600" />
+                                <span className="hidden sm:inline">Online</span>
+                            </span>
+                        ) : (
+                            <span className="flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2.5 py-1 rounded-full animate-pulse">
+                                <WifiOff className="w-3 h-3 text-rose-600" />
+                                <span>Modo Offline</span>
+                            </span>
+                        )}
+
+                        {/* Insignia Estado de Sincronización Local */}
+                        {pendingSyncCount > 0 ? (
+                            <span className="flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-50 border border-amber-300 px-2.5 py-1 rounded-full" title={`Estado: ${syncStatusText}`}>
+                                <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping"></span>
+                                <span>{pendingSyncCount} cambios locales</span>
+                            </span>
+                        ) : (
+                            <span className="hidden sm:flex items-center gap-1 text-[11px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-full" title={`Estado: ${syncStatusText}`}>
+                                <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                                <span>Sincronizado</span>
+                            </span>
+                        )}
+
+                        {/* Botón Sincronizar Parte Completo */}
+                        <button
+                            type="button"
+                            onClick={handleSincronizarParteCompleto}
+                            disabled={isSyncingFullParte}
+                            className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl transition-all shadow-sm active:scale-95 cursor-pointer ${
+                                isSyncingFullParte
+                                    ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                                    : pendingSyncCount > 0
+                                    ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-amber-500/20'
+                                    : 'bg-zinc-900 hover:bg-black text-white shadow-zinc-900/10'
+                            }`}
+                            title="Sincronizar parte completo bloque por bloque en segundo plano"
+                        >
+                            <RefreshCw className={`w-3.5 h-3.5 ${isSyncingFullParte ? 'animate-spin' : ''}`} />
+                            <span>{isSyncingFullParte ? 'Sincronizando...' : 'Sincronizar parte'}</span>
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -1421,7 +1728,7 @@ export default function RevisionChecklist() {
                                 Este parte de trabajo está cerrado y se muestra en modo de solo lectura.
                             </div>
                         </div>
-                        {!isTecnico && (
+                        {isAdminOrSuper && (
                             <button
                                 type="button"
                                 onClick={handleReabrirParte}
@@ -1645,25 +1952,24 @@ export default function RevisionChecklist() {
                                                              {equiposSistema.map((eq, idx) => {
                                                                   const itemsToUse = getItemsToUse(sist.id);
                                                                   
-                                                                  // Buscar si tiene campo de fecha de revisión y si es el día de hoy
+                                                                  // Buscar si tiene campo de fecha de revisión
                                                                   const itemFechaRevision = itemsToUse.find((item) => {
                                                                       const labelLower = (item.label || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
                                                                       return labelLower.includes('fecha de revision');
                                                                   });
                                                                   
-                                                                  const hoyStr = new Date().toISOString().split('T')[0];
                                                                   const valFecha = itemFechaRevision ? eq[itemFechaRevision.key as keyof EquipoInstalado] : null;
-                                                                  const fechaEsHoy = typeof valFecha === 'string' && valFecha.trim() === hoyStr;
+                                                                  const fechaEsReciente = esFechaRevisionReciente(valFecha, 15);
                                                                   
-                                                                  // Si tiene campo fecha de revisión, debe ser hoy. Si no, usamos eq.revisado.
-                                                                  const isRevisado = itemFechaRevision ? fechaEsHoy : eq.revisado;
+                                                                  // Se mantiene verde si la fecha de revisión está en los últimos 15 días. Si no tiene ese campo, usamos eq.revisado.
+                                                                  const isRevisado = itemFechaRevision ? fechaEsReciente : eq.revisado;
                                                                   
-                                                                  let colorClass = 'bg-amber-500 shadow-[0_0_6px_rgba(245,158,11,0.6)] text-white'; // Amarillo (Fecha no actual / Pendiente)
-                                                                  let titleText = 'Fecha no actual';
+                                                                  let colorClass = 'bg-amber-500 shadow-[0_0_6px_rgba(245,158,11,0.6)] text-white'; // Amarillo (Supera 15 días / Pendiente)
+                                                                  let titleText = 'Supera los 15 días o pendiente';
                                                                   
                                                                   if (isRevisado) {
-                                                                      colorClass = 'bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.6)] text-white'; // Verde (Revisado hoy)
-                                                                      titleText = 'Revisado hoy (OK)';
+                                                                      colorClass = 'bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.6)] text-white'; // Verde (Revisado en los últimos 15 días)
+                                                                      titleText = 'Revisado (OK - Últimos 15 días)';
                                                                   }
                                                                   
                                                                   const numeroEquipo = idx + 1;
@@ -1676,8 +1982,8 @@ export default function RevisionChecklist() {
                                                                              e.stopPropagation();
                                                                              // Asegurar que el sistema está abierto en el acordeón
                                                                              setOpenSistemas(prev => ({ ...prev, [sist.id]: true }));
-                                                                             // Desplazar suavemente dejando la cabecera del equipo completamente visible debajo de la barra pegajosa (offset 160px)
-                                                                             setTimeout(() => {
+                                                                             // Desplazar suavemente dejando la cabecera del equipo completamente visible
+                                                                             const scrollToTarget = () => {
                                                                                  const el = document.getElementById(`equipo-${eq.id}`);
                                                                                  if (el) {
                                                                                      const headerOffset = 160;
@@ -1692,7 +1998,9 @@ export default function RevisionChecklist() {
                                                                                          el.classList.remove('ring-2', 'ring-indigo-500', 'ring-offset-2');
                                                                                      }, 2000);
                                                                                  }
-                                                                             }, 120);
+                                                                             };
+                                                                             setTimeout(scrollToTarget, 50);
+                                                                             setTimeout(scrollToTarget, 220);
                                                                          }}
                                                                          className={`min-w-[14px] h-[14px] px-0.5 rounded-full ${colorClass} flex items-center justify-center text-[9px] font-bold leading-none transition-all hover:scale-110 active:scale-95 cursor-pointer select-none`}
                                                                          title={`${eq.codigo || `Equipo ${numeroEquipo}`}: ${titleText} (Haz clic para ir al equipo)`}
@@ -1742,7 +2050,7 @@ export default function RevisionChecklist() {
                                         )}
 
                                         {/* Botones de acción del sistema - parte superior */}
-                                        {(parte.estado === 'En revisión' || parte.estado === 'Pre-Cerrado') && (
+                                        {parte.estado !== 'Cerrado' && (
                                             <div className="mb-5 flex flex-wrap gap-2">
                                                 <button
                                                     type="button"
@@ -1767,7 +2075,7 @@ export default function RevisionChecklist() {
                                             </div>
                                         )}
 
-                                        <div className={`space-y-4 ${(parte.estado !== 'En revisión' && parte.estado !== 'Pre-Cerrado') ? 'pointer-events-none select-none opacity-95' : ''}`}>
+                                        <div className={`space-y-4 ${parte.estado === 'Cerrado' ? 'pointer-events-none select-none opacity-95' : ''}`}>
                                             {(() => {
                                                 const filteredEqs = equiposInstalados
                                                     .filter(eq => eq.sistemaId === sist.id)
@@ -1815,7 +2123,8 @@ export default function RevisionChecklist() {
                                                             handleDeleteEquipo,
                                                             handleCheckChange,
                                                             getCheckStats,
-                                                            getEquipoSyncStatus
+                                                            getEquipoSyncStatus,
+                                                            handleCopiarEquipo
                                                         };
 
                                                         if (isExtintor) return <SistemaExtintores {...commonProps} />;
@@ -1876,7 +2185,7 @@ export default function RevisionChecklist() {
                                 <p className="text-xs text-orange-700">Esta revisión está finalizada y es de solo lectura.</p>
                             </div>
                         </div>
-                        {!isTecnico && (
+                        {isAdminOrSuper && (
                             <button
                                 onClick={handleReabrirParte}
                                 className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white text-sm font-semibold rounded-xl transition-colors shadow-sm"
@@ -1901,7 +2210,7 @@ export default function RevisionChecklist() {
                             </span>
                         )}
                     </button>
-                    {(parte.estado === 'En revisión' || parte.estado === 'Pre-Cerrado') && (
+                    {parte.estado !== 'Cerrado' && (
                         <>
                             <button
                                 onClick={handlePauseRevision}
@@ -1909,23 +2218,33 @@ export default function RevisionChecklist() {
                             >
                                 <Save className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> Guardar datos
                             </button>
-                            <button
-                                onClick={isTecnico ? handleSaveRevision : handlePreCerrarParte}
-                                className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1 sm:gap-2 px-1.5 py-2.5 sm:px-5 sm:py-2.5 rounded-xl font-semibold text-white bg-indigo-600 hover:bg-indigo-700 shadow-md shadow-indigo-200 transition-all text-[11px] sm:text-sm text-center leading-tight"
-                            >
-                                <Lock className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> {isTecnico ? 'Finalizar parte' : 'Pre-cerrar'}
-                            </button>
-                            {!isTecnico && (
+                            {isTecnico && (
                                 <button
-                                    onClick={handleCerrarParte}
-                                    className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1 sm:gap-2 px-1.5 py-2.5 sm:px-5 sm:py-2.5 rounded-xl font-semibold text-white bg-black hover:bg-zinc-900 shadow-md shadow-zinc-800 transition-all text-[11px] sm:text-sm text-center leading-tight"
+                                    onClick={handleSaveRevision}
+                                    className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1 sm:gap-2 px-1.5 py-2.5 sm:px-5 sm:py-2.5 rounded-xl font-semibold text-white bg-indigo-600 hover:bg-indigo-700 shadow-md shadow-indigo-200 transition-all text-[11px] sm:text-sm text-center leading-tight"
                                 >
-                                    <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> Cerrar
+                                    <Lock className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> Finalizar parte
                                 </button>
+                            )}
+                            {isAdminOrSuper && (
+                                <>
+                                    <button
+                                        onClick={handlePreCerrarParte}
+                                        className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1 sm:gap-2 px-1.5 py-2.5 sm:px-5 sm:py-2.5 rounded-xl font-semibold text-white bg-indigo-600 hover:bg-indigo-700 shadow-md shadow-indigo-200 transition-all text-[11px] sm:text-sm text-center leading-tight"
+                                    >
+                                        <Lock className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> Pre-cerrar
+                                    </button>
+                                    <button
+                                        onClick={handleCerrarParte}
+                                        className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1 sm:gap-2 px-1.5 py-2.5 sm:px-5 sm:py-2.5 rounded-xl font-semibold text-white bg-black hover:bg-zinc-900 shadow-md shadow-zinc-800 transition-all text-[11px] sm:text-sm text-center leading-tight"
+                                    >
+                                        <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> Cerrar
+                                    </button>
+                                </>
                             )}
                         </>
                     )}
-                    {parte.estado === 'Cerrado' && !isTecnico && (
+                    {parte.estado === 'Cerrado' && isAdminOrSuper && (
                         <button
                             onClick={handleReabrirParte}
                             className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1 sm:gap-2 px-1.5 py-2.5 sm:px-5 sm:py-2.5 rounded-xl font-semibold text-white bg-amber-500 hover:bg-amber-600 shadow-md shadow-amber-200 transition-all text-[11px] sm:text-sm text-center leading-tight"
@@ -1953,14 +2272,23 @@ export default function RevisionChecklist() {
                         setEquiposInstalados(updated);
                         saveEquiposProgress(updated);
 
-                        try {
-                            if (updatedEq.id && !updatedEq.id.startsWith('temp_')) {
-                                await updateEquipoInstalado(updatedEq.id, updatedEq);
+                        if (parteId) {
+                            await updateParteOfflineData(parteId, { equiposInstalados: updated });
+                            if (updatedEq.id) {
+                                await addPendingSyncItem(parteId, 'equipo', updatedEq.id, updatedEq);
                             }
-                            showToast('Equipo actualizado');
+                        }
+
+                        try {
+                            if (updatedEq.id && !updatedEq.id.startsWith('temp_') && navigator.onLine) {
+                                await updateEquipoInstalado(updatedEq.id, updatedEq);
+                                showToast('Equipo actualizado');
+                            } else {
+                                showToast('Equipo guardado en local (Offline)');
+                            }
                         } catch (err) {
-                            console.error('Error al actualizar equipo en Firestore:', err);
-                            showToast('Error al actualizar en servidor');
+                            console.warn('Guardado offline para equipo actualizado:', err);
+                            showToast('Equipo guardado en local (Offline)');
                         }
                         
                         setEditEquipo(null);
@@ -1989,6 +2317,7 @@ export default function RevisionChecklist() {
                     sistemaId={addEquipo.sistemaId}
                     sistemaNombre={sistemasDelCentro.find(s => s.id === addEquipo.sistemaId)?.tipo || sistemasDelCentro.find(s => s.id === addEquipo.sistemaId)?.familia || ''}
                     centroId={centroId}
+                    parteId={parteId}
                     plantillaId={sistemasDelCentro.find(s => s.id === addEquipo.sistemaId)?.tipo || sistemasDelCentro.find(s => s.id === addEquipo.sistemaId)?.familia || ''}
                     equiposExistentes={equiposInstalados.filter(e => e.sistemaId === addEquipo.sistemaId)}
                     onSave={async (equipo) => {
@@ -2010,12 +2339,23 @@ export default function RevisionChecklist() {
                         setEquiposInstalados(updatedEquipos);
                         saveEquiposProgress(updatedEquipos);
                         
+                        if (parteId) {
+                            await updateParteOfflineData(parteId, { equiposInstalados: updatedEquipos });
+                            if (equipoConCodigo.id) {
+                                await addPendingSyncItem(parteId, 'equipo', equipoConCodigo.id, equipoConCodigo);
+                            }
+                        }
+
                         try {
-                            await addEquipoInstalado(equipoConCodigo as any);
-                            showToast('Equipo añadido');
+                            if (navigator.onLine) {
+                                await addEquipoInstalado(equipoConCodigo as any);
+                                showToast('Equipo añadido');
+                            } else {
+                                showToast('Equipo añadido en local (Offline)');
+                            }
                         } catch (err) {
-                            console.error('Error al añadir equipo en Firestore:', err);
-                            showToast('Error al añadir en servidor');
+                            console.warn('Guardado offline para equipo nuevo:', err);
+                            showToast('Equipo añadido en local (Offline)');
                         }
                         
                         setAddEquipo(prev => ({ ...prev, isOpen: false }));

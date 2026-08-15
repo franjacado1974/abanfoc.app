@@ -67,6 +67,7 @@ function Login({ usuarios: _usuarios, onLogin }: { usuarios: Usuario[], onLogin:
       const remoteUser = await verifyUser(username, password);
       if (remoteUser) {
         sessionStorage.setItem('firecheck_logged_user', JSON.stringify(remoteUser));
+        localStorage.setItem('firecheck_logged_user', JSON.stringify(remoteUser));
         onLogin(remoteUser);
         return;
       }
@@ -973,7 +974,7 @@ export default function App() {
 
   const [loggedUser, setLoggedUser] = useState<Usuario | null>(() => {
     try {
-      const session = sessionStorage.getItem('firecheck_logged_user');
+      const session = sessionStorage.getItem('firecheck_logged_user') || localStorage.getItem('firecheck_logged_user');
       return session ? JSON.parse(session) : null;
     } catch { return null; }
   });
@@ -1007,6 +1008,8 @@ export default function App() {
   });
 
   const handleLogout = () => {
+    sessionStorage.removeItem('firecheck_logged_user');
+    localStorage.removeItem('firecheck_logged_user');
     setLoggedUser(null);
     const stored = localStorage.getItem('firecheck_db_usuarios');
     if (stored) setAvailableUsers(JSON.parse(stored));

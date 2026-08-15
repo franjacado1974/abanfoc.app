@@ -20,7 +20,15 @@ interface Props {
     handleCheckChange: (equipoId: string, itemKey: string, value: any, itemName?: string) => void;
     getCheckStats: (eq: EquipoInstalado) => { ok: number; fail: number; pending: number };
     getEquipoSyncStatus?: (equipoId: string) => string;
+    handleCopiarEquipo?: (eqToCopy: EquipoInstalado) => void | Promise<void>;
 }
+
+const esCampoUbicacion = (label?: string, key?: string) => {
+    const lbl = (label || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const k = (key || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    return lbl.includes('ubicacion') || lbl.includes('cobertura') || lbl.includes('planta') || lbl.includes('nivel') ||
+           k.includes('ubicacion') || k.includes('cobertura') || k.includes('planta') || k.includes('nivel');
+};
 
 const esUbicacionMarcaModelo = (label?: string, key?: string) => {
     const lbl = (label || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -44,7 +52,8 @@ export default function SistemaDeteccion({
     handleDeleteEquipo,
     handleCheckChange: propHandleCheckChange,
     getCheckStats,
-    getEquipoSyncStatus
+    getEquipoSyncStatus,
+    handleCopiarEquipo
 }: Props) {
     const handleCheckChange = (equipoId: string, itemKey: string, value: any, itemName?: string) => {
         // Primero, obtener el equipo actual antes de aplicar el cambio
@@ -165,7 +174,7 @@ export default function SistemaDeteccion({
                                                         }
 
                                                         return (
-                                                            <div key={eq.id} className={`rounded-xl border transition-all ${algunCheckRojo ? 'bg-red-50/30 border-red-200' : 'bg-slate-50 border-slate-150'}`}>
+                                                            <div key={eq.id} id={`equipo-${eq.id}`} className={`scroll-mt-44 rounded-xl border transition-all ${algunCheckRojo ? 'bg-red-50/30 border-red-200' : 'bg-slate-50 border-slate-150'}`}>
                                                                 <div className="px-4 py-3 flex flex-wrap items-center justify-between gap-2">
                                                                     <div className="flex flex-wrap items-center gap-2 min-w-0">
                                                                         <span className="px-3 py-1 bg-black text-white text-sm font-mono font-bold rounded-lg shadow-md min-w-[36px] text-center shrink-0">
@@ -351,19 +360,22 @@ export default function SistemaDeteccion({
                                                                         const labelLower = (item.label || '').toLowerCase().replace(/[áéíóú]/g, (c) => ({'á':'a','é':'e','í':'i','ó':'o','ú':'u'})[c] || c);
                                                                         const esNumeroOrden = labelLower.includes('orden');
                                                                         const esUCase = esUbicacionMarcaModelo(item.label, item.key);
+                                                                        const esUbic = esCampoUbicacion(item.label, item.key);
+                                                                        const textoVal = esNumeroOrden ? (eq.codigo || '') : (typeof val === 'string' ? val : '');
+                                                                        const esExcedido40 = esUbic && typeof textoVal === 'string' && textoVal.length > 40;
                                                                         const placeholderTexto = labelLower.includes('referencia') && labelLower.includes('instalacion')
                                                                             ? 'Ejemplo: Area general o zona'
                                                                             : '...';
                                                                         return (
                                                                             <input
                                                                                 type="text"
-                                                                                value={esNumeroOrden ? (eq.codigo || '') : (typeof val === 'string' ? (esUCase ? val.toUpperCase() : val) : '')}
+                                                                                value={esNumeroOrden ? (eq.codigo || '') : (typeof val === 'string' ? (val) : '')}
                                                                                 onChange={(e) => {
                                                                                     if (!esNumeroOrden) {
-                                                                                        handleCheckChange(eq.id, item.key, esUCase ? e.target.value.toUpperCase() : e.target.value);
+                                                                                        handleCheckChange(eq.id, item.key, e.target.value);
                                                                                     }
                                                                                 }}
-                                                                                className={`w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${esNumeroOrden ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''} ${esNumeroOrden ? '' : getResponseColorClass(val, typeof val === 'string' && val.trim() !== '')} ${esUCase ? 'uppercase' : ''}`}
+                                                                                className={`w-full px-2 py-1.5 rounded-lg text-xs outline-none transition-colors ${esExcedido40 ? 'bg-red-50 border-2 border-red-500 text-red-700 font-bold focus:border-red-600 focus:ring-2 focus:ring-red-500/20' : 'bg-white border border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20'} ${esNumeroOrden ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''} ${esNumeroOrden ? '' : getResponseColorClass(val, typeof val === 'string' && val.trim() !== '')} ${esUCase ? 'uppercase' : ''}`}
                                                                                 placeholder={placeholderTexto}
                                                                                 readOnly={esNumeroOrden}
                                                                             />
@@ -462,6 +474,9 @@ export default function SistemaDeteccion({
                                                                                  const labelLower = (item.label || '').toLowerCase().replace(/[áéíóú]/g, (c) => ({'á':'a','é':'e','í':'i','ó':'o','ú':'u'})[c] || c);
                                                                                  const esNumeroOrden = labelLower.includes('orden');
                                                                                  const esUCase = esUbicacionMarcaModelo(item.label, item.key);
+                                                                        const esUbic = esCampoUbicacion(item.label, item.key);
+                                                                        const textoVal = esNumeroOrden ? (eq.codigo || '') : (typeof val === 'string' ? val : '');
+                                                                        const esExcedido40 = esUbic && typeof textoVal === 'string' && textoVal.length > 40;
                                                                                  if (esNumeroOrden) console.log('🔍 Campo Nº Orden detectado, eq.codigo =', eq.codigo);
                                                                                  const placeholderTexto = labelLower.includes('referencia') && labelLower.includes('instalacion')
                                                                                      ? 'Ejemplo: Area general o zona'
@@ -472,13 +487,13 @@ export default function SistemaDeteccion({
                                                                                          <label className="text-[10px] font-normal text-slate-500">{item.label}</label>
                                                                                          <input
                                                                                              type="text"
-                                                                                             value={esNumeroOrden ? (eq.codigo || '') : (typeof val === 'string' ? (esUCase ? val.toUpperCase() : val) : '')}
+                                                                                             value={esNumeroOrden ? (eq.codigo || '') : (typeof val === 'string' ? (val) : '')}
                                                                                              onChange={(e) => {
                                                                                                  if (!esNumeroOrden) {
-                                                                                                     handleCheckChange(eq.id, item.key, esUCase ? e.target.value.toUpperCase() : e.target.value);
+                                                                                                     handleCheckChange(eq.id, item.key, e.target.value);
                                                                                                  }
                                                                                              }}
-                                                                                             className={`w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 ${esNumeroOrden ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''} ${esNumeroOrden ? '' : getResponseColorClass(val, tieneValorTexto)} ${esUCase ? 'uppercase' : ''}`}
+                                                                                             className={`w-full px-2 py-1.5 rounded-lg text-xs outline-none transition-colors ${esExcedido40 ? 'bg-red-50 border-2 border-red-500 text-red-700 font-bold focus:border-red-600 focus:ring-2 focus:ring-red-500/20' : 'bg-white border border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20'} ${esNumeroOrden ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''} ${esNumeroOrden ? '' : getResponseColorClass(val, tieneValorTexto)} ${esUCase ? 'uppercase' : ''}`}
                                                                                              placeholder={placeholderTexto}
                                                                                              readOnly={esNumeroOrden}
                                                                                          />
@@ -584,16 +599,12 @@ export default function SistemaDeteccion({
 
                                                                        const handleAnomaliaChange = (newVal: string) => {
                                                                            handleCheckChange(eq.id, 'anomalias', newVal);
-                                                                           if (noteItemAnom) {
-                                                                               handleCheckChange(eq.id, noteItemAnom.key, newVal);
-                                                                           }
+                                                                           
                                                                        };
 
                                                                        const handleObservacionesChange = (newVal: string) => {
                                                                            handleCheckChange(eq.id, 'observaciones', newVal);
-                                                                           if (noteItemObs) {
-                                                                               handleCheckChange(eq.id, noteItemObs.key, newVal);
-                                                                           }
+                                                                           
                                                                        };
 
                                                                        return (
@@ -833,6 +844,17 @@ export default function SistemaDeteccion({
                                                                                  className="px-4 py-2 bg-slate-400 hover:bg-slate-500 text-white rounded-lg text-xs font-semibold transition-all shadow-sm"
                                                                              >
                                                                                  Limpiar Checks
+                                                                             </button>
+                                                                             <button
+                                                                                 type="button"
+                                                                                 onClick={() => {
+                                                                                     if (handleCopiarEquipo) {
+                                                                                         handleCopiarEquipo(eq);
+                                                                                     }
+                                                                                 }}
+                                                                                 className="px-4 py-2 bg-black hover:bg-zinc-800 text-white rounded-lg text-xs font-semibold transition-all shadow-sm"
+                                                                             >
+                                                                                 Copiar nuevo equipo
                                                                              </button>
                                                                           </div>
                                                                           <div className="flex items-center gap-1.5">

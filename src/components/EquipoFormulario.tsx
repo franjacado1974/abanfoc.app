@@ -11,10 +11,47 @@
  * - Al guardar, persiste id, centroId, sistemaId y todos los campos de la plantilla
  */
 import { useState, useEffect } from 'react';
-import { X, Save, Camera, CheckCircle2, XCircle } from 'lucide-react';
+import { X, Save, Camera, CheckCircle2, XCircle, RefreshCw, Trash2 } from 'lucide-react';
 import { getPlantillas, subscribeItemsDePlantilla, type ItemPlantilla } from '../plantillas';
 import { uploadFile, subscribeSistemasCategorias } from '../firebase';
 import type { EquipoInstalado } from '../Centros';
+
+const readFileAsDataUrl = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+            const rawDataUrl = reader.result as string;
+            if (!rawDataUrl) {
+                reject(new Error('FileReader vacío'));
+                return;
+            }
+            const img = new window.Image();
+            img.onload = () => {
+                try {
+                    const canvas = document.createElement('canvas');
+                    const MAX = 800;
+                    let w = img.width, h = img.height;
+                    if (w > MAX || h > MAX) {
+                        if (w > h) { h = Math.floor(h * MAX / w); w = MAX; }
+                        else { if (h > MAX) { w = Math.floor(w * MAX / h); h = MAX; } }
+                    }
+                    canvas.width = w; canvas.height = h;
+                    const ctx = canvas.getContext('2d');
+                    if (ctx) {
+                        ctx.drawImage(img, 0, 0, w, h);
+                        resolve(canvas.toDataURL('image/jpeg', 0.8));
+                        return;
+                    }
+                } catch { /* use rawDataUrl */ }
+                resolve(rawDataUrl);
+            };
+            img.onerror = () => resolve(rawDataUrl);
+            img.src = rawDataUrl;
+        };
+        reader.onerror = () => reject(new Error('FileReader error'));
+        reader.readAsDataURL(file);
+    });
+};
 
 interface EquipoFormularioProps {
     equipo: Partial<EquipoInstalado> | null;
@@ -32,8 +69,8 @@ interface EquipoFormularioProps {
 const isUbicacionMarcaModelo = (label?: string, key?: string) => {
     const lbl = (label || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     const k = (key || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    return lbl.includes('ubicacion') || lbl.includes('marca') || lbl.includes('modelo') ||
-           k.includes('ubicacion') || k.includes('marca') || k.includes('modelo');
+    return lbl.includes('ubicacion') || lbl.includes('marca') || lbl.includes('modelo') || lbl.includes('planta') || lbl.includes('nivel') ||
+           k.includes('ubicacion') || k.includes('marca') || k.includes('modelo') || k.includes('planta') || k.includes('nivel');
 };
 
 export default function EquipoFormulario({
@@ -41,7 +78,7 @@ export default function EquipoFormulario({
     sistemaId,
     sistemaNombre,
     centroId,
-    parteId,
+    parteId: _parteId,
     plantillaId: _plantillaId,
     onSave,
     onCancel,
@@ -52,10 +89,11 @@ export default function EquipoFormulario({
     const [plantillaItems, setPlantillaItems] = useState<ItemPlantilla[]>([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [uploadingFoto, setUploadingFoto] = useState(false);
     const [plantillaEncontradaNombre, setPlantillaEncontradaNombre] = useState<string | null>(null);
     const [tiposSistema, setTiposSistema] = useState<{ id: string; nombre: string }[]>([]);
 
-    const modoRevision = !!parteId;
+    const modoRevision = true;
 
     // Cargar tipos del sistema actual
     useEffect(() => {
@@ -235,10 +273,22 @@ export default function EquipoFormulario({
 
     const handleChange = (key: string, value: any) => {
         setFormData(prev => {
-            const updated = { ...prev, [key]: value };
+            const currentItem = plantillaItems.find(it => it.key === key);
+            const keyLower = key.toLowerCase();
+            const labelLower = (currentItem?.label || '').toLowerCase();
+            const isUbicacionField = keyLower === 'ubicacion' || keyLower === 'cobertura' || keyLower.includes('ubicacion') || labelLower.includes('ubicacion') || labelLower.includes('cobertura') || labelLower.includes('nivel planta') || labelLower.includes('planta') || labelLower.includes('nivel');
+
+            let finalVal = value;
+            if (typeof value === 'string' && isUbicacionField) {
+                finalVal = value.toUpperCase();
+            }
+
+            const updated = { ...prev, [key]: finalVal };
+            if (isUbicacionField && typeof finalVal === 'string') {
+                updated.ubicacion = finalVal;
+            }
             
             // Auto-gestionar anomalías en el campo de Observaciones
-            const currentItem = plantillaItems.find(it => it.key === key);
             const notasItem = plantillaItems.find(item => {
                 const lbl = (item.label || '').toLowerCase();
                 return lbl.includes('anomal') || ((lbl.includes('notas') || lbl.includes('observaciones')) && !plantillaItems.some(i => (i.label||'').toLowerCase().includes('anomal')));
@@ -332,7 +382,7 @@ export default function EquipoFormulario({
                         }
                     } else if (
                         !isBoolOrCheck &&
-                        (label.includes('ubicación') || label.includes('ubicacion') || label.includes('cobertura'))
+                        (label.includes('ubicación') || label.includes('ubicacion') || label.includes('cobertura') || label.includes('planta') || label.includes('nivel'))
                     ) {
                         equipoToSave.ubicacion = strVal.toUpperCase();
                         (equipoToSave as any)[item.key] = strVal.toUpperCase();
@@ -392,34 +442,28 @@ export default function EquipoFormulario({
         const file = e.target.files?.[0];
         if (!file) return;
 
+        setUploadingFoto(true);
         try {
-            const thumbnail = await new Promise<Blob>((resolve, reject) => {
-                const img = new window.Image();
-                const url = URL.createObjectURL(file);
-                img.onload = () => {
-                    URL.revokeObjectURL(url);
-                    const canvas = document.createElement('canvas');
-                    const MAX = 640;
-                    let w = img.width, h = img.height;
-                    if (w > h) { if (w > MAX) { h = Math.floor(h * MAX / w); w = MAX; } }
-                    else { if (h > MAX) { w = Math.floor(w * MAX / h); h = MAX; } }
-                    canvas.width = w; canvas.height = h;
-                    const ctx = canvas.getContext('2d');
-                    if (!ctx) { reject(new Error('canvas error')); return; }
-                    ctx.drawImage(img, 0, 0, w, h);
-                    canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('blob error')), 'image/jpeg', 0.75);
-                };
-                img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('load error')); };
-                img.src = url;
-            });
+            const dataUrl = await readFileAsDataUrl(file);
+            handleChange('foto', dataUrl);
 
-            const thumbFile = new File([thumbnail], `thumb_${Date.now()}.jpg`, { type: 'image/jpeg' });
-            const path = `equipos/${centroId}/${sistemaId}/${formData.id || 'temp'}/foto_${Date.now()}`;
-            const url = await uploadFile(thumbFile, path);
-            handleChange('foto', url);
+            if (navigator.onLine) {
+                try {
+                    const res = await fetch(dataUrl);
+                    const blobData = await res.blob();
+                    const thumbFile = new File([blobData], `thumb_${Date.now()}.jpg`, { type: 'image/jpeg' });
+                    const path = `equipos/${centroId}/${sistemaId}/${formData.id || 'temp'}/foto_${Date.now()}`;
+                    const url = await uploadFile(thumbFile, path);
+                    handleChange('foto', url);
+                } catch (netErr) {
+                    console.warn('Subida online falló, conservando dataUrl local:', netErr);
+                }
+            }
         } catch (err) {
-            console.error('Error al subir imagen:', err);
-            alert('Error al subir la imagen');
+            console.error('Error al procesar imagen:', err);
+            alert('Error al procesar la imagen');
+        } finally {
+            setUploadingFoto(false);
         }
     };
 
@@ -742,6 +786,8 @@ export default function EquipoFormulario({
         const isObservacionField = (itemLblLower.includes('observaci') || itemLblLower.includes('nota')) && !isAnomaliaField;
         const isAnoFieldWithMsg = isAnomaliaField && typeof value === 'string' && value.trim() !== '';
         const isObsFieldWithMsg = isObservacionField && typeof value === 'string' && value.trim() !== '';
+        const isUbicacionField = itemLblLower.includes('ubicacion') || itemLblLower.includes('cobertura') || itemLblLower.includes('planta') || itemLblLower.includes('nivel') || item.key.toLowerCase().includes('ubicacion') || item.key.toLowerCase().includes('cobertura') || item.key.toLowerCase().includes('planta') || item.key.toLowerCase().includes('nivel');
+        const isUbicacionExcedida = isUbicacionField && typeof value === 'string' && value.length > 40;
 
         if (item.horizontal || tipo === 'pregunta-horizontal') {
             const isCheck = tipo === 'check';
@@ -867,10 +913,12 @@ export default function EquipoFormulario({
                                 return (
                                     <input
                                         type="text"
-                                        value={typeof value === 'string' ? (isUCase ? value.toUpperCase() : value) : ''}
-                                        onChange={(e) => handleChange(item.key, isUCase ? e.target.value.toUpperCase() : e.target.value)}
+                                        value={typeof value === 'string' ? value : ''}
+                                        onChange={(e) => handleChange(item.key, e.target.value)}
                                         className={`w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 transition-colors ${isUCase ? 'uppercase' : ''} ${
-                                            isErrorDate || isAnoFieldWithMsg
+                                            isUbicacionExcedida
+                                            ? 'bg-red-50 border-2 border-red-500 text-red-700 font-bold focus:border-red-600 focus:ring-red-500/20'
+                                            : (isErrorDate || isAnoFieldWithMsg)
                                             ? 'bg-red-50 border-red-400 text-red-700 focus:border-red-500 focus:ring-red-500/20' 
                                             : 'bg-white border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20'
                                         }`}
@@ -985,7 +1033,7 @@ export default function EquipoFormulario({
                                 const file = e.target.files?.[0];
                                 if (!file) return;
                                 try {
-                                    const thumbnail = await new Promise<Blob>((resolve, reject) => {
+                                    const dataUrl = await new Promise<string>((resolve, reject) => {
                                         const img = new window.Image();
                                         const url = URL.createObjectURL(file);
                                         img.onload = () => {
@@ -999,27 +1047,43 @@ export default function EquipoFormulario({
                                             const ctx = canvas.getContext('2d');
                                             if (!ctx) { reject(new Error('canvas error')); return; }
                                             ctx.drawImage(img, 0, 0, w, h);
-                                            canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('blob error')), 'image/jpeg', 0.75);
+                                            resolve(canvas.toDataURL('image/jpeg', 0.75));
                                         };
                                         img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('load error')); };
                                         img.src = url;
                                     });
-                                    const thumbFile = new File([thumbnail], `thumb_${Date.now()}.jpg`, { type: 'image/jpeg' });
-                                    const path = `equipos/${centroId}/${sistemaId}/${formData.id || 'temp'}/${item.key}_${Date.now()}`;
-                                    const uploadedUrl = await uploadFile(thumbFile, path);
-                                    handleChange(item.key, uploadedUrl);
+
+                                    if (navigator.onLine) {
+                                        try {
+                                            const res = await fetch(dataUrl);
+                                            const blobData = await res.blob();
+                                            const thumbFile = new File([blobData], `thumb_${Date.now()}.jpg`, { type: 'image/jpeg' });
+                                            const path = `equipos/${centroId}/${sistemaId}/${formData.id || 'temp'}/${item.key}_${Date.now()}`;
+                                            const uploadedUrl = await uploadFile(thumbFile, path);
+                                            handleChange(item.key, uploadedUrl);
+                                            return;
+                                        } catch (netErr) {
+                                            console.warn('Falló la subida online de imagen de campo, usando dataUrl local:', netErr);
+                                        }
+                                    }
+
+                                    handleChange(item.key, dataUrl);
                                 } catch (err) {
-                                    console.error('Error subiendo imagen de campo:', err);
-                                    alert('Error al subir la imagen');
+                                    console.error('Error procesando imagen de campo:', err);
+                                    alert('Error al procesar la imagen');
                                 }
                             }}
                         />
                         {imgUrl ? (
-                            <div className="relative w-full h-32 rounded-lg overflow-hidden border border-slate-200 bg-slate-50">
+                            <div className="relative w-full h-36 rounded-xl overflow-hidden border-2 border-indigo-200 bg-slate-50 shadow-sm group">
                                 <img src={imgUrl} alt={item.label} className="w-full h-full object-cover" />
-                                <button onClick={() => handleChange(item.key, '')}
-                                    className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full hover:bg-red-600">
-                                    <X className="w-3 h-3" />
+                                <button 
+                                    type="button"
+                                    onClick={() => handleChange(item.key, '')}
+                                    className="absolute top-2 right-2 p-1.5 bg-red-600 text-white rounded-full hover:bg-red-700 shadow-md transition-all active:scale-95 flex items-center justify-center"
+                                    title="Eliminar foto"
+                                >
+                                    <Trash2 className="w-4 h-4" />
                                 </button>
                             </div>
                         ) : (
@@ -1109,10 +1173,12 @@ export default function EquipoFormulario({
                         <label className="text-xs font-semibold text-slate-600">{item.label}</label>
                         <input
                             type="text"
-                            value={typeof value === 'string' ? (isUCase ? value.toUpperCase() : value) : ''}
-                            onChange={(e) => handleChange(item.key, isUCase ? e.target.value.toUpperCase() : e.target.value)}
+                            value={typeof value === 'string' ? value : ''}
+                            onChange={(e) => handleChange(item.key, e.target.value)}
                             className={`w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 transition-colors ${isUCase ? 'uppercase' : ''} ${
-                                isErrorDate || isAnoFieldWithMsg
+                                isUbicacionExcedida
+                                ? 'bg-red-50 border-2 border-red-500 text-red-700 font-bold focus:border-red-600 focus:ring-red-500/20'
+                                : (isErrorDate || isAnoFieldWithMsg)
                                 ? 'bg-red-50 border-red-400 text-red-700 focus:border-red-500 focus:ring-red-500/20' 
                                 : 'bg-white border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20'
                             }`}
@@ -1193,8 +1259,8 @@ export default function EquipoFormulario({
                                 </label>
                                 <input
                                     type="text"
-                                    value={(formData.ubicacion || '').toUpperCase()}
-                                    onChange={(e) => handleChange('ubicacion', e.target.value.toUpperCase())}
+                                    value={formData.ubicacion || ''}
+                                    onChange={(e) => handleChange('ubicacion', e.target.value)}
                                     className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 uppercase"
                                     placeholder={(sistemaNombre.toLowerCase().includes('detecci') || sistemaNombre.toLowerCase().includes('rociador') || sistemaNombre.toLowerCase().includes('sprinkler') || (sistemaNombre.toLowerCase().includes('puesto') && sistemaNombre.toLowerCase().includes('control'))) ? 'Área de cobertura de este sistema...' : 'Ubicación...'}
                                 />
@@ -1215,17 +1281,42 @@ export default function EquipoFormulario({
                             <h3 className="text-sm font-bold text-slate-700 mb-4">Fotografía</h3>
                             <div className="flex items-center gap-4">
                                 <input type="file" accept="image/*" capture="environment"
-                                    onChange={handleUploadFoto} className="hidden" id="foto-upload" />
+                                    onChange={handleUploadFoto} className="hidden" id="foto-upload" disabled={uploadingFoto} />
                                 <label htmlFor="foto-upload"
-                                    className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg text-sm font-semibold transition-all shadow-sm cursor-pointer">
-                                    <Camera className="w-4 h-4" /> Añadir foto
+                                    className={`inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer ${uploadingFoto ? 'opacity-70 cursor-wait' : ''}`}>
+                                    {uploadingFoto ? (
+                                        <>
+                                            <RefreshCw className="w-4 h-4 animate-spin text-white" />
+                                            <span>Procesando foto...</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Camera className="w-4 h-4 text-white" />
+                                            <span>Añadir foto</span>
+                                        </>
+                                    )}
                                 </label>
-                                {(formData as any).foto && typeof (formData as any).foto === 'string' && (
-                                    <div className="relative w-20 h-20 rounded-lg overflow-hidden border border-slate-200">
-                                        <img src={(formData as any).foto} alt="Foto" className="w-full h-full object-cover" />
-                                        <button onClick={() => handleChange('foto', '')}
-                                            className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full hover:bg-red-600">
-                                            <X className="w-3 h-3" />
+                                {(formData as any).foto && typeof (formData as any).foto === 'string' && (formData as any).foto.trim() !== '' && (
+                                    <div className="flex items-center gap-3">
+                                        <div className="relative w-24 h-24 rounded-2xl overflow-hidden border-2 border-indigo-200 shadow-md bg-slate-100 group">
+                                            <img src={(formData as any).foto} alt="Foto equipo" className="w-full h-full object-cover" />
+                                            <button 
+                                                type="button"
+                                                onClick={() => handleChange('foto', '')}
+                                                className="absolute top-1.5 right-1.5 p-1.5 bg-red-600 hover:bg-red-700 text-white rounded-full shadow-lg transition-all active:scale-95 flex items-center justify-center"
+                                                title="Eliminar foto"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleChange('foto', '')}
+                                            className="inline-flex items-center gap-1.5 px-3 py-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-xl text-xs font-bold transition-all active:scale-95 cursor-pointer shadow-sm"
+                                            title="Eliminar foto"
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                            <span>Eliminar foto</span>
                                         </button>
                                     </div>
                                 )}

@@ -110,9 +110,20 @@ export function normalizarDatosEmpresa(empresaInput?: any, empresaIdFallback?: s
   const email = getField(['correo', 'CORREO', 'Correo', 'email', 'EMAIL', 'Email', 'mail', 'correo_electronico', 'correoElectronico', 'emailContacto'], isDefaultAbanfoc ? 'info@abanfoc.com' : '');
   const web = getField(['web', 'WEB', 'Web', 'pagina_web', 'url', 'sitio_web', 'webEmpresa'], isDefaultAbanfoc ? 'www.abanfoc.com' : '');
   
-  const logoUrl = getField(['logoUrl', 'logo', 'logo_url', 'logoBase64', 'imagenLogo', 'logo_empresa'], isDefaultAbanfoc ? (typeof localStorage !== 'undefined' ? localStorage.getItem('firecheck_db_logo') || '' : '') : '');
+  const fallbackLogo = typeof localStorage !== 'undefined' ? (localStorage.getItem('firecheck_db_logo') || '') : '';
+  const logoUrl = getField(['logoUrl', 'logo', 'logo_url', 'logoBase64', 'imagenLogo', 'logo_empresa'], fallbackLogo);
   const selloUrl = getField(['selloUrl', 'sello', 'selloBase64', 'sello_url', 'imagenSello', 'sello_empresa']);
-  const ingenieroFirmaUrl = getField(['ingenieroFirmaUrl', 'firmaIngenieroBase64', 'firmaUrl', 'firma_ingeniero_url', 'firmaIngeniero', 'firmaTecnicoTitulado']);
+
+  let fallbackFirma = '';
+  try {
+    const singleEmpRaw = typeof localStorage !== 'undefined' ? localStorage.getItem('firecheck_db_empresa') : null;
+    if (singleEmpRaw) {
+      const parsedSingle = JSON.parse(singleEmpRaw);
+      fallbackFirma = parsedSingle?.firmaIngenieroBase64 || parsedSingle?.ingenieroFirmaUrl || parsedSingle?.firmaUrl || '';
+    }
+  } catch (_e) {}
+
+  const ingenieroFirmaUrl = getField(['ingenieroFirmaUrl', 'firmaIngenieroBase64', 'firmaUrl', 'firma_ingeniero_url', 'firmaIngeniero', 'firmaTecnicoTitulado'], fallbackFirma);
 
   const ingenieroNombre = getField(['ingenieroNombre', 'tecnicoNombre', 'nombreIngeniero', 'ingeniero_nombre', 'tecnico_nombre', 'tecnicoTituladoNombre']);
   const ingenieroApellidos = getField(['ingenieroApellidos', 'tecnicoApellidos', 'apellidosIngeniero', 'ingeniero_apellidos', 'tecnico_apellidos', 'tecnicoTituladoApellidos']);
@@ -1412,22 +1423,28 @@ export const generarActaExtintoresPDF = async (
         return finalY;
       }
 
-      // Pintar el título "Anomalías y observaciones:"
-      if (finalY > 265) {
-        doc.addPage();
-        const newPageNum = (doc.internal as any).getNumberOfPages();
-        if (!drawnTablePages.has(newPageNum)) {
-          drawTableHeader(newPageNum);
-          drawnTablePages.add(newPageNum);
-        }
-        finalY = 34;
+      // Pintar el título de anomalías (se muestran siempre en la siguiente página)
+      doc.addPage();
+      const newPageNum = (doc.internal as any).getNumberOfPages();
+      if (!drawnTablePages.has(newPageNum)) {
+        drawTableHeader(newPageNum);
+        drawnTablePages.add(newPageNum);
       }
+      finalY = 34;
+
       doc.setFont("helvetica", "bold");
       doc.setFontSize(10);
       doc.setTextColor(0, 0, 0);
-      doc.text('Anomalías y observaciones:', 14, finalY);
+
+      const tituloSeccionAnomalias = `Anomalías y observaciones técnicas detectadas en el sistema: ${title}`;
+
+      const wrappedTituloLines: string[] = doc.splitTextToSize(tituloSeccionAnomalias, pageWidth - 28);
+      wrappedTituloLines.forEach(tLine => {
+        doc.text(tLine, 14, finalY);
+        finalY += 5.5;
+      });
       doc.setFont("helvetica", "normal");
-      finalY += 7;
+      finalY += 1.5;
 
       if (anomalias.length === 0) {
         doc.setTextColor(5, 150, 105);
@@ -1813,15 +1830,29 @@ export const generarActaExtintoresPDF = async (
             const s = String(v).trim().toLowerCase();
             return s !== 'true' && s !== 'false' && s !== 'sí' && s !== 'no' && s !== 'ok' && s !== 'correcto' && s !== 'incorrecto';
         };
-        if (item && isValidTextVal(eq[item.key])) return eq[item.key];
-        if (isValidTextVal(eq[fixedKey])) return eq[fixedKey];
-        if (fixedKey === 'nombre' || fixedKey === 'tipo' || fixedKey === 'clase') {
+        let val = '-';
+        if (item && isValidTextVal(eq[item.key])) val = eq[item.key];
+        else if (isValidTextVal(eq[fixedKey])) val = eq[fixedKey];
+        else if (fixedKey === 'nombre' || fixedKey === 'tipo' || fixedKey === 'clase') {
             const validCandidates = [eq.nombre, eq.tipo, eq.clase, eq.modelo, eq.pesoCapacidad, eq.descripcion];
             for (const c of validCandidates) {
-                if (isValidTextVal(c)) return c;
+                if (isValidTextVal(c)) { val = c; break; }
             }
         }
-        return '-';
+        const isUbicacion = fixedKey === 'ubicacion' || fixedKey === 'cobertura' ||
+            (item && ((item.key && item.key.toLowerCase().includes('ubicacion')) ||
+                      (item.label && item.label.toLowerCase().includes('ubicacion')) ||
+                      (item.label && item.label.toLowerCase().includes('planta')) ||
+                      (item.label && item.label.toLowerCase().includes('nivel'))));
+        if (isUbicacion && val && val !== '-') {
+            val = String(val).toUpperCase().replace(/[\r\n]+/g, ' ').trim();
+            if (val.length > 40) {
+                val = val.substring(0, 40);
+            }
+        } else if (val && val !== '-') {
+            val = String(val).replace(/[\r\n]+/g, ' ').trim();
+        }
+        return val;
     };
 
     const formatMesAno = (val: any) => {
@@ -2102,8 +2133,11 @@ export const generarActaExtintoresPDF = async (
 
               if (isFullWidthItem) {
                 let val1 = getDisplayValue(eq[item1.key]);
-                if ((val1 === '-' || !val1) && (item1.key === 'ubicacion' || lbl1Norm.includes('ubicacion') || lbl1Norm.includes('cobertura'))) {
+                if ((val1 === '-' || !val1) && (item1.key === 'ubicacion' || lbl1Norm.includes('ubicacion') || lbl1Norm.includes('cobertura') || lbl1Norm.includes('planta'))) {
                   val1 = getDisplayValue(eq.ubicacion || eq.cobertura);
+                }
+                if ((item1.key === 'ubicacion' || lbl1Norm.includes('ubicacion') || lbl1Norm.includes('cobertura') || lbl1Norm.includes('planta')) && val1 && val1 !== '-') {
+                  val1 = String(val1).toUpperCase();
                 }
                 datosRows.push([
                   { content: item1.label || '', colSpan: 2, styles: { fontStyle: 'bold', fillColor: [245, 247, 250] } },
@@ -2115,8 +2149,11 @@ export const generarActaExtintoresPDF = async (
               }
 
               let val1 = getDisplayValue(eq[item1.key]);
-              if ((val1 === '-' || !val1) && (item1.key === 'ubicacion' || lbl1Norm.includes('ubicacion') || lbl1Norm.includes('cobertura'))) {
+              if ((val1 === '-' || !val1) && (item1.key === 'ubicacion' || lbl1Norm.includes('ubicacion') || lbl1Norm.includes('cobertura') || lbl1Norm.includes('planta'))) {
                 val1 = getDisplayValue(eq.ubicacion || eq.cobertura);
+              }
+              if ((item1.key === 'ubicacion' || lbl1Norm.includes('ubicacion') || lbl1Norm.includes('cobertura') || lbl1Norm.includes('planta')) && val1 && val1 !== '-') {
+                val1 = String(val1).toUpperCase();
               }
               
               let label2 = '';
@@ -2129,8 +2166,11 @@ export const generarActaExtintoresPDF = async (
                 if (!lbl2Norm.includes('tipo de instalacion') && !(item2.label || '').trim().startsWith('1.1')) {
                   label2 = item2.label || '';
                   val2 = getDisplayValue(eq[item2.key]);
-                  if ((val2 === '-' || !val2) && (item2.key === 'ubicacion' || lbl2Norm.includes('ubicacion') || lbl2Norm.includes('cobertura'))) {
+                  if ((val2 === '-' || !val2) && (item2.key === 'ubicacion' || lbl2Norm.includes('ubicacion') || lbl2Norm.includes('cobertura') || lbl2Norm.includes('planta'))) {
                     val2 = getDisplayValue(eq.ubicacion || eq.cobertura);
+                  }
+                  if ((item2.key === 'ubicacion' || lbl2Norm.includes('ubicacion') || lbl2Norm.includes('cobertura') || lbl2Norm.includes('planta')) && val2 && val2 !== '-') {
+                    val2 = String(val2).toUpperCase();
                   }
                   advance = 2;
                 }
@@ -2144,8 +2184,11 @@ export const generarActaExtintoresPDF = async (
                 if (!lbl3Norm.includes('tipo de instalacion') && !(item3.label || '').trim().startsWith('1.1')) {
                   label3 = item3.label || '';
                   val3 = getDisplayValue(eq[item3.key]);
-                  if ((val3 === '-' || !val3) && (item3.key === 'ubicacion' || lbl3Norm.includes('ubicacion') || lbl3Norm.includes('cobertura'))) {
+                  if ((val3 === '-' || !val3) && (item3.key === 'ubicacion' || lbl3Norm.includes('ubicacion') || lbl3Norm.includes('cobertura') || lbl3Norm.includes('planta'))) {
                     val3 = getDisplayValue(eq.ubicacion || eq.cobertura);
+                  }
+                  if ((item3.key === 'ubicacion' || lbl3Norm.includes('ubicacion') || lbl3Norm.includes('cobertura') || lbl3Norm.includes('planta')) && val3 && val3 !== '-') {
+                    val3 = String(val3).toUpperCase();
                   }
                   advance = 3;
                 }
@@ -2165,15 +2208,16 @@ export const generarActaExtintoresPDF = async (
             autoTable(doc, {
               startY: currentY,
               margin: { top: 40, left: 14, right: 14 },
+              tableWidth: 269,
               headStyles: { fillColor: [128, 0, 32], textColor: [255, 255, 255], fontSize: 7.5, halign: 'center', valign: 'middle', lineWidth: 0.1, lineColor: [255, 255, 255] },
               bodyStyles: { fontSize: 7, halign: 'left', valign: 'middle', lineWidth: 0.1, lineColor: [200, 200, 200] },
               columnStyles: {
-                0: { halign: 'left', cellWidth: 'auto' },
-                1: { halign: 'center', cellWidth: 28 },
-                2: { halign: 'left', cellWidth: 'auto' },
-                3: { halign: 'center', cellWidth: 28 },
-                4: { halign: 'left', cellWidth: 'auto' },
-                5: { halign: 'center', cellWidth: 31 }
+                0: { halign: 'left', cellWidth: 55 },
+                1: { halign: 'center', cellWidth: 34 },
+                2: { halign: 'left', cellWidth: 55 },
+                3: { halign: 'center', cellWidth: 34 },
+                4: { halign: 'left', cellWidth: 55 },
+                5: { halign: 'center', cellWidth: 36 }
               },
                 head: [
                   [{ content: sec.title, colSpan: 6, styles: { fillColor: [128, 0, 32], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5, halign: 'left' } }]
@@ -2188,6 +2232,15 @@ export const generarActaExtintoresPDF = async (
               },
               didParseCell: function (data: any) {
                 if (data.section === 'body') {
+                  data.cell.styles.overflow = 'hidden';
+                  data.cell.styles.valign = 'middle';
+                  const rawVal = data.cell.raw !== undefined && data.cell.raw !== null ? data.cell.raw : data.cell.text;
+                  const strVal = Array.isArray(rawVal) ? rawVal.join(' ') : String(rawVal);
+                  const cleanStr = strVal.replace(/[\r\n]+/g, ' ').trim();
+                  if (cleanStr && cleanStr !== 'TICK') {
+                    data.cell.text = [cleanStr];
+                  }
+
                   const idx = data.row.index * 3;
                   const item1 = filteredSecItems[idx];
                   const item2 = filteredSecItems[idx + 1];
@@ -2285,11 +2338,12 @@ export const generarActaExtintoresPDF = async (
               autoTable(doc, {
                 startY: currentY,
                 margin: { top: 40, left: 14, right: 14 },
+                tableWidth: 269,
                 headStyles: { fillColor: [128, 0, 32], textColor: [255, 255, 255], fontSize: 7.5, halign: 'center', valign: 'middle', lineWidth: 0.1, lineColor: [255, 255, 255] },
                 bodyStyles: { fontSize: 7.5, halign: 'left', valign: 'middle', lineWidth: 0.1, lineColor: [200, 200, 200] },
                 columnStyles: (sec.title && (sec.title.toUpperCase().includes('CONCLUSIONES') || sec.title.toUpperCase().includes('CONCLUSIO'))) ? {
-                  0: { halign: 'left' },
-                  1: { halign: 'center', cellWidth: 'wrap' }
+                  0: { halign: 'left', cellWidth: 200 },
+                  1: { halign: 'center', cellWidth: 69 }
                 } : {
                   0: { halign: 'left', cellWidth: 229 },
                   1: { halign: 'center', cellWidth: 40 }
@@ -2308,6 +2362,15 @@ export const generarActaExtintoresPDF = async (
                 },
                 didParseCell: function (data: any) {
                   if (data.section === 'body') {
+                    data.cell.styles.overflow = 'hidden';
+                    data.cell.styles.valign = 'middle';
+                    const rawVal = data.cell.raw !== undefined && data.cell.raw !== null ? data.cell.raw : data.cell.text;
+                    const strVal = Array.isArray(rawVal) ? rawVal.join(' ') : String(rawVal);
+                    const cleanStr = strVal.replace(/[\r\n]+/g, ' ').trim();
+                    if (cleanStr && cleanStr !== 'TICK') {
+                      data.cell.text = [cleanStr];
+                    }
+
                     const itemNorm = normalItems[data.row.index];
                     if (itemNorm) {
                       const lblNorm = (itemNorm.label || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -2530,14 +2593,34 @@ export const generarActaExtintoresPDF = async (
               };
 
               const colStyles: any = {};
+              let ubicColIdx = -1;
+              
               tableHeaders.forEach((h, index) => {
+                const colIdx = hasVerticalHeaders ? index + 1 : index;
                 const norm = String(h || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-                if (norm.includes('ubicacion')) {
-                  colStyles[index] = { cellWidth: 'auto', halign: 'left' };
+                if (norm.includes('ubicacion') || norm.includes('planta')) {
+                  ubicColIdx = colIdx;
+                } else if (norm.includes('tipo') || norm.includes('clase') || norm.includes('modelo')) {
+                  colStyles[colIdx] = { cellWidth: 38, halign: 'center' };
+                } else if (norm.includes('fecha') || norm.includes('fabricacion') || norm.includes('retimbre')) {
+                  colStyles[colIdx] = { cellWidth: 20, halign: 'center' };
+                } else if (norm.includes('presion') || norm.includes('tara') || norm.includes('peso') || norm.includes('carga') || norm.includes('bar')) {
+                  colStyles[colIdx] = { cellWidth: 22, halign: 'center' };
                 } else {
-                  colStyles[index] = { cellWidth: 'auto', halign: 'center' };
+                  colStyles[colIdx] = { halign: 'center' };
                 }
               });
+
+              if (hasVerticalHeaders) {
+                colStyles[0] = { halign: 'left', fontStyle: 'bold' };
+              }
+
+              // Si hay columna de ubicación, se expande a la izquierda; si no, la columna principal (col 0) se expande para llenar los 269 mm
+              if (ubicColIdx !== -1) {
+                colStyles[ubicColIdx] = { halign: 'left' };
+              } else if (!hasVerticalHeaders) {
+                colStyles[0] = { halign: 'left' };
+              }
 
               if (isGrafico) {
                 doc.addPage();
@@ -2552,6 +2635,7 @@ export const generarActaExtintoresPDF = async (
               autoTable(doc, {
                 startY: currentY,
                 margin: { top: 40, left: 14, right: 14 },
+                tableWidth: 269,
                 headStyles: { 
                   fillColor: [70, 80, 95], 
                   textColor: [255, 255, 255], 
@@ -2685,14 +2769,66 @@ export const generarActaExtintoresPDF = async (
 
     } else {
       // Layout Horizontal Clásico
-      const dynamicColumnStyles: any = { 
-        0: { halign: 'center', fillColor: [128, 0, 32], textColor: [255, 255, 255] }, 
-        1: { halign: 'left' } 
-      };
-      checkHeaders.forEach((_, i) => {
-        dynamicColumnStyles[headersBase.length + i] = { halign: 'center', cellWidth: 7.5 };
+      const dynamicColumnStyles: any = {};
+      const maxTableWidth = 269; // Ancho total de tabla idéntico al de extintores (297 - 14 - 14)
+      
+      let colUbicacionIdx = -1;
+      let anchoOtrasColumnas = 0;
+
+      headersBase.forEach((headerText, colIdx) => {
+        const normH = String(headerText || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        if (colIdx === 0) {
+          dynamicColumnStyles[colIdx] = { halign: 'center', cellWidth: 9, fillColor: [128, 0, 32], textColor: [255, 255, 255] };
+          anchoOtrasColumnas += 9;
+        } else if (normH.includes('ubicacion') || normH.includes('planta')) {
+          colUbicacionIdx = colIdx;
+        } else if (normH.includes('tipo') || normH.includes('clase') || normH.includes('modelo')) {
+          const w = esPuertasRF ? 55 : (isBie ? 38 : (esCasetas ? 38 : 42));
+          dynamicColumnStyles[colIdx] = { halign: 'center', cellWidth: w };
+          anchoOtrasColumnas += w;
+        } else if (normH.includes('placa')) {
+          const w = isBie ? 14 : 15;
+          dynamicColumnStyles[colIdx] = { halign: 'center', cellWidth: w };
+          anchoOtrasColumnas += w;
+        } else if (normH.includes('longitud')) {
+          dynamicColumnStyles[colIdx] = { halign: 'center', cellWidth: 14 };
+          anchoOtrasColumnas += 14;
+        } else if (normH.includes('fabricante') || normH.includes('marca')) {
+          const w = isBie ? 22 : 24;
+          dynamicColumnStyles[colIdx] = { halign: 'center', cellWidth: w };
+          anchoOtrasColumnas += w;
+        } else if (normH.includes('fecha') || normH.includes('fabricacion') || normH.includes('retimbre') || normH.includes('prueba') || normH.includes('hidraulica') || normH.includes('p.h')) {
+          dynamicColumnStyles[colIdx] = { halign: 'center', cellWidth: 17 };
+          anchoOtrasColumnas += 17;
+        } else if (normH.includes('salida') || normH.includes('bocas')) {
+          dynamicColumnStyles[colIdx] = { halign: 'center', cellWidth: 20 };
+          anchoOtrasColumnas += 20;
+        } else if (normH.includes('diametro') || normH.includes('diam')) {
+          dynamicColumnStyles[colIdx] = { halign: 'center', cellWidth: 16 };
+          anchoOtrasColumnas += 16;
+        } else if (normH.includes('tramo')) {
+          dynamicColumnStyles[colIdx] = { halign: 'center', cellWidth: 14.5 };
+          anchoOtrasColumnas += 14.5;
+        } else {
+          dynamicColumnStyles[colIdx] = { halign: 'center', cellWidth: 20 };
+          anchoOtrasColumnas += 20;
+        }
       });
 
+      const checkWidth = (isBie || esExtintor) ? 5.8 : 6.5;
+      checkHeaders.forEach((_, i) => {
+        dynamicColumnStyles[headersBase.length + i] = { halign: 'center', cellWidth: checkWidth };
+        anchoOtrasColumnas += checkWidth;
+      });
+
+      // La columna de Ubicación absorbe automáticamente todo el ancho restante para que la tabla sea exactamente de 269 mm
+      if (colUbicacionIdx !== -1) {
+        const anchoUbic = Math.max(50, Math.round((maxTableWidth - anchoOtrasColumnas) * 10) / 10);
+        dynamicColumnStyles[colUbicacionIdx] = { halign: 'left', cellWidth: anchoUbic };
+      } else {
+        const anchoCol1 = Math.max(50, Math.round((maxTableWidth - (anchoOtrasColumnas - (dynamicColumnStyles[1]?.cellWidth || 0))) * 10) / 10);
+        dynamicColumnStyles[1] = { halign: 'left', cellWidth: anchoCol1 };
+      }
 
       doc.setFont("helvetica", "normal");
       doc.setFontSize(6.5);
@@ -2707,8 +2843,9 @@ export const generarActaExtintoresPDF = async (
       autoTable(doc, {
         startY: currentY + 4,
         margin: { top: 40, left: 14, right: 14 },
+        tableWidth: 269,
         headStyles: { fillColor: [128, 0, 32], textColor: [255, 255, 255], fontSize: 7, halign: 'center', valign: 'middle', lineWidth: 0.1, lineColor: [255, 255, 255] },
-        bodyStyles: { fontSize: 7, halign: 'center', lineWidth: 0.1, lineColor: [200, 200, 200] },
+        bodyStyles: { fontSize: 6.8, halign: 'center', valign: 'middle', lineWidth: 0.1, lineColor: [200, 200, 200], cellPadding: { top: 1.5, bottom: 1.5, left: 1, right: 1 }, overflow: 'ellipsize' },
 
         columnStyles: dynamicColumnStyles,
         head: [
@@ -2738,6 +2875,35 @@ export const generarActaExtintoresPDF = async (
             }
           }
           if (data.section === 'body') {
+            data.cell.styles.overflow = 'hidden';
+            data.cell.styles.valign = 'middle';
+
+            // Forzar estrictamente 1 sola línea por celda eliminando cualquier salto de línea
+            const rawVal = data.cell.raw !== undefined && data.cell.raw !== null ? data.cell.raw : data.cell.text;
+            const strVal = Array.isArray(rawVal) ? rawVal.join(' ') : String(rawVal);
+            const cleanStr = strVal.replace(/[\r\n]+/g, ' ').trim();
+            if (cleanStr && cleanStr !== 'TICK') {
+              data.cell.text = [cleanStr];
+            }
+
+            // Auto-fit dinámico de tamaño de fuente para que NUNCA salte a 2 filas
+            if (data.column.index < headersBase.length && cleanStr && cleanStr !== '-' && cleanStr !== 'TICK') {
+              const colStyleWidth = dynamicColumnStyles[data.column.index]?.cellWidth;
+              const cellW = (typeof colStyleWidth === 'number') ? colStyleWidth : 25;
+              const availW = Math.max(6, cellW - 2.5);
+
+              doc.setFont("helvetica", data.cell.styles.fontStyle || "normal");
+              let fs = data.cell.styles.fontSize || 6.8;
+              doc.setFontSize(fs);
+              let tw = doc.getTextWidth(cleanStr);
+              while (tw > availW && fs > 4.0) {
+                fs -= 0.2;
+                doc.setFontSize(fs);
+                tw = doc.getTextWidth(cleanStr);
+              }
+              data.cell.styles.fontSize = fs;
+            }
+
             if (data.column.index < headersBase.length) {
               const eq = equipos[data.row.index];
               if (eq) {
@@ -2976,18 +3142,31 @@ export const generarActaExtintoresPDF = async (
   let tableStartY = 34;
   let hasRenderedAnySystem = false;
 
-  // Ordenar: EXTINTOR primero (10), luego HIDRANTE (20) y CASETA (21) juntos, luego BIE (30), luego el resto (100)
+  // Orden de sistemas en Actas: 1º EXTINTORES, 2º BOCAS DE INCENDIO (BIE), 3º HIDRANTES, 4º CASETAS, resto...
   const sistemasOrdenados = [...sistemas].sort((a, b) => {
     const getWeight = (s: any) => {
-      const familyOrType = (s.familia || s.tipo || '').toUpperCase();
+      const familyOrType = `${s.familia || ''} ${s.tipo || ''} ${s.nombre || ''}`.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      // 1º Extintores
       if (familyOrType.includes('EXTINTOR')) return 10;
-      if (familyOrType.includes('CASETA') || familyOrType.includes('DOTACION') || familyOrType.includes('DOTACIÓN')) return 21;
-      if (familyOrType.includes('HIDRANTE')) return 20;
-      if (familyOrType.includes('BIE') || familyOrType.includes('BOCA')) return 30;
+      // 2º Bocas de Incendios (BIE)
+      if (familyOrType.includes('BIE') || familyOrType.includes('BOCA')) return 20;
+      // 3º Hidrantes (excluyendo casetas/dotación)
+      if (familyOrType.includes('HIDRANTE') && !familyOrType.includes('CASETA') && !familyOrType.includes('DOTACION')) return 30;
+      // 4º Casetas
+      if (familyOrType.includes('CASETA') || familyOrType.includes('DOTACION')) return 40;
+      // Después el resto
       if (familyOrType.includes('ABASTECIMIENTO') || familyOrType.includes('SALA DE BOMBAS')) return 50;
       if (familyOrType.includes('JOCKEY')) return 51;
-      if (familyOrType.includes('ELECTRICA') || familyOrType.includes('ELÉCTRICA')) return 52;
-      if (familyOrType.includes('GASOIL') || familyOrType.includes('MOTOBOMBA')) return 53;
+      if (familyOrType.includes('ELECTRICA')) return 52;
+      if (familyOrType.includes('GASOIL') || familyOrType.includes('DIESEL') || familyOrType.includes('MOTOBOMBA')) return 53;
+      if (familyOrType.includes('ROCIADOR') || familyOrType.includes('SPRINKLER')) return 60;
+      if (familyOrType.includes('DETECCI') && !familyOrType.includes('MONOXIDO') && !familyOrType.includes('ASPIRACI')) return 70;
+      if (familyOrType.includes('ASPIRACI')) return 71;
+      if (familyOrType.includes('MONOXIDO') || familyOrType.includes('(CO)')) return 72;
+      if (familyOrType.includes('COCINA') || familyOrType.includes('CAMPANA')) return 80;
+      if (familyOrType.includes('GAS') || familyOrType.includes('EXTINCION')) return 81;
+      if (familyOrType.includes('ALUMBRADO') || familyOrType.includes('EMERGENCIA')) return 85;
+      if (familyOrType.includes('PUERTA') || familyOrType.includes('CORTAFUEGO') || familyOrType.includes('RF')) return 90;
       return 100;
     };
     const wA = getWeight(a);
@@ -3495,11 +3674,11 @@ export const generarAlbaranPDF = async (
     headStyles: { fillColor: [128, 0, 32], halign: 'center', lineColor: [255, 255, 255], lineWidth: 0.3 },
     bodyStyles: { lineColor: [255, 255, 255], lineWidth: 0.3 },
     columnStyles: {
-      0: { halign: 'center', cellWidth: 16 },
+      0: { halign: 'center', cellWidth: 22 },
       1: { cellWidth: 40 },
       2: { cellWidth: 'auto' },
-      3: { halign: 'right', cellWidth: 25 },
-      4: { halign: 'right', cellWidth: 25 }
+      3: { halign: 'right', cellWidth: 22 },
+      4: { halign: 'right', cellWidth: 22 }
     },
     didParseCell: (data: any) => {
       if (data.section === 'body' && data.row.index >= totalRows) {
@@ -3797,9 +3976,10 @@ export const generarCertificadoPDF = async (
         let fallbackName = 'Equipo';
         const nsUpper = nombreSistema.toUpperCase();
         const esExtintor = nsUpper.includes('EXTINTOR');
+        const esBie = nsUpper.includes('BIE') || nsUpper.includes('BOCA');
         if (esExtintor) {
           fallbackName = 'Extintor';
-        } else if (nsUpper.includes('BIE') || nsUpper.includes('BOCA')) {
+        } else if (esBie) {
           fallbackName = 'BIE';
         } else if (nsUpper.includes('DETEC') || nsUpper.includes('HUMO')) {
           fallbackName = 'Detector';
@@ -3810,6 +3990,7 @@ export const generarCertificadoPDF = async (
         // Escanear todas las claves de eq para detectar agente o capacidad implícitos
         let detectedAgente = '';
         let detectedCapacidad = '';
+        let allValuesString = '';
         for (const k of Object.keys(eq)) {
           const kLower = k.toLowerCase();
           if (
@@ -3822,7 +4003,8 @@ export const generarCertificadoPDF = async (
             kLower === 'ubicacion'
           ) continue;
           const val = eq[k];
-          if (typeof val === 'string') {
+          if (typeof val === 'string' && val.trim() !== '' && val.toLowerCase() !== 'true' && val.toLowerCase() !== 'false') {
+            allValuesString += ' ' + val.trim();
             const valUpper = val.toUpperCase().trim();
             if (!detectedAgente) {
               if (valUpper.includes('POLVO ABC') || valUpper === 'POLVO') {
@@ -3865,15 +4047,32 @@ export const generarCertificadoPDF = async (
           } else if (!cleanTipo || cleanTipo.toLowerCase() === 'extintor') {
             cleanTipo = detectedAgente || 'Polvo ABC';
           }
+        } else if (esBie) {
+          const fullBieStr = `${cleanTipo} ${allValuesString}`.toUpperCase();
+          if (fullBieStr.includes('25')) {
+            cleanTipo = 'BIE 25 mm';
+          } else if (fullBieStr.includes('45')) {
+            cleanTipo = 'BIE 45 mm';
+          } else if (fullBieStr.includes('70')) {
+            cleanTipo = 'BIE 70 mm';
+          } else {
+            let formatted = cleanTipo;
+            if (!formatted.toUpperCase().startsWith('BIE')) {
+              formatted = `BIE ${formatted}`;
+            }
+            cleanTipo = formatted;
+          }
         }
 
         let capVal = '';
-        if (eq.capacidad && typeof eq.capacidad === 'string' && eq.capacidad.toLowerCase() !== 'true' && eq.capacidad.toLowerCase() !== 'false') {
-          capVal = eq.capacidad;
-        } else if (eq.peso && typeof eq.peso === 'string' && eq.peso.toLowerCase() !== 'true' && eq.peso.toLowerCase() !== 'false') {
-          capVal = eq.peso;
-        } else {
-          capVal = detectedCapacidad;
+        if (!esBie) {
+          if (eq.capacidad && typeof eq.capacidad === 'string' && eq.capacidad.toLowerCase() !== 'true' && eq.capacidad.toLowerCase() !== 'false') {
+            capVal = eq.capacidad;
+          } else if (eq.peso && typeof eq.peso === 'string' && eq.peso.toLowerCase() !== 'true' && eq.peso.toLowerCase() !== 'false') {
+            capVal = eq.peso;
+          } else {
+            capVal = detectedCapacidad;
+          }
         }
         let cleanCap = (capVal || '').trim();
 
@@ -3951,7 +4150,7 @@ export const generarCertificadoPDF = async (
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(7.5);
         doc.setTextColor(80, 80, 80);
-        doc.text(`• ${clave} — ${cantidad} unidad${cantidad > 1 ? 'es' : ''}`, margen + 14, col0_Y, { maxWidth: (pageWidth / 2) - margen - 12 });
+        doc.text(`• ${clave} = ${cantidad} unidad${cantidad > 1 ? 'es' : ''}`, margen + 14, col0_Y, { maxWidth: (pageWidth / 2) - margen - 12 });
         col0_Y += 4.5;
       });
       col0_Y += 2;
@@ -3970,7 +4169,7 @@ export const generarCertificadoPDF = async (
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(7.5);
         doc.setTextColor(80, 80, 80);
-        doc.text(`• ${clave} — ${cantidad} unidad${cantidad > 1 ? 'es' : ''}`, pageWidth / 2 + 10, col1_Y, { maxWidth: (pageWidth / 2) - margen - 12 });
+        doc.text(`• ${clave} = ${cantidad} unidad${cantidad > 1 ? 'es' : ''}`, pageWidth / 2 + 10, col1_Y, { maxWidth: (pageWidth / 2) - margen - 12 });
         col1_Y += 4.5;
       });
       col1_Y += 2;

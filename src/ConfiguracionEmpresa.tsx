@@ -384,6 +384,28 @@ export default function ConfiguracionEmpresa() {
   const handleSave = async (data: any) => {
     const { _docId, ...fields } = data;
     await saveEmpresa(_docId || null, fields);
+
+    // Sincronizar inmediatamente localStorage para reflejar cambios al instante en los PDFs
+    try {
+      const targetId = _docId || data.id;
+      const savedEmpresasRaw = localStorage.getItem('firecheck_db_empresas');
+      let empresasArr: any[] = savedEmpresasRaw ? JSON.parse(savedEmpresasRaw) : [];
+      const updatedEmpresa = { _docId: targetId, id: targetId, ...fields };
+      const idx = empresasArr.findIndex(e => (targetId && (e._docId === targetId || e.id === targetId)) || (e.nombre && fields.nombre && e.nombre.trim().toLowerCase() === fields.nombre.trim().toLowerCase()));
+      if (idx >= 0) {
+        empresasArr[idx] = { ...empresasArr[idx], ...updatedEmpresa };
+      } else {
+        empresasArr.push(updatedEmpresa);
+      }
+      localStorage.setItem('firecheck_db_empresas', JSON.stringify(empresasArr));
+      localStorage.setItem('firecheck_db_empresa', JSON.stringify(updatedEmpresa));
+      if (fields.logoUrl) {
+        localStorage.setItem('firecheck_db_logo', fields.logoUrl);
+      }
+    } catch (e) {
+      console.error('Error al actualizar el caché local de empresas:', e);
+    }
+
     alert('Datos guardados correctamente');
     setSelectedEmpresa(null);
     setCrearNueva(false);
