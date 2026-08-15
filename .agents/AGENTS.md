@@ -179,4 +179,33 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
   - Al pulsar en cualquier luz numerada, DEBE abrirse/desplegarse el acordeón del sistema (`setOpenSistemas`) y realizarse un scroll suave (*smooth scroll*) con un desfasamiento (*offset*) de **160px** (`elementPosition + window.pageYOffset - 160`) y la clase `scroll-mt-44`.
   - Esto garantiza que la tarjeta del equipo y su cabecera (número, código, fechas y checks) queden completamente visibles holgadamente por debajo de la cabecera pegajosa del menú acordeón sin que nada la tape.
 
+---
+
+## 19. Blindaje Inviolable del Límite Visual de 40 Caracteres en el Campo Ubicación (RevisionSistemas/*.tsx y EquipoFormulario.tsx)
+- **Alerta Visual en Rojo a partir del Carácter 41**:
+  - En los 20 componentes de sistemas (`src/components/RevisionSistemas/*.tsx`) y en el modal de equipos (`src/components/EquipoFormulario.tsx`), el campo de Ubicación / Nivel planta y ubicación / Cobertura DEBE evaluarse en tiempo real.
+  - Si la longitud del texto ingresado es superior a 40 caracteres (`valor.length > 40`), el campo DEBE resaltar inmediatamente en **ROJO** (`bg-red-50 border-2 border-red-500 text-red-700 font-bold focus:border-red-600 focus:ring-2 focus:ring-red-500/20`).
+  - Al borrar y quedar en $\le 40$ caracteres, recupera instantáneamente su color y estilo normal.
+
+---
+
+## 20. Blindaje Inviolable de 1 Sola Fila Estricta y Ancho 100% de Página (269 mm) en Tablas de Actas PDF (pdfGenerator.ts)
+- **1 Sola Fila Obligatoria por Celda**:
+  - En todas las tablas del Acta PDF, las celdas del cuerpo DEBEN forzarse a 1 sola fila plana eliminando cualquier retorno de carro (`replace(/[\r\n]+/g, ' ')`), aplicando `overflow: 'hidden'` y **Auto-fit dinámico de tamaño de fuente** (`doc.getTextWidth`) para que jamás se creen 2 líneas ni se amontonen textos.
+- **Ancho Total Uniforme de 269 mm**:
+  - Absolutamente todas las tablas de todos los sistemas en el Acta PDF DEBEN tener un ancho total idéntico al de extintores (**269 mm** de margen a margen). En tablas con menos columnas, la columna de Ubicación/Descriptiva debe expandirse dinámicamente para absorber el 100% del área imprimible.
+
+---
+
+## 21. Blindaje Inviolable del Orden Reglamentario de Sistemas en Actas PDF (pdfGenerator.ts)
+- **Jerarquía Obligatoria de Aparición**:
+  - En el documento Acta PDF, el orden de los sistemas con equipos instalados DEBE ser estrictamente:
+    1. **1.º EXTINTORES** (`weight = 10`)
+    2. **2.º BOCAS DE INCENDIO (BIE)** (`weight = 20`)
+    3. **3.º HIDRANTES** (`weight = 30`)
+    4. **4.º CASETAS / DOTACIÓN** (`weight = 40`)
+    5. **RESTO DE SISTEMAS**: Grupos de bombeo/abastecimiento (50-53), Rociadores (60), Detección/Aspiración/CO (70-72), Extinción gas/cocina (80-81), Alumbrado (85), Puertas RF (90)...
+  - Si el centro carece de alguno de estos sistemas, el generador pasa automáticamente al siguiente.
+
+
 

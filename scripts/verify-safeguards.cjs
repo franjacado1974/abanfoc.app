@@ -167,6 +167,27 @@ if (fs.existsSync(revChecklistPath)) {
   }
 }
 
+// 10. Verificación de alerta >40 caracteres en campo Ubicación (AGENTS.md REGLA 19)
+const eqFormPath = path.join(__dirname, '../src/components/EquipoFormulario.tsx');
+if (fs.existsSync(eqFormPath)) {
+  const content = fs.readFileSync(eqFormPath, 'utf8');
+  if (!content.includes('isUbicacionExcedida') || !content.includes('value.length > 40')) {
+    errors.push('CRÍTICO: EquipoFormulario.tsx carece de la alerta en rojo para ubicaciones > 40 caracteres (AGENTS.md REGLA 19).');
+  }
+}
+
+// 11. Verificación de 1 sola fila y ancho 269mm en Actas PDF (AGENTS.md REGLA 20)
+if (fs.existsSync(pdfGenPath)) {
+  const content = fs.readFileSync(pdfGenPath, 'utf8');
+  if (!content.includes('tableWidth: 269') || !content.includes('data.cell.styles.overflow = \'hidden\'')) {
+    errors.push('CRÍTICO: pdfGenerator.ts carece del forzado de 1 sola fila y ancho uniforme de 269mm (AGENTS.md REGLA 20).');
+  }
+  // 12. Verificación del orden reglamentario de sistemas en Actas (AGENTS.md REGLA 21)
+  if (!content.includes('// Orden de sistemas en Actas: 1º EXTINTORES, 2º BOCAS DE INCENDIO (BIE), 3º HIDRANTES, 4º CASETAS') && !content.includes('sistemasOrdenados')) {
+    errors.push('CRÍTICO: pdfGenerator.ts carece del orden reglamentario estricto de sistemas (AGENTS.md REGLA 21).');
+  }
+}
+
 // Resultado de la verificación
 if (errors.length > 0) {
   console.error('\n❌ ERROR CRÍTICO DE BLINDAJE INTEGRAL (AGENTS.md):');

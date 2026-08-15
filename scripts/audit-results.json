@@ -1,0 +1,2078 @@
+[
+  {
+    "file": "App.tsx",
+    "lineNum": 1,
+    "rawLine": "import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';",
+    "target": "react-router-dom"
+  },
+  {
+    "file": "App.tsx",
+    "lineNum": 9,
+    "rawLine": "import { useState, useEffect } from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "App.tsx",
+    "lineNum": 10,
+    "rawLine": "import Loader from './recursos-compartidos/components/Loader';",
+    "target": "./recursos-compartidos/components/Loader"
+  },
+  {
+    "file": "App.tsx",
+    "lineNum": 11,
+    "rawLine": "import DashboardTecnico from './mantenimientos/pages/DashboardTecnico';",
+    "target": "./mantenimientos/pages/DashboardTecnico"
+  },
+  {
+    "file": "App.tsx",
+    "lineNum": 12,
+    "rawLine": "import Clientes from './oficina/pages/Clientes';",
+    "target": "./oficina/pages/Clientes"
+  },
+  {
+    "file": "App.tsx",
+    "lineNum": 13,
+    "rawLine": "import Centros from './oficina/pages/Centros';",
+    "target": "./oficina/pages/Centros"
+  },
+  {
+    "file": "App.tsx",
+    "lineNum": 14,
+    "rawLine": "import ClientesCentros from './oficina/pages/ClientesCentros';",
+    "target": "./oficina/pages/ClientesCentros"
+  },
+  {
+    "file": "App.tsx",
+    "lineNum": 15,
+    "rawLine": "import Presupuestos from './oficina/pages/Presupuestos';",
+    "target": "./oficina/pages/Presupuestos"
+  },
+  {
+    "file": "App.tsx",
+    "lineNum": 16,
+    "rawLine": "import Catalogo from './oficina/pages/Catalogo';",
+    "target": "./oficina/pages/Catalogo"
+  },
+  {
+    "file": "App.tsx",
+    "lineNum": 17,
+    "rawLine": "import Articulos from './oficina/pages/Articulos';",
+    "target": "./oficina/pages/Articulos"
+  },
+  {
+    "file": "App.tsx",
+    "lineNum": 18,
+    "rawLine": "import Servicios from './oficina/pages/Servicios';",
+    "target": "./oficina/pages/Servicios"
+  },
+  {
+    "file": "App.tsx",
+    "lineNum": 19,
+    "rawLine": "import Albaranes from './oficina/pages/Albaranes';",
+    "target": "./oficina/pages/Albaranes"
+  },
+  {
+    "file": "App.tsx",
+    "lineNum": 20,
+    "rawLine": "import Certificados from './oficina/pages/Certificados';",
+    "target": "./oficina/pages/Certificados"
+  },
+  {
+    "file": "App.tsx",
+    "lineNum": 21,
+    "rawLine": "import ConfiguracionEmpresa from './oficina/pages/ConfiguracionEmpresa';",
+    "target": "./oficina/pages/ConfiguracionEmpresa"
+  },
+  {
+    "file": "App.tsx",
+    "lineNum": 22,
+    "rawLine": "import Pedidos from './oficina/pages/Pedidos';",
+    "target": "./oficina/pages/Pedidos"
+  },
+  {
+    "file": "App.tsx",
+    "lineNum": 23,
+    "rawLine": "import Planificacion from './mantenimientos/pages/Planificacion';",
+    "target": "./mantenimientos/pages/Planificacion"
+  },
+  {
+    "file": "App.tsx",
+    "lineNum": 24,
+    "rawLine": "import Partes from './mantenimientos/pages/Partes';",
+    "target": "./mantenimientos/pages/Partes"
+  },
+  {
+    "file": "App.tsx",
+    "lineNum": 25,
+    "rawLine": "import RevisionChecklist from './mantenimientos/pages/RevisionChecklist';",
+    "target": "./mantenimientos/pages/RevisionChecklist"
+  },
+  {
+    "file": "App.tsx",
+    "lineNum": 26,
+    "rawLine": "import Revisiones from './mantenimientos/pages/Revisiones';",
+    "target": "./mantenimientos/pages/Revisiones"
+  },
+  {
+    "file": "App.tsx",
+    "lineNum": 27,
+    "rawLine": "import Reparaciones from './reparaciones/pages/Reparaciones';",
+    "target": "./reparaciones/pages/Reparaciones"
+  },
+  {
+    "file": "App.tsx",
+    "lineNum": 28,
+    "rawLine": "import Instalaciones from './instalaciones/pages/Instalaciones';",
+    "target": "./instalaciones/pages/Instalaciones"
+  },
+  {
+    "file": "App.tsx",
+    "lineNum": 29,
+    "rawLine": "import Ajustes from './oficina/pages/Ajustes';",
+    "target": "./oficina/pages/Ajustes"
+  },
+  {
+    "file": "App.tsx",
+    "lineNum": 30,
+    "rawLine": "import Buzon from './oficina/pages/Buzon';",
+    "target": "./oficina/pages/Buzon"
+  },
+  {
+    "file": "App.tsx",
+    "lineNum": 31,
+    "rawLine": "import Sidebar from './recursos-compartidos/components/Sidebar';",
+    "target": "./recursos-compartidos/components/Sidebar"
+  },
+  {
+    "file": "App.tsx",
+    "lineNum": 47,
+    "rawLine": "import { APP_VERSION } from './recursos-compartidos/types/constants';",
+    "target": "./recursos-compartidos/types/constants"
+  },
+  {
+    "file": "App.tsx",
+    "lineNum": 48,
+    "rawLine": "import { useRegisterSW } from 'virtual:pwa-register/react';",
+    "target": "virtual:pwa-register/react"
+  },
+  {
+    "file": "instalaciones/pages/Instalaciones.tsx",
+    "lineNum": 1,
+    "rawLine": "import { useState, useEffect } from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "instalaciones/routes.ts",
+    "lineNum": 1,
+    "rawLine": "import Instalaciones from './pages/Instalaciones';",
+    "target": "./pages/Instalaciones"
+  },
+  {
+    "file": "main.tsx",
+    "lineNum": 1,
+    "rawLine": "import { StrictMode } from 'react'",
+    "target": "react"
+  },
+  {
+    "file": "main.tsx",
+    "lineNum": 2,
+    "rawLine": "import { createRoot } from 'react-dom/client'",
+    "target": "react-dom/client"
+  },
+  {
+    "file": "main.tsx",
+    "lineNum": 4,
+    "rawLine": "import App from './App.tsx'",
+    "target": "./App.tsx"
+  },
+  {
+    "file": "mantenimientos/components/PartesMovil.tsx",
+    "lineNum": 1,
+    "rawLine": "import { useState, useEffect } from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "mantenimientos/components/PartesMovil.tsx",
+    "lineNum": 2,
+    "rawLine": "import { useNavigate } from 'react-router-dom';",
+    "target": "react-router-dom"
+  },
+  {
+    "file": "mantenimientos/components/PartesMovil.tsx",
+    "lineNum": 3,
+    "rawLine": "import { Building2, Calendar, User as UserIcon, ArrowLeft, Briefcase } from 'lucide-react';",
+    "target": "lucide-react"
+  },
+  {
+    "file": "mantenimientos/components/PartesMovil.tsx",
+    "lineNum": 4,
+    "rawLine": "import { subscribePartes, subscribeCentros, subscribeClientes, subscribeTecnicos } from '../../recursos-compartidos/firebase/firebase';",
+    "target": "../../recursos-compartidos/firebase/firebase"
+  },
+  {
+    "file": "mantenimientos/components/PartesTecnico.tsx",
+    "lineNum": 1,
+    "rawLine": "import { useState, useEffect } from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "mantenimientos/components/PartesTecnico.tsx",
+    "lineNum": 7,
+    "rawLine": "import { subscribePartes, subscribeCentroSistemas, subscribeClientes, subscribeCentros, updateParte, getEquiposInstalados } from '../../recursos-compartidos/firebase/firebase';",
+    "target": "../../recursos-compartidos/firebase/firebase"
+  },
+  {
+    "file": "mantenimientos/components/PartesTecnico.tsx",
+    "lineNum": 8,
+    "rawLine": "import { getPlantillas } from '../../recursos-compartidos/types/plantillas';",
+    "target": "../../recursos-compartidos/types/plantillas"
+  },
+  {
+    "file": "mantenimientos/components/PartesTecnico.tsx",
+    "lineNum": 9,
+    "rawLine": "import { saveParteOfflineBundle, getParteOfflineBundle, getOfflineDiagnostics, type OfflineParteBundle } from '../../recursos-compartidos/services/offlineDB';",
+    "target": "../../recursos-compartidos/services/offlineDB"
+  },
+  {
+    "file": "mantenimientos/components/PartesTecnico.tsx",
+    "lineNum": 10,
+    "rawLine": "import { useNavigate } from 'react-router-dom';",
+    "target": "react-router-dom"
+  },
+  {
+    "file": "mantenimientos/components/PartesTecnico.tsx",
+    "lineNum": 11,
+    "rawLine": "import type { Parte, Centro, Cliente, CentroSistema } from '../../recursos-compartidos/types/models';",
+    "target": "../../recursos-compartidos/types/models"
+  },
+  {
+    "file": "mantenimientos/components/PartesTecnico.tsx",
+    "lineNum": 12,
+    "rawLine": "import type { Tecnico } from '../../recursos-compartidos/firebase/firebase';",
+    "target": "../../recursos-compartidos/firebase/firebase"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaAbastecimientoSalaBombas.tsx",
+    "lineNum": 1,
+    "rawLine": "import React from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaAbastecimientoSalaBombas.tsx",
+    "lineNum": 2,
+    "rawLine": "import { CheckCircle2, XCircle, X, Pencil, Trash2 } from 'lucide-react';",
+    "target": "lucide-react"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaAbastecimientoSalaBombas.tsx",
+    "lineNum": 3,
+    "rawLine": "import type { CentroSistema, EquipoInstalado, Parte } from '../../../recursos-compartidos/types/models';",
+    "target": "../../../recursos-compartidos/types/models"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaAbastecimientoSalaBombas.tsx",
+    "lineNum": 4,
+    "rawLine": "import { updateEquipoInstalado, updateParte as updateParteFirestore, uploadFile, type ChecklistItem } from '../../../recursos-compartidos/firebase/firebase';",
+    "target": "../../../recursos-compartidos/firebase/firebase"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaAbastecimientoSalaBombas.tsx",
+    "lineNum": 5,
+    "rawLine": "import TableInput from '../../../recursos-compartidos/components/TableInput';",
+    "target": "../../../recursos-compartidos/components/TableInput"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaAlumbradoEmergencia.tsx",
+    "lineNum": 1,
+    "rawLine": "import React from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaAlumbradoEmergencia.tsx",
+    "lineNum": 2,
+    "rawLine": "import { CheckCircle2, XCircle, X, Pencil, Trash2 } from 'lucide-react';",
+    "target": "lucide-react"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaAlumbradoEmergencia.tsx",
+    "lineNum": 3,
+    "rawLine": "import type { CentroSistema, EquipoInstalado, Parte } from '../../../recursos-compartidos/types/models';",
+    "target": "../../../recursos-compartidos/types/models"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaAlumbradoEmergencia.tsx",
+    "lineNum": 4,
+    "rawLine": "import { updateEquipoInstalado, updateParte as updateParteFirestore, uploadFile, type ChecklistItem } from '../../../recursos-compartidos/firebase/firebase';",
+    "target": "../../../recursos-compartidos/firebase/firebase"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaAlumbradoEmergencia.tsx",
+    "lineNum": 5,
+    "rawLine": "import TableInput from '../../../recursos-compartidos/components/TableInput';",
+    "target": "../../../recursos-compartidos/components/TableInput"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaBies.tsx",
+    "lineNum": 1,
+    "rawLine": "import React from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaBies.tsx",
+    "lineNum": 2,
+    "rawLine": "import { CheckCircle2, XCircle, Pencil, Trash2 } from 'lucide-react';",
+    "target": "lucide-react"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaBies.tsx",
+    "lineNum": 3,
+    "rawLine": "import type { CentroSistema, EquipoInstalado, Parte } from '../../../recursos-compartidos/types/models';",
+    "target": "../../../recursos-compartidos/types/models"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaBies.tsx",
+    "lineNum": 4,
+    "rawLine": "import { updateEquipoInstalado, updateParte as updateParteFirestore, uploadFile, type ChecklistItem } from '../../../recursos-compartidos/firebase/firebase';",
+    "target": "../../../recursos-compartidos/firebase/firebase"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaBies.tsx",
+    "lineNum": 5,
+    "rawLine": "import TableInput from '../../../recursos-compartidos/components/TableInput';",
+    "target": "../../../recursos-compartidos/components/TableInput"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaBombaDiesel.tsx",
+    "lineNum": 1,
+    "rawLine": "import React from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaBombaDiesel.tsx",
+    "lineNum": 2,
+    "rawLine": "import { CheckCircle2, XCircle, X, Pencil, Trash2 } from 'lucide-react';",
+    "target": "lucide-react"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaBombaDiesel.tsx",
+    "lineNum": 3,
+    "rawLine": "import type { CentroSistema, EquipoInstalado, Parte } from '../../../recursos-compartidos/types/models';",
+    "target": "../../../recursos-compartidos/types/models"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaBombaDiesel.tsx",
+    "lineNum": 4,
+    "rawLine": "import { updateEquipoInstalado, updateParte as updateParteFirestore, uploadFile, type ChecklistItem } from '../../../recursos-compartidos/firebase/firebase';",
+    "target": "../../../recursos-compartidos/firebase/firebase"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaBombaDiesel.tsx",
+    "lineNum": 5,
+    "rawLine": "import TableInput from '../../../recursos-compartidos/components/TableInput';",
+    "target": "../../../recursos-compartidos/components/TableInput"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaBombaElectrica.tsx",
+    "lineNum": 1,
+    "rawLine": "import React from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaBombaElectrica.tsx",
+    "lineNum": 2,
+    "rawLine": "import { CheckCircle2, XCircle, X, Pencil, Trash2 } from 'lucide-react';",
+    "target": "lucide-react"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaBombaElectrica.tsx",
+    "lineNum": 3,
+    "rawLine": "import type { CentroSistema, EquipoInstalado, Parte } from '../../../recursos-compartidos/types/models';",
+    "target": "../../../recursos-compartidos/types/models"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaBombaElectrica.tsx",
+    "lineNum": 4,
+    "rawLine": "import { updateEquipoInstalado, updateParte as updateParteFirestore, uploadFile, type ChecklistItem } from '../../../recursos-compartidos/firebase/firebase';",
+    "target": "../../../recursos-compartidos/firebase/firebase"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaBombaElectrica.tsx",
+    "lineNum": 5,
+    "rawLine": "import TableInput from '../../../recursos-compartidos/components/TableInput';",
+    "target": "../../../recursos-compartidos/components/TableInput"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaBombaJockey.tsx",
+    "lineNum": 1,
+    "rawLine": "import React from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaBombaJockey.tsx",
+    "lineNum": 2,
+    "rawLine": "import { CheckCircle2, XCircle, X, Pencil, Trash2 } from 'lucide-react';",
+    "target": "lucide-react"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaBombaJockey.tsx",
+    "lineNum": 3,
+    "rawLine": "import type { CentroSistema, EquipoInstalado, Parte } from '../../../recursos-compartidos/types/models';",
+    "target": "../../../recursos-compartidos/types/models"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaBombaJockey.tsx",
+    "lineNum": 4,
+    "rawLine": "import { updateEquipoInstalado, updateParte as updateParteFirestore, uploadFile, type ChecklistItem } from '../../../recursos-compartidos/firebase/firebase';",
+    "target": "../../../recursos-compartidos/firebase/firebase"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaBombaJockey.tsx",
+    "lineNum": 5,
+    "rawLine": "import TableInput from '../../../recursos-compartidos/components/TableInput';",
+    "target": "../../../recursos-compartidos/components/TableInput"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaCasetas.tsx",
+    "lineNum": 1,
+    "rawLine": "import React from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaCasetas.tsx",
+    "lineNum": 2,
+    "rawLine": "import { CheckCircle2, XCircle, X, Pencil, Trash2 } from 'lucide-react';",
+    "target": "lucide-react"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaCasetas.tsx",
+    "lineNum": 3,
+    "rawLine": "import type { CentroSistema, EquipoInstalado, Parte } from '../../../recursos-compartidos/types/models';",
+    "target": "../../../recursos-compartidos/types/models"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaCasetas.tsx",
+    "lineNum": 4,
+    "rawLine": "import { updateEquipoInstalado, updateParte as updateParteFirestore, uploadFile, type ChecklistItem } from '../../../recursos-compartidos/firebase/firebase';",
+    "target": "../../../recursos-compartidos/firebase/firebase"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaCasetas.tsx",
+    "lineNum": 5,
+    "rawLine": "import TableInput from '../../../recursos-compartidos/components/TableInput';",
+    "target": "../../../recursos-compartidos/components/TableInput"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaDeteccion.tsx",
+    "lineNum": 1,
+    "rawLine": "import React from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaDeteccion.tsx",
+    "lineNum": 2,
+    "rawLine": "import { CheckCircle2, XCircle, X, Pencil, Trash2 } from 'lucide-react';",
+    "target": "lucide-react"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaDeteccion.tsx",
+    "lineNum": 3,
+    "rawLine": "import type { CentroSistema, EquipoInstalado, Parte } from '../../../recursos-compartidos/types/models';",
+    "target": "../../../recursos-compartidos/types/models"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaDeteccion.tsx",
+    "lineNum": 4,
+    "rawLine": "import { updateEquipoInstalado, updateParte as updateParteFirestore, uploadFile, type ChecklistItem } from '../../../recursos-compartidos/firebase/firebase';",
+    "target": "../../../recursos-compartidos/firebase/firebase"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaDeteccion.tsx",
+    "lineNum": 5,
+    "rawLine": "import TableInput from '../../../recursos-compartidos/components/TableInput';",
+    "target": "../../../recursos-compartidos/components/TableInput"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaDeteccionAspiracion.tsx",
+    "lineNum": 1,
+    "rawLine": "import React from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaDeteccionAspiracion.tsx",
+    "lineNum": 2,
+    "rawLine": "import { CheckCircle2, XCircle, X, Pencil, Trash2 } from 'lucide-react';",
+    "target": "lucide-react"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaDeteccionAspiracion.tsx",
+    "lineNum": 3,
+    "rawLine": "import type { CentroSistema, EquipoInstalado, Parte } from '../../../recursos-compartidos/types/models';",
+    "target": "../../../recursos-compartidos/types/models"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaDeteccionAspiracion.tsx",
+    "lineNum": 4,
+    "rawLine": "import { updateEquipoInstalado, updateParte as updateParteFirestore, uploadFile, type ChecklistItem } from '../../../recursos-compartidos/firebase/firebase';",
+    "target": "../../../recursos-compartidos/firebase/firebase"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaDeteccionAspiracion.tsx",
+    "lineNum": 5,
+    "rawLine": "import TableInput from '../../../recursos-compartidos/components/TableInput';",
+    "target": "../../../recursos-compartidos/components/TableInput"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaDeteccionMonoxido.tsx",
+    "lineNum": 1,
+    "rawLine": "import React from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaDeteccionMonoxido.tsx",
+    "lineNum": 2,
+    "rawLine": "import { CheckCircle2, XCircle, X, Pencil, Trash2 } from 'lucide-react';",
+    "target": "lucide-react"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaDeteccionMonoxido.tsx",
+    "lineNum": 3,
+    "rawLine": "import type { CentroSistema, EquipoInstalado, Parte } from '../../../recursos-compartidos/types/models';",
+    "target": "../../../recursos-compartidos/types/models"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaDeteccionMonoxido.tsx",
+    "lineNum": 4,
+    "rawLine": "import { updateEquipoInstalado, updateParte as updateParteFirestore, uploadFile, type ChecklistItem } from '../../../recursos-compartidos/firebase/firebase';",
+    "target": "../../../recursos-compartidos/firebase/firebase"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaDeteccionMonoxido.tsx",
+    "lineNum": 5,
+    "rawLine": "import TableInput from '../../../recursos-compartidos/components/TableInput';",
+    "target": "../../../recursos-compartidos/components/TableInput"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaExtincionCampanaCocina.tsx",
+    "lineNum": 1,
+    "rawLine": "import React from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaExtincionCampanaCocina.tsx",
+    "lineNum": 2,
+    "rawLine": "import { CheckCircle2, XCircle, X, Pencil, Trash2 } from 'lucide-react';",
+    "target": "lucide-react"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaExtincionCampanaCocina.tsx",
+    "lineNum": 3,
+    "rawLine": "import type { CentroSistema, EquipoInstalado, Parte } from '../../../recursos-compartidos/types/models';",
+    "target": "../../../recursos-compartidos/types/models"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaExtincionCampanaCocina.tsx",
+    "lineNum": 4,
+    "rawLine": "import { updateEquipoInstalado, updateParte as updateParteFirestore, uploadFile, type ChecklistItem } from '../../../recursos-compartidos/firebase/firebase';",
+    "target": "../../../recursos-compartidos/firebase/firebase"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaExtincionCampanaCocina.tsx",
+    "lineNum": 5,
+    "rawLine": "import TableInput from '../../../recursos-compartidos/components/TableInput';",
+    "target": "../../../recursos-compartidos/components/TableInput"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaExtincionGas.tsx",
+    "lineNum": 1,
+    "rawLine": "import React from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaExtincionGas.tsx",
+    "lineNum": 2,
+    "rawLine": "import { CheckCircle2, XCircle, X, Pencil, Trash2 } from 'lucide-react';",
+    "target": "lucide-react"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaExtincionGas.tsx",
+    "lineNum": 3,
+    "rawLine": "import type { CentroSistema, EquipoInstalado, Parte } from '../../../recursos-compartidos/types/models';",
+    "target": "../../../recursos-compartidos/types/models"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaExtincionGas.tsx",
+    "lineNum": 4,
+    "rawLine": "import { updateEquipoInstalado, updateParte as updateParteFirestore, uploadFile, type ChecklistItem } from '../../../recursos-compartidos/firebase/firebase';",
+    "target": "../../../recursos-compartidos/firebase/firebase"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaExtincionGas.tsx",
+    "lineNum": 5,
+    "rawLine": "import TableInput from '../../../recursos-compartidos/components/TableInput';",
+    "target": "../../../recursos-compartidos/components/TableInput"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaExtintores.tsx",
+    "lineNum": 1,
+    "rawLine": "import React from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaExtintores.tsx",
+    "lineNum": 2,
+    "rawLine": "import { CheckCircle2, XCircle, Pencil, Trash2 } from 'lucide-react';",
+    "target": "lucide-react"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaExtintores.tsx",
+    "lineNum": 3,
+    "rawLine": "import type { CentroSistema, EquipoInstalado, Parte } from '../../../recursos-compartidos/types/models';",
+    "target": "../../../recursos-compartidos/types/models"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaExtintores.tsx",
+    "lineNum": 4,
+    "rawLine": "import { updateEquipoInstalado, updateParte as updateParteFirestore, uploadFile, type ChecklistItem } from '../../../recursos-compartidos/firebase/firebase';",
+    "target": "../../../recursos-compartidos/firebase/firebase"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaExtintores.tsx",
+    "lineNum": 5,
+    "rawLine": "import TableInput from '../../../recursos-compartidos/components/TableInput';",
+    "target": "../../../recursos-compartidos/components/TableInput"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaExutorios.tsx",
+    "lineNum": 1,
+    "rawLine": "import React from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaExutorios.tsx",
+    "lineNum": 2,
+    "rawLine": "import { CheckCircle2, XCircle, X, Pencil, Trash2 } from 'lucide-react';",
+    "target": "lucide-react"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaExutorios.tsx",
+    "lineNum": 3,
+    "rawLine": "import type { CentroSistema, EquipoInstalado, Parte } from '../../../recursos-compartidos/types/models';",
+    "target": "../../../recursos-compartidos/types/models"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaExutorios.tsx",
+    "lineNum": 4,
+    "rawLine": "import { updateEquipoInstalado, updateParte as updateParteFirestore, uploadFile, type ChecklistItem } from '../../../recursos-compartidos/firebase/firebase';",
+    "target": "../../../recursos-compartidos/firebase/firebase"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaExutorios.tsx",
+    "lineNum": 5,
+    "rawLine": "import TableInput from '../../../recursos-compartidos/components/TableInput';",
+    "target": "../../../recursos-compartidos/components/TableInput"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaFuenteAlimentacionAuxiliar.tsx",
+    "lineNum": 1,
+    "rawLine": "import React from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaFuenteAlimentacionAuxiliar.tsx",
+    "lineNum": 2,
+    "rawLine": "import { CheckCircle2, XCircle, X, Pencil, Trash2 } from 'lucide-react';",
+    "target": "lucide-react"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaFuenteAlimentacionAuxiliar.tsx",
+    "lineNum": 3,
+    "rawLine": "import type { CentroSistema, EquipoInstalado, Parte } from '../../../recursos-compartidos/types/models';",
+    "target": "../../../recursos-compartidos/types/models"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaFuenteAlimentacionAuxiliar.tsx",
+    "lineNum": 4,
+    "rawLine": "import { updateEquipoInstalado, updateParte as updateParteFirestore, uploadFile, type ChecklistItem } from '../../../recursos-compartidos/firebase/firebase';",
+    "target": "../../../recursos-compartidos/firebase/firebase"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaFuenteAlimentacionAuxiliar.tsx",
+    "lineNum": 5,
+    "rawLine": "import TableInput from '../../../recursos-compartidos/components/TableInput';",
+    "target": "../../../recursos-compartidos/components/TableInput"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaGenerico.tsx",
+    "lineNum": 1,
+    "rawLine": "import React from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaGenerico.tsx",
+    "lineNum": 2,
+    "rawLine": "import { CheckCircle2, XCircle, X, Pencil, Trash2 } from 'lucide-react';",
+    "target": "lucide-react"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaGenerico.tsx",
+    "lineNum": 3,
+    "rawLine": "import type { CentroSistema, EquipoInstalado, Parte } from '../../../recursos-compartidos/types/models';",
+    "target": "../../../recursos-compartidos/types/models"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaGenerico.tsx",
+    "lineNum": 4,
+    "rawLine": "import { updateEquipoInstalado, updateParte as updateParteFirestore, uploadFile, type ChecklistItem } from '../../../recursos-compartidos/firebase/firebase';",
+    "target": "../../../recursos-compartidos/firebase/firebase"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaGenerico.tsx",
+    "lineNum": 5,
+    "rawLine": "import TableInput from '../../../recursos-compartidos/components/TableInput';",
+    "target": "../../../recursos-compartidos/components/TableInput"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaHidrantes.tsx",
+    "lineNum": 1,
+    "rawLine": "import React from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaHidrantes.tsx",
+    "lineNum": 2,
+    "rawLine": "import { CheckCircle2, XCircle, X, Pencil, Trash2 } from 'lucide-react';",
+    "target": "lucide-react"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaHidrantes.tsx",
+    "lineNum": 3,
+    "rawLine": "import type { CentroSistema, EquipoInstalado, Parte } from '../../../recursos-compartidos/types/models';",
+    "target": "../../../recursos-compartidos/types/models"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaHidrantes.tsx",
+    "lineNum": 4,
+    "rawLine": "import { updateEquipoInstalado, updateParte as updateParteFirestore, uploadFile, type ChecklistItem } from '../../../recursos-compartidos/firebase/firebase';",
+    "target": "../../../recursos-compartidos/firebase/firebase"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaHidrantes.tsx",
+    "lineNum": 5,
+    "rawLine": "import TableInput from '../../../recursos-compartidos/components/TableInput';",
+    "target": "../../../recursos-compartidos/components/TableInput"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaPuertasRF.tsx",
+    "lineNum": 1,
+    "rawLine": "import React from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaPuertasRF.tsx",
+    "lineNum": 2,
+    "rawLine": "import { CheckCircle2, XCircle, X, Pencil, Trash2 } from 'lucide-react';",
+    "target": "lucide-react"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaPuertasRF.tsx",
+    "lineNum": 3,
+    "rawLine": "import type { CentroSistema, EquipoInstalado, Parte } from '../../../recursos-compartidos/types/models';",
+    "target": "../../../recursos-compartidos/types/models"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaPuertasRF.tsx",
+    "lineNum": 4,
+    "rawLine": "import { updateEquipoInstalado, updateParte as updateParteFirestore, uploadFile, type ChecklistItem } from '../../../recursos-compartidos/firebase/firebase';",
+    "target": "../../../recursos-compartidos/firebase/firebase"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaPuertasRF.tsx",
+    "lineNum": 5,
+    "rawLine": "import TableInput from '../../../recursos-compartidos/components/TableInput';",
+    "target": "../../../recursos-compartidos/components/TableInput"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaSobrepresionPresurizacion.tsx",
+    "lineNum": 1,
+    "rawLine": "import React from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaSobrepresionPresurizacion.tsx",
+    "lineNum": 2,
+    "rawLine": "import { CheckCircle2, XCircle, X, Pencil, Trash2 } from 'lucide-react';",
+    "target": "lucide-react"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaSobrepresionPresurizacion.tsx",
+    "lineNum": 3,
+    "rawLine": "import type { CentroSistema, EquipoInstalado, Parte } from '../../../recursos-compartidos/types/models';",
+    "target": "../../../recursos-compartidos/types/models"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaSobrepresionPresurizacion.tsx",
+    "lineNum": 4,
+    "rawLine": "import { updateEquipoInstalado, updateParte as updateParteFirestore, uploadFile, type ChecklistItem } from '../../../recursos-compartidos/firebase/firebase';",
+    "target": "../../../recursos-compartidos/firebase/firebase"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaSobrepresionPresurizacion.tsx",
+    "lineNum": 5,
+    "rawLine": "import TableInput from '../../../recursos-compartidos/components/TableInput';",
+    "target": "../../../recursos-compartidos/components/TableInput"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaSprinklers.tsx",
+    "lineNum": 1,
+    "rawLine": "import React from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaSprinklers.tsx",
+    "lineNum": 2,
+    "rawLine": "import { CheckCircle2, XCircle, X, Pencil, Trash2 } from 'lucide-react';",
+    "target": "lucide-react"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaSprinklers.tsx",
+    "lineNum": 3,
+    "rawLine": "import type { CentroSistema, EquipoInstalado, Parte } from '../../../recursos-compartidos/types/models';",
+    "target": "../../../recursos-compartidos/types/models"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaSprinklers.tsx",
+    "lineNum": 4,
+    "rawLine": "import { updateEquipoInstalado, updateParte as updateParteFirestore, uploadFile, type ChecklistItem } from '../../../recursos-compartidos/firebase/firebase';",
+    "target": "../../../recursos-compartidos/firebase/firebase"
+  },
+  {
+    "file": "mantenimientos/components/RevisionSistemas/SistemaSprinklers.tsx",
+    "lineNum": 5,
+    "rawLine": "import TableInput from '../../../recursos-compartidos/components/TableInput';",
+    "target": "../../../recursos-compartidos/components/TableInput"
+  },
+  {
+    "file": "mantenimientos/pages/DashboardTecnico.tsx",
+    "lineNum": 1,
+    "rawLine": "import { useState, useMemo, useEffect } from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "mantenimientos/pages/DashboardTecnico.tsx",
+    "lineNum": 2,
+    "rawLine": "import { FileText, Package, Users, Power, LogOut, FileCheck, Inbox } from 'lucide-react';",
+    "target": "lucide-react"
+  },
+  {
+    "file": "mantenimientos/pages/DashboardTecnico.tsx",
+    "lineNum": 3,
+    "rawLine": "import { BrowserRouter, Routes, Route } from 'react-router-dom';",
+    "target": "react-router-dom"
+  },
+  {
+    "file": "mantenimientos/pages/DashboardTecnico.tsx",
+    "lineNum": 4,
+    "rawLine": "import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';",
+    "target": "firebase/firestore"
+  },
+  {
+    "file": "mantenimientos/pages/DashboardTecnico.tsx",
+    "lineNum": 5,
+    "rawLine": "import { db } from '../../recursos-compartidos/firebase/firebase';",
+    "target": "../../recursos-compartidos/firebase/firebase"
+  },
+  {
+    "file": "mantenimientos/pages/DashboardTecnico.tsx",
+    "lineNum": 6,
+    "rawLine": "import PartesTecnico from '../components/PartesTecnico';",
+    "target": "../components/PartesTecnico"
+  },
+  {
+    "file": "mantenimientos/pages/DashboardTecnico.tsx",
+    "lineNum": 7,
+    "rawLine": "import RevisionChecklist from './RevisionChecklist';",
+    "target": "./RevisionChecklist"
+  },
+  {
+    "file": "mantenimientos/pages/DashboardTecnico.tsx",
+    "lineNum": 8,
+    "rawLine": "import { APP_VERSION } from '../../recursos-compartidos/types/constants';",
+    "target": "../../recursos-compartidos/types/constants"
+  },
+  {
+    "file": "mantenimientos/pages/Partes.tsx",
+    "lineNum": 1,
+    "rawLine": "import { useState, useEffect, useRef } from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "mantenimientos/pages/Partes.tsx",
+    "lineNum": 2,
+    "rawLine": "import { useNavigate } from 'react-router-dom';",
+    "target": "react-router-dom"
+  },
+  {
+    "file": "mantenimientos/pages/Partes.tsx",
+    "lineNum": 3,
+    "rawLine": "import { FileText, Building2, MapPin, CalendarDays, Search, Trash2, Download, Eye, X, Check, ArrowLeft, Filter, ChevronDown } from 'lucide-react';",
+    "target": "lucide-react"
+  },
+  {
+    "file": "mantenimientos/pages/Partes.tsx",
+    "lineNum": 4,
+    "rawLine": "import { subscribePartes, subscribeCentros, subscribeClientes, subscribeTecnicos, deleteParte, db, updateParte } from '../../recursos-compartidos/firebase/firebase';",
+    "target": "../../recursos-compartidos/firebase/firebase"
+  },
+  {
+    "file": "mantenimientos/pages/Partes.tsx",
+    "lineNum": 5,
+    "rawLine": "import { collection, getDocs, doc, getDoc, query, where } from 'firebase/firestore';",
+    "target": "firebase/firestore"
+  },
+  {
+    "file": "mantenimientos/pages/Partes.tsx",
+    "lineNum": 6,
+    "rawLine": "import { generarActaExtintoresPDF, generarAlbaranPDF, generarCertificadoPDF } from '../../recursos-compartidos/services/pdfGenerator';",
+    "target": "../../recursos-compartidos/services/pdfGenerator"
+  },
+  {
+    "file": "mantenimientos/pages/Partes.tsx",
+    "lineNum": 7,
+    "rawLine": "import { generarContratoPDF } from '../../recursos-compartidos/services/pdfContratoGenerator';",
+    "target": "../../recursos-compartidos/services/pdfContratoGenerator"
+  },
+  {
+    "file": "mantenimientos/pages/Partes.tsx",
+    "lineNum": 352,
+    "rawLine": "const { addAlbaran } = await import('../../recursos-compartidos/firebase/firebase');",
+    "target": "../../recursos-compartidos/firebase/firebase"
+  },
+  {
+    "file": "mantenimientos/pages/Planificacion.tsx",
+    "lineNum": 1,
+    "rawLine": "import { useState, useEffect } from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "mantenimientos/pages/Planificacion.tsx",
+    "lineNum": 2,
+    "rawLine": "import { useNavigate } from 'react-router-dom';",
+    "target": "react-router-dom"
+  },
+  {
+    "file": "mantenimientos/pages/Planificacion.tsx",
+    "lineNum": 3,
+    "rawLine": "import { Calendar, ChevronLeft, ChevronRight, Building2, FileText, AlertTriangle, CheckCheck, ArrowLeft } from 'lucide-react';",
+    "target": "lucide-react"
+  },
+  {
+    "file": "mantenimientos/pages/Planificacion.tsx",
+    "lineNum": 4,
+    "rawLine": "import { addParte, updateParte, subscribePartes } from '../../recursos-compartidos/firebase/firebase';",
+    "target": "../../recursos-compartidos/firebase/firebase"
+  },
+  {
+    "file": "mantenimientos/pages/RevisionChecklist.tsx",
+    "lineNum": 1,
+    "rawLine": "import SistemaExtintores from '../components/RevisionSistemas/SistemaExtintores';",
+    "target": "../components/RevisionSistemas/SistemaExtintores"
+  },
+  {
+    "file": "mantenimientos/pages/RevisionChecklist.tsx",
+    "lineNum": 2,
+    "rawLine": "import SistemaBies from '../components/RevisionSistemas/SistemaBies';",
+    "target": "../components/RevisionSistemas/SistemaBies"
+  },
+  {
+    "file": "mantenimientos/pages/RevisionChecklist.tsx",
+    "lineNum": 3,
+    "rawLine": "import SistemaDeteccion from '../components/RevisionSistemas/SistemaDeteccion';",
+    "target": "../components/RevisionSistemas/SistemaDeteccion"
+  },
+  {
+    "file": "mantenimientos/pages/RevisionChecklist.tsx",
+    "lineNum": 4,
+    "rawLine": "import SistemaDeteccionAspiracion from '../components/RevisionSistemas/SistemaDeteccionAspiracion';",
+    "target": "../components/RevisionSistemas/SistemaDeteccionAspiracion"
+  },
+  {
+    "file": "mantenimientos/pages/RevisionChecklist.tsx",
+    "lineNum": 5,
+    "rawLine": "import SistemaDeteccionMonoxido from '../components/RevisionSistemas/SistemaDeteccionMonoxido';",
+    "target": "../components/RevisionSistemas/SistemaDeteccionMonoxido"
+  },
+  {
+    "file": "mantenimientos/pages/RevisionChecklist.tsx",
+    "lineNum": 6,
+    "rawLine": "import SistemaGenerico from '../components/RevisionSistemas/SistemaGenerico';",
+    "target": "../components/RevisionSistemas/SistemaGenerico"
+  },
+  {
+    "file": "mantenimientos/pages/RevisionChecklist.tsx",
+    "lineNum": 7,
+    "rawLine": "import SistemaSobrepresionPresurizacion from '../components/RevisionSistemas/SistemaSobrepresionPresurizacion';",
+    "target": "../components/RevisionSistemas/SistemaSobrepresionPresurizacion"
+  },
+  {
+    "file": "mantenimientos/pages/RevisionChecklist.tsx",
+    "lineNum": 8,
+    "rawLine": "import SistemaBombaElectrica from '../components/RevisionSistemas/SistemaBombaElectrica';",
+    "target": "../components/RevisionSistemas/SistemaBombaElectrica"
+  },
+  {
+    "file": "mantenimientos/pages/RevisionChecklist.tsx",
+    "lineNum": 9,
+    "rawLine": "import SistemaBombaJockey from '../components/RevisionSistemas/SistemaBombaJockey';",
+    "target": "../components/RevisionSistemas/SistemaBombaJockey"
+  },
+  {
+    "file": "mantenimientos/pages/RevisionChecklist.tsx",
+    "lineNum": 10,
+    "rawLine": "import SistemaBombaDiesel from '../components/RevisionSistemas/SistemaBombaDiesel';",
+    "target": "../components/RevisionSistemas/SistemaBombaDiesel"
+  },
+  {
+    "file": "mantenimientos/pages/RevisionChecklist.tsx",
+    "lineNum": 11,
+    "rawLine": "import SistemaAbastecimientoSalaBombas from '../components/RevisionSistemas/SistemaAbastecimientoSalaBombas';",
+    "target": "../components/RevisionSistemas/SistemaAbastecimientoSalaBombas"
+  },
+  {
+    "file": "mantenimientos/pages/RevisionChecklist.tsx",
+    "lineNum": 12,
+    "rawLine": "import SistemaCasetas from '../components/RevisionSistemas/SistemaCasetas';",
+    "target": "../components/RevisionSistemas/SistemaCasetas"
+  },
+  {
+    "file": "mantenimientos/pages/RevisionChecklist.tsx",
+    "lineNum": 13,
+    "rawLine": "import SistemaExutorios from '../components/RevisionSistemas/SistemaExutorios';",
+    "target": "../components/RevisionSistemas/SistemaExutorios"
+  },
+  {
+    "file": "mantenimientos/pages/RevisionChecklist.tsx",
+    "lineNum": 14,
+    "rawLine": "import SistemaHidrantes from '../components/RevisionSistemas/SistemaHidrantes';",
+    "target": "../components/RevisionSistemas/SistemaHidrantes"
+  },
+  {
+    "file": "mantenimientos/pages/RevisionChecklist.tsx",
+    "lineNum": 15,
+    "rawLine": "import SistemaPuertasRF from '../components/RevisionSistemas/SistemaPuertasRF';",
+    "target": "../components/RevisionSistemas/SistemaPuertasRF"
+  },
+  {
+    "file": "mantenimientos/pages/RevisionChecklist.tsx",
+    "lineNum": 16,
+    "rawLine": "import SistemaSprinklers from '../components/RevisionSistemas/SistemaSprinklers';",
+    "target": "../components/RevisionSistemas/SistemaSprinklers"
+  },
+  {
+    "file": "mantenimientos/pages/RevisionChecklist.tsx",
+    "lineNum": 17,
+    "rawLine": "import SistemaExtincionGas from '../components/RevisionSistemas/SistemaExtincionGas';",
+    "target": "../components/RevisionSistemas/SistemaExtincionGas"
+  },
+  {
+    "file": "mantenimientos/pages/RevisionChecklist.tsx",
+    "lineNum": 18,
+    "rawLine": "import SistemaExtincionCampanaCocina from '../components/RevisionSistemas/SistemaExtincionCampanaCocina';",
+    "target": "../components/RevisionSistemas/SistemaExtincionCampanaCocina"
+  },
+  {
+    "file": "mantenimientos/pages/RevisionChecklist.tsx",
+    "lineNum": 19,
+    "rawLine": "import SistemaFuenteAlimentacionAuxiliar from '../components/RevisionSistemas/SistemaFuenteAlimentacionAuxiliar';",
+    "target": "../components/RevisionSistemas/SistemaFuenteAlimentacionAuxiliar"
+  },
+  {
+    "file": "mantenimientos/pages/RevisionChecklist.tsx",
+    "lineNum": 20,
+    "rawLine": "import SistemaAlumbradoEmergencia from '../components/RevisionSistemas/SistemaAlumbradoEmergencia';",
+    "target": "../components/RevisionSistemas/SistemaAlumbradoEmergencia"
+  },
+  {
+    "file": "mantenimientos/pages/RevisionChecklist.tsx",
+    "lineNum": 21,
+    "rawLine": "import { useState, useEffect, useRef } from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "mantenimientos/pages/RevisionChecklist.tsx",
+    "lineNum": 22,
+    "rawLine": "import { useNavigate, useLocation } from 'react-router-dom';",
+    "target": "react-router-dom"
+  },
+  {
+    "file": "mantenimientos/pages/RevisionChecklist.tsx",
+    "lineNum": 23,
+    "rawLine": "import { ArrowLeft, Save, Layers, ChevronDown, ChevronUp, Plus, X, CheckCircle2, AlertTriangle, PenLine, RotateCcw, CheckCheck, Lock, MessageSquare, Unlock, Calendar, Wifi, WifiOff, RefreshCw } from 'lucide-react';",
+    "target": "lucide-react"
+  },
+  {
+    "file": "mantenimientos/pages/RevisionChecklist.tsx",
+    "lineNum": 24,
+    "rawLine": "import { addEquipoInstalado, addAlbaran, updateEquipoInstalado, updateParte as updateParteFirestore, updateCentro, subscribePartes, subscribeCentros, subscribeClientes, subscribeCentroSistemas, subscribeEquiposInstalados, subscribeArticulos, subscribeSistemasCategorias, generateNumeroMantenimiento, uploadFile, type Albaran, type ChecklistItem } from '../../recursos-compartidos/firebase/firebase';",
+    "target": "../../recursos-compartidos/firebase/firebase"
+  },
+  {
+    "file": "mantenimientos/pages/RevisionChecklist.tsx",
+    "lineNum": 25,
+    "rawLine": "import { subscribePlantillas, subscribeItemsDePlantilla, type ItemPlantilla } from '../../recursos-compartidos/types/plantillas';",
+    "target": "../../recursos-compartidos/types/plantillas"
+  },
+  {
+    "file": "mantenimientos/pages/RevisionChecklist.tsx",
+    "lineNum": 26,
+    "rawLine": "import { getParteOfflineBundle, updateParteOfflineData, getPendingSyncItems, markSyncItemDone, markSyncItemFailed, addPendingSyncItem } from '../../recursos-compartidos/services/offlineDB';",
+    "target": "../../recursos-compartidos/services/offlineDB"
+  },
+  {
+    "file": "mantenimientos/pages/RevisionChecklist.tsx",
+    "lineNum": 27,
+    "rawLine": "import type { Centro, Parte, Cliente, CentroSistema, EquipoInstalado } from '../../recursos-compartidos/types/models';",
+    "target": "../../recursos-compartidos/types/models"
+  },
+  {
+    "file": "mantenimientos/pages/RevisionChecklist.tsx",
+    "lineNum": 28,
+    "rawLine": "import ConfirmationModal from '../../recursos-compartidos/ConfirmationModal';",
+    "target": "../../recursos-compartidos/ConfirmationModal"
+  },
+  {
+    "file": "mantenimientos/pages/RevisionChecklist.tsx",
+    "lineNum": 29,
+    "rawLine": "import { getIconForSistema } from '../../recursos-compartidos/services/sistemasUtils';",
+    "target": "../../recursos-compartidos/services/sistemasUtils"
+  },
+  {
+    "file": "mantenimientos/pages/RevisionChecklist.tsx",
+    "lineNum": 30,
+    "rawLine": "import EquipoFormulario from '../../recursos-compartidos/components/EquipoFormulario';",
+    "target": "../../recursos-compartidos/components/EquipoFormulario"
+  },
+  {
+    "file": "mantenimientos/pages/RevisionChecklist.tsx",
+    "lineNum": 1492,
+    "rawLine": "const { deleteEquipoInstalado } = await import('../../recursos-compartidos/firebase/firebase');",
+    "target": "../../recursos-compartidos/firebase/firebase"
+  },
+  {
+    "file": "mantenimientos/pages/Revisiones.tsx",
+    "lineNum": 1,
+    "rawLine": "import { useState, useEffect } from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "mantenimientos/pages/Revisiones.tsx",
+    "lineNum": 2,
+    "rawLine": "import { useNavigate } from 'react-router-dom';",
+    "target": "react-router-dom"
+  },
+  {
+    "file": "mantenimientos/routes.ts",
+    "lineNum": 1,
+    "rawLine": "import Planificacion from './pages/Planificacion';",
+    "target": "./pages/Planificacion"
+  },
+  {
+    "file": "mantenimientos/routes.ts",
+    "lineNum": 2,
+    "rawLine": "import Partes from './pages/Partes';",
+    "target": "./pages/Partes"
+  },
+  {
+    "file": "mantenimientos/routes.ts",
+    "lineNum": 3,
+    "rawLine": "import RevisionChecklist from './pages/RevisionChecklist';",
+    "target": "./pages/RevisionChecklist"
+  },
+  {
+    "file": "mantenimientos/routes.ts",
+    "lineNum": 4,
+    "rawLine": "import Revisiones from './pages/Revisiones';",
+    "target": "./pages/Revisiones"
+  },
+  {
+    "file": "mantenimientos/routes.ts",
+    "lineNum": 5,
+    "rawLine": "import DashboardTecnico from './pages/DashboardTecnico';",
+    "target": "./pages/DashboardTecnico"
+  },
+  {
+    "file": "oficina/pages/Ajustes.tsx",
+    "lineNum": 1,
+    "rawLine": "import { useState, useEffect } from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "oficina/pages/Ajustes.tsx",
+    "lineNum": 2,
+    "rawLine": "import { useNavigate } from 'react-router-dom';",
+    "target": "react-router-dom"
+  },
+  {
+    "file": "oficina/pages/Ajustes.tsx",
+    "lineNum": 6,
+    "rawLine": "import { addUserToFirestore, subscribeSistemasCategorias, addSistemaCategoria, deleteSistemaCategoria, updateSistemaCategoria, uploadFile, subscribeImpuestos, saveImpuestoConfig, subscribeTecnicos, saveTecnico, deleteTecnico } from '../../recursos-compartidos/firebase/firebase';",
+    "target": "../../recursos-compartidos/firebase/firebase"
+  },
+  {
+    "file": "oficina/pages/Ajustes.tsx",
+    "lineNum": 7,
+    "rawLine": "import FormBuilderPlantillas from './FormBuilderPlantillas';",
+    "target": "./FormBuilderPlantillas"
+  },
+  {
+    "file": "oficina/pages/Ajustes.tsx",
+    "lineNum": 8,
+    "rawLine": "import ConfirmationModal from '../../recursos-compartidos/ConfirmationModal';",
+    "target": "../../recursos-compartidos/ConfirmationModal"
+  },
+  {
+    "file": "oficina/pages/Albaranes.tsx",
+    "lineNum": 1,
+    "rawLine": "import { useState, useEffect, useMemo, useRef } from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "oficina/pages/Albaranes.tsx",
+    "lineNum": 2,
+    "rawLine": "import { useNavigate } from 'react-router-dom';",
+    "target": "react-router-dom"
+  },
+  {
+    "file": "oficina/pages/Albaranes.tsx",
+    "lineNum": 3,
+    "rawLine": "import { ArrowLeft, FileDigit, Download, Search, CheckCircle2, Circle, Clock, Trash2, Plus, Building2, MapPin, Save, Trash, Edit, Copy, Maximize2, X, Signature } from 'lucide-react';",
+    "target": "lucide-react"
+  },
+  {
+    "file": "oficina/pages/Albaranes.tsx",
+    "lineNum": 4,
+    "rawLine": "import { addAlbaran, updateAlbaran, deleteAlbaran, subscribeAlbaranes, subscribeEmpresas, subscribeTecnicos, subscribeCentros, subscribeClientes, subscribeTrabajos, db, type Albaran, type Cliente, type Centro, type Equipo, type Tecnico, type Empresa, type TrabajoConfig, updateParte } from '../../recursos-compartidos/firebase/firebase';",
+    "target": "../../recursos-compartidos/firebase/firebase"
+  },
+  {
+    "file": "oficina/pages/Albaranes.tsx",
+    "lineNum": 5,
+    "rawLine": "import { doc, getDoc } from 'firebase/firestore';",
+    "target": "firebase/firestore"
+  },
+  {
+    "file": "oficina/pages/Albaranes.tsx",
+    "lineNum": 6,
+    "rawLine": "import { generarAlbaranPDF } from '../../recursos-compartidos/services/pdfGenerator';",
+    "target": "../../recursos-compartidos/services/pdfGenerator"
+  },
+  {
+    "file": "oficina/pages/Albaranes.tsx",
+    "lineNum": 7,
+    "rawLine": "import ConfirmationModal from '../../recursos-compartidos/ConfirmationModal';",
+    "target": "../../recursos-compartidos/ConfirmationModal"
+  },
+  {
+    "file": "oficina/pages/Articulos.tsx",
+    "lineNum": 1,
+    "rawLine": "import { useState, useEffect, useRef } from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "oficina/pages/Articulos.tsx",
+    "lineNum": 2,
+    "rawLine": "import { useNavigate } from 'react-router-dom';",
+    "target": "react-router-dom"
+  },
+  {
+    "file": "oficina/pages/Articulos.tsx",
+    "lineNum": 3,
+    "rawLine": "import { Package, Plus, Search, Edit, Trash2, X, Download, Upload } from 'lucide-react';",
+    "target": "lucide-react"
+  },
+  {
+    "file": "oficina/pages/Articulos.tsx",
+    "lineNum": 4,
+    "rawLine": "import ConfirmationModal from '../../recursos-compartidos/ConfirmationModal'; // Import the new modal component",
+    "target": "../../recursos-compartidos/ConfirmationModal"
+  },
+  {
+    "file": "oficina/pages/Articulos.tsx",
+    "lineNum": 5,
+    "rawLine": "import * as XLSX from 'xlsx';",
+    "target": "xlsx"
+  },
+  {
+    "file": "oficina/pages/Articulos.tsx",
+    "lineNum": 13,
+    "rawLine": "import { type SistemaCategoria } from './Sistemas'; // Import SistemaCategoria from Sistemas.tsx",
+    "target": "./Sistemas"
+  },
+  {
+    "file": "oficina/pages/Buzon.tsx",
+    "lineNum": 1,
+    "rawLine": "import { useState, useEffect } from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "oficina/pages/Buzon.tsx",
+    "lineNum": 18,
+    "rawLine": "import { db } from '../../recursos-compartidos/firebase/firebase';",
+    "target": "../../recursos-compartidos/firebase/firebase"
+  },
+  {
+    "file": "oficina/pages/Buzon.tsx",
+    "lineNum": 19,
+    "rawLine": "import ConfirmationModal from '../../recursos-compartidos/ConfirmationModal';",
+    "target": "../../recursos-compartidos/ConfirmationModal"
+  },
+  {
+    "file": "oficina/pages/Catalogo.tsx",
+    "lineNum": 1,
+    "rawLine": "import { useState, useEffect, useRef } from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "oficina/pages/Catalogo.tsx",
+    "lineNum": 2,
+    "rawLine": "import { useNavigate } from 'react-router-dom';",
+    "target": "react-router-dom"
+  },
+  {
+    "file": "oficina/pages/Catalogo.tsx",
+    "lineNum": 3,
+    "rawLine": "import { Package, Wrench, Plus, Search, Edit, Trash2, X, Download, Upload, Image as ImageIcon, Copy, ArrowLeft } from 'lucide-react';",
+    "target": "lucide-react"
+  },
+  {
+    "file": "oficina/pages/Catalogo.tsx",
+    "lineNum": 4,
+    "rawLine": "import ConfirmationModal from '../../recursos-compartidos/ConfirmationModal';",
+    "target": "../../recursos-compartidos/ConfirmationModal"
+  },
+  {
+    "file": "oficina/pages/Catalogo.tsx",
+    "lineNum": 5,
+    "rawLine": "import * as XLSX from 'xlsx';",
+    "target": "xlsx"
+  },
+  {
+    "file": "oficina/pages/Catalogo.tsx",
+    "lineNum": 14,
+    "rawLine": "import { type SistemaCategoria } from './Sistemas';",
+    "target": "./Sistemas"
+  },
+  {
+    "file": "oficina/pages/Centros.tsx",
+    "lineNum": 2,
+    "rawLine": "import { useState, useEffect, useRef, useMemo } from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "oficina/pages/Centros.tsx",
+    "lineNum": 3,
+    "rawLine": "import { useNavigate, useLocation } from 'react-router-dom';",
+    "target": "react-router-dom"
+  },
+  {
+    "file": "oficina/pages/Centros.tsx",
+    "lineNum": 4,
+    "rawLine": "import { ArrowLeft, Save, Plus, Search, Edit, Trash2, MapPin, Layers, X, Copy, AlertTriangle, Upload, Download, Building2, UserCheck, Eye, Phone, Mail, Users, ChevronRight, CreditCard } from 'lucide-react';",
+    "target": "lucide-react"
+  },
+  {
+    "file": "oficina/pages/Centros.tsx",
+    "lineNum": 5,
+    "rawLine": "import * as XLSX from 'xlsx';",
+    "target": "xlsx"
+  },
+  {
+    "file": "oficina/pages/Centros.tsx",
+    "lineNum": 6,
+    "rawLine": "import { CATEGORIAS_POR_DEFECTO, getIconForSistema } from './Sistemas';",
+    "target": "./Sistemas"
+  },
+  {
+    "file": "oficina/pages/Centros.tsx",
+    "lineNum": 7,
+    "rawLine": "import { addCentro, updateCentro, deleteCentro, subscribeCentros, subscribeFamilias, subscribeArticulos, subscribeTecnicos, subscribeEmpresas, addCentroSistema, deleteCentroSistema, subscribeCentroSistemas, addEquipoInstalado, updateEquipoInstalado, deleteEquipoInstalado, subscribeEquiposInstalados, sistemaToSlug, saveContrato, syncContratosExistentes, updateParte as updateParteFirestore, subscribeSistemasCategorias } from '../../recursos-compartidos/firebase/firebase';",
+    "target": "../../recursos-compartidos/firebase/firebase"
+  },
+  {
+    "file": "oficina/pages/Centros.tsx",
+    "lineNum": 8,
+    "rawLine": "import type { Articulo, Tecnico } from '../../recursos-compartidos/firebase/firebase';",
+    "target": "../../recursos-compartidos/firebase/firebase"
+  },
+  {
+    "file": "oficina/pages/Centros.tsx",
+    "lineNum": 9,
+    "rawLine": "import ConfirmationModal from '../../recursos-compartidos/ConfirmationModal';",
+    "target": "../../recursos-compartidos/ConfirmationModal"
+  },
+  {
+    "file": "oficina/pages/Centros.tsx",
+    "lineNum": 10,
+    "rawLine": "import DetailModal from '../../recursos-compartidos/components/DetailModal';",
+    "target": "../../recursos-compartidos/components/DetailModal"
+  },
+  {
+    "file": "oficina/pages/Centros.tsx",
+    "lineNum": 11,
+    "rawLine": "import EquipoFormulario from '../../recursos-compartidos/components/EquipoFormulario';",
+    "target": "../../recursos-compartidos/components/EquipoFormulario"
+  },
+  {
+    "file": "oficina/pages/Centros.tsx",
+    "lineNum": 12,
+    "rawLine": "import { generarContratoPDF } from '../../recursos-compartidos/services/pdfContratoGenerator';",
+    "target": "../../recursos-compartidos/services/pdfContratoGenerator"
+  },
+  {
+    "file": "oficina/pages/Certificados.tsx",
+    "lineNum": 1,
+    "rawLine": "import { useState, useEffect, useMemo } from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "oficina/pages/Certificados.tsx",
+    "lineNum": 2,
+    "rawLine": "import { useNavigate } from 'react-router-dom';",
+    "target": "react-router-dom"
+  },
+  {
+    "file": "oficina/pages/Certificados.tsx",
+    "lineNum": 8,
+    "rawLine": "import ConfirmationModal from '../../recursos-compartidos/ConfirmationModal';",
+    "target": "../../recursos-compartidos/ConfirmationModal"
+  },
+  {
+    "file": "oficina/pages/Certificados.tsx",
+    "lineNum": 9,
+    "rawLine": "import { generarCertificadoPDF, generarCertificadoPDFView } from '../../recursos-compartidos/services/pdfGenerator';",
+    "target": "../../recursos-compartidos/services/pdfGenerator"
+  },
+  {
+    "file": "oficina/pages/Certificados.tsx",
+    "lineNum": 10,
+    "rawLine": "import { db, subscribeCertificados, deleteCertificado, addCertificado } from '../../recursos-compartidos/firebase/firebase';",
+    "target": "../../recursos-compartidos/firebase/firebase"
+  },
+  {
+    "file": "oficina/pages/Certificados.tsx",
+    "lineNum": 11,
+    "rawLine": "import { doc, getDoc } from 'firebase/firestore';",
+    "target": "firebase/firestore"
+  },
+  {
+    "file": "oficina/pages/Certificados.tsx",
+    "lineNum": 12,
+    "rawLine": "import DetailModal from '../../recursos-compartidos/components/DetailModal';",
+    "target": "../../recursos-compartidos/components/DetailModal"
+  },
+  {
+    "file": "oficina/pages/Clientes.tsx",
+    "lineNum": 1,
+    "rawLine": "import { collection, doc, deleteDoc, getDocs, setDoc } from \"firebase/firestore\";",
+    "target": "firebase/firestore"
+  },
+  {
+    "file": "oficina/pages/Clientes.tsx",
+    "lineNum": 2,
+    "rawLine": "import { db } from '../../recursos-compartidos/firebase/firebase';",
+    "target": "../../recursos-compartidos/firebase/firebase"
+  },
+  {
+    "file": "oficina/pages/Clientes.tsx",
+    "lineNum": 3,
+    "rawLine": "import { useState, useEffect, useRef, useMemo } from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "oficina/pages/Clientes.tsx",
+    "lineNum": 4,
+    "rawLine": "import ConfirmationModal from '../../recursos-compartidos/ConfirmationModal';",
+    "target": "../../recursos-compartidos/ConfirmationModal"
+  },
+  {
+    "file": "oficina/pages/Clientes.tsx",
+    "lineNum": 5,
+    "rawLine": "import { useNavigate } from 'react-router-dom';",
+    "target": "react-router-dom"
+  },
+  {
+    "file": "oficina/pages/Clientes.tsx",
+    "lineNum": 6,
+    "rawLine": "import { ArrowLeft, Save, Building2, Plus, Download, Upload, Users, Search, Edit, Trash2, CreditCard, Phone, Mail, MapPin, Eye } from 'lucide-react';",
+    "target": "lucide-react"
+  },
+  {
+    "file": "oficina/pages/Clientes.tsx",
+    "lineNum": 7,
+    "rawLine": "import * as XLSX from 'xlsx';",
+    "target": "xlsx"
+  },
+  {
+    "file": "oficina/pages/Clientes.tsx",
+    "lineNum": 8,
+    "rawLine": "import DetailModal from '../../recursos-compartidos/components/DetailModal';",
+    "target": "../../recursos-compartidos/components/DetailModal"
+  },
+  {
+    "file": "oficina/pages/ClientesCentros.tsx",
+    "lineNum": 1,
+    "rawLine": "import { useState, useEffect, useRef } from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "oficina/pages/ClientesCentros.tsx",
+    "lineNum": 2,
+    "rawLine": "import { useNavigate } from 'react-router-dom';",
+    "target": "react-router-dom"
+  },
+  {
+    "file": "oficina/pages/ClientesCentros.tsx",
+    "lineNum": 3,
+    "rawLine": "import { Users, Building2, Plus, Upload, Download, ArrowLeft } from 'lucide-react';",
+    "target": "lucide-react"
+  },
+  {
+    "file": "oficina/pages/ClientesCentros.tsx",
+    "lineNum": 4,
+    "rawLine": "import * as XLSX from 'xlsx';",
+    "target": "xlsx"
+  },
+  {
+    "file": "oficina/pages/ClientesCentros.tsx",
+    "lineNum": 5,
+    "rawLine": "import Clientes from './Clientes';",
+    "target": "./Clientes"
+  },
+  {
+    "file": "oficina/pages/ClientesCentros.tsx",
+    "lineNum": 6,
+    "rawLine": "import Centros from './Centros';",
+    "target": "./Centros"
+  },
+  {
+    "file": "oficina/pages/ConfiguracionEmpresa.tsx",
+    "lineNum": 1,
+    "rawLine": "import { useState, useEffect } from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "oficina/pages/ConfiguracionEmpresa.tsx",
+    "lineNum": 2,
+    "rawLine": "import { useNavigate } from 'react-router-dom';",
+    "target": "react-router-dom"
+  },
+  {
+    "file": "oficina/pages/ConfiguracionEmpresa.tsx",
+    "lineNum": 8,
+    "rawLine": "import { subscribeEmpresas, saveEmpresa, deleteEmpresa, uploadFile } from '../../recursos-compartidos/firebase/firebase';",
+    "target": "../../recursos-compartidos/firebase/firebase"
+  },
+  {
+    "file": "oficina/pages/FormBuilderPlantillas.tsx",
+    "lineNum": 17,
+    "rawLine": "import { useState, useEffect } from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "oficina/pages/GestionEmpresa.tsx",
+    "lineNum": 1,
+    "rawLine": "import { useState, useEffect, useRef } from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "oficina/pages/GestionEmpresa.tsx",
+    "lineNum": 2,
+    "rawLine": "import { useNavigate } from 'react-router-dom';",
+    "target": "react-router-dom"
+  },
+  {
+    "file": "oficina/pages/GestionEmpresa.tsx",
+    "lineNum": 3,
+    "rawLine": "import { ArrowLeft, Save, Building2, Image as ImageIcon, PenTool } from 'lucide-react';",
+    "target": "lucide-react"
+  },
+  {
+    "file": "oficina/pages/GestionEmpresa.tsx",
+    "lineNum": 4,
+    "rawLine": "import { guardarDatosEmpresa, cargaDatosEmpresa } from '../../recursos-compartidos/services/pdfGenerator';",
+    "target": "../../recursos-compartidos/services/pdfGenerator"
+  },
+  {
+    "file": "oficina/pages/Pedidos.tsx",
+    "lineNum": 1,
+    "rawLine": "import { useState, useEffect, useMemo } from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "oficina/pages/Pedidos.tsx",
+    "lineNum": 2,
+    "rawLine": "import { useNavigate } from 'react-router-dom';",
+    "target": "react-router-dom"
+  },
+  {
+    "file": "oficina/pages/Pedidos.tsx",
+    "lineNum": 3,
+    "rawLine": "import { Search, X, Plus, Building2, Calendar, Clock, CheckCircle, FileText, Trash2, Edit, Save, ChevronDown, ArrowLeft } from 'lucide-react';",
+    "target": "lucide-react"
+  },
+  {
+    "file": "oficina/pages/Pedidos.tsx",
+    "lineNum": 4,
+    "rawLine": "import { subscribePedidos, addPedido, updatePedido, deletePedido, subscribeClientes, subscribeCentros, subscribePresupuestos, type Pedido, type Presupuesto, type Cliente, type Centro } from '../../recursos-compartidos/firebase/firebase';",
+    "target": "../../recursos-compartidos/firebase/firebase"
+  },
+  {
+    "file": "oficina/pages/PeriodicidadPage.tsx",
+    "lineNum": 1,
+    "rawLine": "import { useState, useEffect } from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "oficina/pages/PeriodicidadPage.tsx",
+    "lineNum": 2,
+    "rawLine": "import { useNavigate, useLocation } from 'react-router-dom';",
+    "target": "react-router-dom"
+  },
+  {
+    "file": "oficina/pages/PeriodicidadPage.tsx",
+    "lineNum": 3,
+    "rawLine": "import { ArrowLeft } from 'lucide-react';",
+    "target": "lucide-react"
+  },
+  {
+    "file": "oficina/pages/PeriodicidadPage.tsx",
+    "lineNum": 4,
+    "rawLine": "import { subscribeCentros, updateCentro } from '../../recursos-compartidos/firebase/firebase';",
+    "target": "../../recursos-compartidos/firebase/firebase"
+  },
+  {
+    "file": "oficina/pages/PeriodicidadPage.tsx",
+    "lineNum": 5,
+    "rawLine": "import type { Centro } from '../../recursos-compartidos/types/models';",
+    "target": "../../recursos-compartidos/types/models"
+  },
+  {
+    "file": "oficina/pages/Presupuestos.tsx",
+    "lineNum": 1,
+    "rawLine": "import React, { useState, useEffect, useMemo } from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "oficina/pages/Presupuestos.tsx",
+    "lineNum": 2,
+    "rawLine": "import { useNavigate } from 'react-router-dom';",
+    "target": "react-router-dom"
+  },
+  {
+    "file": "oficina/pages/Presupuestos.tsx",
+    "lineNum": 3,
+    "rawLine": "import { Search, X, Download, Edit, Send, Trash2, Save, Package, Wrench, Type, Calculator, CheckCircle, Clock, Ban, ChevronDown, FileText, ArrowLeft, Plus } from 'lucide-react';",
+    "target": "lucide-react"
+  },
+  {
+    "file": "oficina/pages/Presupuestos.tsx",
+    "lineNum": 4,
+    "rawLine": "import { subscribePresupuestos, addPresupuesto, updatePresupuesto, deletePresupuesto, subscribeClientes, subscribeArticulos, subscribeCentros, subscribeImpuestos, subscribeEmpresas } from '../../recursos-compartidos/firebase/firebase';",
+    "target": "../../recursos-compartidos/firebase/firebase"
+  },
+  {
+    "file": "oficina/pages/Presupuestos.tsx",
+    "lineNum": 5,
+    "rawLine": "import type { Presupuesto, PresupuestoLinea, Cliente, Articulo, Centro } from '../../recursos-compartidos/firebase/firebase';",
+    "target": "../../recursos-compartidos/firebase/firebase"
+  },
+  {
+    "file": "oficina/pages/Presupuestos.tsx",
+    "lineNum": 6,
+    "rawLine": "import { generarPresupuestoPDF } from '../../recursos-compartidos/services/pdfGenerator';",
+    "target": "../../recursos-compartidos/services/pdfGenerator"
+  },
+  {
+    "file": "oficina/pages/Servicios.tsx",
+    "lineNum": 1,
+    "rawLine": "import { useState, useEffect, useRef } from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "oficina/pages/Servicios.tsx",
+    "lineNum": 2,
+    "rawLine": "import { Wrench, Plus, Search, Edit, Trash2, X, Download, Upload } from 'lucide-react';",
+    "target": "lucide-react"
+  },
+  {
+    "file": "oficina/pages/Servicios.tsx",
+    "lineNum": 3,
+    "rawLine": "import ConfirmationModal from '../../recursos-compartidos/ConfirmationModal';",
+    "target": "../../recursos-compartidos/ConfirmationModal"
+  },
+  {
+    "file": "oficina/pages/Servicios.tsx",
+    "lineNum": 4,
+    "rawLine": "import * as XLSX from 'xlsx';",
+    "target": "xlsx"
+  },
+  {
+    "file": "oficina/pages/Sistemas.tsx",
+    "lineNum": 1,
+    "rawLine": "import { useState, useEffect, useRef } from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "oficina/pages/Sistemas.tsx",
+    "lineNum": 2,
+    "rawLine": "import { useNavigate, useLocation } from 'react-router-dom';",
+    "target": "react-router-dom"
+  },
+  {
+    "file": "oficina/pages/Sistemas.tsx",
+    "lineNum": 3,
+    "rawLine": "import { Layers, ArrowLeft, Plus, Edit, Trash2, X, FileBox, LayoutList, Droplets, BellRing, Wind, Download, Upload, Copy, Search, Cloud, Loader } from 'lucide-react';",
+    "target": "lucide-react"
+  },
+  {
+    "file": "oficina/pages/Sistemas.tsx",
+    "lineNum": 4,
+    "rawLine": "import * as XLSX from 'xlsx';",
+    "target": "xlsx"
+  },
+  {
+    "file": "oficina/pages/Sistemas.tsx",
+    "lineNum": 5,
+    "rawLine": "import { syncSistemas, subscribeSistemasCategorias, deleteEquipoFromSystemCollection, subscribeEquiposBySystem, addSistemaCategoria, deleteSistemaCategoria, getCollectionName, addCentroSistema, sistemaToSlug } from '../../recursos-compartidos/firebase/firebase';",
+    "target": "../../recursos-compartidos/firebase/firebase"
+  },
+  {
+    "file": "oficina/pages/Sistemas.tsx",
+    "lineNum": 6,
+    "rawLine": "import ConfirmationModal from '../../recursos-compartidos/ConfirmationModal'; // Ruta corregida",
+    "target": "../../recursos-compartidos/ConfirmationModal"
+  },
+  {
+    "file": "oficina/routes.ts",
+    "lineNum": 1,
+    "rawLine": "import Clientes from './pages/Clientes';",
+    "target": "./pages/Clientes"
+  },
+  {
+    "file": "oficina/routes.ts",
+    "lineNum": 2,
+    "rawLine": "import Centros from './pages/Centros';",
+    "target": "./pages/Centros"
+  },
+  {
+    "file": "oficina/routes.ts",
+    "lineNum": 3,
+    "rawLine": "import ClientesCentros from './pages/ClientesCentros';",
+    "target": "./pages/ClientesCentros"
+  },
+  {
+    "file": "oficina/routes.ts",
+    "lineNum": 4,
+    "rawLine": "import Presupuestos from './pages/Presupuestos';",
+    "target": "./pages/Presupuestos"
+  },
+  {
+    "file": "oficina/routes.ts",
+    "lineNum": 5,
+    "rawLine": "import Pedidos from './pages/Pedidos';",
+    "target": "./pages/Pedidos"
+  },
+  {
+    "file": "oficina/routes.ts",
+    "lineNum": 6,
+    "rawLine": "import Albaranes from './pages/Albaranes';",
+    "target": "./pages/Albaranes"
+  },
+  {
+    "file": "oficina/routes.ts",
+    "lineNum": 7,
+    "rawLine": "import Certificados from './pages/Certificados';",
+    "target": "./pages/Certificados"
+  },
+  {
+    "file": "oficina/routes.ts",
+    "lineNum": 8,
+    "rawLine": "import Catalogo from './pages/Catalogo';",
+    "target": "./pages/Catalogo"
+  },
+  {
+    "file": "oficina/routes.ts",
+    "lineNum": 9,
+    "rawLine": "import Articulos from './pages/Articulos';",
+    "target": "./pages/Articulos"
+  },
+  {
+    "file": "oficina/routes.ts",
+    "lineNum": 10,
+    "rawLine": "import Servicios from './pages/Servicios';",
+    "target": "./pages/Servicios"
+  },
+  {
+    "file": "oficina/routes.ts",
+    "lineNum": 11,
+    "rawLine": "import ConfiguracionEmpresa from './pages/ConfiguracionEmpresa';",
+    "target": "./pages/ConfiguracionEmpresa"
+  },
+  {
+    "file": "oficina/routes.ts",
+    "lineNum": 12,
+    "rawLine": "import Ajustes from './pages/Ajustes';",
+    "target": "./pages/Ajustes"
+  },
+  {
+    "file": "oficina/routes.ts",
+    "lineNum": 13,
+    "rawLine": "import Buzon from './pages/Buzon';",
+    "target": "./pages/Buzon"
+  },
+  {
+    "file": "pdfGenerator_backup.ts",
+    "lineNum": 1,
+    "rawLine": "import { jsPDF } from 'jspdf';",
+    "target": "jspdf"
+  },
+  {
+    "file": "pdfGenerator_backup.ts",
+    "lineNum": 2,
+    "rawLine": "import autoTable from 'jspdf-autotable';",
+    "target": "jspdf-autotable"
+  },
+  {
+    "file": "pdfGenerator_backup.ts",
+    "lineNum": 3,
+    "rawLine": "import { extintorBase64 } from './recursos-compartidos/services/icono_extintor';",
+    "target": "./recursos-compartidos/services/icono_extintor"
+  },
+  {
+    "file": "pdfGenerator_backup.ts",
+    "lineNum": 4,
+    "rawLine": "import { biesBase64 } from './recursos-compartidos/services/icono_bies';",
+    "target": "./recursos-compartidos/services/icono_bies"
+  },
+  {
+    "file": "recursos-compartidos/components/DetailModal.tsx",
+    "lineNum": 1,
+    "rawLine": "import { X, ArrowLeft } from 'lucide-react';",
+    "target": "lucide-react"
+  },
+  {
+    "file": "recursos-compartidos/components/DetailModal.tsx",
+    "lineNum": 2,
+    "rawLine": "import { useEffect } from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "recursos-compartidos/components/EquipoFormulario.tsx",
+    "lineNum": 13,
+    "rawLine": "import { useState, useEffect } from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "recursos-compartidos/components/EquipoFormulario.tsx",
+    "lineNum": 14,
+    "rawLine": "import { X, Save, Camera, CheckCircle2, XCircle, RefreshCw, Trash2 } from 'lucide-react';",
+    "target": "lucide-react"
+  },
+  {
+    "file": "recursos-compartidos/components/EquipoFormulario.tsx",
+    "lineNum": 15,
+    "rawLine": "import { getPlantillas, subscribeItemsDePlantilla, type ItemPlantilla } from '../types/plantillas';",
+    "target": "../types/plantillas"
+  },
+  {
+    "file": "recursos-compartidos/components/EquipoFormulario.tsx",
+    "lineNum": 16,
+    "rawLine": "import { uploadFile, subscribeSistemasCategorias } from '../firebase/firebase';",
+    "target": "../firebase/firebase"
+  },
+  {
+    "file": "recursos-compartidos/components/EquipoFormulario.tsx",
+    "lineNum": 17,
+    "rawLine": "import type { EquipoInstalado } from '../types/models';",
+    "target": "../types/models"
+  },
+  {
+    "file": "recursos-compartidos/components/Loader.tsx",
+    "lineNum": 1,
+    "rawLine": "import { useEffect, useState } from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "recursos-compartidos/components/Loader.tsx",
+    "lineNum": 2,
+    "rawLine": "import { extintorBase64 } from '../services/icono_extintor';",
+    "target": "../services/icono_extintor"
+  },
+  {
+    "file": "recursos-compartidos/components/Sidebar.tsx",
+    "lineNum": 1,
+    "rawLine": "import { useState, useEffect } from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "recursos-compartidos/components/Sidebar.tsx",
+    "lineNum": 2,
+    "rawLine": "import { useNavigate, useLocation } from 'react-router-dom';",
+    "target": "react-router-dom"
+  },
+  {
+    "file": "recursos-compartidos/components/Sidebar.tsx",
+    "lineNum": 8,
+    "rawLine": "import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';",
+    "target": "firebase/firestore"
+  },
+  {
+    "file": "recursos-compartidos/components/Sidebar.tsx",
+    "lineNum": 9,
+    "rawLine": "import { db } from '../firebase/firebase';",
+    "target": "../firebase/firebase"
+  },
+  {
+    "file": "recursos-compartidos/components/Sidebar.tsx",
+    "lineNum": 10,
+    "rawLine": "import { APP_VERSION } from '../types/constants';",
+    "target": "../types/constants"
+  },
+  {
+    "file": "recursos-compartidos/components/Sidebar.tsx",
+    "lineNum": 108,
+    "rawLine": "const { storage } = await import('../firebase/firebase');",
+    "target": "../firebase/firebase"
+  },
+  {
+    "file": "recursos-compartidos/components/Sidebar.tsx",
+    "lineNum": 109,
+    "rawLine": "const { ref, getDownloadURL } = await import('firebase/storage');",
+    "target": "firebase/storage"
+  },
+  {
+    "file": "recursos-compartidos/components/TableInput.tsx",
+    "lineNum": 1,
+    "rawLine": "import { useState, useEffect } from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "recursos-compartidos/components/TableInput.tsx",
+    "lineNum": 2,
+    "rawLine": "import { Plus, Trash2, TrendingUp } from 'lucide-react';",
+    "target": "lucide-react"
+  },
+  {
+    "file": "recursos-compartidos/ConfirmationModal.tsx",
+    "lineNum": 1,
+    "rawLine": "import React from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "recursos-compartidos/ConfirmationModal.tsx",
+    "lineNum": 2,
+    "rawLine": "import { X, AlertTriangle } from 'lucide-react';",
+    "target": "lucide-react"
+  },
+  {
+    "file": "recursos-compartidos/firebase/firebase.tsx",
+    "lineNum": 1,
+    "rawLine": "import { initializeApp } from \"firebase/app\";",
+    "target": "firebase/app"
+  },
+  {
+    "file": "recursos-compartidos/firebase/firebase.tsx",
+    "lineNum": 2,
+    "rawLine": "import { getAnalytics } from \"firebase/analytics\";",
+    "target": "firebase/analytics"
+  },
+  {
+    "file": "recursos-compartidos/firebase/firebase.tsx",
+    "lineNum": 3,
+    "rawLine": "import { getFirestore, collection, getDocs, getDoc, query, where, orderBy, addDoc, doc, updateDoc, setDoc, deleteDoc, onSnapshot, enableMultiTabIndexedDbPersistence } from \"firebase/firestore\";",
+    "target": "firebase/firestore"
+  },
+  {
+    "file": "recursos-compartidos/firebase/firebase.tsx",
+    "lineNum": 4,
+    "rawLine": "import { getStorage, ref, uploadBytes, getDownloadURL } from \"firebase/storage\";",
+    "target": "firebase/storage"
+  },
+  {
+    "file": "recursos-compartidos/firebase/firebase.tsx",
+    "lineNum": 1600,
+    "rawLine": "const { runTransaction } = await import('firebase/firestore');",
+    "target": "firebase/firestore"
+  },
+  {
+    "file": "recursos-compartidos/services/pdfContratoGenerator.ts",
+    "lineNum": 1,
+    "rawLine": "import { jsPDF } from 'jspdf';",
+    "target": "jspdf"
+  },
+  {
+    "file": "recursos-compartidos/services/pdfContratoGenerator.ts",
+    "lineNum": 2,
+    "rawLine": "import { fetchImageToBase64, normalizarDatosEmpresa, optimizarImagenParaPDF } from './pdfGenerator';",
+    "target": "./pdfGenerator"
+  },
+  {
+    "file": "recursos-compartidos/services/pdfGenerator.ts",
+    "lineNum": 1,
+    "rawLine": "import { jsPDF } from 'jspdf';",
+    "target": "jspdf"
+  },
+  {
+    "file": "recursos-compartidos/services/pdfGenerator.ts",
+    "lineNum": 2,
+    "rawLine": "import autoTable from 'jspdf-autotable';",
+    "target": "jspdf-autotable"
+  },
+  {
+    "file": "recursos-compartidos/services/pdfGenerator.ts",
+    "lineNum": 3,
+    "rawLine": "import { extintorBase64 } from './icono_extintor';",
+    "target": "./icono_extintor"
+  },
+  {
+    "file": "recursos-compartidos/services/pdfGenerator.ts",
+    "lineNum": 4,
+    "rawLine": "import { biesBase64 } from './icono_bies';",
+    "target": "./icono_bies"
+  },
+  {
+    "file": "recursos-compartidos/services/pdfGenerator.ts",
+    "lineNum": 5,
+    "rawLine": "import { getSistemasCategorias } from '../firebase/firebase';",
+    "target": "../firebase/firebase"
+  },
+  {
+    "file": "recursos-compartidos/services/sistemasUtils.ts",
+    "lineNum": 1,
+    "rawLine": "import { Droplets, BellRing, Wind, FileBox } from 'lucide-react';",
+    "target": "lucide-react"
+  },
+  {
+    "file": "recursos-compartidos/services/sistemasUtils.ts",
+    "lineNum": 2,
+    "rawLine": "import type { SistemaCategoria } from '../types/models';",
+    "target": "../types/models"
+  },
+  {
+    "file": "recursos-compartidos/types/plantillas.ts",
+    "lineNum": 44,
+    "rawLine": "import { db } from '../firebase/firebase';",
+    "target": "../firebase/firebase"
+  },
+  {
+    "file": "reparaciones/pages/Reparaciones.tsx",
+    "lineNum": 1,
+    "rawLine": "import { useState, useEffect } from 'react';",
+    "target": "react"
+  },
+  {
+    "file": "reparaciones/routes.ts",
+    "lineNum": 1,
+    "rawLine": "import Reparaciones from './pages/Reparaciones';",
+    "target": "./pages/Reparaciones"
+  }
+]
