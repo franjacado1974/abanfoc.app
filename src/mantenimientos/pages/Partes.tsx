@@ -587,7 +587,7 @@ export default function Partes() {
         const st = (p.estado || '').trim();
         const esRetimbrando = Boolean((p as any).equiposRetirados || (p as any).retimbrado || st === 'Retimbrando');
         if (estadoFilter === 'Retimbrando') {
-          if (!esRetimbrando) return false;
+          if (!esRetimbrando || st === 'Cerrado') return false;
         } else if (estadoFilter === 'Abierto') {
           if (st !== 'Abierto' && st !== 'Planificado' && st !== '') return false;
         } else if (estadoFilter === 'En revisión') {
@@ -876,10 +876,10 @@ export default function Partes() {
                             {(parte.tecnicoId || parte.estado === 'En revisión' || parte.estado === 'Pre-Cerrado' || parte.estado === 'Finalizado' || parte.estado === 'Cerrado') && (
                               <div 
                                 className={`w-2.5 h-2.5 rounded-full mr-2 shrink-0 ${
-                                  (parte as any).equiposRetirados || (parte as any).retimbrado
-                                    ? 'bg-red-600 shadow-[0_0_12px_rgba(220,38,38,0.9)] animate-pulse'
-                                    : parte.estado === 'Cerrado'
-                                      ? 'bg-black shadow-[0_0_8px_rgba(0,0,0,0.6)]'
+                                  parte.estado === 'Cerrado'
+                                    ? 'bg-black shadow-[0_0_8px_rgba(0,0,0,0.6)]'
+                                    : (parte as any).equiposRetirados || (parte as any).retimbrado
+                                      ? 'bg-red-600 shadow-[0_0_12px_rgba(220,38,38,0.9)] animate-pulse'
                                       : parte.estado === 'Pre-Cerrado'
                                         ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.8)]'
                                         : parte.estado === 'Finalizado'
@@ -889,10 +889,10 @@ export default function Partes() {
                                             : 'bg-zinc-400 shadow-[0_0_8px_rgba(161,161,170,0.8)]'
                                 }`} 
                                 title={
-                                  (parte as any).equiposRetirados || (parte as any).retimbrado
-                                    ? "Equipos retirados para retimbrar (Luz roja parpadeante)"
-                                    : parte.estado === 'Cerrado'
-                                      ? "Revisión Cerrada"
+                                  parte.estado === 'Cerrado'
+                                    ? "Revisión Cerrada"
+                                    : (parte as any).equiposRetirados || (parte as any).retimbrado
+                                      ? "Equipos retirados para retimbrar (Luz roja parpadeante)"
                                       : parte.estado === 'Finalizado'
                                         ? "Revisión Finalizada"
                                         : parte.estado === 'Pre-Cerrado'
