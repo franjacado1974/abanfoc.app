@@ -135,24 +135,60 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
 - **Cabecera de Tabla Obligatoria**:
   - DEBE mantenerse la estructura de columnas: `REPARACIÓN` - `LUGAR` - `TÉCNICO ASIGNADO` - `COMERCIAL` - `ESTADO` - `NOTA` - `ACCIONES`.
 - **Insignias y Colores de Estado Reglamentarios**:
-  - `Pendiente`: Gris (`bg-slate-100 text-slate-700`).
-  - `En curso`: Amarillo con efecto pulsante (`bg-amber-100 text-amber-800 animate-pulse`).
-  - `Parado`: Rojo (`bg-red-100 text-red-800`).
-  - `Finalizado`: Verde (`bg-emerald-100 text-emerald-800`).
-- **Notas Notificables e Indicador Rojo Parpadeante**:
-  - La columna `NOTA` debe contener el icono `StickyNote`. Si existe texto registrado, DEBE mostrarse un **punto de notificación rojo parpadeante** (badge) sobre el icono, permitiendo abrir/editar la nota en una ventana flotante rápida.
-- **Sincronización Firestore**:
-  - Todos los cambios deben sincronizarse automáticamente mediante `subscribeReparaciones` y `updateReparacion`.
+  - `Pendiente`: Gris (`bg-slate-100 text-slate-700 border-slate-300`).
+  - `En curso`: Amarillo con efecto pulsante (`bg-amber-100 text-amber-800 border-amber-300 shadow-[0_0_8px_rgba(245,158,11,0.25)] animate-pulse`).
+  - `Parado`: Rojo (`bg-red-100 text-red-800 border-red-300 shadow-[0_0_8px_rgba(239,68,68,0.25)]`).
+  - `Finalizado`: Verde (`bg-emerald-100 text-emerald-800 border-emerald-300`).
+- **Navegación Mensual por 12 Pestañas con Colores Estacionales (`MESES_CONFIG`)**:
+  - Barra superior de 12 pestañas (`Enero` a `Diciembre`) con desplazamiento horizontal (`overflow-x-auto scrollbar-none`).
+  - Pestaña activa por defecto: mes en curso (`MESES[new Date().getMonth()]`).
+  - Cada mes cuenta con su paleta de colores/degradados estacionales (`MESES_CONFIG`), con botón activo elevado (`scale-[1.02] shadow-md`) y distintivos numéricos de conteo de tareas registradas por mes (`badgeActive` y `badgeInactive`).
+  - Determinación y filtrado dinámico de mes mediante `getItemMonth` y `getMonthFromDateStr` a partir de `item.fecha`, `item.mes` o `item.fechaCreacion`.
+- **Tarjetas de Estadísticas Reactivas del Mes Activo**:
+  - Panel superior con 5 tarjetas métricas: `Total Tareas`, `Pendientes`, `En curso`, `Parados` y `Finalizados`, calculadas exclusivamente sobre las tareas del mes seleccionado que no estén facturadas.
+- **Insignia de Fecha con Icono Calendario en la Columna Principal**:
+  - En la primera columna (`REPARACIÓN`), debajo del nombre, DEBE mostrarse la fecha en formato `DD/MM/YYYY` acompañada del icono `Calendar` en rojo (`w-3 h-3 text-red-500`) dentro de una insignia gris estilizada (`bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200/80 text-[11px] font-semibold text-slate-500`).
+- **Generación Directa de Albarán (`ReceiptText`) y Vinculación Bidireccional**:
+  - En la columna `ACCIONES`, DEBE incluirse el botón con el icono `ReceiptText` ("Crear Albarán").
+  - **Indicador de Albarán Asociado**: Si la tarea ya posee un albarán vinculado (`item.albaranId`), el icono cambia a color verde esmeralda (`text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50`) con tooltip indicativo `Albarán creado (ALB-XX-XXX) - Clic para generar otro`. Si no tiene albarán asociado, se muestra en azul (`text-slate-600 hover:text-blue-600 hover:bg-blue-50`).
+  - **Modal Flotante de Creación de Albarán (`albaranModalItem`)**:
+    - Incluye tarjeta superior de resumen en azul (`bg-blue-50/70 border border-blue-200/80`) con el nombre de la tarea, fecha formateada, lugar y técnico asignado.
+    - Campos obligatorios y autocompletados: Empresa Mantenedora, Cliente (autoseleccionado según coincidencia del centro/lugar), Centro (filtrado reactivamente por cliente), Técnico asignado (emparejado automáticamente), Concepto (precargado con el nombre de la reparación), Descripción (precargada con notas u observaciones) e Importe (€ sin IVA).
+    - Generación automática del código correlativo `ALB-YY-XXX` según el año actual.
+    - Vinculación cruzada en Firestore: guarda el albarán con `reparacionId: repDocId` y actualiza la tarea de reparación con `albaranId: generatedId`.
+- **Exclusión de Tareas Facturadas y Sincronización Automática**:
+  - Las tareas marcadas con `facturado: true` (`!r.facturado`) se excluyen automáticamente del filtrado mensual de tareas activas para evitar saturación visual.
+  - Al cambiar el estado de facturación en el módulo de Albaranes (`toggleFacturado`), el estado `facturado: nextFacturado` DEBE sincronizarse de forma inmediata en la tarea de reparación correspondiente (`reparacionId`) en Firestore y LocalStorage.
+- **Notas Notificables e Indicador Rojo Parpadeante con Modal Rápido**:
+  - La columna `NOTA` debe contener el icono `StickyNote`. Si existe texto registrado, DEBE mostrarse un **punto de notificación rojo parpadeante** con efecto de onda (`animate-ping`) sobre el icono y fondo ámbar (`bg-amber-100 text-amber-900 border-amber-300`).
+  - Al pulsar el botón, DEBE abrirse un modal flotante rápido (`notaModalItem`) con `backdrop-blur-sm`, cabecera oscura (`bg-slate-900`), textarea ámbar (`bg-amber-50/30`), botón para "Borrar nota" y botón "Guardar Nota", actualizando al instante Firestore y LocalStorage sin obligar a abrir el formulario general de edición.
+- **Persistencia Dual Inmediata (LocalStorage + Firestore)**:
+  - Todo cambio (creación, edición, notas, eliminación o albarán) actualiza de inmediato el almacenamiento local `firecheck_db_reparaciones` para latencia cero en la interfaz, sincronizándose simultáneamente con Firestore mediante `subscribeReparaciones`, `addReparacion`, `updateReparacion` y `deleteReparacion`.
 
 ---
 
 ## 15. Blindaje Inviolable del Módulo Instalaciones (Instalaciones.tsx)
 - **Cabecera de Tabla Obligatoria**:
   - DEBE mantenerse la estructura de columnas: `INSTALACIÓN` - `LUGAR` - `TÉCNICO ASIGNADO` - `COMERCIAL` - `ESTADO` - `NOTA` - `ACCIONES`.
-- **Colores de Estado y Notas Notificables**:
-  - Mismo esquema obligatorio de insignias de estado (Gris, Amarillo pulsante, Rojo, Verde) e icono de nota `StickyNote` con **punto de notificación rojo parpadeante** y modal flotante de edición rápida.
-- **Sincronización Firestore**:
-  - Todos los cambios deben sincronizarse automáticamente mediante `subscribeInstalaciones` y `updateInstalacion`.
+- **Insignias y Colores de Estado Reglamentarios**:
+  - Mismo esquema obligatorio: `Pendiente` (Gris), `En curso` (Amarillo con `animate-pulse`), `Parado` (Rojo), `Finalizado` (Verde).
+- **Navegación Mensual por 12 Pestañas con Colores Estacionales (`MESES_CONFIG`)**:
+  - Barra de 12 meses (`Enero` a `Diciembre`) con desplazamiento horizontal idéntica a Reparaciones, con mes activo por defecto del sistema y paleta individual de degradados estacionales.
+  - Filtrado y asignación automática por mes (`getItemMonth`, `getMonthFromDateStr`).
+- **Tarjetas de Estadísticas Reactivas del Mes Activo**:
+  - Panel con 5 tarjetas métricas (`Total Tareas`, `Pendientes`, `En curso`, `Parados`, `Finalizados`) calculadas sobre las instalaciones del mes activo no facturadas.
+- **Insignia de Fecha con Icono Calendario en la Columna Principal**:
+  - En la primera columna (`INSTALACIÓN`), debajo del nombre, DEBE mostrarse la fecha en formato `DD/MM/YYYY` acompañada del icono `Calendar` en rojo (`w-3 h-3 text-red-500`) dentro de una insignia gris (`bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200/80 text-[11px] font-semibold text-slate-500`).
+- **Generación Directa de Albarán (`ReceiptText`) y Vinculación Bidireccional**:
+  - En la columna `ACCIONES`, botón `ReceiptText` ("Crear Albarán") con indicador en verde esmeralda si ya posee `albaranId` y en azul si está pendiente.
+  - Modal flotante con resumen azul, autocompletado de Empresa, Cliente, Centro, Técnico, Concepto, Descripción e Importe, numeración correlativa `ALB-YY-XXX`, guardado en `albaranes` con `instalacionId` y actualización en `instalaciones` con `albaranId`.
+- **Exclusión de Tareas Facturadas y Sincronización Automática**:
+  - Filtrado mensual que excluye instalaciones con `facturado: true` (`!item.facturado`).
+  - Sincronización bidireccional desde `Albaranes.tsx` (`toggleFacturado` actualiza `updateInstalacion(albaranToUpdate.instalacionId, { facturado: nextFacturado })`).
+- **Notas Notificables e Indicador Rojo Parpadeante con Modal Rápido**:
+  - Mismo comportamiento: icono `StickyNote`, punto rojo parpadeante (`animate-ping`), fondo ámbar y modal flotante rápido de edición de nota con `backdrop-blur-sm`.
+- **Persistencia Dual Inmediata (LocalStorage + Firestore)**:
+  - Actualización síncrona en `firecheck_db_instalaciones` para respuesta instantánea en pantalla y sincronización en tiempo real vía `subscribeInstalaciones`, `addInstalacion`, `updateInstalacion` y `deleteInstalacion`.
 
 ---
 
@@ -322,5 +358,49 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
 - **Restauración Íntegra a Colección Original (`restaurarElementoPapelera`)**:
   - Al pulsar «Restaurar», el sistema DEBE reinsertar el documento original con todos sus datos (`setDoc`) en su colección de origen y eliminarlo de la papelera, reapareciendo de inmediato en su módulo.
 
+---
 
+## 30. Blindaje Inviolable de la Estructura de 7 Categorías y Submenús en el Menú Lateral (Sidebar.tsx)
+- **Estructura Reglamentaria de 7 Categorías**:
+  - El menú de navegación principal (`Sidebar.tsx`) DEBE organizarse estrictamente en **7 bloques/categorías**:
+    1. **Inicio** (`/`, `LayoutDashboard`): acceso directo a la vista principal.
+    2. **Gestión** (`FolderKanban`): desplegable con submenús:
+       - *Clientes* (`/clientes`, `Users`)
+       - *Centros* (`/centros`, `Building2`)
+       - *Catálogo* (`/catalogo`, `Package`)
+    3. **Mantenimientos** (`ClipboardCheck`): desplegable con submenús:
+       - *Planificación* (`/partes_trabajo`, `CalendarDays`)
+       - *Partes de trabajo* (`/partes`, `FileText`)
+       - *Revisiones* (`/revisiones`, `SearchCheck`)
+    4. **Operaciones** (`Wrench`): desplegable con submenús:
+       - *Reparaciones* (`/reparaciones`, `Wrench`)
+       - *Instalaciones* (`/instalaciones`, `HardHat`)
+       - *Pruebas técnicas* (`/pruebas-tecnicas`, `Gauge`)
+    5. **Documentos** (`Files`): desplegable con submenús:
+       - *Certificados* (`/certificados`, `FileCheck`)
+       - *Presupuestos* (`/presupuestos`, `Calculator`)
+       - *Pedidos* (`/pedidos`, `FileText`)
+       - *Albaranes* (`/albaranes`, `FileDigit`)
+       - *Facturas* (`/facturas`, `Receipt`)
+    6. **Papelera** (`/papelera`, `Trash2`): acceso directo al final con borde divisorio superior (`border-t border-zinc-900/80`).
+    7. **Tutoriales** (`/metodos`, `GraduationCap`): acceso directo a la plataforma de videos y tutoriales formativos de la aplicación.
+- **Apertura Dinámica y Acordeón Interactivo**:
+  - Al cargar o cambiar de ruta, la categoría que contenga el submenú activo DEBE abrirse automáticamente (`openCategories`).
+  - Cada categoría con submenús debe contar con flecha indicadora `ChevronDown` con rotación suave (`rotate-180`), línea guía izquierda en submenús (`border-l-2 border-zinc-800`) y resalte del submenú activo en rojo corporativo (`text-red-600 font-black bg-white/10`).
+- **Modo Colapsado con Menú Flotante (Flyout)**:
+  - Al colapsar el menú lateral a 56px (`collapsed === true`), las categorías con submenús muestran sus iconos centrados y despliegan un menú emergente flotante (`group-hover/collapsed:flex`) para permitir la navegación inmediata sin perder ergonomía.
 
+---
+
+## 31. Blindaje Inviolable del Módulo de Tutoriales y Soporte de Video (Metodos.tsx)
+- **Denominación y Encabezado Oficial**:
+  - Tanto en la barra lateral (`Sidebar.tsx`) como en el título de página de `Metodos.tsx`, el módulo DEBE denominarse incondicionalmente **«Tutoriales»** con icono `GraduationCap`.
+- **Gestión Integral de Videos (CRUD)**:
+  - DEBE incluirse el botón superior `+ Añadir Video / Tutorial` reservado para roles administrativos y de edición (`['super-administrador', 'administrador', 'editor']`).
+  - Cada tarjeta de tutorial debe contener botones individuales de **Edición** (`Edit`) y **Eliminación** (`Trash2`) con modal flotante de confirmación (sin alertas nativas).
+  - Modal de creación/edición con campos: Título, Categoría, Duración, Enlace (URL), Descripción y casilla de Tutorial Destacado.
+- **Reproductor Multiformato y Soporte Específico de Microsoft OneDrive**:
+  - El visor modal de video debe reconocer automáticamente enlaces de **YouTube**, **Vimeo**, **Google Drive**, **Archivos directos MP4** y **Microsoft OneDrive / SharePoint** (`1drv.ms`, `onedrive.live.com`, `sharepoint.com`).
+  - Para enlaces de OneDrive, ante las restricciones de `X-Frame-Options` de Microsoft, el reproductor debe presentar una tarjeta dedicada con botón de apertura directa a pantalla completa (`Abrir y Reproducir en OneDrive`).
+- **Persistencia Dual Inmediata**:
+  - Sincronización en tiempo real con Firestore (`tutoriales_metodos`) y caché local en LocalStorage (`firecheck_db_tutoriales_metodos`) para respuesta instantánea.

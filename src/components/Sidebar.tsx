@@ -4,7 +4,9 @@ import {
   Users, CalendarDays, FileText, SearchCheck, Wrench,
   HardHat, Calculator, Package, FileCheck, FileDigit, Receipt,
   Settings, Power, ChevronLeft, ChevronRight, LayoutDashboard,
-  Menu, X, Inbox, Clock, Gauge, Trash2 } from 'lucide-react';
+  Menu, X, Inbox, Clock, Gauge, Trash2,
+  ChevronDown, Building2, FolderKanban, ClipboardCheck, Files, GraduationCap
+} from 'lucide-react';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
 import { APP_VERSION } from '../constants';
@@ -15,31 +17,106 @@ interface SidebarProps {
   appLogo: string;
 }
 
-interface NavItem {
+interface NavSubItem {
   id: string;
   path: string;
   title: string;
   Icon: React.ElementType;
   allowedRoles: string[];
-  section: 'gestion' | 'operaciones' | 'documentacion' | 'configuracion';
 }
 
-const navItems: NavItem[] = [
-  { id: 'dashboard', path: '/', title: 'Inicio', Icon: LayoutDashboard, allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador'], section: 'gestion' },
-  { id: 'clientes-centros', path: '/clientes-centros', title: 'Clientes', Icon: Users, allowedRoles: ['super-administrador', 'administrador', 'editor'], section: 'gestion' },
-  { id: 'catalogo', path: '/catalogo', title: 'Catálogo', Icon: Package, allowedRoles: ['super-administrador', 'administrador', 'editor'], section: 'gestion' },
-  { id: 'partes_trabajo', path: '/partes_trabajo', title: 'Planificación', Icon: CalendarDays, allowedRoles: ['super-administrador', 'administrador'], section: 'operaciones' },
-  { id: 'partes', path: '/partes', title: 'Partes de Trabajo', Icon: FileText, allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador'], section: 'operaciones' },
-  { id: 'revisiones', path: '/revisiones', title: 'Revisiones', Icon: SearchCheck, allowedRoles: ['super-administrador', 'administrador'], section: 'operaciones' },
-  { id: 'reparaciones', path: '/reparaciones', title: 'Reparaciones', Icon: Wrench, allowedRoles: ['super-administrador', 'administrador'], section: 'operaciones' },
-  { id: 'instalaciones', path: '/instalaciones', title: 'Instalaciones', Icon: HardHat, allowedRoles: ['super-administrador', 'administrador'], section: 'operaciones' },
-  { id: 'pruebas-tecnicas', path: '/pruebas-tecnicas', title: 'Pruebas Técnicas', Icon: Gauge, allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador', 'tecnico'], section: 'operaciones' },
-  { id: 'certificados', path: '/certificados', title: 'Certificados', Icon: FileCheck, allowedRoles: ['super-administrador', 'administrador'], section: 'documentacion' },
-  { id: 'presupuestos', path: '/presupuestos', title: 'Presupuestos', Icon: Calculator, allowedRoles: ['super-administrador', 'administrador'], section: 'documentacion' },
-  { id: 'pedidos', path: '/pedidos', title: 'Pedidos', Icon: FileText, allowedRoles: ['super-administrador', 'administrador'], section: 'documentacion' },
-  { id: 'albaranes', path: '/albaranes', title: 'Albaranes', Icon: FileDigit, allowedRoles: ['super-administrador', 'administrador', 'visualizador'], section: 'documentacion' },
-  { id: 'facturas', path: '/facturas', title: 'Facturas', Icon: Receipt, allowedRoles: ['super-administrador', 'administrador'], section: 'documentacion' },
-  { id: 'papelera', path: '/papelera', title: 'Papelera', Icon: Trash2, allowedRoles: ['super-administrador', 'administrador', 'editor'], section: 'configuracion' },
+interface NavCategory {
+  id: string;
+  title: string;
+  Icon: React.ElementType;
+  path?: string;
+  subItems?: NavSubItem[];
+  allowedRoles: string[];
+  isBottom?: boolean;
+}
+
+const CATEGORIAS_MENU: NavCategory[] = [
+  // 1. Inicio
+  {
+    id: 'inicio',
+    title: 'Inicio',
+    Icon: LayoutDashboard,
+    path: '/',
+    allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador']
+  },
+
+  // 2. Gestión (Clientes, Centros, Catálogo)
+  {
+    id: 'gestion',
+    title: 'Gestión',
+    Icon: FolderKanban,
+    allowedRoles: ['super-administrador', 'administrador', 'editor'],
+    subItems: [
+      { id: 'clientes', path: '/clientes', title: 'Clientes', Icon: Users, allowedRoles: ['super-administrador', 'administrador', 'editor'] },
+      { id: 'centros', path: '/centros', title: 'Centros', Icon: Building2, allowedRoles: ['super-administrador', 'administrador'] },
+      { id: 'catalogo', path: '/catalogo', title: 'Catálogo', Icon: Package, allowedRoles: ['super-administrador', 'administrador', 'editor'] }
+    ]
+  },
+
+  // 3. Mantenimientos (Planificación, Partes de trabajo, Revisiones)
+  {
+    id: 'mantenimientos',
+    title: 'Mantenimientos',
+    Icon: ClipboardCheck,
+    allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador'],
+    subItems: [
+      { id: 'planificacion', path: '/partes_trabajo', title: 'Planificación', Icon: CalendarDays, allowedRoles: ['super-administrador', 'administrador'] },
+      { id: 'partes', path: '/partes', title: 'Partes de Trabajo', Icon: FileText, allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador'] },
+      { id: 'revisiones', path: '/revisiones', title: 'Revisiones', Icon: SearchCheck, allowedRoles: ['super-administrador', 'administrador'] }
+    ]
+  },
+
+  // 4. Operaciones (Reparaciones, Instalaciones, Pruebas técnicas)
+  {
+    id: 'operaciones',
+    title: 'Operaciones',
+    Icon: Wrench,
+    allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador', 'tecnico'],
+    subItems: [
+      { id: 'reparaciones', path: '/reparaciones', title: 'Reparaciones', Icon: Wrench, allowedRoles: ['super-administrador', 'administrador'] },
+      { id: 'instalaciones', path: '/instalaciones', title: 'Instalaciones', Icon: HardHat, allowedRoles: ['super-administrador', 'administrador'] },
+      { id: 'pruebas-tecnicas', path: '/pruebas-tecnicas', title: 'Pruebas Técnicas', Icon: Gauge, allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador', 'tecnico'] }
+    ]
+  },
+
+  // 5. Documentos (Certificados, Presupuestos, Pedidos, Albaranes, Facturas)
+  {
+    id: 'documentos',
+    title: 'Documentos',
+    Icon: Files,
+    allowedRoles: ['super-administrador', 'administrador', 'visualizador'],
+    subItems: [
+      { id: 'certificados', path: '/certificados', title: 'Certificados', Icon: FileCheck, allowedRoles: ['super-administrador', 'administrador'] },
+      { id: 'presupuestos', path: '/presupuestos', title: 'Presupuestos', Icon: Calculator, allowedRoles: ['super-administrador', 'administrador'] },
+      { id: 'pedidos', path: '/pedidos', title: 'Pedidos', Icon: FileText, allowedRoles: ['super-administrador', 'administrador'] },
+      { id: 'albaranes', path: '/albaranes', title: 'Albaranes', Icon: FileDigit, allowedRoles: ['super-administrador', 'administrador', 'visualizador'] },
+      { id: 'facturas', path: '/facturas', title: 'Facturas', Icon: Receipt, allowedRoles: ['super-administrador', 'administrador'] }
+    ]
+  },
+
+  // 7. Tutoriales (Videos y tutoriales de la App)
+  {
+    id: 'metodos',
+    title: 'Tutoriales',
+    Icon: GraduationCap,
+    path: '/metodos',
+    allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador', 'tecnico']
+  },
+
+  // 6. Papelera (Preservada permanentemente al fondo según Regla 29)
+  {
+    id: 'papelera',
+    title: 'Papelera',
+    Icon: Trash2,
+    path: '/papelera',
+    allowedRoles: ['super-administrador', 'administrador', 'editor'],
+    isBottom: true
+  }
 ];
 
 export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
@@ -50,6 +127,30 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [displayLogo, setDisplayLogo] = useState(appLogo);
   const [hasUnreadBuzon, setHasUnreadBuzon] = useState(false);
+
+  // Estado de apertura de acordeones de categorías
+  const [openCategories, setOpenCategories] = useState<Record<string, boolean>>({
+    gestion: false,
+    mantenimientos: false,
+    operaciones: false,
+    documentos: false
+  });
+
+  const isActive = (path: string) => {
+    if (path === '/') return location.pathname === '/';
+    if (path === '/clientes') return location.pathname === '/clientes' || location.pathname === '/clientes-centros';
+    if (path === '/revisiones') return location.pathname === '/revisiones' || location.pathname === '/revision-checklist';
+    return location.pathname === path || location.pathname.startsWith(path + '/');
+  };
+
+  // Abrir automáticamente la categoría correspondiente a la ruta activa
+  useEffect(() => {
+    CATEGORIAS_MENU.forEach((cat) => {
+      if (cat.subItems && cat.subItems.some(sub => isActive(sub.path))) {
+        setOpenCategories(prev => ({ ...prev, [cat.id]: true }));
+      }
+    });
+  }, [location.pathname]);
 
   // Escuchar cambios en buzon para activar la luz de notificación parpadeante
   useEffect(() => {
@@ -145,10 +246,8 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
             const a = data[i + 3];
             
             if (a > 0) {
-              // Check if the pixel is dominant red
               const isRed = r > 60 && r > g + 25 && r > b + 25;
               if (isRed) {
-                // Mute green and blue to make it solid red and remove white spots inside
                 const newG = Math.round(g * 0.1);
                 const newB = Math.round(b * 0.1);
                 if (g !== newG || b !== newB) {
@@ -157,7 +256,6 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
                   changed = true;
                 }
               } else {
-                // Make non-red pixels (like white background/spots) fully transparent
                 data[i + 3] = 0;
                 changed = true;
               }
@@ -191,17 +289,11 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
 
   const userRole = normalizeRole(user?.rol);
 
-  const filteredItems = navItems.filter(item => item.allowedRoles.includes(userRole));
-
-  const groupedItems = filteredItems.reduce((groups, item) => {
-    if (!groups[item.section]) groups[item.section] = [];
-    groups[item.section].push(item);
-    return groups;
-  }, {} as Record<string, NavItem[]>);
-
-  const isActive = (path: string) => {
-    if (path === '/') return location.pathname === '/';
-    return location.pathname === path || location.pathname.startsWith(path + '/');
+  const toggleCategory = (catId: string) => {
+    setOpenCategories(prev => ({
+      ...prev,
+      [catId]: !prev[catId]
+    }));
   };
 
   const handleNavigate = (path: string) => {
@@ -215,15 +307,29 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
     handleNavigate('/buzon');
   };
 
+  // Filtrar categorías y submenús según el rol del usuario
+  const visibleCategories = CATEGORIAS_MENU.filter(cat => cat.allowedRoles.includes(userRole)).map(cat => {
+    if (cat.subItems) {
+      return {
+        ...cat,
+        subItems: cat.subItems.filter(sub => sub.allowedRoles.includes(userRole))
+      };
+    }
+    return cat;
+  }).filter(cat => !cat.subItems || cat.subItems.length > 0);
+
+  const mainCategories = visibleCategories.filter(c => !c.isBottom);
+  const bottomCategories = visibleCategories.filter(c => c.isBottom);
+
   const sidebarBgColor = '#000000';
 
   const sidebarContent = (
     <div
-      className={`flex flex-col h-full ${collapsed ? 'w-14' : 'w-52'} transition-all duration-300 ease-in-out`}
+      className={`flex flex-col h-full ${collapsed ? 'w-14' : 'w-56'} transition-all duration-300 ease-in-out`}
       style={{ backgroundColor: sidebarBgColor }}
     >
       {/* Logo & Header */}
-      <div className="flex items-center justify-center px-4 py-5 border-b border-zinc-900">
+      <div className="flex items-center justify-center px-4 py-5 border-b border-zinc-900 shrink-0">
         {!collapsed && (
           <div className="flex flex-col items-center gap-2 w-full overflow-hidden py-1">
             <img src={displayLogo} alt="Logo" className="h-16 w-16 object-contain" onError={(e) => { (e.target as HTMLImageElement).src = '/favicon.png'; }} />
@@ -350,36 +456,189 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
         )}
       </div>
 
-      {/* Navigation */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden py-2 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent">
-        {Object.entries(groupedItems).map(([section, items]) => {
-          return (
-            <div key={section} className={section === 'configuracion' ? 'pt-2 mt-2 border-t border-zinc-900/80' : ''}>
-              {items.map((item) => {
-                const active = isActive(item.path);
-                return (
+      {/* Navigation: 7 Categorías con Submenús */}
+      <div className="flex-1 overflow-y-auto overflow-x-hidden py-3 px-2 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent">
+        <div className="space-y-1">
+          {mainCategories.map((cat) => {
+            const hasSubs = cat.subItems && cat.subItems.length > 0;
+            const isOpen = !!openCategories[cat.id];
+            const isCatActive = hasSubs
+              ? cat.subItems?.some(sub => isActive(sub.path))
+              : cat.path ? isActive(cat.path) : false;
+
+            // Renderizado en Modo Colapsado
+            if (collapsed) {
+              return (
+                <div key={cat.id} className="relative group/collapsed flex justify-center py-1">
                   <button
-                    key={item.id}
-                    onClick={() => handleNavigate(item.path)}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 mx-2 mb-1 rounded-xl text-sm font-medium transition-all duration-200 ${
-                      collapsed ? 'justify-center mx-0 px-0 w-16' : ''
-                    } ${
-                       active
-                         ? 'text-red-600 bg-transparent font-bold'
-                         : 'text-white hover:text-red-500 hover:bg-white/10'
+                    type="button"
+                    onClick={() => {
+                      if (!hasSubs && cat.path) {
+                        handleNavigate(cat.path);
+                      }
+                    }}
+                    className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
+                      isCatActive
+                        ? 'text-red-600 bg-red-600/15'
+                        : 'text-zinc-400 hover:text-white hover:bg-white/10'
                     }`}
-                    title={collapsed ? item.title : undefined}
+                    title={cat.title}
                   >
-                    <div className={`flex items-center justify-center w-5 h-5 ${active ? 'text-red-600' : 'text-white'}`}>
-                      <item.Icon className="w-4 h-4" strokeWidth={1.5} />
-                    </div>
-                    {!collapsed && <span className="truncate">{item.title}</span>}
+                    <cat.Icon className="w-4 h-4" strokeWidth={1.75} />
                   </button>
+
+                  {/* Menú flotante al pasar el cursor en modo colapsado */}
+                  {hasSubs && (
+                    <div className="hidden group-hover/collapsed:flex flex-col absolute left-full top-0 ml-2 z-50 bg-black border border-zinc-800 rounded-2xl p-2 shadow-2xl min-w-[190px] animate-in fade-in zoom-in-95 duration-150">
+                      <div className="px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-red-500 border-b border-zinc-900 mb-1 flex items-center gap-2">
+                        <cat.Icon className="w-3.5 h-3.5" />
+                        <span>{cat.title}</span>
+                      </div>
+                      <div className="space-y-0.5">
+                        {cat.subItems?.map((sub) => {
+                          const subActive = isActive(sub.path);
+                          return (
+                            <button
+                              key={sub.id}
+                              type="button"
+                              onClick={() => handleNavigate(sub.path)}
+                              className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold text-left transition-colors cursor-pointer ${
+                                subActive
+                                  ? 'text-red-600 bg-white/10 font-bold'
+                                  : 'text-zinc-300 hover:text-white hover:bg-white/5'
+                              }`}
+                            >
+                              <sub.Icon className={`w-3.5 h-3.5 shrink-0 ${subActive ? 'text-red-600' : 'text-zinc-400'}`} strokeWidth={1.5} />
+                              <span className="truncate">{sub.title}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
+            // Renderizado en Modo Expandido
+            if (!hasSubs && cat.path) {
+              return (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => handleNavigate(cat.path!)}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+                    isCatActive
+                      ? 'text-red-600 bg-red-600/10 font-black shadow-sm'
+                      : 'text-zinc-300 hover:text-white hover:bg-white/10'
+                  }`}
+                >
+                  <div className={`flex items-center justify-center w-5 h-5 shrink-0 ${isCatActive ? 'text-red-600' : 'text-zinc-400'}`}>
+                    <cat.Icon className="w-4 h-4" strokeWidth={1.75} />
+                  </div>
+                  <span className="truncate">{cat.title}</span>
+                </button>
+              );
+            }
+
+            return (
+              <div key={cat.id} className="mb-1">
+                {/* Cabecera de Categoría con Acordeón */}
+                <button
+                  type="button"
+                  onClick={() => toggleCategory(cat.id)}
+                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+                    isCatActive
+                      ? 'text-red-500 bg-white/5 font-black'
+                      : 'text-zinc-300 hover:text-white hover:bg-white/10'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className={`flex items-center justify-center w-5 h-5 shrink-0 ${isCatActive ? 'text-red-500' : 'text-zinc-400'}`}>
+                      <cat.Icon className="w-4 h-4" strokeWidth={1.75} />
+                    </div>
+                    <span className="truncate">{cat.title}</span>
+                  </div>
+                  <ChevronDown
+                    className={`w-3.5 h-3.5 text-zinc-400 transition-transform duration-200 shrink-0 ${
+                      isOpen ? 'rotate-180 text-red-500' : ''
+                    }`}
+                  />
+                </button>
+
+                {/* Submenús desplegables */}
+                {isOpen && cat.subItems && (
+                  <div className="ml-5 pl-2.5 my-1 border-l-2 border-zinc-800 space-y-0.5 animate-in fade-in duration-150">
+                    {cat.subItems.map((sub) => {
+                      const subActive = isActive(sub.path);
+                      return (
+                        <button
+                          key={sub.id}
+                          type="button"
+                          onClick={() => handleNavigate(sub.path)}
+                          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer text-left ${
+                            subActive
+                              ? 'text-red-600 font-black bg-white/10 shadow-sm'
+                              : 'text-zinc-400 hover:text-white hover:bg-white/5'
+                          }`}
+                        >
+                          <sub.Icon className={`w-3.5 h-3.5 shrink-0 ${subActive ? 'text-red-600' : 'text-zinc-400'}`} strokeWidth={1.5} />
+                          <span className="truncate">{sub.title}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Categorías Inferiores (Papelera según Regla 29) */}
+        {bottomCategories.length > 0 && (
+          <div className="pt-2 mt-3 border-t border-zinc-900/80 space-y-1">
+            {bottomCategories.map((cat) => {
+              const isCatActive = cat.path ? isActive(cat.path) : false;
+
+              if (collapsed) {
+                return (
+                  <div key={cat.id} className="flex justify-center py-1">
+                    <button
+                      type="button"
+                      onClick={() => cat.path && handleNavigate(cat.path)}
+                      className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
+                        isCatActive
+                          ? 'text-red-600 bg-red-600/15'
+                          : 'text-zinc-400 hover:text-white hover:bg-white/10'
+                      }`}
+                      title={cat.title}
+                    >
+                      <cat.Icon className="w-4 h-4" strokeWidth={1.75} />
+                    </button>
+                  </div>
                 );
-              })}
-            </div>
-          );
-        })}
+              }
+
+              return (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => cat.path && handleNavigate(cat.path)}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+                    isCatActive
+                      ? 'text-red-600 bg-red-600/10 font-black shadow-sm'
+                      : 'text-zinc-400 hover:text-white hover:bg-white/10'
+                  }`}
+                >
+                  <div className={`flex items-center justify-center w-5 h-5 shrink-0 ${isCatActive ? 'text-red-600' : 'text-zinc-400'}`}>
+                    <cat.Icon className="w-4 h-4" strokeWidth={1.75} />
+                  </div>
+                  <span className="truncate">{cat.title}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* User Info */}

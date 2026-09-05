@@ -102,7 +102,7 @@ if (!fs.existsSync(partesPath)) {
   }
 }
 
-// 5. Verificación de Sidebar.tsx (Barra de accesos directos sin texto y Modal Flotante de Cierre de Sesión)
+// 5. Verificación de Sidebar.tsx (Barra de accesos directos sin texto, Modal Flotante y Estructura de 7 Categorías)
 const sidebarPath = path.join(__dirname, '../src/components/Sidebar.tsx');
 if (fs.existsSync(sidebarPath)) {
   const content = fs.readFileSync(sidebarPath, 'utf8');
@@ -111,6 +111,12 @@ if (fs.existsSync(sidebarPath)) {
   }
   if (!content.includes('APP_VERSION') || !content.includes('/ajustes') || !content.includes('/buzon')) {
     errors.push('CRÍTICO: Sidebar.tsx carece de los accesos directos por icono debajo del número de versión (AGENTS.md REGLA 13).');
+  }
+  if (!content.includes('CATEGORIAS_MENU') || !content.includes('subItems') || !content.includes('ChevronDown')) {
+    errors.push('CRÍTICO: Sidebar.tsx carece de la estructura de categorías con submenús desplegables.');
+  }
+  if (!content.includes('/metodos')) {
+    errors.push('CRÍTICO: Sidebar.tsx carece de la sección Métodos (/metodos).');
   }
 }
 
@@ -125,6 +131,15 @@ if (!fs.existsSync(reparacionesPath)) {
   }
   if (!content.includes('StickyNote') || !content.includes('animate-ping') || !content.includes('bg-red-600')) {
     errors.push('CRÍTICO: Reparaciones.tsx carece del icono StickyNote con indicador de notificación rojo parpadeante (AGENTS.md REGLA 14).');
+  }
+  if (!content.includes('MESES_CONFIG') || !content.includes('activeMonth')) {
+    errors.push('CRÍTICO: Reparaciones.tsx carece de la navegación mensual por pestañas y configuración de meses (AGENTS.md REGLA 14).');
+  }
+  if (!content.includes('ReceiptText') || !content.includes('albaranModalItem')) {
+    errors.push('CRÍTICO: Reparaciones.tsx carece del botón o modal para crear albaranes directos (AGENTS.md REGLA 14).');
+  }
+  if (!content.includes('!r.facturado')) {
+    errors.push('CRÍTICO: Reparaciones.tsx carece del filtrado para excluir tareas facturadas (AGENTS.md REGLA 14).');
   }
   if (!content.includes('subscribeReparaciones') || !content.includes('updateReparacion')) {
     errors.push('CRÍTICO: Reparaciones.tsx carece de la integración de sincronización Firestore.');
@@ -142,6 +157,15 @@ if (!fs.existsSync(instalacionesPath)) {
   }
   if (!content.includes('StickyNote') || !content.includes('animate-ping') || !content.includes('bg-red-600')) {
     errors.push('CRÍTICO: Instalaciones.tsx carece del icono StickyNote con indicador de notificación rojo parpadeante (AGENTS.md REGLA 15).');
+  }
+  if (!content.includes('MESES_CONFIG') || !content.includes('activeMonth')) {
+    errors.push('CRÍTICO: Instalaciones.tsx carece de la navegación mensual por pestañas y configuración de meses (AGENTS.md REGLA 15).');
+  }
+  if (!content.includes('ReceiptText') || !content.includes('albaranModalItem')) {
+    errors.push('CRÍTICO: Instalaciones.tsx carece del botón o modal para crear albaranes directos (AGENTS.md REGLA 15).');
+  }
+  if (!content.includes('!i.facturado')) {
+    errors.push('CRÍTICO: Instalaciones.tsx carece del filtrado para excluir tareas facturadas (AGENTS.md REGLA 15).');
   }
   if (!content.includes('subscribeInstalaciones') || !content.includes('updateInstalacion')) {
     errors.push('CRÍTICO: Instalaciones.tsx carece de la integración de sincronización Firestore.');
@@ -308,6 +332,34 @@ if (fs.existsSync(firebasePath)) {
   const fbContent = fs.readFileSync(firebasePath, 'utf8');
   if (!fbContent.includes('moverAPapelera') || !fbContent.includes('cleanUndefinedForFirestore')) {
     errors.push('CRÍTICO: firebase.tsx carece de moverAPapelera o sanitización cleanUndefinedForFirestore (AGENTS.md REGLA 29).');
+  }
+}
+
+// 19. Verificación de 7 Categorías y Submenús en el Menú Lateral (AGENTS.md REGLA 30)
+if (fs.existsSync(sidebarPath)) {
+  const sideContent = fs.readFileSync(sidebarPath, 'utf8');
+  if (!sideContent.includes('CATEGORIAS_MENU') || !sideContent.includes('subItems') || !sideContent.includes('ChevronDown')) {
+    errors.push('CRÍTICO: Sidebar.tsx carece de la estructura CATEGORIAS_MENU o subItems reglamentarios (AGENTS.md REGLA 30).');
+  }
+  if (!sideContent.includes('title: \'Tutoriales\'') && !sideContent.includes('title: "Tutoriales"')) {
+    errors.push('CRÍTICO: Sidebar.tsx carece del menú oficial con título Tutoriales (AGENTS.md REGLA 30 y 31).');
+  }
+}
+
+// 20. Verificación del Módulo de Tutoriales y Soporte OneDrive (AGENTS.md REGLA 31)
+const metodosPath = path.join(__dirname, '../src/Metodos.tsx');
+if (!fs.existsSync(metodosPath)) {
+  errors.push('CRÍTICO: No se encontró src/Metodos.tsx para el módulo de Tutoriales (AGENTS.md REGLA 31).');
+} else {
+  const metContent = fs.readFileSync(metodosPath, 'utf8');
+  if (!metContent.includes('tutoriales_metodos') || !metContent.includes('getEmbedInfo')) {
+    errors.push('CRÍTICO: Metodos.tsx carece de persistencia en tutoriales_metodos o del analizador getEmbedInfo (AGENTS.md REGLA 31).');
+  }
+  if (!metContent.includes('1drv.ms') || !metContent.includes('Abrir y Reproducir en OneDrive')) {
+    errors.push('CRÍTICO: Metodos.tsx carece del soporte e interfaz específica para enlaces de Microsoft OneDrive (AGENTS.md REGLA 31).');
+  }
+  if (!metContent.includes('handleOpenCreateModal') || !metContent.includes('handleConfirmDelete')) {
+    errors.push('CRÍTICO: Metodos.tsx carece de las funciones completas de creación, edición y eliminación de tutoriales (AGENTS.md REGLA 31).');
   }
 }
 

@@ -31,6 +31,7 @@ import Buzon from './Buzon';
 import RegistroHorario from './RegistroHorario';
 import PruebasTecnicas from './PruebasTecnicas';
 import Papelera from './Papelera';
+import Metodos from './Metodos';
 import Sidebar from './components/Sidebar';
 import { 
   verifyUser,
@@ -1560,6 +1561,11 @@ export default function App() {
         <Route path="/papelera" element={
           <ProtectedRoute allowedRoles={['super-administrador', 'administrador', 'editor']} user={loggedUser}>
             <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Papelera /></PageLayout>
+          </ProtectedRoute>
+        } />
+        <Route path="/metodos" element={
+          <ProtectedRoute allowedRoles={['super-administrador', 'administrador', 'editor', 'visualizador', 'tecnico']} user={loggedUser}>
+            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Metodos /></PageLayout>
           </ProtectedRoute>
         } />
       </Routes>
