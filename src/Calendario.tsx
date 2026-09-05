@@ -546,7 +546,7 @@ export default function Calendario() {
               title={mostrarFinSemana ? 'Ocultar sábado y domingo' : 'Mostrar sábado y domingo'}
             >
               <CalendarDays className={`w-3.5 h-3.5 ${mostrarFinSemana ? 'text-amber-700' : 'text-slate-500'}`} />
-              <span>{mostrarFinSemana ? 'Ocultar F.S.' : 'Mostrar F.S.'}</span>
+              <span>{mostrarFinSemana ? 'Ocultar Finde' : 'Mostrar Finde'}</span>
             </button>
 
             <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/80">
