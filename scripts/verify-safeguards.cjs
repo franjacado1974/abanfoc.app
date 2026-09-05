@@ -363,6 +363,32 @@ if (!fs.existsSync(metodosPath)) {
   }
 }
 
+// 21. Verificación del Módulo de Calendario Principal (AGENTS.md REGLA 32)
+const calPath = path.join(__dirname, '../src/Calendario.tsx');
+if (!fs.existsSync(calPath)) {
+  errors.push('CRÍTICO: No se encontró src/Calendario.tsx (AGENTS.md REGLA 32).');
+} else {
+  const calContent = fs.readFileSync(calPath, 'utf8');
+  if (!calContent.includes('h-screen') || !calContent.includes('max-h-screen')) {
+    errors.push('CRÍTICO: Calendario.tsx carece del ajuste de altura completa h-screen / max-h-screen (AGENTS.md REGLA 32).');
+  }
+  if (!calContent.includes('handleDrop') || (!calContent.includes('draggable') && !calContent.includes('draggable={true}'))) {
+    errors.push('CRÍTICO: Calendario.tsx carece del sistema de arrastrar y soltar (Drag & Drop) (AGENTS.md REGLA 32).');
+  }
+  if (!calContent.includes('bg-amber-100') || !calContent.includes('bg-sky-100') || !calContent.includes('bg-red-100')) {
+    errors.push('CRÍTICO: Calendario.tsx carece del esquema oficial de colores (Dorado, Azul, Rojo) (AGENTS.md REGLA 32).');
+  }
+  if (!calContent.includes('selectedEvento') || !calContent.includes('selectedEvento.comercial')) {
+    errors.push('CRÍTICO: Calendario.tsx carece del modal de detalles o del campo Comercial (AGENTS.md REGLA 32).');
+  }
+}
+if (fs.existsSync(sidebarPath)) {
+  const sideContent = fs.readFileSync(sidebarPath, 'utf8');
+  if (!sideContent.includes('/calendario')) {
+    errors.push('CRÍTICO: Sidebar.tsx carece de la ruta /calendario debajo de INICIO (AGENTS.md REGLA 32).');
+  }
+}
+
 // Resultado de la verificación
 if (errors.length > 0) {
   console.error('\n❌ ERROR CRÍTICO DE BLINDAJE INTEGRAL (AGENTS.md):');

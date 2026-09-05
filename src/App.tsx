@@ -32,6 +32,7 @@ import RegistroHorario from './RegistroHorario';
 import PruebasTecnicas from './PruebasTecnicas';
 import Papelera from './Papelera';
 import Metodos from './Metodos';
+import Calendario from './Calendario';
 import Sidebar from './components/Sidebar';
 import { 
   verifyUser,
@@ -516,10 +517,6 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
   };
 
   const navigate = useNavigate();
-  const isUserChus = loggedUser && (
-    (loggedUser.nombre || '').toLowerCase().includes('chus') ||
-    (loggedUser.apellidos || '').toLowerCase().includes('chus')
-  );
   const LOGO_URL = "/favicon.png";
 
   const [appLogo] = useState(() => {
@@ -777,111 +774,6 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
         </div>
 
         <div className="p-8 max-w-[1600px] mx-auto animate-in">
-          {/* Welcome Hero Banner */}
-          <div className="bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-950 text-white rounded-3xl p-6 md:p-8 shadow-xl border border-zinc-800 relative overflow-hidden mb-8">
-            <div className="absolute right-0 top-0 w-80 h-80 bg-red-600/10 rounded-full blur-[100px] pointer-events-none" />
-            <div className="absolute left-1/3 bottom-0 w-60 h-60 bg-orange-600/5 rounded-full blur-[80px] pointer-events-none" />
-            
-            <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-              <div className="max-w-xl">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="bg-red-600 text-white text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-md">
-                    Salamandra Control
-                  </span>
-                  <span className="text-zinc-500 text-[10px] font-semibold">• Activo</span>
-                </div>
-                <h2 className="text-2xl md:text-3xl font-extrabold text-white tracking-tight">
-                  ¡Hola, {loggedUser.nombre}! 👋
-                </h2>
-                <p className="text-sm text-zinc-400 mt-2 leading-relaxed">
-                  Bienvenido al panel administrativo de ABANFOC. Desde aquí puedes supervisar el inventario de sistemas, planificar revisiones trimestrales y anuales, y dar soporte a los técnicos en campo.
-                </p>
-                <div className="flex flex-wrap gap-2 mt-4">
-                  <span className="bg-zinc-800/80 hover:bg-zinc-800 text-zinc-300 text-xs px-3.5 py-1.5 rounded-xl font-bold border border-zinc-700/50 transition-colors">
-                    {stats.clientes} Clientes Activos
-                  </span>
-                  <span className="bg-zinc-800/80 hover:bg-zinc-800 text-zinc-300 text-xs px-3.5 py-1.5 rounded-xl font-bold border border-zinc-700/50 transition-colors">
-                    {stats.centros} Centros Registrados
-                  </span>
-                  <span className="bg-zinc-800/80 hover:bg-zinc-800 text-zinc-300 text-xs px-3.5 py-1.5 rounded-xl font-bold border border-zinc-700/50 transition-colors">
-                    {stats.pendientes} Partes Pendientes
-                  </span>
-                </div>
-              </div>
-
-              {isUserChus && (
-                <div className="hidden lg:flex items-center justify-center shrink-0 w-48 h-48 relative select-none" style={{ transform: 'translateY(6px)' }}>
-                  <style>{`
-                    @keyframes flyLeftToRight {
-                      0% { transform: translate3d(-30px, 40px, 0) scale(0.6); opacity: 0; }
-                      15% { opacity: 0.9; }
-                      85% { opacity: 0.9; }
-                      100% { transform: translate3d(210px, 10px, 0) scale(0.7); opacity: 0; }
-                    }
-                    @keyframes flyRightToLeft {
-                      0% { transform: translate3d(210px, 60px, 0) scale(0.5) scaleX(-1); opacity: 0; }
-                      15% { opacity: 0.8; }
-                      85% { opacity: 0.8; }
-                      100% { transform: translate3d(-30px, 30px, 0) scale(0.6) scaleX(-1); opacity: 0; }
-                    }
-                  `}</style>
-
-                  <img 
-                    src="/arbol.png" 
-                    alt="Árbol colorido" 
-                    className="h-44 w-44 object-contain"
-                  />
-
-                  {/* Pájaros blancos volando */}
-                  <svg 
-                    viewBox="0 0 20 12" 
-                    className="absolute w-6 h-4 pointer-events-none select-none z-20"
-                    style={{
-                      animation: 'flyLeftToRight 8s linear infinite',
-                      animationDelay: '1s'
-                    }}
-                  >
-                    <path d="M 0,4 C 5,-2 8,4 10,7 C 12,4 15,-2 20,4 C 15,5 12,8 10,12 C 8,8 5,5 0,4 Z" fill="#ffffff" />
-                  </svg>
-
-                  <svg 
-                    viewBox="0 0 20 12" 
-                    className="absolute w-5 h-3 pointer-events-none select-none z-20"
-                    style={{
-                      animation: 'flyRightToLeft 11s linear infinite',
-                      animationDelay: '5s'
-                    }}
-                  >
-                    <path d="M 0,4 C 5,-2 8,4 10,7 C 12,4 15,-2 20,4 C 15,5 12,8 10,12 C 8,8 5,5 0,4 Z" fill="#ffffff" opacity="0.95" />
-                  </svg>
-
-                  {/* Margaritas a ras del suelo */}
-                  <div className="absolute bottom-2 left-0 right-0 flex justify-center gap-1 text-base filter drop-shadow-[0_1px_3px_rgba(0,0,0,0.4)]">
-                    <span>🌼</span>
-                    <span>🌼</span>
-                    <span>🌼</span>
-                    <span>🌼</span>
-                    <span>🌼</span>
-                    <span>🌼</span>
-                    <span>🌼</span>
-                    <span>🌼</span>
-                    <span>🌼</span>
-                  </div>
-                </div>
-              )}
-
-              <div className="hidden md:flex items-center justify-center shrink-0 w-32 h-32 rounded-2xl bg-zinc-900/50 border border-zinc-800 backdrop-blur-sm relative group overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-tr from-red-600/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                <img 
-                  src="/salamandra-orange.png" 
-                  alt="salamandra" 
-                  className="h-20 w-20 object-contain drop-shadow-[0_0_15px_rgba(239,68,68,0.2)] transition-transform duration-500 group-hover:scale-110" 
-                  onError={(e) => { (e.target as HTMLImageElement).src = appLogo; }}
-                />
-              </div>
-            </div>
-          </div>
-
           {/* Primary Metric Cards Grid */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
             {/* Clientes */}
@@ -1447,6 +1339,12 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Dashboard loggedUser={loggedUser!} onLogout={handleLogout} />} />
+        
+        <Route path="/calendario" element={
+          <ProtectedRoute allowedRoles={['super-administrador', 'administrador', 'editor', 'visualizador']} user={loggedUser}>
+            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Calendario /></PageLayout>
+          </ProtectedRoute>
+        } />
         
         <Route path="/clientes-centros" element={
           <ProtectedRoute allowedRoles={['super-administrador', 'administrador', 'editor']} user={loggedUser}>

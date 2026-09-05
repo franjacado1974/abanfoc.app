@@ -404,3 +404,35 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
   - Para enlaces de OneDrive, ante las restricciones de `X-Frame-Options` de Microsoft, el reproductor debe presentar una tarjeta dedicada con botón de apertura directa a pantalla completa (`Abrir y Reproducir en OneDrive`).
 - **Persistencia Dual Inmediata**:
   - Sincronización en tiempo real con Firestore (`tutoriales_metodos`) y caché local en LocalStorage (`firecheck_db_tutoriales_metodos`) para respuesta instantánea.
+
+---
+
+## 32. Blindaje Inviolable del Módulo Calendario Principal (Calendario.tsx)
+- **Ubicación y Acceso en Navegación**:
+  - Ubicado en el menú lateral directamente debajo de **INICIO** como acceso directo **«Calendario»** (`/calendario`, icono `Calendar`).
+- **Adaptación y Visibilidad Completa en Pantalla (`h-screen`)**:
+  - La vista del calendario DEBE ocupar el 100% del alto disponible de la pantalla (`h-screen max-h-screen overflow-hidden`) utilizando un layout flex vertical y cuadrícula responsiva (`flex-1 min-h-0`).
+  - Todas las semanas del mes (incluyendo la última semana cuando el mes tiene 6 filas) DEBEN visualizarse completas dentro del viewport sin cortes ni necesidad de scroll vertical en la página principal.
+- **Identificación Visual por Etiquetas y Código de Colores Reglamentario**:
+  - En las celdas diarias, cada tarea debe mostrarse en una sola línea compacta con su sigla y nombre resumido del cliente (`[Sigla] [Cliente]`):
+    1. **Revisiones de Mantenimiento (`Rev.`)**: Fondo y borde en **color DORADO / ÁMBAR** (`bg-amber-100 text-amber-900 border-amber-300`).
+    2. **Reparaciones y Averías (`Rep.`)**: Fondo y borde en **color AZUL** (`bg-sky-100 text-sky-900 border-sky-300`).
+    3. **Instalaciones y Montajes (`Inst.`)**: Fondo y borde en **color ROJO** (`bg-red-100 text-red-900 border-red-300`).
+  - La leyenda superior debe reflejar exactamente estas 3 insignias con sus respectivos tonos dorado, azul y rojo.
+- **Arrastrar y Soltar entre Días (Drag & Drop) con Persistencia Cruzada**:
+  - Todas las etiquetas de tareas del calendario son arrastrables (`draggable={true}`).
+  - Al soltar un elemento sobre otra casilla de día, se actualiza la fecha en tiempo real en la interfaz y en Firestore mediante:
+    - `updateParte(docId, { fechaProgramada: nuevaFechaDDMMYYYY })` para revisiones, sincronizándose de inmediato con el módulo **Planificación** (`/partes_trabajo`).
+    - `updateReparacion(docId, { fecha: nuevaFechaYYYYMMDD })` para reparaciones.
+    - `updateInstalacion(docId, { fecha: nuevaFechaYYYYMMDD })` para instalaciones.
+- **Ventana Flotante Informativa de Detalles (Modal)**:
+  - Al hacer clic en cualquier tarea del calendario, se abre una ventana modal flotante (`selectedEvento`) con la cabecera del tipo de trabajo y campos detallados:
+    - **Fecha programada** (formato `DD/MM/YYYY`)
+    - **Concepto / Tarea**
+    - **Cliente**
+    - **Lugar / Centro**
+    - **Técnico Asignado**
+    - **Comercial** (con icono `Briefcase`, indicando el comercial asignado a la tarea o centro)
+    - **Estado**
+    - **Notas / Observaciones**
+

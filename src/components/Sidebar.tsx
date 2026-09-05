@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
-  Users, CalendarDays, FileText, SearchCheck, Wrench,
+  Users, CalendarDays, Calendar, FileText, SearchCheck, Wrench,
   HardHat, Calculator, Package, FileCheck, FileDigit, Receipt,
   Settings, Power, ChevronLeft, ChevronRight, LayoutDashboard,
   Menu, X, Inbox, Clock, Gauge, Trash2,
@@ -42,6 +42,15 @@ const CATEGORIAS_MENU: NavCategory[] = [
     title: 'Inicio',
     Icon: LayoutDashboard,
     path: '/',
+    allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador']
+  },
+
+  // 1.1 Calendario (Vista mensual a pantalla completa)
+  {
+    id: 'calendario',
+    title: 'Calendario',
+    Icon: Calendar,
+    path: '/calendario',
     allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador']
   },
 

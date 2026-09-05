@@ -315,15 +315,6 @@ function DashboardHome({ loggedUser, onLogout, onNavigate }: DashboardTecnicoPro
       </header>
 
       <main className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
-        <div className="mb-8">
-          <h1 className="text-2xl sm:text-3xl font-black text-zinc-900">
-            Hola, {loggedUser.nombre}
-          </h1>
-          <p className="text-zinc-500 mt-1 text-sm">
-            Aquí tienes un resumen de tu área de trabajo.
-          </p>
-        </div>
-
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {cards.map((card) => {
             const Icon = card.icon;
