@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, FileDigit, Download, Search, CheckCircle2, Circle, Clock, Trash2, Plus, Building2, MapPin, Save, Trash, Edit, Copy, Maximize2, X, Signature } from 'lucide-react';
-import { addAlbaran, updateAlbaran, deleteAlbaran, subscribeAlbaranes, subscribeEmpresas, subscribeTecnicos, subscribeCentros, subscribeClientes, subscribeTrabajos, db, type Albaran, type Cliente, type Centro, type Equipo, type Tecnico, type Empresa, type TrabajoConfig, updateParte } from './firebase';
+import { addAlbaran, updateAlbaran, deleteAlbaran, subscribeAlbaranes, subscribeEmpresas, subscribeTecnicos, subscribeCentros, subscribeClientes, subscribeTrabajos, db, type Albaran, type Cliente, type Centro, type Equipo, type Tecnico, type Empresa, type TrabajoConfig, updateParte, updateReparacion, updateInstalacion } from './firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { generarAlbaranPDF } from './pdfGenerator';
 import ConfirmationModal from './ConfirmationModal';
@@ -235,6 +235,38 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
           console.error("Error al cerrar el parte de trabajo asociado:", error);
         }
       }
+
+      // Si el albarán tiene un reparacionId asociado, actualizar facturado en la reparación
+      if (albaranToUpdate.reparacionId) {
+        try {
+          await updateReparacion(albaranToUpdate.reparacionId, { facturado: nextFacturado });
+          const storedReps = JSON.parse(localStorage.getItem('firecheck_db_reparaciones') || '[]');
+          const updatedReps = storedReps.map((r: any) =>
+            (r.id === albaranToUpdate.reparacionId || r._docId === albaranToUpdate.reparacionId)
+              ? { ...r, facturado: nextFacturado }
+              : r
+          );
+          localStorage.setItem('firecheck_db_reparaciones', JSON.stringify(updatedReps));
+        } catch (error) {
+          console.error("Error al actualizar estado facturado en la reparación asociada:", error);
+        }
+      }
+
+      // Si el albarán tiene un instalacionId asociado, actualizar facturado en la instalación
+      if (albaranToUpdate.instalacionId) {
+        try {
+          await updateInstalacion(albaranToUpdate.instalacionId, { facturado: nextFacturado });
+          const storedInsts = JSON.parse(localStorage.getItem('firecheck_db_instalaciones') || '[]');
+          const updatedInsts = storedInsts.map((i: any) =>
+            (i.id === albaranToUpdate.instalacionId || i._docId === albaranToUpdate.instalacionId)
+              ? { ...i, facturado: nextFacturado }
+              : i
+          );
+          localStorage.setItem('firecheck_db_instalaciones', JSON.stringify(updatedInsts));
+        } catch (error) {
+          console.error("Error al actualizar estado facturado en la instalación asociada:", error);
+        }
+      }
     }
   };
 
@@ -461,7 +493,7 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
     return (
       <div className={`min-h-screen bg-[#F8FAFC] px-8 py-6 ${isTecnicoMode ? 'max-w-4xl mx-auto' : ''}`}>
         {/* Header */}
-        <div className="mb-6">
+        <div className="mb-6 text-center sm:text-left flex flex-col items-center sm:items-start">
           <button 
             onClick={() => navigate('/')} 
             className="flex items-center gap-1.5 text-xs font-semibold text-zinc-500 hover:text-zinc-900 mb-3 transition-colors cursor-pointer"

@@ -400,7 +400,7 @@ export default function Catalogo({ isTecnicoMode = false }: CatalogoProps) {
     <div className="min-h-screen bg-[#F8FAFC] px-8 py-6">
       <div className="w-full">
         {/* Header */}
-        <div className="mb-6">
+        <div className="mb-6 text-center sm:text-left flex flex-col items-center sm:items-start">
           <button 
             onClick={() => navigate('/')} 
             className="flex items-center gap-1.5 text-xs font-semibold text-zinc-500 hover:text-zinc-900 mb-3 transition-colors cursor-pointer"

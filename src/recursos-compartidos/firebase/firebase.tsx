@@ -615,10 +615,22 @@ export function subscribeCentros(callback: (centros: Centro[]) => void) {
     const col = collection(db, 'centros');
     const unsub = onSnapshot(col, (snap) => {
       console.info('subscribeCentros: snapshot received, size=', snap.size);
-      const items = snap.docs.map(d => {
+      const rawItems = snap.docs.map(d => {
         const data = d.data() as any;
-        return { _docId: d.id, id: data?.id ?? d.id, ...data };
-      }) as Centro[];
+        return { _docId: d.id, id: data?.id ?? d.id, ...data } as Centro;
+      });
+
+      // Desduplicar centros por código id único
+      const seenIds = new Set<string>();
+      const items: Centro[] = [];
+      for (const item of rawItems) {
+        const uniqueKey = item.id || item._docId;
+        if (uniqueKey && !seenIds.has(uniqueKey)) {
+          seenIds.add(uniqueKey);
+          items.push(item);
+        }
+      }
+
       items.sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
       console.info('subscribeCentros: items=', items);
       callback(items);
@@ -2283,6 +2295,7 @@ export interface RevisionItem {
   empresaMantenedora?: string;
   ubicacion?: string;
   mes?: string;
+  tipoRevision?: string;
   estado: 'Planificado' | 'En curso' | 'Parado' | 'Finalizado';
   fechaCreacion?: string;
   observaciones?: string;
@@ -2304,6 +2317,7 @@ export function subscribeRevisiones(callback: (items: RevisionItem[]) => void) {
           empresaMantenedora: data?.empresaMantenedora || '',
           ubicacion: data?.ubicacion || '',
           mes: data?.mes || '',
+          tipoRevision: data?.tipoRevision || '',
           estado: data?.estado || 'Planificado',
           fechaCreacion: data?.fechaCreacion || new Date().toISOString(),
           observaciones: data?.observaciones || '',
@@ -2350,6 +2364,171 @@ export async function deleteRevision(docId: string) {
     await deleteDoc(docRef);
   } catch (e) {
     console.error('deleteRevision error:', e);
+    throw e;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PAPELERA DE RECICLAJE (Centralizada - Retención 100 Días)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface PapeleraItem {
+  id: string;
+  originalDocId: string;
+  coleccion: string;
+  tipo: string;
+  titulo: string;
+  clienteNombre?: string;
+  centroNombre?: string;
+  datos: Record<string, any>;
+  fechaEliminacion: string;
+  fechaExpiracion: string;
+  eliminadoPor?: string;
+  _docId?: string;
+}
+
+function cleanUndefinedForFirestore(obj: any): any {
+  if (obj === undefined) return null;
+  if (obj === null) return null;
+  if (typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) {
+    return obj.map(cleanUndefinedForFirestore);
+  }
+  const clean: Record<string, any> = {};
+  for (const [key, val] of Object.entries(obj)) {
+    if (val !== undefined) {
+      clean[key] = cleanUndefinedForFirestore(val);
+    }
+  }
+  return clean;
+}
+
+export async function moverAPapelera(params: {
+  coleccion: string;
+  originalDocId: string;
+  tipo: string;
+  titulo: string;
+  clienteNombre?: string;
+  centroNombre?: string;
+  datos: Record<string, any>;
+  usuario?: string;
+}) {
+  try {
+    const fechaEliminacion = new Date().toISOString();
+    const expDate = new Date();
+    expDate.setDate(expDate.getDate() + 100);
+    const fechaExpiracion = expDate.toISOString();
+
+    const sanitizedDatos = cleanUndefinedForFirestore(params.datos || {});
+
+    const papeleraCol = collection(db, 'papelera');
+    await addDoc(papeleraCol, {
+      originalDocId: params.originalDocId,
+      coleccion: params.coleccion,
+      tipo: params.tipo,
+      titulo: params.titulo || 'Sin título',
+      clienteNombre: params.clienteNombre || '',
+      centroNombre: params.centroNombre || '',
+      datos: sanitizedDatos,
+      fechaEliminacion,
+      fechaExpiracion,
+      eliminadoPor: params.usuario || 'Usuario'
+    });
+
+    // Eliminar de la colección de origen
+    const originalRef = doc(db, params.coleccion, params.originalDocId);
+    await deleteDoc(originalRef);
+
+    console.info(`moverAPapelera: Documento ${params.originalDocId} de ${params.coleccion} movido a papelera`);
+    return true;
+  } catch (e) {
+    console.error('moverAPapelera error:', e);
+    throw e;
+  }
+}
+
+export function subscribePapelera(callback: (items: PapeleraItem[]) => void) {
+  try {
+    const col = collection(db, 'papelera');
+    const q = query(col, orderBy('fechaEliminacion', 'desc'));
+    const unsub = onSnapshot(q, async (snap) => {
+      const now = Date.now();
+      const validItems: PapeleraItem[] = [];
+
+      for (const d of snap.docs) {
+        const data = d.data() as any;
+        const expTime = data.fechaExpiracion ? new Date(data.fechaExpiracion).getTime() : 0;
+
+        // Si han pasado más de 100 días, purgar automáticamente de Firestore
+        if (expTime > 0 && expTime < now) {
+          deleteDoc(doc(db, 'papelera', d.id)).catch(err =>
+            console.error('Error purgando elemento caducado de papelera:', err)
+          );
+        } else {
+          validItems.push({
+            _docId: d.id,
+            id: d.id,
+            ...data
+          });
+        }
+      }
+
+      callback(validItems);
+    }, (err) => {
+      console.error('subscribePapelera error:', err);
+      callback([]);
+    });
+
+    return unsub;
+  } catch (e) {
+    console.error('subscribePapelera error:', e);
+    return () => {};
+  }
+}
+
+export async function restaurarElementoPapelera(item: PapeleraItem) {
+  try {
+    if (!item.coleccion || !item.originalDocId || !item.datos) {
+      throw new Error('Datos insuficientes para restaurar el elemento.');
+    }
+
+    // Reinsertar en la colección original
+    const originalRef = doc(db, item.coleccion, item.originalDocId);
+    await setDoc(originalRef, item.datos);
+
+    // Eliminar de la papelera
+    const papeleraRef = doc(db, 'papelera', item._docId || item.id);
+    await deleteDoc(papeleraRef);
+
+    console.info(`restaurarElementoPapelera: ${item.originalDocId} restaurado en ${item.coleccion}`);
+    return true;
+  } catch (e) {
+    console.error('restaurarElementoPapelera error:', e);
+    throw e;
+  }
+}
+
+export async function eliminarDefinitivoPapelera(docId: string) {
+  try {
+    const papeleraRef = doc(db, 'papelera', docId);
+    await deleteDoc(papeleraRef);
+    console.info(`eliminarDefinitivoPapelera: ${docId} eliminado físicamente`);
+    return true;
+  } catch (e) {
+    console.error('eliminarDefinitivoPapelera error:', e);
+    throw e;
+  }
+}
+
+export async function vaciarPapeleraCompleta() {
+  try {
+    const snap = await getDocs(collection(db, 'papelera'));
+    const promises = snap.docs.map(d => deleteDoc(doc(db, 'papelera', d.id)));
+    await Promise.all(promises);
+    console.info('vaciarPapeleraCompleta: Papelera vaciada');
+    return true;
+  } catch (e) {
+    console.error('vaciarPapeleraCompleta error:', e);
     throw e;
   }
 }

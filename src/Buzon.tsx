@@ -364,8 +364,8 @@ export default function Buzon({ isTecnicoMode = false, onBack }: BuzonProps) {
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
         {/* Cabecera Principal */}
         {!isTecnicoMode && (
-          <div className="mb-8 flex items-center gap-3">
-            <div className="p-3 bg-purple-100 text-purple-700 rounded-2xl">
+          <div className="mb-8 flex flex-col sm:flex-row items-center gap-3 text-center sm:text-left">
+            <div className="p-3 bg-purple-100 text-purple-700 rounded-2xl shrink-0">
               <Inbox className="w-8 h-8" />
             </div>
             <div>

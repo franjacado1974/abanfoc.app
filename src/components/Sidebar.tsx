@@ -4,7 +4,7 @@ import {
   Users, CalendarDays, FileText, SearchCheck, Wrench,
   HardHat, Calculator, Package, FileCheck, FileDigit, Receipt,
   Settings, Power, ChevronLeft, ChevronRight, LayoutDashboard,
-  Menu, X, Inbox} from 'lucide-react';
+  Menu, X, Inbox, Clock, Gauge, Trash2 } from 'lucide-react';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
 import { APP_VERSION } from '../constants';
@@ -33,11 +33,13 @@ const navItems: NavItem[] = [
   { id: 'revisiones', path: '/revisiones', title: 'Revisiones', Icon: SearchCheck, allowedRoles: ['super-administrador', 'administrador'], section: 'operaciones' },
   { id: 'reparaciones', path: '/reparaciones', title: 'Reparaciones', Icon: Wrench, allowedRoles: ['super-administrador', 'administrador'], section: 'operaciones' },
   { id: 'instalaciones', path: '/instalaciones', title: 'Instalaciones', Icon: HardHat, allowedRoles: ['super-administrador', 'administrador'], section: 'operaciones' },
+  { id: 'pruebas-tecnicas', path: '/pruebas-tecnicas', title: 'Pruebas Técnicas', Icon: Gauge, allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador', 'tecnico'], section: 'operaciones' },
   { id: 'certificados', path: '/certificados', title: 'Certificados', Icon: FileCheck, allowedRoles: ['super-administrador', 'administrador'], section: 'documentacion' },
   { id: 'presupuestos', path: '/presupuestos', title: 'Presupuestos', Icon: Calculator, allowedRoles: ['super-administrador', 'administrador'], section: 'documentacion' },
   { id: 'pedidos', path: '/pedidos', title: 'Pedidos', Icon: FileText, allowedRoles: ['super-administrador', 'administrador'], section: 'documentacion' },
   { id: 'albaranes', path: '/albaranes', title: 'Albaranes', Icon: FileDigit, allowedRoles: ['super-administrador', 'administrador', 'visualizador'], section: 'documentacion' },
   { id: 'facturas', path: '/facturas', title: 'Facturas', Icon: Receipt, allowedRoles: ['super-administrador', 'administrador'], section: 'documentacion' },
+  { id: 'papelera', path: '/papelera', title: 'Papelera', Icon: Trash2, allowedRoles: ['super-administrador', 'administrador', 'editor'], section: 'configuracion' },
 ];
 
 export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
@@ -180,7 +182,14 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
     loadAndProcessLogo();
   }, [appLogo]);
 
-  const userRole = user?.rol || 'visualizador';
+  const normalizeRole = (r?: string) => {
+    const clean = (r || '').toLowerCase().trim();
+    if (clean === 'administracion' || clean === 'administración' || clean === 'admin' || clean === 'administrador') return 'administrador';
+    if (clean === 'superadministrador' || clean === 'superusuario' || clean === 'super_administrador' || clean === 'super-usuario' || clean === 'super-administrador') return 'super-administrador';
+    return clean || 'visualizador';
+  };
+
+  const userRole = normalizeRole(user?.rol);
 
   const filteredItems = navItems.filter(item => item.allowedRoles.includes(userRole));
 
@@ -241,7 +250,21 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
                     )}
                   </button>
                 )}
-                {['super-administrador', 'administrador'].includes(userRole) && (
+                {['super-administrador', 'superusuario', 'superadministrador'].includes(userRole) && (
+                  <button
+                    type="button"
+                    onClick={() => handleNavigate('/registro-horario')}
+                    className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+                      isActive('/registro-horario')
+                        ? 'text-red-600 bg-red-600/10'
+                        : 'text-zinc-400 hover:text-red-500 hover:bg-white/10'
+                    }`}
+                    title="Registro horario"
+                  >
+                    <Clock className="w-4 h-4" strokeWidth={1.75} />
+                  </button>
+                )}
+                {['super-administrador', 'superusuario', 'superadministrador'].includes(userRole) && (
                   <button
                     type="button"
                     onClick={() => handleNavigate('/ajustes')}
@@ -287,7 +310,21 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
                 )}
               </button>
             )}
-            {['super-administrador', 'administrador'].includes(userRole) && (
+            {['super-administrador', 'superusuario', 'superadministrador'].includes(userRole) && (
+              <button
+                type="button"
+                onClick={() => handleNavigate('/registro-horario')}
+                className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+                  isActive('/registro-horario')
+                    ? 'text-red-600 bg-red-600/10'
+                    : 'text-zinc-400 hover:text-red-500 hover:bg-white/10'
+                }`}
+                title="Registro horario"
+              >
+                <Clock className="w-4 h-4" strokeWidth={1.75} />
+              </button>
+            )}
+            {['super-administrador', 'superusuario', 'superadministrador'].includes(userRole) && (
               <button
                 type="button"
                 onClick={() => handleNavigate('/ajustes')}
@@ -317,7 +354,7 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
       <div className="flex-1 overflow-y-auto overflow-x-hidden py-2 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent">
         {Object.entries(groupedItems).map(([section, items]) => {
           return (
-            <div key={section}>
+            <div key={section} className={section === 'configuracion' ? 'pt-2 mt-2 border-t border-zinc-900/80' : ''}>
               {items.map((item) => {
                 const active = isActive(item.path);
                 return (

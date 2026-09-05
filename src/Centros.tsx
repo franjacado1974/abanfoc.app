@@ -1371,7 +1371,7 @@ const renderModals = () => {
       <div className={hideHeader ? '' : 'px-4 md:px-8 py-6'}>
         {!hideHeader ? (
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-          <div>
+          <div className="text-center md:text-left flex flex-col items-center md:items-start">
             <button onClick={() => navigate('/')} className="flex items-center gap-1.5 text-xs font-medium text-zinc-500 hover:text-zinc-900 mb-3 transition-colors">
               <ArrowLeft className="w-3.5 h-3.5" /> Volver al panel
             </button>

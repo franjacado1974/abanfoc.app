@@ -4237,9 +4237,10 @@ export const generarCertificadoPDF = async (
 
   y += cardResultH + 8;
 
-  // ── FIRMAS (Certificado) ──
+  // ── FIRMAS (Certificado: El Técnico Titulado y Técnico mantenedor) ──
+  const firmaTecnicoFinal = _firmaTecnico || parte?.firmaTecnico;
   const firmaIngenieroBase64 = await fetchImageToBase64(empData?.ingenieroFirmaUrl || empData?.firmaIngenieroBase64 || empData?.firmaUrl);
-  if (firmaIngenieroBase64 || _firmaTecnico || _firmaCliente) {
+  if (firmaIngenieroBase64 || firmaTecnicoFinal) {
     const firmasY = y;
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8);
@@ -4262,27 +4263,25 @@ export const generarCertificadoPDF = async (
       }
       return '';
     })();
+
+    const boxW = 75;
+    const boxH = 26;
+    const box1X = 22;
+    const box2X = 113;
     
-    // Firma Ingeniero
-    doc.text('El Técnico Titulado', 20, firmasY);
+    // 1. Firma Ingeniero / Técnico Titulado
+    doc.text('El Técnico Titulado', box1X, firmasY);
     doc.setDrawColor(220, 220, 220);
-    doc.roundedRect(20, firmasY + 3, 50, 25, 2, 2);
+    doc.roundedRect(box1X, firmasY + 3, boxW, boxH, 2, 2);
     if (firmaIngenieroBase64) {
-      await dibujarFirmaAjustada(doc, firmaIngenieroBase64, 22, firmasY + 4, 46, 23);
+      await dibujarFirmaAjustada(doc, firmaIngenieroBase64, box1X + 2, firmasY + 4, boxW - 4, boxH - 2);
     }
     
-    // Firma Técnico
-    doc.text('Técnico mantenedor', 80, firmasY);
-    doc.roundedRect(80, firmasY + 3, 50, 25, 2, 2);
-    if (_firmaTecnico) {
-      await dibujarFirmaAjustada(doc, _firmaTecnico, 82, firmasY + 4, 46, 23);
-    }
-    
-    // Firma Cliente
-    doc.text('Conformidad Cliente', 140, firmasY);
-    doc.roundedRect(140, firmasY + 3, 50, 25, 2, 2);
-    if (_firmaCliente) {
-      await dibujarFirmaAjustada(doc, _firmaCliente, 142, firmasY + 4, 46, 23);
+    // 2. Firma Técnico Mantenedor
+    doc.text('Técnico mantenedor', box2X, firmasY);
+    doc.roundedRect(box2X, firmasY + 3, boxW, boxH, 2, 2);
+    if (firmaTecnicoFinal) {
+      await dibujarFirmaAjustada(doc, firmaTecnicoFinal, box2X + 2, firmasY + 4, boxW - 4, boxH - 2);
     }
 
     // Nombres y cargos debajo de las firmas
@@ -4294,13 +4293,10 @@ export const generarCertificadoPDF = async (
     const nombreIngeniero = (empData?.ingenieroNombre && empData?.ingenieroApellidos) 
       ? `${empData.ingenieroNombre} ${empData.ingenieroApellidos}`
       : (empData?.tecnicoTitulado || 'Técnico Titulado');
-    doc.text(nombreIngeniero, 20, firmasY + 32);
+    doc.text(nombreIngeniero, box1X, firmasY + 33);
 
     // Nombre Técnico
-    doc.text(tecnicoNombre || 'Técnico mantenedor', 80, firmasY + 32);
-
-    // Nombre Cliente
-    doc.text(_nombreFirmante || 'Cliente / Titular', 140, firmasY + 32);
+    doc.text(tecnicoNombre || 'Técnico mantenedor', box2X, firmasY + 33);
 
     // Cargos y números
     doc.setFont("helvetica", "normal");
@@ -4309,14 +4305,11 @@ export const generarCertificadoPDF = async (
 
     // Cargo e Ingeniero nº
     const numColegiado = empData?.ingenieroColegiado || empData?.numTecnicoTitulado || '—';
-    doc.text(`Ingeniero nº: ${numColegiado}`, 20, firmasY + 36);
+    doc.text(`Ingeniero nº: ${numColegiado}`, box1X, firmasY + 37);
 
     // Cargo Técnico
     const numHab = habilitacionTecnico || '—';
-    doc.text(`Habilitación nº: ${numHab}`, 80, firmasY + 36);
-
-    // Cargo Cliente
-    doc.text('Titular del centro', 140, firmasY + 36);
+    doc.text(`Habilitación nº: ${numHab}`, box2X, firmasY + 37);
   }
 
   // Footer (solo número de página alineado a la derecha)

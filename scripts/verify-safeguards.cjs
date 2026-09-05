@@ -188,6 +188,129 @@ if (fs.existsSync(pdfGenPath)) {
   }
 }
 
+// 13. Verificación de exclusividad de Configuraciones para SuperUsuario (AGENTS.md REGLA 22)
+if (fs.existsSync(sidebarPath)) {
+  const content = fs.readFileSync(sidebarPath, 'utf8');
+  if (content.includes("['super-administrador', 'administrador'].includes(userRole)") && content.includes('/ajustes')) {
+    errors.push('CRÍTICO: Sidebar.tsx no debe permitir el menú configuraciones al rol administrador (AGENTS.md REGLA 22).');
+  }
+  if (!content.includes("['super-administrador', 'superusuario', 'superadministrador'].includes(userRole)")) {
+    errors.push('CRÍTICO: Sidebar.tsx carece de la restricción exclusiva de Configuraciones para SuperUsuario (AGENTS.md REGLA 22).');
+  }
+}
+
+const appPath = path.join(__dirname, '../src/App.tsx');
+if (fs.existsSync(appPath)) {
+  const content = fs.readFileSync(appPath, 'utf8');
+  const matchAjustes = content.match(/<Route\s+path="\/ajustes"[\s\S]*?allowedRoles=\{([^}]+)\}/);
+  if (matchAjustes && matchAjustes[1].includes("'administrador'")) {
+    errors.push('CRÍTICO: App.tsx permite acceso a /ajustes a usuarios administradores no superusuarios (AGENTS.md REGLA 22).');
+  }
+  if (!content.includes('path="/ajustes"') || (matchAjustes && !matchAjustes[1].includes("'super-administrador'"))) {
+    errors.push('CRÍTICO: App.tsx carece de la ruta protegida /ajustes para super-administrador (AGENTS.md REGLA 22).');
+  }
+}
+
+// 14. Verificación de Pruebas Técnicas y Ensayos Hidráulicos (AGENTS.md REGLA 25)
+const pruebasTecPath = path.join(__dirname, '../src/PruebasTecnicas.tsx');
+if (!fs.existsSync(pruebasTecPath)) {
+  errors.push('CRÍTICO: No se encontró src/PruebasTecnicas.tsx (AGENTS.md REGLA 25).');
+} else {
+  const content = fs.readFileSync(pruebasTecPath, 'utf8');
+  if (!content.includes("'pruebas_tecnicas'") || !content.includes('onSnapshot')) {
+    errors.push('CRÍTICO: PruebasTecnicas.tsx carece de la sincronización en tiempo real con la colección pruebas_tecnicas (AGENTS.md REGLA 25).');
+  }
+  if (!content.includes('empresaMantenedora') || !content.includes('equipoMedicion') || !content.includes('tipoEquipo')) {
+    errors.push('CRÍTICO: PruebasTecnicas.tsx carece de los campos unificados en Datos Generales del Ensayo (AGENTS.md REGLA 25).');
+  }
+  if (!content.includes('qTotalNum') || !content.includes('q1Num + q2Num')) {
+    errors.push('CRÍTICO: PruebasTecnicas.tsx carece del cálculo automático de caudal simultáneo Q1 + Q2 (AGENTS.md REGLA 25).');
+  }
+  if (!content.includes('handleExportPDF') || !content.includes('Descargar Informe PDF')) {
+    errors.push('CRÍTICO: PruebasTecnicas.tsx carece de la generación/descarga de informe PDF oficial (AGENTS.md REGLA 25).');
+  }
+  if (!content.includes('Recuperar ensayo anterior') && !content.includes('Recuperar ensayos anteriores')) {
+    errors.push('CRÍTICO: PruebasTecnicas.tsx carece del desplegable/buscador de ensayos anteriores guardados (AGENTS.md REGLA 25).');
+  }
+
+  // 15. Verificación de Aislamiento de Firmas por Empresa y Maquetación (AGENTS.md REGLA 26)
+  if (!content.includes('matchedEmpRaw?.selloUrl') && !content.includes('matchedEmpRaw?.ingenieroFirmaUrl')) {
+    errors.push('CRÍTICO: PruebasTecnicas.tsx carece del aislamiento estricto de firmas y sellos por empresa (AGENTS.md REGLA 26).');
+  }
+  if (!content.includes('PRUEBA NO CONFORME.') && !content.includes('PRUEBA CONFORME.')) {
+    errors.push('CRÍTICO: PruebasTecnicas.tsx carece de la estructuración en 2 líneas del dictamen en el PDF (AGENTS.md REGLA 26).');
+  }
+  if (!content.includes('selloX = 105')) {
+    errors.push('CRÍTICO: PruebasTecnicas.tsx carece de la posición centrada del sello de empresa (AGENTS.md REGLA 26).');
+  }
+
+  // 16. Verificación de Valores Normativos en Ensayos Hidráulicos (AGENTS.md REGLA 27)
+  if (!content.includes('caudalMin1Eq: 100') || !content.includes('caudalMin2Eq: 200') || !content.includes('caudalMin1Eq: 500') || !content.includes('caudalMin1Eq: 1000')) {
+    errors.push('CRÍTICO: PruebasTecnicas.tsx carece de los valores normativos mínimos de caudal y presión (AGENTS.md REGLA 27).');
+  }
+  if (!content.includes('UNE 23500:2021 y Real Decreto 513/2017 de 22 de mayo') || !content.includes('UNE 23500:2021 y R.I.P.CI.')) {
+    errors.push('CRÍTICO: PruebasTecnicas.tsx carece de las referencias normativas obligatorias (AGENTS.md REGLA 27).');
+  }
+  if (!content.includes('formatFechaEnsayo')) {
+    errors.push('CRÍTICO: PruebasTecnicas.tsx carece de la función de formateo de fecha DD/MM/YYYY (AGENTS.md REGLA 27).');
+  }
+}
+
+// 17. Verificación de Edición, Membrete Oficial y Firmas en Certificados (AGENTS.md REGLA 28)
+const certsPath = path.join(__dirname, '../src/Certificados.tsx');
+if (!fs.existsSync(certsPath)) {
+  errors.push('CRÍTICO: No se encontró src/Certificados.tsx (AGENTS.md REGLA 28).');
+} else {
+  const certContent = fs.readFileSync(certsPath, 'utf8');
+  if (!certContent.includes('handleOpenEditModal') || !certContent.includes('editingCert')) {
+    errors.push('CRÍTICO: Certificados.tsx carece del soporte de edición completa de certificados (AGENTS.md REGLA 28).');
+  }
+  if (!certContent.includes('canvasTecnicoRef') || !certContent.includes('firmaTecnico')) {
+    errors.push('CRÍTICO: Certificados.tsx carece del canvas digital para la firma del técnico mantenedor (AGENTS.md REGLA 28).');
+  }
+}
+
+if (fs.existsSync(pdfGenPath)) {
+  const pdfContent = fs.readFileSync(pdfGenPath, 'utf8');
+  if (!pdfContent.includes("cargaDatosEmpresa('ABANFOC S.L.')") && !pdfContent.includes('ABANFOC S.L.')) {
+    errors.push('CRÍTICO: pdfGenerator.ts carece del forzado permanente de ABANFOC S.L. en certificados oficiales (AGENTS.md REGLA 28).');
+  }
+  const certIdx = pdfContent.indexOf('export const generarCertificadoPDF');
+  const certSlice = certIdx !== -1 ? pdfContent.slice(certIdx) : '';
+  if (!certSlice.includes('box1X = 22') || !certSlice.includes('box2X = 113') || certSlice.includes('Conformidad Cliente')) {
+    errors.push('CRÍTICO: pdfGenerator.ts carece de la distribución de 2 firmas oficiales o contiene la casilla cliente en el Certificado Oficial (AGENTS.md REGLA 28).');
+  }
+}
+
+// 18. Verificación de Papelera de Reciclaje y Retención de 100 Días (AGENTS.md REGLA 29)
+const papeleraPath = path.join(__dirname, '../src/Papelera.tsx');
+if (!fs.existsSync(papeleraPath)) {
+  errors.push('CRÍTICO: No se encontró src/Papelera.tsx (AGENTS.md REGLA 29).');
+} else {
+  const papContent = fs.readFileSync(papeleraPath, 'utf8');
+  if (!papContent.includes('subscribePapelera') || !papContent.includes('restaurarElementoPapelera')) {
+    errors.push('CRÍTICO: Papelera.tsx carece de las funciones de suscripción y restauración (AGENTS.md REGLA 29).');
+  }
+  if (!papContent.includes('100') || !papContent.includes('calcularDiasRestantes')) {
+    errors.push('CRÍTICO: Papelera.tsx carece del cálculo y visualización de retención de 100 días (AGENTS.md REGLA 29).');
+  }
+}
+
+if (fs.existsSync(sidebarPath)) {
+  const sideContent = fs.readFileSync(sidebarPath, 'utf8');
+  if (!sideContent.includes('/papelera') || !sideContent.includes('Trash2')) {
+    errors.push('CRÍTICO: Sidebar.tsx carece del acceso directo a la Papelera con icono Trash2 (AGENTS.md REGLA 29).');
+  }
+}
+
+const firebasePath = path.join(__dirname, '../src/firebase.tsx');
+if (fs.existsSync(firebasePath)) {
+  const fbContent = fs.readFileSync(firebasePath, 'utf8');
+  if (!fbContent.includes('moverAPapelera') || !fbContent.includes('cleanUndefinedForFirestore')) {
+    errors.push('CRÍTICO: firebase.tsx carece de moverAPapelera o sanitización cleanUndefinedForFirestore (AGENTS.md REGLA 29).');
+  }
+}
+
 // Resultado de la verificación
 if (errors.length > 0) {
   console.error('\n❌ ERROR CRÍTICO DE BLINDAJE INTEGRAL (AGENTS.md):');

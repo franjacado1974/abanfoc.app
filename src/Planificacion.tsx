@@ -259,16 +259,16 @@ export default function Planificacion() {
     <div className="min-h-screen bg-[#F8FAFC] px-8 py-6">
       <div className="max-w-[1600px] mx-auto">
         {/* Header */}
-        <div className="mb-6">
+        <div className="mb-6 flex flex-col items-center sm:items-start text-center sm:text-left">
           <button 
             onClick={() => navigate('/')} 
             className="flex items-center gap-1.5 text-xs font-semibold text-zinc-500 hover:text-zinc-900 mb-3 transition-colors cursor-pointer"
           >
             <ArrowLeft className="w-3.5 h-3.5" /> Volver al panel
           </button>
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 w-full">
             <div>
-              <h1 className="text-2xl font-black text-zinc-950 tracking-tight flex items-center gap-2">
+              <h1 className="text-2xl font-black text-zinc-950 tracking-tight flex items-center justify-center sm:justify-start gap-2">
                 Planificación de Revisiones
               </h1>
               <p className="text-xs font-semibold text-zinc-500 mt-1">Calendarización y asignación mensual de mantenimientos preventivos a técnicos.</p>

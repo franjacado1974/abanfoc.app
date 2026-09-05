@@ -207,5 +207,120 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
     5. **RESTO DE SISTEMAS**: Grupos de bombeo/abastecimiento (50-53), Rociadores (60), Detección/Aspiración/CO (70-72), Extinción gas/cocina (80-81), Alumbrado (85), Puertas RF (90)...
   - Si el centro carece de alguno de estos sistemas, el generador pasa automáticamente al siguiente.
 
+---
+
+## 22. Blindaje Inviolable de Acceso y Visibilidad Exclusiva de Configuraciones para SuperUsuario
+- **Acceso Exclusivo a SuperUsuario**:
+  - El acceso a las rutas `/ajustes` y `/configuracion-datos` DEBE estar restringido exclusivamente a usuarios con rol de SuperUsuario (`'super-administrador'`, `'superusuario'`, `'superadministrador'`).
+  - Los usuarios con rol de Técnico (`'tecnico'`), Administrador (`'administrador'`), Editor (`'editor'`) o Visualizador (`'visualizador'`) NO deben tener acceso ni ver el acceso directo de Configuraciones.
+- **Icono de Configuraciones en Sidebar**:
+  - En `Sidebar.tsx` (tanto en la barra expandida como colapsada y móvil), el botón de acceso directo a Configuraciones (`/ajustes`) sólo debe renderizarse condicionado a roles de SuperUsuario (`['super-administrador', 'superusuario', 'superadministrador'].includes(userRole)`).
+
+---
+
+## 23. Blindaje Inviolable de Nomenclatura y Formato de Versiones de la Aplicación
+- **Estructura Obligatoria**:
+  - Toda versión de la aplicación DEBE seguir estrictamente el patrón: `V.DD.MM.YY.LETRA` (Día, Mes, Año en 2 dígitos, y Letra correlativa de versión, ej. `V.31.08.26.A`).
+- **Sincronización Dual**:
+  - La versión debe mantenerse sincronizada de forma idéntica y simultánea en:
+    1. `src/constants.ts` (`export const APP_VERSION = 'V.DD.MM.YY.LETRA';`)
+    2. `public/version.json` (`{ "version": "V.DD.MM.YY.LETRA" }`)
+
+---
+
+## 24. Blindaje Inviolable del Conteo y Tipos de Equipos en Certificado PDF (pdfGenerator.ts)
+- **Capacidades en Litros y Kilos Exclusivas de Extintores**:
+  - La detección por expresiones regulares de pesos y capacidades (`\d+\s*KG`, `\d+\s*L`, `litros`, `kilos`) y la concatenación de capacidades DEBEN restringirse **estricta y exclusivamente a Extintores** (`if (esExtintor)`).
+  - Queda ESTRICTAMENTE PROHIBIDO que textos, notas o números de otros sistemas (como Hidrantes, Detectores, Bombas, Puertas RF, etc.) generen sufijos de capacidad como `2 L.` o `Kg.`.
+- **Conteo y Tipo Real de Hidrantes y Demás Sistemas**:
+  - En **Hidrantes** (y resto de sistemas), el tipo DEBE obtenerse del campo de la tabla o plantilla (`eq.tipo` o campos dinámicos). Si no está definido, se usa el nombre del sistema (`"Hidrante"`) en vez del genérico `"Equipo"`.
+  - Todos los equipos del mismo tipo deben agruparse sumando exactamente su número total de unidades revisadas en una sola línea limpia.
+
+---
+
+## 25. Blindaje Inviolable del Módulo de Pruebas Técnicas y Ensayos Hidráulicos (PruebasTecnicas.tsx)
+- **Persistencia en Firestore y Colección `pruebas_tecnicas`**:
+  - Queda estrictamente prohibido alterar o eliminar la colección `pruebas_tecnicas` y su sincronización en tiempo real vía `onSnapshot`.
+- **Estructura Unificada de Datos Generales del Ensayo**:
+  - Los campos de Empresa Mantenedora, Equipo de Medición, Equipo a Medir, Cliente, Centro, Fecha/Hora y Técnico deben mantenerse permanentemente unificados en el bloque superior de Datos Generales sin dependencias de plantillas dinámicas externas.
+- **Cálculo Automático de Caudal Simultáneo y Doble Ensayo**:
+  - En la Prueba 2 (dos equipos simultáneos), si el técnico introduce el caudal medido en cada equipo por separado ($Q_1$ y $Q_2$), el sistema DEBE calcular automáticamente la suma combinada real de la red: $Q_{\text{total}} = Q_1 + Q_2$.
+  - La evaluación de conformidad debe validar tanto presiones mínimas de servicio ($P_1, P_2 \ge P_{\text{mín}}$) como caudales individuales y simultáneos ($Q_1 \ge Q_{\text{mín1}}$, $Q_{\text{total}} \ge Q_{\text{mín2}}$).
+- **Desplegable Buscador de Ensayos Anteriores**:
+  - En la tarjeta principal de la vista de menú (`selectedView === 'menu'`) y en el bloque superior del formulario, DEBE mantenerse de forma permanente el desplegable buscador interactivo para cargar en 1 solo clic cualquier ensayo previo almacenado en Firebase con su Curva $P-Q$.
+- **Generación y Descarga de Informe PDF Oficial**:
+  - El botón «Descargar Informe PDF» debe generar el documento institucional con cabecera técnica, tablas de mediciones, análisis de variación, observaciones en azul y bloque de firmas.
+
+---
+
+## 26. Blindaje Inviolable del Informe Técnico de Ensayos Hidráulicos y Personalización Dinámica (PruebasTecnicas.tsx)
+- **Aislamiento Estricto de Firmas y Sellos por Empresa**:
+  - Cada empresa mantenedora (ABANFOC S.L., ARC Seguretat, Segupro, Abanfoc en colaboración con Segupro, Sertec Espacio, etc.) utiliza **exclusivamente su propio sello y firma** (`selloUrl`, `ingenieroFirmaUrl`) registrado en su ficha de Firebase.
+  - Queda ESTRICTAMENTE PROHIBIDO prestar sellos o firmas de una empresa a otra mediante fallbacks cruzados. Si una empresa no tiene sello asignado, no debe mostrar el de otra empresa.
+- **Cabecera Institucional Limpia en PDF**:
+  - La cabecera superior en PDF debe incluir únicamente el título técnico, la referencia normativa y `Empresa mantenedora: [Nombre Empresa]`, sin logotipos, versiones de software ni fechas de emisión redundantes.
+- **Bloque de Firmas y Sello Oficial**:
+  - El sello y firma oficial de la empresa debe situarse centrado en la hoja (`x = 105 mm`, `y = currentY - 1`) acompañando al bloque de texto del técnico a la izquierda.
+- **Posicionamiento Reglamentario de Etiquetas en Gráfico P-Q (Pantalla y PDF)**:
+  - La etiqueta de la **Presión Estática** ($P_0, Q=0$) DEBE situarse permanentemente **por encima** del punto azul.
+  - Las etiquetas de la **Prueba 1** (1 equipo) y **Prueba 2** (2 equipos simultáneos) DEBEN situarse permanentemente **por debajo** de los puntos correspondientes y de la curva para garantizar máxima legibilidad y no solaparse con las líneas superiores de referencia de la norma.
+- **Leyenda del Gráfico en Dos Líneas (Pantalla y PDF)**:
+  - Punto Azul: `Presión` / `Estática`.
+  - Punto Verde: `Prueba 1` / `(1º equipo)`.
+  - Punto Morado: `Prueba 2` / `(2º equipo)`.
+  - Línea Roja: `Ref.` / `Norma`.
+- **Estructuración en Dos Líneas de Conclusiones y Dictamen**:
+  - Línea 1 destacada: `Prueba no conforme.` (o `PRUEBA NO CONFORME.` en PDF) / `Prueba conforme.`.
+  - Línea 2 descriptiva: `No se han alcanzado los requisitos de presión y caudal exigidos por la [norma].` / `La instalación cumple satisfactoriamente con los requisitos mínimos de presión y caudal exigidos por la [norma].`.
+
+---
+
+## 27. Blindaje Inviolable de Valores Normativos en Ensayos Hidráulicos (PruebasTecnicas.tsx)
+- **Valores Mínimos y Presiones Reglamentarias**:
+  - **BIE 25 mm**: $P_{\text{mín}} \ge 3.5$ bar, $Q_{\text{mín 1 eq}} \ge 100$ LPM, $Q_{\text{mín 2 eq}} \ge 200$ LPM, $P_{\text{máx estática}} \le 9.0$ bar.
+  - **BIE 45 mm**: $P_{\text{mín}} \ge 3.5$ bar, $Q_{\text{mín 1 eq}} \ge 200$ LPM, $Q_{\text{mín 2 eq}} \ge 400$ LPM, $P_{\text{máx estática}} \le 9.0$ bar.
+  - **Hidrantes 70 mm**: $P_{\text{mín}} \ge 7.0$ bar, $Q_{\text{mín 1 boca}} \ge 500$ LPM, $Q_{\text{mín 2 bocas}} \ge 1000$ LPM.
+  - **Hidrantes 100 mm**: $P_{\text{mín}} \ge 7.0$ bar, $Q_{\text{mín 1 boca}} \ge 1000$ LPM, $Q_{\text{mín 2 bocas}} \ge 2000$ LPM.
+- **Normativa y Títulos**:
+  - Referencia normativa obligatoria: `UNE 23500:2021 y Real Decreto 513/2017 de 22 de mayo` en cabecera y conclusiones.
+  - Campo *Normativa aplicada* en la tabla de datos técnicos del cliente: `UNE 23500:2021 y R.I.P.CI.`.
+  - Queda prohibido añadir subtítulos redundantes bajo `CURVA CARACTERÍSTICA DE PRESIÓN Y CAUDAL (P - Q)`.
+- **Formato de Fechas y Pie de Página en PDF**:
+  - Todas las fechas de ensayo DEBEN mostrarse en formato `DD/MM/YYYY`.
+  - El pie de página del informe técnico debe ser únicamente `Página X de Y` sin menciones a software ni leyendas secundarias.
+
+---
+
+## 28. Blindaje Inviolable de Edición, Membrete Oficial y Firmas en Certificados (Certificados.tsx y pdfGenerator.ts)
+- **Edición Completa de Certificados Existentes**:
+  - En la tabla de certificados de escritorio, en las tarjetas de la app móvil y en el modal de detalle (`DetailModal`), DEBE mantenerse accesible el botón de editar certificado (`Pencil`).
+  - El modal de edición debe precargar todos los campos del certificado emitido y permitir actualizar su estado, notas, fecha, técnico y firmas en Firestore (`addCertificado`).
+- **Membrete y Logotipo Exclusivos de ABANFOC S.L.**:
+  - En la función `generarCertificadoPDF`, los datos de la empresa mantenedora (`empData`) y el logotipo DEBEN forzarse siempre e incondicionalmente a **ABANFOC S.L.** (Razón Social: *ABANFOC S.L.*, CIF: *B16794679*, RASIC: *106001687*, dirección y logo `/logo.png`), sin importar la empresa asignada al cliente o centro.
+- **Casilla de Firma del Técnico Mantenedor**:
+  - En el modal de creación y edición de certificados (`src/Certificados.tsx`), DEBE mantenerse el lienzo digital táctil e interactivo (*Signature Canvas*) para registrar y almacenar la firma del técnico mantenedor (`firmaTecnico`) en Firestore, con botón de *"Limpiar firma"*.
+- **Distribución de 2 Firmas Oficiales en el PDF**:
+  - En el documento PDF de Certificado (`generarCertificadoPDF`), DEBEN figurar exclusivamente **2 casillas simétricas de firma**:
+    1. **El Técnico Titulado (Ingeniero Colegiado)** a la izquierda (`box1X = 22`).
+    2. **Técnico Mantenedor (con Nº de Habilitación)** a la derecha (`box2X = 113`).
+  - Queda suprimida y prohibida la inclusión de la casilla de conformidad del cliente en certificados oficiales.
+
+---
+
+## 29. Blindaje Inviolable del Sistema de Papelera de Reciclaje y Retención de 100 Días (Papelera.tsx, Sidebar.tsx y firebase.tsx)
+- **Acceso Permanente en Menú Lateral (`Sidebar.tsx`)**:
+  - En la barra lateral (`Sidebar.tsx`), la opción **«Papelera»** (`Trash2`) DEBE situarse incondicionalmente abajo del todo en la navegación (`section: 'configuracion'`), separada por una línea divisoria sutil (`border-t border-zinc-900/80`).
+  - Debe ser accesible para roles administrativos y de edición (`['super-administrador', 'administrador', 'editor']`).
+- **Persistencia en Firestore y Colección `papelera`**:
+  - Al eliminar cualquier archivo, ensayo o documento en Pruebas Técnicas (`pruebas_tecnicas`), Certificados (`certificados`), Albaranes (`albaranes`), Partes de Trabajo (`partes`) o Presupuestos (`presupuestos`), el sistema DEBE llamar a `moverAPapelera(...)` antes del borrado de la colección original.
+  - Queda ESTRICTAMENTE PROHIBIDO el borrado directo e irreversible sin pasar previamente por la papelera.
+- **Sanitización Obligatoria de Datos para Firestore (`cleanUndefinedForFirestore`)**:
+  - La función `moverAPapelera` DEBE sanitizar recursivamente cualquier valor `undefined` convirtiéndolo a `null` o suprimiéndolo para evitar excepciones `Unsupported field value: undefined` en Firebase.
+- **Retención y Purga Automática de 100 Días**:
+  - Cada elemento en papelera debe calcular `fechaExpiracion` a 100 días vista (`fechaEliminacion + 100 días`).
+  - Al sincronizarse la papelera (`subscribePapelera`), cualquier documento con más de 100 días de antigüedad debe ser purgado automáticamente de Firestore en segundo plano.
+- **Restauración Íntegra a Colección Original (`restaurarElementoPapelera`)**:
+  - Al pulsar «Restaurar», el sistema DEBE reinsertar el documento original con todos sus datos (`setDoc`) en su colección de origen y eliminarlo de la papelera, reapareciendo de inmediato en su módulo.
+
 
 

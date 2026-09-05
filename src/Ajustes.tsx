@@ -423,7 +423,7 @@ export default function Ajustes() {
   return (
     <div className="min-h-screen bg-[#F8FAFC] px-8 py-6">
       {/* Header */}
-      <div className="mb-6">
+      <div className="mb-6 text-center sm:text-left flex flex-col items-center sm:items-start">
         {view !== 'menu' ? (
           <button 
             onClick={() => setView('menu')} 

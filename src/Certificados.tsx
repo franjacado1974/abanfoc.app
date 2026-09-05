@@ -1,15 +1,24 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   FileCheck, Download, Search, CheckCircle2, CircleX, Clock, Trash2, Eye, 
   Building2, MapPin, User, CalendarDays, AlertTriangle, ArrowLeft, Plus, 
-  Wrench, PlayCircle, FileText, X, Layers
+  Wrench, PlayCircle, FileText, X, Layers, Pencil
 } from 'lucide-react';
 import ConfirmationModal from './ConfirmationModal';
 import { generarCertificadoPDF, generarCertificadoPDFView } from './pdfGenerator';
-import { db, subscribeCertificados, deleteCertificado, addCertificado } from './firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { subscribeCertificados, deleteCertificado, addCertificado } from './firebase';
 import DetailModal from './components/DetailModal';
+
+const isCanvasBlank = (canvas: HTMLCanvasElement | null): boolean => {
+  if (!canvas) return true;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return true;
+  const pixelBuffer = new Uint32Array(
+    ctx.getImageData(0, 0, canvas.width, canvas.height).data.buffer
+  );
+  return !pixelBuffer.some(color => color !== 0);
+};
 
 export const CATEGORIAS_CERTIFICADO = [
   {
@@ -93,8 +102,11 @@ export default function Certificados() {
   const [selectedCert, setSelectedCert] = useState<any | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
 
-  // Modal de creación manual
+  // Modal de creación y edición manual
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [editingCert, setEditingCert] = useState<any | null>(null);
+  const canvasTecnicoRef = useRef<HTMLCanvasElement>(null);
+  const [firmaTecnicoData, setFirmaTecnicoData] = useState<string>('');
   const [formManualCert, setFormManualCert] = useState({
     clienteId: '',
     centroId: '',
@@ -107,6 +119,80 @@ export default function Certificados() {
     textoCertificado: '',
     observaciones: ''
   });
+
+  const initCanvasDraw = (canvas: HTMLCanvasElement | null) => {
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    let drawing = false;
+
+    const getPos = (e: MouseEvent | TouchEvent) => {
+      const rect = canvas.getBoundingClientRect();
+      const clientX = 'touches' in e ? e.touches[0].clientX : (e as MouseEvent).clientX;
+      const clientY = 'touches' in e ? e.touches[0].clientY : (e as MouseEvent).clientY;
+      return {
+        x: (clientX - rect.left) * (canvas.width / rect.width),
+        y: (clientY - rect.top) * (canvas.height / rect.height)
+      };
+    };
+
+    const startDraw = (e: MouseEvent | TouchEvent) => {
+      drawing = true;
+      const pos = getPos(e);
+      ctx.beginPath();
+      ctx.moveTo(pos.x, pos.y);
+    };
+
+    const moveDraw = (e: MouseEvent | TouchEvent) => {
+      if (!drawing) return;
+      if (e.cancelable) e.preventDefault();
+      const pos = getPos(e);
+      ctx.lineTo(pos.x, pos.y);
+      ctx.stroke();
+    };
+
+    const endDraw = () => {
+      drawing = false;
+    };
+
+    canvas.onmousedown = startDraw;
+    canvas.onmousemove = moveDraw;
+    canvas.onmouseup = endDraw;
+    canvas.onmouseleave = endDraw;
+
+    canvas.ontouchstart = startDraw;
+    canvas.ontouchmove = moveDraw;
+    canvas.ontouchend = endDraw;
+  };
+
+  useEffect(() => {
+    if (isCreateModalOpen) {
+      const timer = setTimeout(() => {
+        if (canvasTecnicoRef.current) {
+          initCanvasDraw(canvasTecnicoRef.current);
+          const ctx = canvasTecnicoRef.current.getContext('2d');
+          if (ctx) {
+            ctx.clearRect(0, 0, canvasTecnicoRef.current.width, canvasTecnicoRef.current.height);
+            if (firmaTecnicoData) {
+              const img = new Image();
+              img.crossOrigin = 'anonymous';
+              img.onload = () => {
+                ctx.drawImage(img, 0, 0, canvasTecnicoRef.current!.width, canvasTecnicoRef.current!.height);
+              };
+              img.src = firmaTecnicoData;
+            }
+          }
+        }
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [isCreateModalOpen, firmaTecnicoData]);
 
   useEffect(() => {
     const unsubCertificados = subscribeCertificados((firebaseCertificados) => {
@@ -139,6 +225,8 @@ export default function Certificados() {
   };
 
   const handleOpenCreateModal = (tipoId?: string) => {
+    setEditingCert(null);
+    setFirmaTecnicoData('');
     const catId = tipoId || 'revision';
     const cat = CATEGORIAS_CERTIFICADO.find(c => c.id === catId) || CATEGORIAS_CERTIFICADO[0];
     const year = new Date().getFullYear();
@@ -156,6 +244,24 @@ export default function Certificados() {
       estado: 'Favorable',
       textoCertificado: cat.plantillaTexto,
       observaciones: ''
+    });
+    setIsCreateModalOpen(true);
+  };
+
+  const handleOpenEditModal = (cert: any) => {
+    setEditingCert(cert);
+    setFirmaTecnicoData(cert.firmaTecnico || '');
+    setFormManualCert({
+      clienteId: cert.clienteId || '',
+      centroId: cert.centroId || '',
+      tecnicoId: cert.tecnicoId || '',
+      tipoCertificado: cert.tipoCertificado || 'revision',
+      tituloCertificado: cert.tituloCertificado || '',
+      numeroMantenimiento: cert.numeroMantenimiento || '',
+      fechaCreacion: cert.fechaCreacion ? cert.fechaCreacion.split('T')[0] : new Date().toISOString().split('T')[0],
+      estado: cert.estado || 'Favorable',
+      textoCertificado: cert.textoCertificado || '',
+      observaciones: cert.observaciones || ''
     });
     setIsCreateModalOpen(true);
   };
@@ -180,7 +286,26 @@ export default function Certificados() {
 
     const catInfo = CATEGORIAS_CERTIFICADO.find(c => c.id === formManualCert.tipoCertificado);
 
-    const newCert: any = {
+    // Capturar firma del técnico del canvas
+    const rawFirma = canvasTecnicoRef.current ? canvasTecnicoRef.current.toDataURL('image/png') : '';
+    const firmaFinal = (canvasTecnicoRef.current && !isCanvasBlank(canvasTecnicoRef.current)) ? rawFirma : firmaTecnicoData;
+
+    const certToSave: any = editingCert ? {
+      ...editingCert,
+      clienteId: formManualCert.clienteId,
+      centroId: formManualCert.centroId,
+      empresaId: empId || editingCert.empresaId || '',
+      numeroMantenimiento: formManualCert.numeroMantenimiento.trim() || editingCert.numeroMantenimiento,
+      fechaCreacion: formManualCert.fechaCreacion ? new Date(formManualCert.fechaCreacion).toISOString() : editingCert.fechaCreacion,
+      estado: formManualCert.estado,
+      tecnicoId: formManualCert.tecnicoId,
+      tipoCertificado: formManualCert.tipoCertificado,
+      tituloCertificado: formManualCert.tipoCertificado === 'generico' ? (formManualCert.tituloCertificado || 'CERTIFICADO OFICIAL') : (catInfo?.nombre || 'CERTIFICADO'),
+      textoCertificado: formManualCert.textoCertificado,
+      observaciones: formManualCert.observaciones,
+      firmaTecnico: firmaFinal,
+      updatedAt: new Date().toISOString()
+    } : {
       id: `cert-man-${Date.now()}`,
       clienteId: formManualCert.clienteId,
       centroId: formManualCert.centroId,
@@ -194,14 +319,17 @@ export default function Certificados() {
       tituloCertificado: formManualCert.tipoCertificado === 'generico' ? (formManualCert.tituloCertificado || 'CERTIFICADO OFICIAL') : (catInfo?.nombre || 'CERTIFICADO'),
       textoCertificado: formManualCert.textoCertificado,
       observaciones: formManualCert.observaciones,
+      firmaTecnico: firmaFinal,
       esManual: true
     };
 
     try {
-      await addCertificado(newCert);
+      await addCertificado(certToSave);
       setIsCreateModalOpen(false);
+      setEditingCert(null);
+      setFirmaTecnicoData('');
     } catch (err) {
-      console.error("Error guardando certificado manual:", err);
+      console.error("Error guardando certificado:", err);
       alert("Error al guardar el certificado en la base de datos.");
     }
   };
@@ -255,14 +383,8 @@ export default function Certificados() {
       const albaranData = albaranes.find((a: any) => a.parteId === cert.parteId);
       
       const empresas = JSON.parse(localStorage.getItem('firecheck_db_empresas') || '[]');
-      const empId = cert.empresaId || centro?.empresaId;
-      let empresaSeleccionada = empresas.find((e: any) => e._docId === empId || e.id === empId || (e.nombre && typeof e.nombre === 'string' && e.nombre.trim().toLowerCase() === empId?.trim().toLowerCase()));
-      if (!empresaSeleccionada && empId) {
-          try {
-              const docSnap = await getDoc(doc(db, 'empresa', empId));
-              if (docSnap.exists()) empresaSeleccionada = { _docId: docSnap.id, ...docSnap.data() };
-          } catch(e){}
-      }
+      const abanfocEmp = empresas.find((e: any) => e.nombre && typeof e.nombre === 'string' && e.nombre.toUpperCase().includes('ABANFOC')) || empresas[0];
+      const empresaSeleccionada = abanfocEmp || { nombre: 'ABANFOC S.L.', cif: 'B16794679', rasic: '106001687', logoUrl: '/logo.png' };
 
       const nombreTecnico = tecnico ? `${tecnico.nombre} ${tecnico.apellidos}` : 'No asignado';
       await generarCertificadoPDF(
@@ -273,9 +395,9 @@ export default function Certificados() {
         cert.estado, 
         sistemasDelCentro, 
         equiposDelCentro,
-        albaranData?.firmaCliente,
-        albaranData?.firmaTecnico,
-        albaranData?.nombreFirmante,
+        undefined,
+        cert.firmaTecnico || albaranData?.firmaTecnico,
+        undefined,
         false,
         empresaSeleccionada
       );
@@ -297,14 +419,8 @@ export default function Certificados() {
       const albaranData = albaranes.find((a: any) => a.parteId === cert.parteId);
       
       const empresas = JSON.parse(localStorage.getItem('firecheck_db_empresas') || '[]');
-      const empId = cert.empresaId || centro?.empresaId;
-      let empresaSeleccionada = empresas.find((e: any) => e._docId === empId || e.id === empId || (e.nombre && typeof e.nombre === 'string' && e.nombre.trim().toLowerCase() === empId?.trim().toLowerCase()));
-      if (!empresaSeleccionada && empId) {
-          try {
-              const docSnap = await getDoc(doc(db, 'empresa', empId));
-              if (docSnap.exists()) empresaSeleccionada = { _docId: docSnap.id, ...docSnap.data() };
-          } catch(e){}
-      }
+      const abanfocEmp = empresas.find((e: any) => e.nombre && typeof e.nombre === 'string' && e.nombre.toUpperCase().includes('ABANFOC')) || empresas[0];
+      const empresaSeleccionada = abanfocEmp || { nombre: 'ABANFOC S.L.', cif: 'B16794679', rasic: '106001687', logoUrl: '/logo.png' };
       
       const nombreTecnico = tecnico ? `${tecnico.nombre} ${tecnico.apellidos}` : 'No asignado';
       
@@ -316,9 +432,9 @@ export default function Certificados() {
         cert.estado, 
         sistemasDelCentro, 
         equiposDelCentro,
-        albaranData?.firmaCliente,
-        albaranData?.firmaTecnico,
-        albaranData?.nombreFirmante,
+        undefined,
+        cert.firmaTecnico || albaranData?.firmaTecnico,
+        undefined,
         false,
         empresaSeleccionada
       );
@@ -338,14 +454,14 @@ export default function Certificados() {
       <div className="min-h-screen bg-[#F8FAFC] px-4 md:px-8 py-6">
         {/* Header */}
         <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
+          <div className="text-center md:text-left flex flex-col items-center md:items-start">
             <button 
               onClick={() => navigate('/')} 
               className="flex items-center gap-1.5 text-xs font-semibold text-zinc-500 hover:text-zinc-900 mb-3 transition-colors cursor-pointer"
             >
               <ArrowLeft className="w-3.5 h-3.5" /> Volver al panel
             </button>
-            <h1 className="text-2xl font-black text-zinc-950 tracking-tight flex items-center gap-2">
+            <h1 className="text-2xl font-black text-zinc-950 tracking-tight flex items-center justify-center md:justify-start gap-2">
               Certificados Oficiales
             </h1>
             <p className="text-xs font-semibold text-zinc-500 mt-1">Gestión de certificados por categoría y emisión de certificados manuales.</p>
@@ -489,16 +605,16 @@ export default function Certificados() {
         ) : (
           <div className="bg-white rounded-3xl border border-zinc-200 shadow-sm overflow-hidden overflow-x-auto">
             {/* Desktop header */}
-            <div className="hidden md:flex items-center bg-[#f9f7f4] border-b border-zinc-200/80 px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-zinc-500 min-w-[750px]">
+            <div className="hidden md:flex items-center bg-[#f9f7f4] border-b border-zinc-200/80 px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-zinc-500 min-w-[780px]">
               <div className="w-36 shrink-0">Nº Certificado</div>
               <div className="w-36 shrink-0">Tipo / Categoría</div>
               <div className="w-28 shrink-0">Fecha</div>
               <div className="flex-1 min-w-0">Cliente / Centro</div>
               <div className="w-28 shrink-0">Estado</div>
-              <div className="w-28 shrink-0 text-right">Acciones</div>
+              <div className="w-36 shrink-0 text-right">Acciones</div>
             </div>
 
-            <div className="divide-y divide-zinc-100 min-w-[750px] md:min-w-0">
+            <div className="divide-y divide-zinc-100 min-w-[780px] md:min-w-0">
               {sortedAndFilteredCertificados.map((cert) => {
                 const cliente = clientes.find(c => c.id === cert.clienteId);
                 const centro = centros.find(c => c._docId === cert.centroId || c.id === cert.centroId);
@@ -517,9 +633,22 @@ export default function Certificados() {
                         <span className="text-[11px] font-mono font-bold text-zinc-700 bg-zinc-100 px-2 py-0.5 rounded-lg">{cert.numeroMantenimiento}</span>
                         {cert.esManual && <span className="text-[9px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded uppercase">Manual</span>}
                       </div>
-                      <button onClick={(e) => { e.stopPropagation(); handleViewDetail(cert); }} className="p-1 text-zinc-400 hover:text-red-600 rounded-xl">
-                        <Eye className="w-4 h-4" />
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); handleOpenEditModal(cert); }} 
+                          className="p-1 text-zinc-400 hover:text-blue-600 rounded-xl"
+                          title="Editar Certificado"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); handleViewDetail(cert); }} 
+                          className="p-1 text-zinc-400 hover:text-black rounded-xl"
+                          title="Ver detalle"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
                     <div className="flex md:hidden items-center gap-2 mb-1">
                       <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold ${catInfo.colorBadge}`}>
@@ -544,6 +673,13 @@ export default function Certificados() {
                         {isPositivo ? 'Favorable' : 'Anomalías / Obs'}
                       </span>
                       <div className="flex gap-1">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleOpenEditModal(cert); }}
+                          className="p-1.5 text-zinc-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
+                          title="Editar Certificado"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
                         <button
                           onClick={(e) => { e.stopPropagation(); handleGenerarPDF(cert); }}
                           className="p-1.5 text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100 rounded-xl transition-all"
@@ -601,24 +737,31 @@ export default function Certificados() {
                           {isPositivo ? 'Favorable' : 'Observaciones'}
                         </span>
                       </div>
-                      <div className="w-28 shrink-0 flex items-center justify-end gap-1">
+                      <div className="w-36 shrink-0 flex items-center justify-end gap-1">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleOpenEditModal(cert); }}
+                          className="p-1.5 text-zinc-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-colors cursor-pointer"
+                          title="Editar Certificado"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
                         <button
                           onClick={(e) => { e.stopPropagation(); handleViewDetail(cert); }}
-                          className="p-1.5 text-zinc-400 hover:text-black hover:bg-zinc-100 rounded-xl transition-colors"
+                          className="p-1.5 text-zinc-400 hover:text-black hover:bg-zinc-100 rounded-xl transition-colors cursor-pointer"
                           title="Ver detalle"
                         >
                           <Eye className="w-4 h-4" />
                         </button>
                         <button
                           onClick={(e) => { e.stopPropagation(); handleGenerarPDF(cert); }}
-                          className="p-1.5 text-zinc-400 hover:text-black hover:bg-zinc-100 rounded-xl transition-all"
+                          className="p-1.5 text-zinc-400 hover:text-black hover:bg-zinc-100 rounded-xl transition-all cursor-pointer"
                           title="Descargar PDF"
                         >
                           <Download className="w-4 h-4" />
                         </button>
                         <button
                           onClick={(e) => { e.stopPropagation(); handleDeleteCertificado(cert.id); }}
-                          className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors"
+                          className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors cursor-pointer"
                           title="Eliminar"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -640,12 +783,15 @@ export default function Certificados() {
             <div className="px-6 py-4 border-b border-zinc-100 flex items-center justify-between bg-zinc-50/80">
               <div>
                 <h2 className="text-lg font-bold text-zinc-900 flex items-center gap-2">
-                  <Plus className="w-5 h-5 text-black" /> Crear Certificado Manual
+                  {editingCert ? <Pencil className="w-5 h-5 text-blue-600" /> : <Plus className="w-5 h-5 text-black" />}
+                  {editingCert ? 'Editar Certificado' : 'Crear Certificado Manual'}
                 </h2>
-                <p className="text-xs text-zinc-500">Emitir certificado oficial de forma manual.</p>
+                <p className="text-xs text-zinc-500">
+                  {editingCert ? 'Modificar datos del certificado oficial registrado.' : 'Emitir certificado oficial de forma manual.'}
+                </p>
               </div>
               <button 
-                onClick={() => setIsCreateModalOpen(false)} 
+                onClick={() => { setIsCreateModalOpen(false); setEditingCert(null); }} 
                 className="p-2 text-zinc-400 hover:text-black hover:bg-white rounded-xl transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
@@ -794,11 +940,45 @@ export default function Certificados() {
                 />
               </div>
 
+              {/* Firma del Técnico Mantenedor */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-bold text-zinc-700 uppercase flex items-center gap-1.5">
+                    <Pencil className="w-3.5 h-3.5 text-black" />
+                    Firma del Técnico Mantenedor
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (canvasTecnicoRef.current) {
+                        const ctx = canvasTecnicoRef.current.getContext('2d');
+                        ctx?.clearRect(0, 0, canvasTecnicoRef.current.width, canvasTecnicoRef.current.height);
+                      }
+                      setFirmaTecnicoData('');
+                    }}
+                    className="text-[11px] font-bold text-red-600 hover:text-red-700 hover:underline cursor-pointer"
+                  >
+                    Limpiar firma
+                  </button>
+                </div>
+                <div className="bg-zinc-50 border border-zinc-200 rounded-2xl p-2.5">
+                  <canvas
+                    ref={canvasTecnicoRef}
+                    width={600}
+                    height={160}
+                    className="w-full h-32 bg-white border border-zinc-300/80 rounded-xl touch-none shadow-inner cursor-crosshair"
+                  />
+                  <p className="text-[10px] text-zinc-400 text-center mt-1.5">
+                    Dibuja la firma del técnico mantenedor directamente sobre el recuadro blanco
+                  </p>
+                </div>
+              </div>
+
               <div className="pt-3 border-t border-zinc-100 flex items-center justify-end gap-3">
                 <button
                   type="button"
-                  onClick={() => setIsCreateModalOpen(false)}
-                  className="px-4 py-2.5 rounded-xl font-bold text-xs text-zinc-500 hover:bg-zinc-100 transition-colors"
+                  onClick={() => { setIsCreateModalOpen(false); setEditingCert(null); }}
+                  className="px-4 py-2.5 rounded-xl font-bold text-xs text-zinc-500 hover:bg-zinc-100 transition-colors cursor-pointer"
                 >
                   Cancelar
                 </button>
@@ -806,7 +986,7 @@ export default function Certificados() {
                   type="submit"
                   className="bg-black text-white px-6 py-2.5 rounded-xl text-xs font-bold hover:bg-zinc-800 transition-all shadow-md active:scale-95 cursor-pointer flex items-center gap-2"
                 >
-                  <FileCheck className="w-4 h-4" /> Guardar y Emitir Certificado
+                  <FileCheck className="w-4 h-4" /> {editingCert ? 'Guardar Cambios' : 'Guardar y Emitir Certificado'}
                 </button>
               </div>
             </form>
@@ -957,17 +1137,33 @@ export default function Certificados() {
                 </div>
               )}
 
+              {/* Firma del Técnico Mantenedor */}
+              {selectedCert.firmaTecnico && (
+                <div className="pt-4 border-t border-zinc-200">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-500 mb-2">Firma del Técnico Mantenedor</h4>
+                  <div className="bg-zinc-50 border border-zinc-200 rounded-2xl p-3 inline-block">
+                    <img src={selectedCert.firmaTecnico} alt="Firma del Técnico" className="h-20 object-contain bg-white rounded-xl border border-zinc-200 px-4 py-1" />
+                  </div>
+                </div>
+              )}
+
               {/* Actions */}
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-zinc-200">
                 <button
+                  onClick={() => { const c = selectedCert; setIsDetailOpen(false); handleOpenEditModal(c); }}
+                  className="flex items-center gap-1.5 bg-blue-50 text-blue-700 border border-blue-200 px-4 py-2 rounded-xl text-xs font-bold hover:bg-blue-100 transition-colors cursor-pointer"
+                >
+                  <Pencil className="w-4 h-4" /> Editar Certificado
+                </button>
+                <button
                   onClick={() => { setIsDetailOpen(false); handleViewPDF(selectedCert); }}
-                  className="flex items-center gap-1.5 bg-zinc-100 text-zinc-800 border border-zinc-300 px-4 py-2 rounded-xl text-xs font-bold hover:bg-zinc-200 transition-colors"
+                  className="flex items-center gap-1.5 bg-zinc-100 text-zinc-800 border border-zinc-300 px-4 py-2 rounded-xl text-xs font-bold hover:bg-zinc-200 transition-colors cursor-pointer"
                 >
                   <Eye className="w-4 h-4" /> Ver PDF
                 </button>
                 <button
                   onClick={() => { setIsDetailOpen(false); handleGenerarPDF(selectedCert); }}
-                  className="flex items-center gap-1.5 bg-black text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-zinc-800 transition-colors"
+                  className="flex items-center gap-1.5 bg-black text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-zinc-800 transition-colors cursor-pointer"
                 >
                   <Download className="w-4 h-4" /> Descargar PDF
                 </button>

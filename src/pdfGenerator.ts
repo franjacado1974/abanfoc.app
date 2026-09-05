@@ -101,16 +101,16 @@ export function normalizarDatosEmpresa(empresaInput?: any, empresaIdFallback?: s
   const isDefaultAbanfoc = !nombre || nombre.toUpperCase().includes('ABANFOC');
 
   const cif = getField(['cif', 'CIF', 'Cif', 'nif', 'NIF', 'Nif', 'cif_nif', 'cifNif'], isDefaultAbanfoc ? 'B16794679' : '');
-  const rasic = getField(['rasic', 'RASIC', 'Rasic', 'num_rasic', 'numRasic', 'rasicNum', 'registro', 'registroIndustrial', 'registro_industrial', 'n_rasic', 'nRasic', 'numero_rasic', 'numeroRasic'], isDefaultAbanfoc ? '106001687' : '');
-  const direccion = getField(['direccion', 'DIRECCION', 'Direccion', 'dir', 'domicilio', 'calle', 'direccion_empresa'], isDefaultAbanfoc ? 'C/ America 16B Ático' : '');
-  const poblacion = getField(['poblacion', 'POBLACION', 'Poblacion', 'localidad', 'LOCALIDAD', 'Localidad', 'ciudad', 'municipio'], isDefaultAbanfoc ? 'Sta. Coloma de Gramanet' : '');
+  const rasic = getField(['rasic', 'RASIC', 'Rasic', 'num_rasic', 'numRasic', 'rasicNum', 'registro', 'registroIndustrial', 'registro_industrial', 'n_rasic', 'nRasic', 'numero_rasic', 'numeroRasic'], '');
+  const direccion = getField(['direccion', 'DIRECCION', 'Direccion', 'dir', 'domicilio', 'calle', 'direccion_empresa'], isDefaultAbanfoc ? 'C/ America 16 B' : '');
+  const poblacion = getField(['poblacion', 'POBLACION', 'Poblacion', 'localidad', 'LOCALIDAD', 'Localidad', 'ciudad', 'municipio'], isDefaultAbanfoc ? 'Sta. Coloma Gramanet' : '');
   const provincia = getField(['provincia', 'PROVINCIA', 'Provincia'], isDefaultAbanfoc ? 'Barcelona' : '');
   const cp = getField(['cp', 'CP', 'codigoPostal', 'codigo_postal', 'cod_postal', 'c_p', 'codPostal'], isDefaultAbanfoc ? '08921' : '');
-  const telefono = getField(['telefono', 'TELEFONO', 'Telefono', 'tel', 'TEL', 'tlf', 'TLF', 'phone', 'tel1', 'telefono1', 'telf', 'movil', 'movil1', 'contacto_telefono', 'telefonoContacto', 'numeroTelefono'], isDefaultAbanfoc ? '651 019 229' : '');
-  const email = getField(['correo', 'CORREO', 'Correo', 'email', 'EMAIL', 'Email', 'mail', 'correo_electronico', 'correoElectronico', 'emailContacto'], isDefaultAbanfoc ? 'info@abanfoc.com' : '');
-  const web = getField(['web', 'WEB', 'Web', 'pagina_web', 'url', 'sitio_web', 'webEmpresa'], isDefaultAbanfoc ? 'www.abanfoc.com' : '');
+  const telefono = getField(['telefono', 'TELEFONO', 'Telefono', 'tel', 'TEL', 'tlf', 'TLF', 'phone', 'tel1', 'telefono1', 'telf', 'movil', 'movil1', 'contacto_telefono', 'telefonoContacto', 'numeroTelefono'], isDefaultAbanfoc ? '930108917' : '');
+  const email = getField(['correo', 'CORREO', 'Correo', 'email', 'EMAIL', 'Email', 'mail', 'correo_electronico', 'correoElectronico', 'emailContacto'], isDefaultAbanfoc ? 'abanfoc@abanfoc.es' : '');
+  const web = getField(['web', 'WEB', 'Web', 'pagina_web', 'url', 'sitio_web', 'webEmpresa'], isDefaultAbanfoc ? 'https://abanfoc.es' : '');
   
-  const fallbackLogo = typeof localStorage !== 'undefined' ? (localStorage.getItem('firecheck_db_logo') || '') : '';
+  const fallbackLogo = isDefaultAbanfoc ? 'https://firebasestorage.googleapis.com/v0/b/app-abanfoc-v1.firebasestorage.app/o/empresa%2Flogo_1780000624676?alt=media&token=b92c0cd7-a0bf-4a96-ab0c-2aa124e52683' : (typeof localStorage !== 'undefined' ? (localStorage.getItem('firecheck_db_logo') || '') : '');
   const logoUrl = getField(['logoUrl', 'logo', 'logo_url', 'logoBase64', 'imagenLogo', 'logo_empresa'], fallbackLogo);
   const selloUrl = getField(['selloUrl', 'sello', 'selloBase64', 'sello_url', 'imagenSello', 'sello_empresa']);
 
@@ -507,7 +507,7 @@ export const fetchImageToBase64 = async (urlOrBase64: string | null | undefined)
 
   if (urlOrBase64.startsWith('data:')) {
     rawResult = urlOrBase64;
-  } else if (urlOrBase64.startsWith('http')) {
+  } else if (urlOrBase64.startsWith('http') || urlOrBase64.startsWith('/') || urlOrBase64.startsWith('.')) {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 4000);
@@ -3977,17 +3977,42 @@ export const generarCertificadoPDF = async (
         const nsUpper = nombreSistema.toUpperCase();
         const esExtintor = nsUpper.includes('EXTINTOR');
         const esBie = nsUpper.includes('BIE') || nsUpper.includes('BOCA');
+        const esHidrante = nsUpper.includes('HIDRANTE') && !nsUpper.includes('CASETA') && !nsUpper.includes('DOTACION');
         if (esExtintor) {
           fallbackName = 'Extintor';
         } else if (esBie) {
           fallbackName = 'BIE';
-        } else if (nsUpper.includes('DETEC') || nsUpper.includes('HUMO')) {
+        } else if (esHidrante) {
+          fallbackName = 'Hidrante';
+        } else if (nsUpper.includes('DETEC') || nsUpper.includes('HUMO') || nsUpper.includes('ASPIRAC')) {
           fallbackName = 'Detector';
-        } else if (nsUpper.includes('PUERTA')) {
+        } else if (nsUpper.includes('PUERTA') || nsUpper.includes('RF')) {
           fallbackName = 'Puerta RF';
+        } else if (nsUpper.includes('CASETA') || nsUpper.includes('DOTACION')) {
+          fallbackName = 'Caseta de dotación';
+        } else if (nsUpper.includes('ROCIADOR') || nsUpper.includes('SPRINKLER')) {
+          fallbackName = 'Rociador';
+        } else if (nsUpper.includes('ALUMBRADO') || nsUpper.includes('EMERGENCIA')) {
+          fallbackName = 'Luminaria de emergencia';
         }
 
-        // Escanear todas las claves de eq para detectar agente o capacidad implícitos
+        // Buscar tipo en campos dinámicos si existe
+        let tipoFromItems = '';
+        const itemsDeSist = (sist?.items || sist?.checkItems || sist?.plantilla || []) as any[];
+        if (Array.isArray(itemsDeSist) && itemsDeSist.length > 0) {
+          const itemTipoDef = itemsDeSist.find(it => {
+            const lbl = (it.label || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            return lbl.includes('tipo') && it.tipoRespuesta !== 'check' && !lbl.includes('tipo de respuesta');
+          });
+          if (itemTipoDef && itemTipoDef.key && eq[itemTipoDef.key] !== undefined && eq[itemTipoDef.key] !== null) {
+            const v = String(eq[itemTipoDef.key]).trim();
+            if (v && v.toLowerCase() !== 'true' && v.toLowerCase() !== 'false') {
+              tipoFromItems = v;
+            }
+          }
+        }
+
+        // Escanear todas las claves de eq para detectar agente o capacidad implícitos (SOLO PARA EXTINTORES)
         let detectedAgente = '';
         let detectedCapacidad = '';
         let allValuesString = '';
@@ -4006,21 +4031,23 @@ export const generarCertificadoPDF = async (
           if (typeof val === 'string' && val.trim() !== '' && val.toLowerCase() !== 'true' && val.toLowerCase() !== 'false') {
             allValuesString += ' ' + val.trim();
             const valUpper = val.toUpperCase().trim();
-            if (!detectedAgente) {
-              if (valUpper.includes('POLVO ABC') || valUpper === 'POLVO') {
-                detectedAgente = 'Polvo ABC';
-              } else if (valUpper.includes('CO2')) {
-                detectedAgente = 'CO2';
-              } else if (valUpper.includes('AGUA')) {
-                detectedAgente = 'Agua';
-              } else if (valUpper.includes('ESPUMA')) {
-                detectedAgente = 'Espuma';
+            if (esExtintor) {
+              if (!detectedAgente) {
+                if (valUpper.includes('POLVO ABC') || valUpper === 'POLVO') {
+                  detectedAgente = 'Polvo ABC';
+                } else if (valUpper.includes('CO2')) {
+                  detectedAgente = 'CO2';
+                } else if (valUpper.includes('AGUA')) {
+                  detectedAgente = 'Agua';
+                } else if (valUpper.includes('ESPUMA')) {
+                  detectedAgente = 'Espuma';
+                }
               }
-            }
-            if (!detectedCapacidad) {
-              const match = valUpper.match(/(\d+\s*KG)/) || valUpper.match(/(\d+\s*L)/);
-              if (match) {
-                detectedCapacidad = match[1].toLowerCase().replace(/\s+/g, ' ');
+              if (!detectedCapacidad) {
+                const match = valUpper.match(/(\b\d+\s*KG\b|\b\d+\s*KILOS?\b)/) || valUpper.match(/(\b\d+\s*L\b|\b\d+\s*LITROS?\b)/);
+                if (match) {
+                  detectedCapacidad = match[1].toLowerCase().replace(/\s+/g, ' ');
+                }
               }
             }
           }
@@ -4028,7 +4055,7 @@ export const generarCertificadoPDF = async (
 
         const valName = (val: any) => typeof val === 'string' && val.trim() !== '' && val.toLowerCase() !== 'true' && val.toLowerCase() !== 'false' ? val.trim() : (typeof val === 'number' && !isNaN(val) ? String(val) : null);
         
-        let tipoVal = valName(eq.tipo) || valName(eq.agente) || detectedAgente || valName(eq.nombre) || valName(eq.clase) || valName(eq.marca) || fallbackName;
+        let tipoVal = valName(eq.tipo) || tipoFromItems || valName(eq.agente) || detectedAgente || valName(eq.nombre) || valName(eq.clase) || valName(eq.marca) || fallbackName;
 
         let cleanTipo = tipoVal.trim();
         if (esExtintor) {
@@ -4062,10 +4089,14 @@ export const generarCertificadoPDF = async (
             }
             cleanTipo = formatted;
           }
+        } else if (esHidrante) {
+          if (!cleanTipo || cleanTipo.toLowerCase() === 'equipo') {
+            cleanTipo = 'Hidrante';
+          }
         }
 
         let capVal = '';
-        if (!esBie) {
+        if (esExtintor) {
           if (eq.capacidad && typeof eq.capacidad === 'string' && eq.capacidad.toLowerCase() !== 'true' && eq.capacidad.toLowerCase() !== 'false') {
             capVal = eq.capacidad;
           } else if (eq.peso && typeof eq.peso === 'string' && eq.peso.toLowerCase() !== 'true' && eq.peso.toLowerCase() !== 'false') {
@@ -4237,9 +4268,10 @@ export const generarCertificadoPDF = async (
 
   y += cardResultH + 8;
 
-  // ── FIRMAS (Certificado) ──
+  // ── FIRMAS (Certificado: El Técnico Titulado y Técnico mantenedor) ──
+  const firmaTecnicoFinal = _firmaTecnico || parte?.firmaTecnico;
   const firmaIngenieroBase64 = await fetchImageToBase64(empData?.ingenieroFirmaUrl || empData?.firmaIngenieroBase64 || empData?.firmaUrl);
-  if (firmaIngenieroBase64 || _firmaTecnico || _firmaCliente) {
+  if (firmaIngenieroBase64 || firmaTecnicoFinal) {
     const firmasY = y;
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8);
@@ -4262,27 +4294,25 @@ export const generarCertificadoPDF = async (
       }
       return '';
     })();
+
+    const boxW = 75;
+    const boxH = 26;
+    const box1X = 22;
+    const box2X = 113;
     
-    // Firma Ingeniero
-    doc.text('El Técnico Titulado', 20, firmasY);
+    // 1. Firma Ingeniero / Técnico Titulado
+    doc.text('El Técnico Titulado', box1X, firmasY);
     doc.setDrawColor(220, 220, 220);
-    doc.roundedRect(20, firmasY + 3, 50, 25, 2, 2);
+    doc.roundedRect(box1X, firmasY + 3, boxW, boxH, 2, 2);
     if (firmaIngenieroBase64) {
-      await dibujarFirmaAjustada(doc, firmaIngenieroBase64, 22, firmasY + 4, 46, 23);
+      await dibujarFirmaAjustada(doc, firmaIngenieroBase64, box1X + 2, firmasY + 4, boxW - 4, boxH - 2);
     }
     
-    // Firma Técnico
-    doc.text('Técnico mantenedor', 80, firmasY);
-    doc.roundedRect(80, firmasY + 3, 50, 25, 2, 2);
-    if (_firmaTecnico) {
-      await dibujarFirmaAjustada(doc, _firmaTecnico, 82, firmasY + 4, 46, 23);
-    }
-    
-    // Firma Cliente
-    doc.text('Conformidad Cliente', 140, firmasY);
-    doc.roundedRect(140, firmasY + 3, 50, 25, 2, 2);
-    if (_firmaCliente) {
-      await dibujarFirmaAjustada(doc, _firmaCliente, 142, firmasY + 4, 46, 23);
+    // 2. Firma Técnico Mantenedor
+    doc.text('Técnico mantenedor', box2X, firmasY);
+    doc.roundedRect(box2X, firmasY + 3, boxW, boxH, 2, 2);
+    if (firmaTecnicoFinal) {
+      await dibujarFirmaAjustada(doc, firmaTecnicoFinal, box2X + 2, firmasY + 4, boxW - 4, boxH - 2);
     }
 
     // Nombres y cargos debajo de las firmas
@@ -4294,13 +4324,10 @@ export const generarCertificadoPDF = async (
     const nombreIngeniero = (empData?.ingenieroNombre && empData?.ingenieroApellidos) 
       ? `${empData.ingenieroNombre} ${empData.ingenieroApellidos}`
       : (empData?.tecnicoTitulado || 'Técnico Titulado');
-    doc.text(nombreIngeniero, 20, firmasY + 32);
+    doc.text(nombreIngeniero, box1X, firmasY + 33);
 
     // Nombre Técnico
-    doc.text(tecnicoNombre || 'Técnico mantenedor', 80, firmasY + 32);
-
-    // Nombre Cliente
-    doc.text(_nombreFirmante || 'Cliente / Titular', 140, firmasY + 32);
+    doc.text(tecnicoNombre || 'Técnico mantenedor', box2X, firmasY + 33);
 
     // Cargos y números
     doc.setFont("helvetica", "normal");
@@ -4309,14 +4336,11 @@ export const generarCertificadoPDF = async (
 
     // Cargo e Ingeniero nº
     const numColegiado = empData?.ingenieroColegiado || empData?.numTecnicoTitulado || '—';
-    doc.text(`Ingeniero nº: ${numColegiado}`, 20, firmasY + 36);
+    doc.text(`Ingeniero nº: ${numColegiado}`, box1X, firmasY + 37);
 
     // Cargo Técnico
     const numHab = habilitacionTecnico || '—';
-    doc.text(`Habilitación nº: ${numHab}`, 80, firmasY + 36);
-
-    // Cargo Cliente
-    doc.text('Titular del centro', 140, firmasY + 36);
+    doc.text(`Habilitación nº: ${numHab}`, box2X, firmasY + 37);
   }
 
   // Footer (solo número de página alineado a la derecha)
@@ -4616,4 +4640,139 @@ export const generarPresupuestoPDF = async (
   }
 
   doc.save(`Presupuesto_${presupuesto.numeroPresupuesto || 'N-A'}.pdf`);
-};
+};
+
+// ============ PDF LISTADO DE REVISIONES MENSUALES ============
+export const generarPDFRevisionesMes = async (
+  mes: string,
+  items: any[],
+  _empresa?: Record<string, any>,
+  noSave?: boolean
+) => {
+  const doc = new jsPDF('l', 'mm', 'a4');
+  const pageWidth = doc.internal.pageSize.getWidth(); // 297 mm
+  const pageHeight = doc.internal.pageSize.getHeight(); // 210 mm
+  const margen = 14;
+
+  // Obtener datos de la empresa principal configurada en Gestión de Empresa
+  const empData = normalizarDatosEmpresa();
+
+  // Logo a la derecha - Logotipo oficial de la empresa configurada
+  try {
+    let logoRaw = empData.logoUrl || (typeof localStorage !== 'undefined' ? localStorage.getItem('firecheck_db_logo') : null) || '/logo.png';
+    if (logoRaw) {
+      const fetched = await fetchImageToBase64(logoRaw);
+      if (fetched) {
+        const { base64: logoData, format } = await optimizarImagenParaPDF(fetched, 800, 0.75);
+        const logoProps = doc.getImageProperties(logoData);
+        const maxLogoWidth = 55;
+        const maxLogoHeight = 18;
+        const logoRatio = logoProps.width / logoProps.height;
+        const logoWidth = Math.min(maxLogoWidth, maxLogoHeight * logoRatio);
+        const logoHeight = logoWidth / logoRatio;
+        doc.addImage(logoData, format, pageWidth - margen - logoWidth, 10, logoWidth, logoHeight);
+      }
+    }
+  } catch (_e) { }
+
+  // Datos empresa principal (izquierda)
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(30, 30, 30);
+  doc.text(empData.nombre || 'ABANFOC S.L.', margen, 15);
+
+  doc.setFontSize(7.5);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(90, 90, 90);
+  let yEmp = 19;
+
+  const linea1 = [
+    empData.cif ? `CIF: ${empData.cif}` : '',
+    empData.rasic ? `Nº Registro Industrial / RASIC: ${empData.rasic}` : ''
+  ].filter(Boolean).join(' | ');
+  if (linea1) { doc.text(linea1, margen, yEmp); yEmp += 3.8; }
+
+  const linea2 = [
+    empData.direccion,
+    [empData.cp || empData.codigoPostal, empData.poblacion || empData.localidad].filter(Boolean).join(' '),
+    empData.provincia ? `(${empData.provincia})` : ''
+  ].filter(Boolean).join(' - ');
+  if (linea2) { doc.text(linea2, margen, yEmp); yEmp += 3.8; }
+
+  const linea3 = [
+    empData.telefono ? `Tel: ${empData.telefono}` : '',
+    (empData.email || empData.correo) ? `Email: ${empData.email || empData.correo}` : '',
+    empData.web ? `Web: ${empData.web}` : ''
+  ].filter(Boolean).join(' | ');
+  if (linea3) { doc.text(linea3, margen, yEmp); yEmp += 3.8; }
+
+  // Título del reporte
+  doc.setFontSize(15);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(180, 20, 20); // Rojo corporativo
+  doc.text(`PLANIFICACIÓN DE REVISIONES - ${mes.toUpperCase()}`, margen, 38);
+
+  doc.setFontSize(8.5);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(70, 70, 70);
+  const fechaHoy = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  doc.text(`Total centros planificados: ${items.length} | Fecha de emisión: ${fechaHoy}`, margen, 43);
+
+  // Tabla con autoTable - 1 sola fila plana por centro
+  const bodyRows = items.map((item, idx) => [
+    (idx + 1).toString().padStart(2, '0'),
+    (item.centroNombre || '-').replace(/[\r\n]+/g, ' '),
+    (item.codigoCentro || '-').replace(/[\r\n]+/g, ' '),
+    item.tipoRevision || 'Anual',
+    (item.empresaMantenedora || '-').replace(/[\r\n]+/g, ' '),
+    (item.ubicacion || '-').replace(/[\r\n]+/g, ' '),
+    (item.observaciones || '-').replace(/[\r\n]+/g, ' ')
+  ]);
+
+  autoTable(doc, {
+    startY: 47,
+    margin: { left: margen, right: margen },
+    head: [['Nº', 'NOMBRE DEL CENTRO', 'CÓDIGO CENTRO', 'TIPO REVISIÓN', 'EMPRESA MANTENEDORA', 'POBLACIÓN', 'OBSERVACIONES / NOTAS']],
+    body: bodyRows,
+    theme: 'grid',
+    styles: {
+      fontSize: 7.2,
+      cellPadding: 1.8,
+      valign: 'middle',
+      overflow: 'hidden',
+      textColor: [40, 40, 40]
+    },
+    headStyles: {
+      fillColor: [20, 20, 20],
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+      fontSize: 7.2,
+      halign: 'center'
+    },
+    columnStyles: {
+      0: { cellWidth: 10, halign: 'center', fontStyle: 'bold' },
+      1: { cellWidth: 95, fontStyle: 'bold' },
+      2: { cellWidth: 18, halign: 'center' },
+      3: { cellWidth: 20, halign: 'center' },
+      4: { cellWidth: 42 },
+      5: { cellWidth: 32 },
+      6: { cellWidth: 'auto' }
+    },
+    didDrawPage: (data) => {
+      // Pie de página
+      const pageCount = (doc.internal as any).getNumberOfPages();
+      doc.setFontSize(7);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(140, 140, 140);
+      doc.text(`Salamandra - Sistema de Gestión Contra Incendios`, margen, pageHeight - 8);
+      doc.text(`Página ${data.pageNumber} de ${pageCount}`, pageWidth - margen, pageHeight - 8, { align: 'right' });
+    }
+  });
+
+  if (!noSave) {
+    doc.save(`Revisiones_${mes}_${new Date().getFullYear()}.pdf`);
+  }
+
+  return doc;
+};
+

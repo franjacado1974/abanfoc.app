@@ -4,9 +4,9 @@ import {
   FileCheck, HardHat,
   SearchCheck, Wrench, Receipt, FileDigit, Package, CalendarDays,
   ShieldCheck, ArrowLeft,
-  Clock
+  Clock, ArrowRightCircle, ArrowLeftCircle, CheckCircle2, AlertTriangle, KeyRound
 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Loader from './components/Loader';
 import DashboardTecnico from './DashboardTecnico';
 import Clientes from './Clientes';
@@ -28,6 +28,9 @@ import Reparaciones from './Reparaciones';
 import Instalaciones from './Instalaciones';
 import Ajustes from './Ajustes';
 import Buzon from './Buzon';
+import RegistroHorario from './RegistroHorario';
+import PruebasTecnicas from './PruebasTecnicas';
+import Papelera from './Papelera';
 import Sidebar from './components/Sidebar';
 import { 
   verifyUser,
@@ -42,7 +45,9 @@ import {
   subscribeTecnicos,
   subscribeEmpresas,
   subscribeTrabajos,
-  subscribeSistemasCategorias
+  subscribeSistemasCategorias,
+  subscribeUsuarios,
+  registrarFichaje
 } from './firebase';
 import { APP_VERSION } from './constants';
 import { useRegisterSW } from 'virtual:pwa-register/react';
@@ -53,12 +58,79 @@ interface Usuario {
   apellidos: string;
   rol: string;
   password?: string;
+  usuario?: string;
 }
 
-function Login({ usuarios: _usuarios, onLogin }: { usuarios: Usuario[], onLogin: (user: Usuario) => void }) {
+function Login({ usuarios: initialUsuarios, onLogin }: { usuarios: Usuario[], onLogin: (user: Usuario) => void }) {
+  // viewMode: 'cards' (pantalla con 2 tarjetas) | 'login' (formulario sistema) | 'horario' (fichaje)
+  const [viewMode, setViewMode] = useState<'cards' | 'login' | 'horario'>('cards');
+  
+  // Login form states
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [appLogo] = useState('/logo_login.png');
+
+  // Control Horario states
+  const [userList, setUserList] = useState<Usuario[]>(initialUsuarios || []);
+  const [selectedUserId, setSelectedUserId] = useState<string>('');
+  const [notasFichaje, setNotasFichaje] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successData, setSuccessData] = useState<{ tipo: 'entrada' | 'salida'; hora: string; usuario: string } | null>(null);
+  const [offlineWarning, setOfflineWarning] = useState<string | null>(null);
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  // Suscribirse a la lista de usuarios para el selector de horario
+  useEffect(() => {
+    const unsub = subscribeUsuarios((users) => {
+      if (Array.isArray(users) && users.length > 0) {
+        setUserList(users);
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  // Reloj en vivo para control horario
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Comprobar si hubo un fallo de registro previo offline
+  useEffect(() => {
+    try {
+      const savedAlert = localStorage.getItem('firecheck_pending_horario_alert');
+      if (savedAlert) {
+        setOfflineWarning(savedAlert);
+      }
+    } catch { /* ignore */ }
+  }, []);
+
+  // Filtrar usuarios con rol "Técnico" o "Administración" (excluyendo Super Administrador y Administrador)
+  const horarioUsers = useMemo(() => {
+    return userList.filter((u) => {
+      const r = (u.rol || '').toString().trim().toLowerCase();
+      if (
+        r === 'super-administrador' ||
+        r === 'superadministrador' ||
+        r === 'superusuario' ||
+        r === 'administrador' ||
+        r === 'admin'
+      ) {
+        return false;
+      }
+      return (
+        r === 'tecnico' ||
+        r === 'técnico' ||
+        r === 'administracion' ||
+        r === 'administración' ||
+        r === 'editor' ||
+        r === 'visualizador'
+      );
+    });
+  }, [userList]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -75,47 +147,326 @@ function Login({ usuarios: _usuarios, onLogin }: { usuarios: Usuario[], onLogin:
       console.error('Error verificando en Firestore:', err);
     }
 
-    alert('Usuario o contrasena incorrectos');
+    alert('Usuario o contraseña incorrectos');
   };
+
+  const handleRegistrarHorario = async (tipo: 'entrada' | 'salida') => {
+    if (!selectedUserId) {
+      alert('Por favor, selecciona tu nombre de usuario para registrar la jornada.');
+      return;
+    }
+
+    const foundUser = userList.find(u => u.id === selectedUserId || (u as any)._docId === selectedUserId);
+    const uNombre = foundUser ? (foundUser.nombre + (foundUser.apellidos ? ' ' + foundUser.apellidos : '')) : 'Usuario';
+    const uRol = foundUser ? foundUser.rol : 'técnico';
+
+    setIsSubmitting(true);
+
+    try {
+      // Guardar en Firebase estrictamente esperando confirmación
+      const record = await registrarFichaje({
+        usuarioId: selectedUserId,
+        usuarioNombre: uNombre,
+        usuarioRol: uRol,
+        tipo,
+        notas: notasFichaje.trim()
+      });
+
+      // Éxito confirmado en Firestore: limpiar alertas previas y mostrar modal con check verde
+      localStorage.removeItem('firecheck_pending_horario_alert');
+      setOfflineWarning(null);
+      setSuccessData({
+        tipo,
+        hora: record.hora,
+        usuario: record.usuarioNombre
+      });
+      setShowSuccessModal(true);
+      setNotasFichaje('');
+    } catch (err) {
+      console.error('Error guardando registro horario en Firebase:', err);
+      // No se muestra el check verde por fallo de red / cobertura
+      const errorMsg = `No se pudo registrar tu último acceso (${tipo.toUpperCase()}) por fallo de cobertura o red. Comprueba tu conexión a internet o vuelve a intentarlo.`;
+      try {
+        localStorage.setItem('firecheck_pending_horario_alert', errorMsg);
+      } catch { /* ignore */ }
+      setOfflineWarning(errorMsg);
+      alert('Error de conexión: No se ha podido guardar el registro horario en Firebase. Se ha registrado un recordatorio para el próximo acceso.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const formattedTimeString = currentTime.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const formattedDateString = currentTime.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
   return (
     <div 
       className="min-h-screen bg-cover bg-center bg-no-repeat flex items-center justify-center p-4 bg-zinc-200"
       style={{ backgroundImage: "url('/bg-login.jpg')" }}
     >
-      <div className="bg-white/85 backdrop-blur-md p-5 sm:p-6 rounded-2xl shadow-2xl w-full max-w-xs sm:max-w-sm border border-white/20">
-        <div className="flex flex-col items-center mb-6">
-          <img src={appLogo} alt="Logo" className="h-12 sm:h-14 md:h-16 mb-4 sm:mb-6 object-contain" onError={(e) => { (e.target as HTMLImageElement).src = '/favicon.png'; }} />
-          <h2 className="text-xl sm:text-2xl font-bold text-zinc-900 text-center">acceso al sistema</h2>
-          <p className="text-zinc-500 text-sm text-center">introduce tus credenciales para continuar</p>
+      {/* ─── VISTA 1: DOS TARJETAS PRINCIPALES (SELECCIÓN) ─── */}
+      {viewMode === 'cards' && (
+        <div className="bg-white/90 backdrop-blur-md p-6 sm:p-8 rounded-3xl shadow-2xl w-full max-w-md border border-white/30 text-center animate-in fade-in zoom-in-95 duration-200">
+          <div className="flex flex-col items-center mb-6">
+            <img 
+              src={appLogo} 
+              alt="Logo" 
+              className="h-14 sm:h-16 mb-2 object-contain" 
+              onError={(e) => { (e.target as HTMLImageElement).src = '/favicon.png'; }} 
+            />
+            <p className="text-zinc-500 text-xs font-semibold mt-0.5">Selecciona una opción para continuar</p>
+          </div>
+
+          {offlineWarning && (
+            <div className="mb-5 p-3.5 bg-amber-50 border border-amber-200 rounded-2xl text-left flex items-start gap-2.5">
+              <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-bold text-amber-900">Aviso de conexión</p>
+                <p className="text-[11px] text-amber-700 mt-0.5 leading-tight">{offlineWarning}</p>
+                <button
+                  onClick={() => {
+                    localStorage.removeItem('firecheck_pending_horario_alert');
+                    setOfflineWarning(null);
+                  }}
+                  className="text-[10px] font-bold text-amber-900 underline mt-1.5 cursor-pointer block"
+                >
+                  Entendido / Descartar aviso
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 gap-4">
+            {/* Tarjeta 1: Control Horario */}
+            <button
+              onClick={() => setViewMode('horario')}
+              className="group flex items-center gap-4 p-4 rounded-2xl bg-gradient-to-r from-orange-500/10 via-amber-500/10 to-orange-500/5 hover:from-orange-500/20 hover:to-amber-500/15 border-2 border-orange-200 hover:border-orange-400 transition-all text-left shadow-sm active:scale-[0.98] cursor-pointer"
+            >
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center text-white shadow-md shadow-orange-500/20 shrink-0 group-hover:scale-105 transition-transform">
+                <Clock className="w-6 h-6 stroke-[2.2]" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-base font-black text-zinc-900">Control Horario</h3>
+                  <span className="text-[10px] font-extrabold uppercase bg-orange-100 text-orange-800 px-2 py-0.5 rounded-full">Fichaje</span>
+                </div>
+                <p className="text-xs text-zinc-600 mt-0.5 font-medium">Registrar entrada o salida de jornada</p>
+              </div>
+            </button>
+
+            {/* Tarjeta 2: Entrar al Sistema */}
+            <button
+              onClick={() => setViewMode('login')}
+              className="group flex items-center gap-4 p-4 rounded-2xl bg-zinc-900 hover:bg-black text-white border-2 border-zinc-800 hover:border-zinc-700 transition-all text-left shadow-md active:scale-[0.98] cursor-pointer"
+            >
+              <div className="w-12 h-12 rounded-2xl bg-zinc-800 group-hover:bg-zinc-700 flex items-center justify-center text-red-500 shadow-inner shrink-0 group-hover:scale-105 transition-transform">
+                <KeyRound className="w-6 h-6 stroke-[2.2]" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-base font-black text-white">Entrar al Sistema</h3>
+                  <span className="text-[10px] font-extrabold uppercase bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded-full">Acceso</span>
+                </div>
+                <p className="text-xs text-zinc-400 mt-0.5 font-medium">Iniciar sesión con credenciales</p>
+              </div>
+            </button>
+          </div>
+
+          <div className="flex items-center justify-center gap-2 mt-6 text-zinc-400 text-xs">
+            <img src="/salamandra-orange.png" alt="salamandra" className="h-8 w-8 object-contain" />
+            <span>{APP_VERSION}</span>
+          </div>
         </div>
-        <form onSubmit={handleLogin} className="space-y-4">
-          <input 
-            type="text" 
-            placeholder="Nombre"
-            className="w-full px-4 py-3 sm:py-3.5 bg-zinc-50 border border-zinc-200 rounded-xl sm:rounded-2xl outline-none focus:border-black font-medium text-sm" 
-            value={username} 
-            onChange={e => setUsername(e.target.value)} 
-            required
-          />
-          <input 
-            type="password" 
-            placeholder="Contrasena"
-            className="w-full px-4 py-3 sm:py-3.5 bg-zinc-50 border border-zinc-200 rounded-xl sm:rounded-2xl outline-none focus:border-black font-medium text-sm" 
-            value={password} 
-            onChange={e => setPassword(e.target.value)} 
-            required
-          />
-          <button type="submit" className="w-full bg-black hover:bg-zinc-800 text-white py-3.5 sm:py-4 rounded-xl sm:rounded-2xl font-bold shadow-lg transition-all active:scale-95">Entrar</button>
-        </form>
-        <div className="flex items-center justify-center gap-2 mt-4 text-zinc-400 text-xs">
-          <img src="/salamandra-orange.png" alt="salamandra" className="h-10 w-10 object-contain" />
-          <span>{APP_VERSION}</span>
+      )}
+
+      {/* ─── VISTA 2: FORMULARIO CONTROL HORARIO (FICHAJE) ─── */}
+      {viewMode === 'horario' && (
+        <div className="bg-white/95 backdrop-blur-md p-6 sm:p-7 rounded-3xl shadow-2xl w-full max-w-sm border border-white/40 animate-in fade-in zoom-in-95 duration-200">
+          <div className="flex items-center justify-between mb-4">
+            <button
+              onClick={() => setViewMode('cards')}
+              className="flex items-center gap-1.5 text-xs font-bold text-zinc-500 hover:text-zinc-900 transition-colors cursor-pointer py-1 px-2 rounded-lg hover:bg-zinc-100"
+            >
+              <ArrowLeft className="w-4 h-4" /> Volver
+            </button>
+            <span className="text-[10px] font-black uppercase tracking-wider bg-orange-100 text-orange-700 px-2.5 py-0.5 rounded-full">
+              Fichaje Rápido
+            </span>
+          </div>
+
+          {/* Reloj Digital en Vivo */}
+          <div className="bg-zinc-900 text-white rounded-2xl p-4 text-center mb-5 shadow-inner border border-zinc-800">
+            <p className="text-3xl sm:text-4xl font-black font-mono tracking-wider text-orange-400 leading-none">
+              {formattedTimeString}
+            </p>
+            <p className="text-[11px] font-medium text-zinc-400 capitalize mt-2">
+              {formattedDateString}
+            </p>
+          </div>
+
+          {offlineWarning && (
+            <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-left flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <p className="text-[11px] text-amber-800 leading-tight">{offlineWarning}</p>
+            </div>
+          )}
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-[11px] font-extrabold uppercase tracking-wider text-zinc-500 mb-1.5">
+                Selecciona tu usuario *
+              </label>
+              <select
+                value={selectedUserId}
+                onChange={(e) => setSelectedUserId(e.target.value)}
+                className="w-full px-4 py-3 bg-zinc-50 border border-zinc-300 rounded-xl outline-none focus:border-orange-500 focus:bg-white font-bold text-sm text-zinc-900 cursor-pointer shadow-sm"
+              >
+                <option value="">-- Elige tu nombre --</option>
+                {horarioUsers.map((u) => {
+                  const fullName = u.nombre ? `${u.nombre} ${u.apellidos || ''}` : (u.usuario || u.id);
+                  return (
+                    <option key={u.id || (u as any)._docId} value={u.id || (u as any)._docId}>
+                      {fullName} ({u.rol || 'técnico'})
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-extrabold uppercase tracking-wider text-zinc-500 mb-1.5">
+                Observaciones / Notas (Opcional)
+              </label>
+              <input
+                type="text"
+                placeholder="Ej. Salida a comida, inicio de guardia..."
+                value={notasFichaje}
+                onChange={(e) => setNotasFichaje(e.target.value)}
+                className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl outline-none focus:border-orange-500 font-medium text-xs text-zinc-800 shadow-sm"
+              />
+            </div>
+
+            {/* Botones Principales de Entrada y Salida */}
+            <div className="grid grid-cols-1 gap-3 pt-2">
+              <button
+                type="button"
+                disabled={isSubmitting || !selectedUserId}
+                onClick={() => handleRegistrarHorario('entrada')}
+                className="w-full flex items-center justify-center gap-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-zinc-300 disabled:cursor-not-allowed text-white py-3.5 rounded-2xl font-black text-sm shadow-lg shadow-emerald-600/20 transition-all active:scale-95 cursor-pointer"
+              >
+                <ArrowRightCircle className="w-5 h-5 stroke-[2.5]" />
+                <span>Registrar entrada</span>
+              </button>
+
+              <button
+                type="button"
+                disabled={isSubmitting || !selectedUserId}
+                onClick={() => handleRegistrarHorario('salida')}
+                className="w-full flex items-center justify-center gap-2.5 bg-red-600 hover:bg-red-700 disabled:bg-zinc-300 disabled:cursor-not-allowed text-white py-3.5 rounded-2xl font-black text-sm shadow-lg shadow-red-600/20 transition-all active:scale-95 cursor-pointer"
+              >
+                <ArrowLeftCircle className="w-5 h-5 stroke-[2.5]" />
+                <span>Registrar salida</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-center gap-2 mt-5 text-zinc-400 text-xs">
+            <img src="/salamandra-orange.png" alt="salamandra" className="h-7 w-7 object-contain" />
+            <span>{APP_VERSION}</span>
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* ─── VISTA 3: ACCESO AL SISTEMA (FORMULARIO ORIGINAL) ─── */}
+      {viewMode === 'login' && (
+        <div className="bg-white/85 backdrop-blur-md p-5 sm:p-6 rounded-2xl shadow-2xl w-full max-w-xs sm:max-w-sm border border-white/20 animate-in fade-in zoom-in-95 duration-200">
+          <div className="flex items-center justify-between mb-3">
+            <button
+              onClick={() => setViewMode('cards')}
+              className="flex items-center gap-1.5 text-xs font-bold text-zinc-500 hover:text-zinc-900 transition-colors cursor-pointer py-1 px-2 rounded-lg hover:bg-zinc-100"
+            >
+              <ArrowLeft className="w-4 h-4" /> Volver
+            </button>
+            <span className="text-[10px] font-black uppercase tracking-wider bg-zinc-200 text-zinc-700 px-2 py-0.5 rounded-full">
+              Sistema
+            </span>
+          </div>
+
+          <div className="flex flex-col items-center mb-6">
+            <img src={appLogo} alt="Logo" className="h-12 sm:h-14 md:h-16 mb-4 sm:mb-6 object-contain" onError={(e) => { (e.target as HTMLImageElement).src = '/favicon.png'; }} />
+            <h2 className="text-xl sm:text-2xl font-bold text-zinc-900 text-center">acceso al sistema</h2>
+            <p className="text-zinc-500 text-sm text-center">introduce tus credenciales para continuar</p>
+          </div>
+          <form onSubmit={handleLogin} className="space-y-4">
+            <input 
+              type="text" 
+              placeholder="Nombre"
+              className="w-full px-4 py-3 sm:py-3.5 bg-zinc-50 border border-zinc-200 rounded-xl sm:rounded-2xl outline-none focus:border-black font-medium text-sm" 
+              value={username} 
+              onChange={e => setUsername(e.target.value)} 
+              required
+            />
+            <input 
+              type="password" 
+              placeholder="Contraseña"
+              className="w-full px-4 py-3 sm:py-3.5 bg-zinc-50 border border-zinc-200 rounded-xl sm:rounded-2xl outline-none focus:border-black font-medium text-sm" 
+              value={password} 
+              onChange={e => setPassword(e.target.value)} 
+              required
+            />
+            <button type="submit" className="w-full bg-black hover:bg-zinc-800 text-white py-3.5 sm:py-4 rounded-xl sm:rounded-2xl font-bold shadow-lg transition-all active:scale-95 cursor-pointer">Entrar</button>
+          </form>
+          <div className="flex items-center justify-center gap-2 mt-4 text-zinc-400 text-xs">
+            <img src="/salamandra-orange.png" alt="salamandra" className="h-10 w-10 object-contain" />
+            <span>{APP_VERSION}</span>
+          </div>
+        </div>
+      )}
+
+      {/* ─── MODAL ÉXITO: HORARIO REGISTRADO CON CHECK VERDE ─── */}
+      {showSuccessModal && successData && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center p-4 z-[99999] animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl w-full max-w-sm shadow-2xl p-6 sm:p-7 text-center animate-in zoom-in-95 duration-200 border border-zinc-100">
+            <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg shadow-emerald-500/20 animate-bounce">
+              <CheckCircle2 className="w-12 h-12 stroke-[2.5]" />
+            </div>
+            
+            <h3 className="text-2xl font-black text-zinc-950 tracking-tight">
+              Horario registrado
+            </h3>
+            
+            <div className="my-4 p-3.5 bg-emerald-50/70 border border-emerald-200 rounded-2xl">
+              <p className="text-xs font-bold text-emerald-900 uppercase tracking-wider">
+                {successData.tipo === 'entrada' ? '🟢 Fichaje de Entrada' : '🔴 Fichaje de Salida'}
+              </p>
+              <p className="text-base font-black text-zinc-900 mt-1">
+                {successData.usuario}
+              </p>
+              <p className="text-sm font-bold text-emerald-700 font-mono mt-0.5">
+                Hora: {successData.hora}
+              </p>
+            </div>
+
+            <p className="text-xs text-zinc-500 mb-6">
+              El registro se ha sincronizado y guardado con éxito en la base de datos de Firebase.
+            </p>
+
+            <button
+              onClick={() => {
+                setShowSuccessModal(false);
+                setViewMode('cards');
+              }}
+              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 rounded-2xl shadow-lg transition-all active:scale-95 cursor-pointer"
+            >
+              Aceptar
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
 
 function AccessDenied() {
   const navigate = useNavigate();
@@ -142,8 +493,16 @@ function AccessDenied() {
   );
 }
 
+function normalizeRole(r?: string) {
+  const clean = (r || '').toLowerCase().trim();
+  if (clean === 'administracion' || clean === 'administración' || clean === 'admin' || clean === 'administrador') return 'administrador';
+  if (clean === 'superadministrador' || clean === 'superusuario' || clean === 'super_administrador' || clean === 'super-usuario' || clean === 'super-administrador') return 'super-administrador';
+  return clean || 'visualizador';
+}
+
 function ProtectedRoute({ allowedRoles, user, children }: { allowedRoles: string[], user: Usuario | null, children: React.ReactNode }) {
-  if (!user || !allowedRoles.includes(user.rol)) {
+  const userRole = normalizeRole(user?.rol);
+  if (!user || !allowedRoles.includes(userRole)) {
     return <AccessDenied />;
   }
   return <>{children}</>;
@@ -403,8 +762,8 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
       <main className="flex-1 overflow-y-auto">
         {/* Top Sticky Bar */}
         <div className="sticky top-0 z-40 bg-[#F8FAFC]/80 backdrop-blur-md border-b border-zinc-200/60">
-          <div className="flex items-center justify-between px-8 py-4">
-            <div>
+          <div className="flex flex-col sm:flex-row items-center justify-between px-4 sm:px-8 py-3 sm:py-4 gap-2">
+            <div className="text-center sm:text-left flex-1">
               <h1 className="text-xl font-black text-zinc-950 tracking-tight">Inicio</h1>
               <p className="text-xs font-semibold text-zinc-500 mt-0.5">{formattedDate}</p>
             </div>
@@ -800,7 +1159,7 @@ function PlaceholderPage(props: { title: string; [key: string]: any }) {
   const navigate = useNavigate();
   return (
     <div className="min-h-screen bg-[#F8FAFC] px-8 py-6 flex flex-col">
-      <div className="mb-6">
+      <div className="mb-6 text-center sm:text-left flex flex-col items-center sm:items-start">
         <button 
           onClick={() => navigate('/')} 
           className="flex items-center gap-1.5 text-xs font-semibold text-zinc-500 hover:text-zinc-900 mb-3 transition-colors cursor-pointer"
@@ -837,9 +1196,15 @@ function PageLayout({ user, onLogout, appLogo, children }: { user: Usuario | nul
 export default function App() {
   const {
     needRefresh: [needRefresh, setNeedRefresh],
+    updateServiceWorker,
   } = useRegisterSW({
     onRegistered(r) {
       console.log('SW Registered: ', r);
+      if (r) {
+        setInterval(() => {
+          r.update();
+        }, 15000);
+      }
     },
     onRegisterError(error) {
       console.log('SW registration error', error);
@@ -849,8 +1214,33 @@ export default function App() {
   const [newVersion, setNewVersion] = useState<string>('');
 
   useEffect(() => {
-    if (needRefresh) {
-      fetch('/version.json?t=' + Date.now())
+    const checkVersion = async () => {
+      try {
+        const res = await fetch('/version.json?t=' + Date.now(), { cache: 'no-store' });
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.version && data.version !== APP_VERSION) {
+            setNewVersion(data.version);
+            setNeedRefresh(true);
+          }
+        }
+      } catch (err) {
+        console.warn('Error comprobando versión:', err);
+      }
+    };
+
+    checkVersion();
+    const interval = setInterval(checkVersion, 20000);
+    window.addEventListener('focus', checkVersion);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', checkVersion);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (needRefresh && !newVersion) {
+      fetch('/version.json?t=' + Date.now(), { cache: 'no-store' })
         .then(res => {
           if (!res.ok) throw new Error('Failed to fetch version');
           return res.json();
@@ -864,10 +1254,13 @@ export default function App() {
           console.error('Error fetching new version:', err);
         });
     }
-  }, [needRefresh]);
+  }, [needRefresh, newVersion]);
 
   const handleUpdateClick = async () => {
     try {
+      if (updateServiceWorker) {
+        await updateServiceWorker(true);
+      }
       if ('serviceWorker' in navigator) {
         const registrations = await navigator.serviceWorker.getRegistrations();
         for (const registration of registrations) {
@@ -1038,7 +1431,8 @@ export default function App() {
   }
 
   // El usuario técnico solo ve su dashboard sin menú lateral
-  if (loggedUser.rol === 'tecnico') {
+  const activeRole = normalizeRole(loggedUser.rol);
+  if (activeRole === 'tecnico') {
     return (
       <>
         <DashboardTecnico loggedUser={loggedUser} onLogout={handleLogout} />
@@ -1129,7 +1523,7 @@ export default function App() {
           </ProtectedRoute>
         } />
         <Route path="/configuracion-datos" element={
-          <ProtectedRoute allowedRoles={['super-administrador', 'administrador']} user={loggedUser}>
+          <ProtectedRoute allowedRoles={['super-administrador', 'superusuario', 'superadministrador']} user={loggedUser}>
             <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><ConfiguracionEmpresa /></PageLayout>
           </ProtectedRoute>
         } />
@@ -1148,9 +1542,24 @@ export default function App() {
             <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Buzon /></PageLayout>
           </ProtectedRoute>
         } />
+        <Route path="/pruebas-tecnicas" element={
+          <ProtectedRoute allowedRoles={['super-administrador', 'administrador', 'editor', 'visualizador', 'tecnico']} user={loggedUser}>
+            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><PruebasTecnicas /></PageLayout>
+          </ProtectedRoute>
+        } />
+        <Route path="/registro-horario" element={
+          <ProtectedRoute allowedRoles={['super-administrador', 'superusuario', 'superadministrador']} user={loggedUser}>
+            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><RegistroHorario /></PageLayout>
+          </ProtectedRoute>
+        } />
         <Route path="/ajustes" element={
-          <ProtectedRoute allowedRoles={['super-administrador', 'administrador']} user={loggedUser}>
+          <ProtectedRoute allowedRoles={['super-administrador', 'superusuario', 'superadministrador']} user={loggedUser}>
             <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Ajustes /></PageLayout>
+          </ProtectedRoute>
+        } />
+        <Route path="/papelera" element={
+          <ProtectedRoute allowedRoles={['super-administrador', 'administrador', 'editor']} user={loggedUser}>
+            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Papelera /></PageLayout>
           </ProtectedRoute>
         } />
       </Routes>

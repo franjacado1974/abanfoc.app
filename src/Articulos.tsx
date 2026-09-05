@@ -348,13 +348,13 @@ export default function Articulos() {
   return (
     <div className="min-h-screen bg-fuchsia-50/40 p-6 md:p-12">
       <div className="max-w-5xl mx-auto w-full">
-        <button onClick={() => navigate('/catalogo')} className="text-sm font-medium text-fuchsia-600 hover:text-fuchsia-950 mb-8 flex items-center gap-2 transition-colors">
+        <button onClick={() => navigate('/catalogo')} className="text-sm font-medium text-fuchsia-600 hover:text-fuchsia-950 mb-8 flex items-center gap-2 transition-colors mx-auto md:mx-0">
           ← Volver a Catálogo
         </button>
 
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-fuchsia-950 tracking-tight flex items-center gap-3">
+          <div className="text-center md:text-left flex flex-col items-center md:items-start">
+            <h1 className="text-3xl font-bold text-fuchsia-950 tracking-tight flex items-center justify-center md:justify-start gap-3">
               <div className="w-10 h-10 bg-fuchsia-100 text-fuchsia-600 rounded-xl flex items-center justify-center">
                 <Package className="w-5 h-5" />
               </div>

@@ -346,35 +346,54 @@ export default function Presupuestos() {
     const subtotal = formSubtotal;
     const total = formTotal;
 
-    const presupuestoData: Presupuesto = {
+    // Sanitizar líneas excluyendo campos temporales como precioUnidadInput
+    const lineasSanitizadas: PresupuestoLinea[] = formLineas.map(l => {
+      const sanitized: PresupuestoLinea = {
+        id: l.id || `L-${generateId()}`,
+        tipo: l.tipo || 'manual',
+        concepto: l.concepto || '',
+        cantidad: Number(l.cantidad) || 1,
+        precioUnidad: Number(l.precioUnidad) || 0,
+        subtotal: (Number(l.cantidad) || 1) * (Number(l.precioUnidad) || 0),
+      };
+      if (l.codigo) sanitized.codigo = l.codigo;
+      if (l.descripcion) sanitized.descripcion = l.descripcion;
+      if (l.fotoUrl) sanitized.fotoUrl = l.fotoUrl;
+      return sanitized;
+    });
+
+    const presupuestoData: any = {
       id: editingPresupuesto?.id || `PRE-${generateId()}`,
       titulo: formTitulo.trim(),
       clienteId: formClienteId,
       nombreCliente: cliente?.nombre || 'Cliente',
-      centroId: formCentroId || undefined,
       fechaCreacion: editingPresupuesto?.fechaCreacion || new Date().toISOString(),
-      fechaValidez: formFechaValidez || undefined,
       estado: editingPresupuesto?.estado || 'Borrador',
-      lineas: formLineas.map(l => ({ ...l, subtotal: l.cantidad * l.precioUnidad })),
+      lineas: lineasSanitizadas,
       subtotal,
       iva: formIva,
       total,
-      notas: formNotas,
-      usuarioRealizado: usuarioActual ? `${usuarioActual.nombre}${usuarioActual.apellidos ? ' ' + usuarioActual.apellidos : ''}` : undefined,
     };
+
+    if (formCentroId) presupuestoData.centroId = formCentroId;
+    if (formFechaValidez) presupuestoData.fechaValidez = formFechaValidez;
+    if (formNotas && formNotas.trim()) presupuestoData.notas = formNotas.trim();
+    if (usuarioActual) {
+      presupuestoData.usuarioRealizado = `${usuarioActual.nombre}${usuarioActual.apellidos ? ' ' + usuarioActual.apellidos : ''}`.trim();
+    }
 
     try {
       if (editingPresupuesto) {
         const docId = (editingPresupuesto as any)._docId || editingPresupuesto.id;
-        await updatePresupuesto(docId, presupuestoData as any);
+        await updatePresupuesto(docId, presupuestoData);
       } else {
-        await addPresupuesto(presupuestoData as any);
+        await addPresupuesto(presupuestoData);
       }
       setShowForm(false);
       setEditingPresupuesto(null);
-    } catch (e) {
+    } catch (e: any) {
       console.error('Error guardando presupuesto:', e);
-      alert('Error al guardar el presupuesto.');
+      alert(`Error al guardar el presupuesto: ${e?.message || 'Error desconocido'}`);
     }
   };
 
@@ -383,6 +402,9 @@ export default function Presupuestos() {
     const docId = (p as any)._docId || p.id;
     try {
       await updatePresupuesto(docId, { estado: nuevoEstado } as any);
+      if (nuevoEstado === 'Aprobado') {
+        navigate(`/pedidos?fromPresupuesto=${p.id || docId}`);
+      }
     } catch (e) {
       console.error('Error actualizando estado:', e);
     }
@@ -433,10 +455,10 @@ export default function Presupuestos() {
   const getEstadoInfo = (estado: Presupuesto['estado']) => ESTADOS.find(e => e.valor === estado) || ESTADOS[0];
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] px-8 py-6">
+    <div className="min-h-screen bg-[#F8FAFC] px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
       <div className="w-full">
         {/* Header */}
-        <div className="mb-6">
+        <div className="mb-6 text-center sm:text-left flex flex-col items-center sm:items-start">
           <button 
             onClick={() => navigate('/')} 
             className="flex items-center gap-1.5 text-xs font-semibold text-zinc-500 hover:text-zinc-900 mb-3 transition-colors cursor-pointer"
@@ -491,7 +513,7 @@ export default function Presupuestos() {
             >
               Enviados
               <span className={`text-[9px] font-black font-sans px-1.5 py-0.5 rounded transition-colors ${
-                statusFilter === 'Enviado' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-zinc-250 text-zinc-500'
+                statusFilter === 'Enviado' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-zinc-200 text-zinc-500'
               }`}>
                 {presupuestos.filter(p => p.estado === 'Enviado').length}
               </span>
@@ -506,7 +528,7 @@ export default function Presupuestos() {
             >
               En espera
               <span className={`text-[9px] font-black font-sans px-1.5 py-0.5 rounded transition-colors ${
-                statusFilter === 'En espera' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-zinc-250 text-zinc-500'
+                statusFilter === 'En espera' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-zinc-200 text-zinc-500'
               }`}>
                 {presupuestos.filter(p => p.estado === 'En espera').length}
               </span>
@@ -521,7 +543,7 @@ export default function Presupuestos() {
             >
               Aprobados
               <span className={`text-[9px] font-black font-sans px-1.5 py-0.5 rounded transition-colors ${
-                statusFilter === 'Aprobado' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-zinc-250 text-zinc-500'
+                statusFilter === 'Aprobado' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-zinc-200 text-zinc-500'
               }`}>
                 {presupuestos.filter(p => p.estado === 'Aprobado').length}
               </span>
@@ -576,8 +598,9 @@ export default function Presupuestos() {
             </p>
           </div>
         ) : (
-          <div className="bg-white rounded-xl border border-zinc-200 overflow-hidden shadow-sm">
-            <table className="w-full text-sm">
+          <div className="bg-white rounded-xl border border-zinc-200 shadow-sm overflow-hidden">
+            <div className="overflow-x-auto w-full">
+              <table className="w-full text-sm min-w-[780px]">
               <thead>
                 <tr className="bg-zinc-50 text-zinc-500 font-bold uppercase tracking-wider text-xs">
                   <th className="px-4 py-3 text-left">Referencia</th>
@@ -647,6 +670,7 @@ export default function Presupuestos() {
                 })}
               </tbody>
             </table>
+            </div>
           </div>
         )}
       </div>
@@ -686,26 +710,28 @@ export default function Presupuestos() {
               <div>
                 <h3 className="text-xs font-bold text-zinc-400 uppercase mb-3">Líneas del presupuesto</h3>
                 <div className="border border-zinc-200 rounded-xl overflow-hidden">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="bg-zinc-50 text-zinc-500 font-bold uppercase tracking-wider">
-                        <th className="px-3 py-2 text-left">Concepto</th>
-                        <th className="px-3 py-2 text-center">Cant.</th>
-                        <th className="px-3 py-2 text-right">Precio</th>
-                        <th className="px-3 py-2 text-right">Subtotal</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {showDetail.lineas.map((l, i) => (
-                        <tr key={l.id} className={i % 2 === 0 ? 'bg-white' : 'bg-white'}>
-                          <td className="px-3 py-2 text-zinc-800 font-medium">{l.concepto}{l.codigo ? <span className="text-zinc-400 font-mono ml-1">({l.codigo})</span> : ''}</td>
-                          <td className="px-3 py-2 text-center text-zinc-600">{l.cantidad}</td>
-                          <td className="px-3 py-2 text-right text-zinc-600">{formatMoneda(l.precioUnidad)}</td>
-                          <td className="px-3 py-2 text-right font-bold text-zinc-800">{formatMoneda(l.subtotal)}</td>
+                  <div className="overflow-x-auto w-full">
+                    <table className="w-full text-xs min-w-[460px]">
+                      <thead>
+                        <tr className="bg-zinc-50 text-zinc-500 font-bold uppercase tracking-wider">
+                          <th className="px-3 py-2 text-left">Concepto</th>
+                          <th className="px-3 py-2 text-center">Cant.</th>
+                          <th className="px-3 py-2 text-right">Precio</th>
+                          <th className="px-3 py-2 text-right">Subtotal</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {showDetail.lineas.map((l, i) => (
+                          <tr key={l.id} className={i % 2 === 0 ? 'bg-white' : 'bg-white'}>
+                            <td className="px-3 py-2 text-zinc-800 font-medium">{l.concepto}{l.codigo ? <span className="text-zinc-400 font-mono ml-1">({l.codigo})</span> : ''}</td>
+                            <td className="px-3 py-2 text-center text-zinc-600">{l.cantidad}</td>
+                            <td className="px-3 py-2 text-right text-zinc-600">{formatMoneda(l.precioUnidad)}</td>
+                            <td className="px-3 py-2 text-right font-bold text-zinc-800">{formatMoneda(l.subtotal)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
 
@@ -741,19 +767,19 @@ export default function Presupuestos() {
 
       {/* MODAL FORMULARIO (CREAR/EDITAR) */}
       {showForm && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col max-h-[95vh]">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-2 sm:p-4">
+          <div className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
             {/* Header */}
-            <div className="px-6 py-4 border-b border-zinc-100 flex items-center justify-between bg-white shrink-0">
-              <h2 className="text-lg font-bold text-zinc-900">
+            <div className="px-4 sm:px-6 py-3.5 sm:py-4 border-b border-zinc-100 flex items-center justify-between bg-white shrink-0">
+              <h2 className="text-base sm:text-lg font-bold text-zinc-900">
                 {editingPresupuesto ? 'Editar presupuesto' : 'Nuevo presupuesto'}
               </h2>
-              <button onClick={() => setShowForm(false)} className="p-2 text-zinc-400 hover:text-black hover:bg-white rounded-xl transition-colors">
+              <button onClick={() => setShowForm(false)} className="p-1.5 sm:p-2 text-zinc-400 hover:text-black hover:bg-white rounded-xl transition-colors cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-6 overflow-y-auto space-y-6">
+            <div className="p-4 sm:p-6 overflow-y-auto space-y-5 sm:space-y-6 flex-1">
               {/* Datos generales */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2 relative">
@@ -849,74 +875,76 @@ export default function Presupuestos() {
                 {/* Tabla de líneas */}
                 {formLineas.length > 0 ? (
                   <div className="border border-zinc-200 rounded-xl overflow-hidden mb-3">
-                    <table className="w-full text-xs">
-                      <thead>
-                        <tr className="bg-zinc-50 text-zinc-500 font-bold uppercase tracking-wider">
-                          <th className="px-3 py-2 text-left w-12">Tipo</th>
-                          <th className="px-3 py-2 text-left">Concepto</th>
-                          <th className="px-3 py-2 text-center w-16">Cant.</th>
-                          <th className="px-3 py-2 text-right w-28">Precio</th>
-                          <th className="px-3 py-2 text-right w-28">Subtotal</th>
-                          <th className="px-3 py-2 text-center w-10"></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {formLineas.map((l, i) => (
-                          <tr key={l.id} className={i % 2 === 0 ? 'bg-white' : 'bg-zinc-50/30'}>
-                            <td className="px-3 py-2">
-                              {l.fotoUrl ? (
-                                <img src={l.fotoUrl} alt={l.concepto} className="w-8 h-8 rounded-md object-cover border border-zinc-200 shrink-0 bg-white img-no-bg" />
-                              ) : (
-                                l.tipo === 'articulo' ? <Package className="w-3.5 h-3.5 text-orange-500" /> :
-                                l.tipo === 'servicio' ? <Wrench className="w-3.5 h-3.5 text-red-600" /> :
-                                <Type className="w-3.5 h-3.5 text-zinc-400" />
-                              )}
-                            </td>
-                            <td className="px-3 py-2">
-                              <p className="text-zinc-800 font-medium truncate max-w-[300px]">{l.concepto}</p>
-                              {l.codigo && <p className="text-[10px] text-zinc-400 font-mono">{l.codigo}</p>}
-                              {l.descripcion && <p className="text-[10px] text-zinc-400">{l.descripcion}</p>}
-                            </td>
-                            <td className="px-3 py-2 text-center">
-                              <input
-                                type="number"
-                                value={l.cantidad}
-                                onChange={(e) => {
-                                  const nuevaCant = Math.max(0, Number(e.target.value));
-                                  setFormLineas(prev => prev.map(li => li.id === l.id ? { ...li, cantidad: nuevaCant, subtotal: nuevaCant * li.precioUnidad } : li));
-                                }}
-                                min={0}
-                                className="w-16 px-2 py-1 text-center text-zinc-800 bg-zinc-50 border border-zinc-200 rounded-xl text-xs focus:ring-1 focus:ring-orange-500/20 focus:border-orange-500 outline-none"
-                              />
-                            </td>
-                            <td className="px-3 py-2 text-right">
-                              <input
-                                type="text"
-                                inputMode="decimal"
-                                value={l.precioUnidadInput !== undefined ? l.precioUnidadInput : formatDecimalInput(l.precioUnidad)}
-                                onChange={(e) => {
-                                  const inputValue = e.target.value;
-                                  setFormLineas(prev => prev.map(li => li.id === l.id ? { ...li, precioUnidadInput: inputValue, precioUnidad: parseDecimal(inputValue), subtotal: li.cantidad * parseDecimal(inputValue) } : li));
-                                }}
-                                onBlur={(e) => {
-                                  const inputValue = e.target.value;
-                                  const nuevoPrecio = Math.max(0, parseDecimal(inputValue));
-                                  setFormLineas(prev => prev.map(li => li.id === l.id ? { ...li, precioUnidad: nuevoPrecio, precioUnidadInput: undefined, subtotal: li.cantidad * nuevoPrecio } : li));
-                                }}
-                                min={0}
-                                className="w-24 px-2 py-1 text-right text-zinc-800 bg-zinc-50 border border-zinc-200 rounded-xl text-xs focus:ring-1 focus:ring-orange-500/20 focus:border-orange-500 outline-none"
-                              />
-                            </td>
-                            <td className="px-3 py-2 text-right font-bold text-zinc-800">{formatMoneda(l.cantidad * l.precioUnidad)}</td>
-                            <td className="px-3 py-2 text-center">
-                              <button onClick={() => handleRemoveLinea(l.id)} className="p-1 text-zinc-300 hover:text-red-500 rounded transition-colors">
-                                <X className="w-3.5 h-3.5" />
-                              </button>
-                            </td>
+                    <div className="overflow-x-auto w-full">
+                      <table className="w-full text-xs min-w-[560px]">
+                        <thead>
+                          <tr className="bg-zinc-50 text-zinc-500 font-bold uppercase tracking-wider">
+                            <th className="px-3 py-2 text-left w-12">Tipo</th>
+                            <th className="px-3 py-2 text-left">Concepto</th>
+                            <th className="px-3 py-2 text-center w-16">Cant.</th>
+                            <th className="px-3 py-2 text-right w-28">Precio</th>
+                            <th className="px-3 py-2 text-right w-28">Subtotal</th>
+                            <th className="px-3 py-2 text-center w-10"></th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody>
+                          {formLineas.map((l, i) => (
+                            <tr key={l.id} className={i % 2 === 0 ? 'bg-white' : 'bg-zinc-50/30'}>
+                              <td className="px-3 py-2">
+                                {l.fotoUrl ? (
+                                  <img src={l.fotoUrl} alt={l.concepto} className="w-8 h-8 rounded-md object-cover border border-zinc-200 shrink-0 bg-white img-no-bg" />
+                                ) : (
+                                  l.tipo === 'articulo' ? <Package className="w-3.5 h-3.5 text-orange-500" /> :
+                                  l.tipo === 'servicio' ? <Wrench className="w-3.5 h-3.5 text-red-600" /> :
+                                  <Type className="w-3.5 h-3.5 text-zinc-400" />
+                                )}
+                              </td>
+                              <td className="px-3 py-2">
+                                <p className="text-zinc-800 font-medium truncate max-w-[240px] sm:max-w-[300px]">{l.concepto}</p>
+                                {l.codigo && <p className="text-[10px] text-zinc-400 font-mono">{l.codigo}</p>}
+                                {l.descripcion && <p className="text-[10px] text-zinc-400">{l.descripcion}</p>}
+                              </td>
+                              <td className="px-3 py-2 text-center">
+                                <input
+                                  type="number"
+                                  value={l.cantidad}
+                                  onChange={(e) => {
+                                    const nuevaCant = Math.max(0, Number(e.target.value));
+                                    setFormLineas(prev => prev.map(li => li.id === l.id ? { ...li, cantidad: nuevaCant, subtotal: nuevaCant * li.precioUnidad } : li));
+                                  }}
+                                  min={0}
+                                  className="w-16 px-2 py-1 text-center text-zinc-800 bg-zinc-50 border border-zinc-200 rounded-xl text-xs focus:ring-1 focus:ring-orange-500/20 focus:border-orange-500 outline-none"
+                                />
+                              </td>
+                              <td className="px-3 py-2 text-right">
+                                <input
+                                  type="text"
+                                  inputMode="decimal"
+                                  value={l.precioUnidadInput !== undefined ? l.precioUnidadInput : formatDecimalInput(l.precioUnidad)}
+                                  onChange={(e) => {
+                                    const inputValue = e.target.value;
+                                    setFormLineas(prev => prev.map(li => li.id === l.id ? { ...li, precioUnidadInput: inputValue, precioUnidad: parseDecimal(inputValue), subtotal: li.cantidad * parseDecimal(inputValue) } : li));
+                                  }}
+                                  onBlur={(e) => {
+                                    const inputValue = e.target.value;
+                                    const nuevoPrecio = Math.max(0, parseDecimal(inputValue));
+                                    setFormLineas(prev => prev.map(li => li.id === l.id ? { ...li, precioUnidad: nuevoPrecio, precioUnidadInput: undefined, subtotal: li.cantidad * nuevoPrecio } : li));
+                                  }}
+                                  min={0}
+                                  className="w-24 px-2 py-1 text-right text-zinc-800 bg-zinc-50 border border-zinc-200 rounded-xl text-xs focus:ring-1 focus:ring-orange-500/20 focus:border-orange-500 outline-none"
+                                />
+                              </td>
+                              <td className="px-3 py-2 text-right font-bold text-zinc-800">{formatMoneda(l.cantidad * l.precioUnidad)}</td>
+                              <td className="px-3 py-2 text-center">
+                                <button onClick={() => handleRemoveLinea(l.id)} className="p-1 text-zinc-300 hover:text-red-500 rounded transition-colors cursor-pointer">
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 ) : (
                   <div className="text-center py-8 bg-zinc-50 rounded-xl border border-dashed border-zinc-200 mb-3">
@@ -925,38 +953,40 @@ export default function Presupuestos() {
                 )}
 
                 {/* Línea manual */}
-                <div className="flex items-center gap-2 p-3 bg-zinc-50 rounded-xl border border-zinc-200">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 p-3 bg-zinc-50 rounded-xl border border-zinc-200">
                   <input
                     type="text"
                     value={formNewLinea.concepto}
                     onChange={(e) => setFormNewLinea(prev => ({ ...prev, concepto: e.target.value }))}
                     placeholder="Concepto (línea manual)..."
-                    className="flex-1 px-3 py-1.5 bg-white border border-zinc-200 rounded-xl text-xs text-zinc-800 focus:ring-1 focus:ring-orange-500/20 focus:border-orange-500 outline-none"
+                    className="flex-1 px-3 py-2 bg-white border border-zinc-200 rounded-xl text-xs text-zinc-800 focus:ring-1 focus:ring-orange-500/20 focus:border-orange-500 outline-none"
                   />
-                  <input
-                    type="number"
-                    value={formNewLinea.cantidad}
-                    onChange={(e) => setFormNewLinea(prev => ({ ...prev, cantidad: Math.max(1, Number(e.target.value)) }))}
-                    min={1}
-                    className="w-16 px-2 py-1.5 text-center bg-white border border-zinc-200 rounded-xl text-xs text-zinc-800 focus:ring-1 focus:ring-orange-500/20 focus:border-orange-500 outline-none"
-                    placeholder="Cant"
-                  />
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={formatDecimalInput(formNewLinea.precioUnidad)}
-                    onChange={(e) => setFormNewLinea(prev => ({ ...prev, precioUnidad: Math.max(0, parseDecimal(e.target.value)) }))}
-                    min={0}
-                    className="w-24 px-2 py-1.5 text-right bg-white border border-zinc-200 rounded-xl text-xs text-zinc-800 focus:ring-1 focus:ring-orange-500/20 focus:border-orange-500 outline-none"
-                    placeholder="0,00"
-                  />
-                  <button
-                    onClick={handleAddManual}
-                    disabled={!formNewLinea.concepto.trim()}
-                    className="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 disabled:bg-zinc-300 text-white rounded-xl text-xs font-bold transition-colors"
-                  >
-                    Añadir
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      value={formNewLinea.cantidad}
+                      onChange={(e) => setFormNewLinea(prev => ({ ...prev, cantidad: Math.max(1, Number(e.target.value)) }))}
+                      min={1}
+                      className="w-20 sm:w-16 px-2 py-2 text-center bg-white border border-zinc-200 rounded-xl text-xs text-zinc-800 focus:ring-1 focus:ring-orange-500/20 focus:border-orange-500 outline-none"
+                      placeholder="Cant"
+                    />
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={formatDecimalInput(formNewLinea.precioUnidad)}
+                      onChange={(e) => setFormNewLinea(prev => ({ ...prev, precioUnidad: Math.max(0, parseDecimal(e.target.value)) }))}
+                      min={0}
+                      className="flex-1 sm:w-24 px-2 py-2 text-right bg-white border border-zinc-200 rounded-xl text-xs text-zinc-800 focus:ring-1 focus:ring-orange-500/20 focus:border-orange-500 outline-none"
+                      placeholder="0,00"
+                    />
+                    <button
+                      onClick={handleAddManual}
+                      disabled={!formNewLinea.concepto.trim()}
+                      className="px-4 py-2 bg-orange-500 hover:bg-orange-600 disabled:bg-zinc-300 text-white rounded-xl text-xs font-bold transition-colors shrink-0 cursor-pointer"
+                    >
+                      Añadir
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -1033,11 +1063,11 @@ export default function Presupuestos() {
             </div>
 
             {/* Footer */}
-            <div className="px-6 py-4 bg-white border-t border-zinc-100 flex items-center justify-between gap-3 shrink-0">
-              <button onClick={() => setShowForm(false)} className="px-6 py-2.5 rounded-xl font-bold text-zinc-500 hover:bg-zinc-100 transition-colors">
+            <div className="px-4 sm:px-6 py-3 sm:py-4 bg-white border-t border-zinc-100 flex items-center justify-between gap-3 shrink-0">
+              <button onClick={() => setShowForm(false)} className="px-4 sm:px-6 py-2 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm text-zinc-500 hover:bg-zinc-100 transition-colors cursor-pointer">
                 Cancelar
               </button>
-              <button onClick={handleGuardar} className="flex items-center gap-2 px-6 py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl font-bold shadow-lg shadow-orange-200 transition-all">
+              <button onClick={handleGuardar} className="flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl font-bold text-xs sm:text-sm shadow-lg shadow-orange-200 transition-all cursor-pointer">
                 <Save className="w-4 h-4" /> {editingPresupuesto ? 'Guardar cambios' : 'Crear presupuesto'}
               </button>
             </div>

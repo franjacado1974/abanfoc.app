@@ -180,7 +180,14 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
     loadAndProcessLogo();
   }, [appLogo]);
 
-  const userRole = user?.rol || 'visualizador';
+  const normalizeRole = (r?: string) => {
+    const clean = (r || '').toLowerCase().trim();
+    if (clean === 'administracion' || clean === 'administración' || clean === 'admin' || clean === 'administrador') return 'administrador';
+    if (clean === 'superadministrador' || clean === 'superusuario' || clean === 'super_administrador' || clean === 'super-usuario' || clean === 'super-administrador') return 'super-administrador';
+    return clean || 'visualizador';
+  };
+
+  const userRole = normalizeRole(user?.rol);
 
   const filteredItems = navItems.filter(item => item.allowedRoles.includes(userRole));
 
@@ -241,7 +248,7 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
                     )}
                   </button>
                 )}
-                {['super-administrador', 'administrador'].includes(userRole) && (
+                {['super-administrador', 'superusuario', 'superadministrador'].includes(userRole) && (
                   <button
                     type="button"
                     onClick={() => handleNavigate('/ajustes')}
@@ -287,7 +294,7 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
                 )}
               </button>
             )}
-            {['super-administrador', 'administrador'].includes(userRole) && (
+            {['super-administrador', 'superusuario', 'superadministrador'].includes(userRole) && (
               <button
                 type="button"
                 onClick={() => handleNavigate('/ajustes')}

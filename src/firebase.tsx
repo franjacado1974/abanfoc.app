@@ -62,11 +62,13 @@ export interface Pedido {
   titulo: string;
   fechaCreacion: string;
   fechaPrevista?: string;
+  tipoPedido?: 'Reparación' | 'Instalación' | '';
   items: { cantidad: number; concepto: string; descripcion: string; precioUnidad: number; subtotal: number; }[];
   estado: 'Pendiente' | 'En Proceso' | 'Completado';
   presupuestoId?: string;
   numeroPedido?: string;
   notas?: string;
+  tareaGeneradaId?: string;
   _docId?: string;
 }
 
@@ -84,6 +86,8 @@ export interface Albaran {
   firmaTecnico?: string;
   numeroMantenimiento?: string;
   parteId?: string;
+  reparacionId?: string;
+  instalacionId?: string;
   numeroPedido?: string;
   titulo?: string;
   periodicidad?: string;
@@ -356,12 +360,24 @@ export async function verifyUser(username: string, password: string) {
     if (isUserMatch && isPassMatch) {
       const nombre = data['nombre'] ?? data['usuario'] ?? username;
       const apellidos = data['apellidos'] ?? '';
-      const rol = (data['rol'] ?? 'tecnico').toString().trim().toLowerCase();
+      
+      let rawRol = (data['rol'] ?? '').toString().trim().toLowerCase();
+      if (!rawRol) {
+        if (cleanUsername.includes('super')) rawRol = 'super-administrador';
+        else if (cleanUsername.includes('admin')) rawRol = 'administrador';
+        else rawRol = 'tecnico';
+      }
+      if (rawRol === 'administracion' || rawRol === 'administración' || rawRol === 'admin') {
+        rawRol = 'administrador';
+      } else if (rawRol === 'superadministrador' || rawRol === 'superusuario' || rawRol === 'super_administrador' || rawRol === 'super-usuario') {
+        rawRol = 'super-administrador';
+      }
+
       return {
         id: docId || data.id || data._docId || 'user_' + Date.now(),
         nombre,
         apellidos,
-        rol
+        rol: rawRol
       };
     }
     return null;
@@ -614,10 +630,22 @@ export function subscribeCentros(callback: (centros: Centro[]) => void) {
     const col = collection(db, 'centros');
     const unsub = onSnapshot(col, (snap) => {
       console.info('subscribeCentros: snapshot received, size=', snap.size);
-      const items = snap.docs.map(d => {
+      const rawItems = snap.docs.map(d => {
         const data = d.data() as any;
-        return { _docId: d.id, id: data?.id ?? d.id, ...data };
+        return { _docId: d.id, id: data?.id ?? d.id, ...data } as Centro;
       });
+
+      // Desduplicar centros por código id único
+      const seenIds = new Set<string>();
+      const items: Centro[] = [];
+      for (const item of rawItems) {
+        const uniqueKey = item.id || item._docId;
+        if (uniqueKey && !seenIds.has(uniqueKey)) {
+          seenIds.add(uniqueKey);
+          items.push(item);
+        }
+      }
+
       console.info('subscribeCentros: items=', items);
       callback(items);
     }, (err) => {
@@ -1247,9 +1275,24 @@ export async function updateAlbaran(albaran: Albaran) {
   }
 }
 
-export async function deleteAlbaran(id: string) {
+export async function deleteAlbaran(id: string, usuario?: string) {
   try {
     const docRef = doc(db, 'albaranes', id);
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      const data = snap.data();
+      await moverAPapelera({
+        coleccion: 'albaranes',
+        originalDocId: id,
+        tipo: 'Albarán',
+        titulo: data.numeroAlbaran || data.id || id,
+        clienteNombre: data.clienteNombre || data.nombreCliente || '',
+        centroNombre: data.centroNombre || data.nombreCentro || '',
+        datos: data,
+        usuario
+      });
+      return true;
+    }
     await deleteDoc(docRef);
     console.info('deleteAlbaran: deleted', id);
     return true;
@@ -1318,11 +1361,13 @@ export function subscribePedidos(callback: (pedidos: Pedido[]) => void) {
           titulo: data?.titulo || '',
           fechaCreacion: data?.fechaCreacion || new Date().toISOString(),
           fechaPrevista: data?.fechaPrevista || '',
+          tipoPedido: data?.tipoPedido || '',
           items: Array.isArray(data?.items) ? data.items : [],
           estado: data?.estado || 'Pendiente',
           presupuestoId: data?.presupuestoId || '',
           numeroPedido: data?.numeroPedido || data?.id || '',
           notas: data?.notas || '',
+          tareaGeneradaId: data?.tareaGeneradaId || '',
         } as Pedido;
       });
       callback(items);
@@ -1369,6 +1414,7 @@ export interface Certificado {
   tituloCertificado?: string;
   textoCertificado?: string;
   observaciones?: string;
+  firmaTecnico?: string;
   esManual?: boolean;
 }
 
@@ -1395,9 +1441,24 @@ export async function addCertificado(certificado: Certificado) {
   }
 }
 
-export async function deleteCertificado(id: string) {
+export async function deleteCertificado(id: string, usuario?: string) {
   try {
     const docRef = doc(db, 'certificados', id);
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      const data = snap.data();
+      await moverAPapelera({
+        coleccion: 'certificados',
+        originalDocId: id,
+        tipo: 'Certificado',
+        titulo: data.numeroCertificado || data.id || id,
+        clienteNombre: data.clienteNombre || data.nombreCliente || '',
+        centroNombre: data.centroNombre || data.nombreCentro || '',
+        datos: data,
+        usuario
+      });
+      return true;
+    }
     await deleteDoc(docRef);
     console.info('deleteCertificado: deleted', id);
     return true;
@@ -1428,6 +1489,7 @@ export function subscribeCertificados(callback: (certificados: Certificado[]) =>
           tituloCertificado: data.tituloCertificado || '',
           textoCertificado: data.textoCertificado || '',
           observaciones: data.observaciones || '',
+          firmaTecnico: data.firmaTecnico || '',
           esManual: data.esManual === true,
         } as Certificado;
       });
@@ -1526,9 +1588,24 @@ export async function updateParte(id: string, parte: Partial<ParteFirestore>) {
   }
 }
 
-export async function deleteParte(id: string) {
+export async function deleteParte(id: string, usuario?: string) {
   try {
     const ref = doc(db, 'partes', id);
+    const snap = await getDoc(ref);
+    if (snap.exists()) {
+      const data = snap.data();
+      await moverAPapelera({
+        coleccion: 'partes',
+        originalDocId: id,
+        tipo: 'Parte de Trabajo',
+        titulo: data.numeroMantenimiento || data.id || id,
+        clienteNombre: data.nombreCliente || data.clienteNombre || '',
+        centroNombre: data.nombreCentro || data.centroNombre || '',
+        datos: data,
+        usuario
+      });
+      return true;
+    }
     await deleteDoc(ref);
     return true;
   } catch (e) {
@@ -1595,15 +1672,34 @@ async function getNextPresupuestoNumero(): Promise<string> {
   }
 }
 
+/** Elimina de forma recursiva cualquier propiedad con valor `undefined` para evitar errores en Firestore */
+function cleanFirestoreData<T>(obj: T): T {
+  if (obj === null || obj === undefined) return obj;
+  if (Array.isArray(obj)) {
+    return obj.map(item => cleanFirestoreData(item)) as unknown as T;
+  }
+  if (typeof obj === 'object') {
+    const cleaned: any = {};
+    for (const [key, value] of Object.entries(obj as Record<string, any>)) {
+      if (value !== undefined) {
+        cleaned[key] = cleanFirestoreData(value);
+      }
+    }
+    return cleaned as T;
+  }
+  return obj;
+}
+
 export async function addPresupuesto(presupuesto: Presupuesto) {
   try {
     const nuevoNumero = await getNextPresupuestoNumero();
-    const presupuestoToSave = {
+    const rawToSave = {
       ...presupuesto,
       numeroPresupuesto: nuevoNumero,
       id: presupuesto.id || `PRE-${Date.now()}`,
       updatedAt: new Date().toISOString()
     };
+    const presupuestoToSave = cleanFirestoreData(rawToSave);
 
     const col = collection(db, 'presupuestos');
     const ref = await addDoc(col, presupuestoToSave);
@@ -1617,7 +1713,8 @@ export async function addPresupuesto(presupuesto: Presupuesto) {
 export async function updatePresupuesto(id: string, presupuesto: Partial<Presupuesto>) {
   try {
     const ref = doc(db, 'presupuestos', id);
-    await setDoc(ref, { ...presupuesto, updatedAt: new Date().toISOString() }, { merge: true });
+    const dataToSave = cleanFirestoreData({ ...presupuesto, updatedAt: new Date().toISOString() });
+    await setDoc(ref, dataToSave, { merge: true });
     return { _docId: id, ...presupuesto };
   } catch (e) {
     console.error('updatePresupuesto error:', e);
@@ -1625,9 +1722,24 @@ export async function updatePresupuesto(id: string, presupuesto: Partial<Presupu
   }
 }
 
-export async function deletePresupuesto(id: string) {
+export async function deletePresupuesto(id: string, usuario?: string) {
   try {
     const ref = doc(db, 'presupuestos', id);
+    const snap = await getDoc(ref);
+    if (snap.exists()) {
+      const data = snap.data();
+      await moverAPapelera({
+        coleccion: 'presupuestos',
+        originalDocId: id,
+        tipo: 'Presupuesto',
+        titulo: data.numeroPresupuesto || data.titulo || data.id || id,
+        clienteNombre: data.nombreCliente || '',
+        centroNombre: data.centroNombre || '',
+        datos: data,
+        usuario
+      });
+      return true;
+    }
     await deleteDoc(ref);
     return true;
   } catch (e) {
@@ -2123,8 +2235,12 @@ export interface ReparacionItem {
   comercial: string;
   estado: 'Pendiente' | 'En curso' | 'Parado' | 'Finalizado';
   fechaCreacion: string;
+  fecha?: string;
+  mes?: string;
   observaciones?: string;
   nota?: string;
+  facturado?: boolean;
+  albaranId?: string;
 }
 
 export function subscribeReparaciones(callback: (items: ReparacionItem[]) => void) {
@@ -2142,8 +2258,12 @@ export function subscribeReparaciones(callback: (items: ReparacionItem[]) => voi
           comercial: data?.comercial || '',
           estado: data?.estado || 'Pendiente',
           fechaCreacion: data?.fechaCreacion || new Date().toISOString(),
+          fecha: data?.fecha || (data?.fechaCreacion ? data.fechaCreacion.slice(0, 10) : ''),
+          mes: data?.mes || '',
           observaciones: data?.observaciones || '',
           nota: data?.nota || data?.observaciones || '',
+          facturado: !!data?.facturado,
+          albaranId: data?.albaranId || '',
         } as ReparacionItem;
       });
       callback(items);
@@ -2199,8 +2319,12 @@ export interface InstalacionItem {
   comercial: string;
   estado: 'Pendiente' | 'En curso' | 'Parado' | 'Finalizado';
   fechaCreacion: string;
+  fecha?: string;
+  mes?: string;
   observaciones?: string;
   nota?: string;
+  facturado?: boolean;
+  albaranId?: string;
 }
 
 export function subscribeInstalaciones(callback: (items: InstalacionItem[]) => void) {
@@ -2218,8 +2342,12 @@ export function subscribeInstalaciones(callback: (items: InstalacionItem[]) => v
           comercial: data?.comercial || '',
           estado: data?.estado || 'Pendiente',
           fechaCreacion: data?.fechaCreacion || new Date().toISOString(),
+          fecha: data?.fecha || (data?.fechaCreacion ? data.fechaCreacion.slice(0, 10) : ''),
+          mes: data?.mes || '',
           observaciones: data?.observaciones || '',
           nota: data?.nota || data?.observaciones || '',
+          facturado: !!data?.facturado,
+          albaranId: data?.albaranId || '',
         } as InstalacionItem;
       });
       callback(items);
@@ -2275,6 +2403,7 @@ export interface RevisionItem {
   empresaMantenedora?: string;
   ubicacion?: string;
   mes?: string;
+  tipoRevision?: string;
   estado: 'Planificado' | 'En curso' | 'Parado' | 'Finalizado';
   fechaCreacion?: string;
   observaciones?: string;
@@ -2296,6 +2425,7 @@ export function subscribeRevisiones(callback: (items: RevisionItem[]) => void) {
           empresaMantenedora: data?.empresaMantenedora || '',
           ubicacion: data?.ubicacion || '',
           mes: data?.mes || '',
+          tipoRevision: data?.tipoRevision || '',
           estado: data?.estado || 'Planificado',
           fechaCreacion: data?.fechaCreacion || new Date().toISOString(),
           observaciones: data?.observaciones || '',
@@ -2345,5 +2475,290 @@ export async function deleteRevision(docId: string) {
   }
 }
 
+export function subscribeUsuarios(callback: (usuarios: any[]) => void) {
+  try {
+    const col = collection(db, 'usuarios');
+    const unsub = onSnapshot(col, (snap) => {
+      const items = snap.docs.map(d => ({
+        _docId: d.id,
+        id: d.id,
+        ...d.data()
+      }));
+      try {
+        localStorage.setItem('firecheck_db_usuarios', JSON.stringify(items));
+      } catch (err) {
+        console.warn('Error guardando usuarios en localStorage:', err);
+      }
+      callback(items);
+    }, (err) => {
+      console.error('subscribeUsuarios error:', err);
+      try {
+        const stored = localStorage.getItem('firecheck_db_usuarios');
+        if (stored) callback(JSON.parse(stored));
+        else callback([]);
+      } catch {
+        callback([]);
+      }
+    });
+    return unsub;
+  } catch (e) {
+    console.error('subscribeUsuarios error:', e);
+    return () => {};
+  }
+}
+
+export interface FichajeHorario {
+  id?: string;
+  _docId?: string;
+  usuarioId: string;
+  usuarioNombre: string;
+  usuarioRol: string;
+  tipo: 'entrada' | 'salida';
+  fecha: string; // YYYY-MM-DD
+  hora: string;  // HH:mm:ss
+  timestamp: number;
+  notas?: string;
+  origen?: string;
+}
+
+export async function registrarFichaje(data: {
+  usuarioId: string;
+  usuarioNombre: string;
+  usuarioRol: string;
+  tipo: 'entrada' | 'salida';
+  notas?: string;
+}) {
+  try {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const seconds = String(now.getSeconds()).padStart(2, '0');
+
+    const fecha = `${year}-${month}-${day}`;
+    const hora = `${hours}:${minutes}:${seconds}`;
+    const timestamp = now.getTime();
+
+    const record: FichajeHorario = {
+      usuarioId: data.usuarioId,
+      usuarioNombre: data.usuarioNombre,
+      usuarioRol: data.usuarioRol || 'usuario',
+      tipo: data.tipo,
+      fecha,
+      hora,
+      timestamp,
+      notas: data.notas || '',
+      origen: 'web'
+    };
+
+    const col = collection(db, 'registro_horario');
+    const docRef = await addDoc(col, record);
+    return { ...record, _docId: docRef.id, id: docRef.id };
+  } catch (e) {
+    console.error('registrarFichaje error:', e);
+    throw e;
+  }
+}
+
+export function subscribeRegistroHorario(callback: (registros: FichajeHorario[]) => void) {
+  try {
+    const col = collection(db, 'registro_horario');
+    const q = query(col, orderBy('timestamp', 'desc'));
+    const unsub = onSnapshot(q, (snap) => {
+      const items = snap.docs.map(d => ({
+        _docId: d.id,
+        id: d.id,
+        ...d.data()
+      })) as FichajeHorario[];
+      callback(items);
+    }, (err) => {
+      console.error('subscribeRegistroHorario error:', err);
+      callback([]);
+    });
+    return unsub;
+  } catch (e) {
+    console.error('subscribeRegistroHorario error:', e);
+    return () => {};
+  }
+}
+
+export async function deleteRegistroHorario(docId: string) {
+  try {
+    const docRef = doc(db, 'registro_horario', docId);
+    await deleteDoc(docRef);
+  } catch (e) {
+    console.error('deleteRegistroHorario error:', e);
+    throw e;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PAPELERA DE RECICLAJE (Centralizada - Retención 100 Días)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface PapeleraItem {
+  id: string;
+  originalDocId: string;
+  coleccion: string;
+  tipo: string;
+  titulo: string;
+  clienteNombre?: string;
+  centroNombre?: string;
+  datos: Record<string, any>;
+  fechaEliminacion: string;
+  fechaExpiracion: string;
+  eliminadoPor?: string;
+  _docId?: string;
+}
+
+function cleanUndefinedForFirestore(obj: any): any {
+  if (obj === undefined) return null;
+  if (obj === null) return null;
+  if (typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) {
+    return obj.map(cleanUndefinedForFirestore);
+  }
+  const clean: Record<string, any> = {};
+  for (const [key, val] of Object.entries(obj)) {
+    if (val !== undefined) {
+      clean[key] = cleanUndefinedForFirestore(val);
+    }
+  }
+  return clean;
+}
+
+export async function moverAPapelera(params: {
+  coleccion: string;
+  originalDocId: string;
+  tipo: string;
+  titulo: string;
+  clienteNombre?: string;
+  centroNombre?: string;
+  datos: Record<string, any>;
+  usuario?: string;
+}) {
+  try {
+    const fechaEliminacion = new Date().toISOString();
+    const expDate = new Date();
+    expDate.setDate(expDate.getDate() + 100);
+    const fechaExpiracion = expDate.toISOString();
+
+    const sanitizedDatos = cleanUndefinedForFirestore(params.datos || {});
+
+    const papeleraCol = collection(db, 'papelera');
+    await addDoc(papeleraCol, {
+      originalDocId: params.originalDocId,
+      coleccion: params.coleccion,
+      tipo: params.tipo,
+      titulo: params.titulo || 'Sin título',
+      clienteNombre: params.clienteNombre || '',
+      centroNombre: params.centroNombre || '',
+      datos: sanitizedDatos,
+      fechaEliminacion,
+      fechaExpiracion,
+      eliminadoPor: params.usuario || 'Usuario'
+    });
+
+    // Eliminar de la colección de origen
+    const originalRef = doc(db, params.coleccion, params.originalDocId);
+    await deleteDoc(originalRef);
+
+    console.info(`moverAPapelera: Documento ${params.originalDocId} de ${params.coleccion} movido a papelera`);
+    return true;
+  } catch (e) {
+    console.error('moverAPapelera error:', e);
+    throw e;
+  }
+}
+
+export function subscribePapelera(callback: (items: PapeleraItem[]) => void) {
+  try {
+    const col = collection(db, 'papelera');
+    const q = query(col, orderBy('fechaEliminacion', 'desc'));
+    const unsub = onSnapshot(q, async (snap) => {
+      const now = Date.now();
+      const validItems: PapeleraItem[] = [];
+
+      for (const d of snap.docs) {
+        const data = d.data() as any;
+        const expTime = data.fechaExpiracion ? new Date(data.fechaExpiracion).getTime() : 0;
+
+        // Si han pasado más de 100 días, purgar automáticamente de Firestore
+        if (expTime > 0 && expTime < now) {
+          deleteDoc(doc(db, 'papelera', d.id)).catch(err =>
+            console.error('Error purgando elemento caducado de papelera:', err)
+          );
+        } else {
+          validItems.push({
+            _docId: d.id,
+            id: d.id,
+            ...data
+          });
+        }
+      }
+
+      callback(validItems);
+    }, (err) => {
+      console.error('subscribePapelera error:', err);
+      callback([]);
+    });
+
+    return unsub;
+  } catch (e) {
+    console.error('subscribePapelera error:', e);
+    return () => {};
+  }
+}
+
+export async function restaurarElementoPapelera(item: PapeleraItem) {
+  try {
+    if (!item.coleccion || !item.originalDocId || !item.datos) {
+      throw new Error('Datos insuficientes para restaurar el elemento.');
+    }
+
+    // Reinsertar en la colección original
+    const originalRef = doc(db, item.coleccion, item.originalDocId);
+    await setDoc(originalRef, item.datos);
+
+    // Eliminar de la papelera
+    const papeleraRef = doc(db, 'papelera', item._docId || item.id);
+    await deleteDoc(papeleraRef);
+
+    console.info(`restaurarElementoPapelera: ${item.originalDocId} restaurado en ${item.coleccion}`);
+    return true;
+  } catch (e) {
+    console.error('restaurarElementoPapelera error:', e);
+    throw e;
+  }
+}
+
+export async function eliminarDefinitivoPapelera(docId: string) {
+  try {
+    const papeleraRef = doc(db, 'papelera', docId);
+    await deleteDoc(papeleraRef);
+    console.info(`eliminarDefinitivoPapelera: ${docId} eliminado físicamente`);
+    return true;
+  } catch (e) {
+    console.error('eliminarDefinitivoPapelera error:', e);
+    throw e;
+  }
+}
+
+export async function vaciarPapeleraCompleta() {
+  try {
+    const snap = await getDocs(collection(db, 'papelera'));
+    const promises = snap.docs.map(d => deleteDoc(doc(db, 'papelera', d.id)));
+    await Promise.all(promises);
+    console.info('vaciarPapeleraCompleta: Papelera vaciada');
+    return true;
+  } catch (e) {
+    console.error('vaciarPapeleraCompleta error:', e);
+    throw e;
+  }
+}
+
 export {app, storage, db, analytics};
+
 

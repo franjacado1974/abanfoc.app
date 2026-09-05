@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { extintorBase64 } from '../services/icono_extintor';
 
 export default function Loader() {
   const [loadingText, setLoadingText] = useState('Iniciando sesión segura...');
@@ -35,17 +34,17 @@ export default function Loader() {
 
       {/* Main dark glassmorphic card */}
       <div className="relative z-10 bg-zinc-950/60 backdrop-blur-xl p-8 sm:p-12 rounded-[2.5rem] border border-zinc-900 flex flex-col items-center w-full max-w-sm sm:max-w-md shadow-2xl text-center">
-        {/* Rotating Extinguisher Container */}
+        {/* Rotating Racor Container */}
         <div className="relative w-28 h-28 sm:w-32 sm:h-32 mb-8 bg-zinc-950 rounded-full flex items-center justify-center border border-zinc-900 shadow-[inset_0_2px_4px_rgba(0,0,0,0.5),0_10px_25px_-5px_rgba(239,68,68,0.15)] overflow-hidden">
           {/* Outer spinning dashed ring */}
           <div className="absolute inset-1.5 border border-dashed border-red-500/40 rounded-full animate-spin-slow"></div>
           
-          {/* Extinguisher Icon itself */}
+          {/* Racor Barcelona Icon itself */}
           <img 
-            src={extintorBase64} 
-            alt="Extintor" 
-            className="w-16 h-16 sm:w-20 sm:h-20 object-contain animate-spin-slow select-none pointer-events-none filter drop-shadow-[0_0_8px_rgba(239,68,68,0.3)]" 
-            onError={(e) => { (e.target as HTMLImageElement).src = '/favicon.png'; }}
+            src="/loader-racor.png" 
+            alt="Cargando..." 
+            className="w-20 h-20 sm:w-24 sm:h-24 object-contain animate-spin-slow select-none pointer-events-none filter drop-shadow-[0_0_12px_rgba(255,255,255,0.25)]" 
+            onError={(e) => { (e.target as HTMLImageElement).src = '/racor-barcelona.jpg'; }}
           />
         </div>
 

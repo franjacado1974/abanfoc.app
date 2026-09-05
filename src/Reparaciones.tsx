@@ -2,15 +2,104 @@ import { useState, useEffect } from 'react';
 import { 
   Wrench, Plus, Search, Filter, Edit, Trash2, CheckCircle2, 
   Clock, PauseCircle, User, MapPin, Briefcase, 
-  X, Save, ChevronDown, FileText, StickyNote, Bell
+  X, Save, ChevronDown, FileText, StickyNote, Bell, Calendar,
+  ReceiptText
 } from 'lucide-react';
 import { 
   subscribeReparaciones, addReparacion, updateReparacion, deleteReparacion, 
-  subscribeTecnicos, subscribeCentros,
-  type ReparacionItem 
+  subscribeTecnicos, subscribeCentros, subscribeClientes, subscribeEmpresas, subscribeAlbaranes, addAlbaran,
+  type ReparacionItem, type Albaran, type Cliente, type Centro, type Empresa 
 } from './firebase';
 
+const MESES = [
+  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+];
+
+const MESES_CONFIG: Record<string, {
+  active: string;
+  inactive: string;
+  badgeActive: string;
+  badgeInactive: string;
+}> = {
+  Enero: {
+    active: 'bg-gradient-to-r from-sky-600 to-blue-600 text-white shadow-md shadow-sky-500/20 scale-[1.02]',
+    inactive: 'bg-sky-50/70 text-sky-900 border-sky-200/80 hover:bg-sky-100/90',
+    badgeActive: 'bg-sky-950/80 text-white',
+    badgeInactive: 'bg-sky-200/80 text-sky-900 font-extrabold'
+  },
+  Febrero: {
+    active: 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-500/20 scale-[1.02]',
+    inactive: 'bg-indigo-50/70 text-indigo-900 border-indigo-200/80 hover:bg-indigo-100/90',
+    badgeActive: 'bg-indigo-950/80 text-white',
+    badgeInactive: 'bg-indigo-200/80 text-indigo-900 font-extrabold'
+  },
+  Marzo: {
+    active: 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-500/20 scale-[1.02]',
+    inactive: 'bg-emerald-50/70 text-emerald-900 border-emerald-200/80 hover:bg-emerald-100/90',
+    badgeActive: 'bg-emerald-950/80 text-white',
+    badgeInactive: 'bg-emerald-200/80 text-emerald-900 font-extrabold'
+  },
+  Abril: {
+    active: 'bg-gradient-to-r from-teal-600 to-cyan-600 text-white shadow-md shadow-teal-500/20 scale-[1.02]',
+    inactive: 'bg-teal-50/70 text-teal-900 border-teal-200/80 hover:bg-teal-100/90',
+    badgeActive: 'bg-teal-950/80 text-white',
+    badgeInactive: 'bg-teal-200/80 text-teal-900 font-extrabold'
+  },
+  Mayo: {
+    active: 'bg-gradient-to-r from-green-600 to-emerald-600 text-white shadow-md shadow-green-500/20 scale-[1.02]',
+    inactive: 'bg-green-50/70 text-green-900 border-green-200/80 hover:bg-green-100/90',
+    badgeActive: 'bg-green-950/80 text-white',
+    badgeInactive: 'bg-green-200/80 text-green-900 font-extrabold'
+  },
+  Junio: {
+    active: 'bg-gradient-to-r from-amber-500 to-yellow-500 text-zinc-950 shadow-md shadow-amber-500/20 scale-[1.02]',
+    inactive: 'bg-amber-50/70 text-amber-900 border-amber-200/80 hover:bg-amber-100/90',
+    badgeActive: 'bg-amber-950/80 text-white',
+    badgeInactive: 'bg-amber-200/80 text-amber-900 font-extrabold'
+  },
+  Julio: {
+    active: 'bg-gradient-to-r from-orange-500 to-amber-600 text-white shadow-md shadow-orange-500/20 scale-[1.02]',
+    inactive: 'bg-orange-50/70 text-orange-900 border-orange-200/80 hover:bg-orange-100/90',
+    badgeActive: 'bg-orange-950/80 text-white',
+    badgeInactive: 'bg-orange-200/80 text-orange-900 font-extrabold'
+  },
+  Agosto: {
+    active: 'bg-gradient-to-r from-red-600 to-rose-600 text-white shadow-md shadow-red-500/20 scale-[1.02]',
+    inactive: 'bg-red-50/70 text-red-900 border-red-200/80 hover:bg-red-100/90',
+    badgeActive: 'bg-red-950/80 text-white',
+    badgeInactive: 'bg-red-200/80 text-red-900 font-extrabold'
+  },
+  Septiembre: {
+    active: 'bg-gradient-to-r from-violet-600 to-purple-600 text-white shadow-md shadow-violet-500/20 scale-[1.02]',
+    inactive: 'bg-violet-50/70 text-violet-900 border-violet-200/80 hover:bg-violet-100/90',
+    badgeActive: 'bg-violet-950/80 text-white',
+    badgeInactive: 'bg-violet-200/80 text-violet-900 font-extrabold'
+  },
+  Octubre: {
+    active: 'bg-gradient-to-r from-amber-600 to-orange-600 text-white shadow-md shadow-amber-600/20 scale-[1.02]',
+    inactive: 'bg-amber-50/70 text-amber-950 border-amber-300/80 hover:bg-amber-100/90',
+    badgeActive: 'bg-amber-950/80 text-white',
+    badgeInactive: 'bg-amber-200/80 text-amber-900 font-extrabold'
+  },
+  Noviembre: {
+    active: 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-md shadow-rose-500/20 scale-[1.02]',
+    inactive: 'bg-rose-50/70 text-rose-900 border-rose-200/80 hover:bg-rose-100/90',
+    badgeActive: 'bg-rose-950/80 text-white',
+    badgeInactive: 'bg-rose-200/80 text-rose-900 font-extrabold'
+  },
+  Diciembre: {
+    active: 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-md shadow-cyan-500/20 scale-[1.02]',
+    inactive: 'bg-cyan-50/70 text-cyan-900 border-cyan-200/80 hover:bg-cyan-100/90',
+    badgeActive: 'bg-cyan-950/80 text-white',
+    badgeInactive: 'bg-cyan-200/80 text-cyan-900 font-extrabold'
+  }
+};
+
 export default function Reparaciones() {
+  const currentMonthName = MESES[new Date().getMonth()];
+  const [activeMonth, setActiveMonth] = useState<string>(currentMonthName);
+
   const [reparaciones, setReparaciones] = useState<ReparacionItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -19,7 +108,10 @@ export default function Reparaciones() {
 
   // Listas para desplegables de ayuda
   const [tecnicos, setTecnicos] = useState<any[]>([]);
-  const [centros, setCentros] = useState<any[]>([]);
+  const [centros, setCentros] = useState<Centro[]>([]);
+  const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [empresas, setEmpresas] = useState<Empresa[]>([]);
+  const [albaranes, setAlbaranes] = useState<Albaran[]>([]);
 
   // Modales
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -30,15 +122,67 @@ export default function Reparaciones() {
   const [notaModalItem, setNotaModalItem] = useState<ReparacionItem | null>(null);
   const [notaText, setNotaText] = useState('');
 
+  // Modal para Crear Albarán desde Reparación
+  const [albaranModalItem, setAlbaranModalItem] = useState<ReparacionItem | null>(null);
+  const [albaranData, setAlbaranData] = useState({
+    empresaId: '',
+    clienteId: '',
+    centroId: '',
+    tecnicoId: '',
+    concepto: '',
+    descripcion: '',
+    precioUnidad: 0
+  });
+
   // Formulario de edición/creación
   const [formData, setFormData] = useState({
     reparacion: '',
     lugar: '',
     tecnicoAsignado: '',
     comercial: '',
+    fecha: new Date().toISOString().slice(0, 10),
     estado: 'Pendiente' as 'Pendiente' | 'En curso' | 'Parado' | 'Finalizado',
     observaciones: ''
   });
+
+  // Funciones auxiliares para fechas y meses
+  const getItemMonth = (item: { fecha?: string; mes?: string; fechaCreacion?: string }): string => {
+    if (item.mes && MESES.includes(item.mes)) {
+      return item.mes;
+    }
+    const f = item.fecha || item.fechaCreacion;
+    if (f) {
+      const parts = f.slice(0, 10).split('-');
+      if (parts.length >= 2) {
+        const mIdx = parseInt(parts[1], 10) - 1;
+        if (mIdx >= 0 && mIdx < 12) {
+          return MESES[mIdx];
+        }
+      }
+    }
+    return MESES[new Date().getMonth()];
+  };
+
+  const getMonthFromDateStr = (dateStr: string): string => {
+    if (!dateStr) return MESES[new Date().getMonth()];
+    const parts = dateStr.slice(0, 10).split('-');
+    if (parts.length >= 2) {
+      const mIdx = parseInt(parts[1], 10) - 1;
+      if (mIdx >= 0 && mIdx < 12) {
+        return MESES[mIdx];
+      }
+    }
+    return MESES[new Date().getMonth()];
+  };
+
+  const formatearFecha = (dateStr?: string): string => {
+    if (!dateStr) return '';
+    const parts = dateStr.slice(0, 10).split('-');
+    if (parts.length === 3) {
+      return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+    return dateStr;
+  };
 
   // Cargar datos locales y suscribir a Firebase
   useEffect(() => {
@@ -61,11 +205,17 @@ export default function Reparaciones() {
 
     const unsubTec = subscribeTecnicos((items) => setTecnicos(items));
     const unsubCen = subscribeCentros((items) => setCentros(items));
+    const unsubCli = subscribeClientes((items) => setClientes(items));
+    const unsubEmp = subscribeEmpresas((items) => setEmpresas(items));
+    const unsubAlb = subscribeAlbaranes((items) => setAlbaranes(items));
 
     return () => {
       unsubRep();
       unsubTec();
       unsubCen();
+      unsubCli();
+      unsubEmp();
+      unsubAlb();
     };
   }, []);
 
@@ -83,6 +233,7 @@ export default function Reparaciones() {
       lugar: '',
       tecnicoAsignado: '',
       comercial: '',
+      fecha: new Date().toISOString().slice(0, 10),
       estado: 'Pendiente',
       observaciones: ''
     });
@@ -97,6 +248,7 @@ export default function Reparaciones() {
       lugar: item.lugar || '',
       tecnicoAsignado: item.tecnicoAsignado || '',
       comercial: item.comercial || '',
+      fecha: item.fecha || (item.fechaCreacion ? item.fechaCreacion.slice(0, 10) : new Date().toISOString().slice(0, 10)),
       estado: item.estado || 'Pendiente',
       observaciones: item.nota || item.observaciones || ''
     });
@@ -131,6 +283,105 @@ export default function Reparaciones() {
     setNotaModalItem(null);
   };
 
+  // Abrir modal para Crear Albarán desde la reparación
+  const handleOpenCrearAlbaran = (item: ReparacionItem) => {
+    setAlbaranModalItem(item);
+
+    // Intentar encontrar el centro y cliente por el nombre de lugar
+    const matchCentro = centros.find(c => 
+      (c.nombre && item.lugar && c.nombre.toLowerCase().trim() === item.lugar.toLowerCase().trim()) ||
+      (c.direccion && item.lugar && c.direccion.toLowerCase().includes(item.lugar.toLowerCase()))
+    );
+
+    const clienteId = matchCentro?.clienteId || (clientes.length > 0 ? clientes[0].id : '');
+    const centroId = matchCentro?.id || '';
+    const empresaId = matchCentro?.empresaId || (empresas.length > 0 ? (empresas[0].id || '') : '');
+
+    // Intentar encontrar el técnico asignado
+    const matchTecnico = tecnicos.find(t => 
+      `${t.nombre || ''} ${t.apellidos || ''}`.toLowerCase().trim() === (item.tecnicoAsignado || '').toLowerCase().trim() ||
+      (t.nombre && (item.tecnicoAsignado || '').toLowerCase().includes(t.nombre.toLowerCase()))
+    );
+
+    setAlbaranData({
+      empresaId,
+      clienteId,
+      centroId,
+      tecnicoId: matchTecnico?.id || (tecnicos.length > 0 ? tecnicos[0].id : ''),
+      concepto: item.reparacion || 'Trabajo de reparación',
+      descripcion: (item.nota || item.observaciones || '').trim(),
+      precioUnidad: 0
+    });
+  };
+
+  // Guardar Albarán generado
+  const handleSaveAlbaran = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!albaranModalItem) return;
+
+    if (!albaranData.empresaId || !albaranData.clienteId) {
+      alert('Por favor, selecciona una empresa y un cliente para el albarán.');
+      return;
+    }
+
+    const year = new Date().getFullYear().toString().slice(-2);
+    const prefix = `ALB-${year}-`;
+    const yearAlbaranes = albaranes.filter(alb => alb.id?.startsWith(prefix));
+    let nextNum = 1;
+    if (yearAlbaranes.length > 0) {
+      const nums = yearAlbaranes.map(alb => {
+        const parts = alb.id.split('-');
+        return parseInt(parts[parts.length - 1]);
+      }).filter(n => !isNaN(n));
+      if (nums.length > 0) nextNum = Math.max(...nums) + 1;
+    }
+    const generatedId = `${prefix}${nextNum.toString().padStart(3, '0')}`;
+
+    const repDocId = albaranModalItem._docId || albaranModalItem.id;
+    const precio = Number(albaranData.precioUnidad) || 0;
+
+    const nuevoAlbaran: Albaran = {
+      id: generatedId,
+      empresaId: albaranData.empresaId,
+      clienteId: albaranData.clienteId,
+      centroId: albaranData.centroId || '',
+      tecnicoId: albaranData.tecnicoId || '',
+      fechaCreacion: albaranModalItem.fecha ? `${albaranModalItem.fecha}T10:00:00.000Z` : new Date().toISOString(),
+      titulo: `Reparación: ${albaranModalItem.reparacion}`,
+      reparacionId: repDocId,
+      facturado: false,
+      nombreFirmante: '',
+      items: [
+        {
+          cantidad: 1,
+          concepto: albaranData.concepto || albaranModalItem.reparacion || 'Trabajo de reparación',
+          descripcion: albaranData.descripcion || albaranModalItem.nota || albaranModalItem.observaciones || '',
+          precioUnidad: precio,
+          subtotal: precio
+        }
+      ]
+    };
+
+    try {
+      await addAlbaran(nuevoAlbaran);
+      // Vincular albaranId en la reparación
+      await updateReparacion(repDocId, { albaranId: generatedId });
+      
+      const updatedList = reparaciones.map(r => 
+        (r.id === albaranModalItem.id || r._docId === albaranModalItem._docId)
+          ? { ...r, albaranId: generatedId }
+          : r
+      );
+      updateLocalAndState(updatedList);
+
+      setAlbaranModalItem(null);
+      alert(`Albarán ${generatedId} creado con éxito y guardado en Albaranes.`);
+    } catch (err) {
+      console.error('Error al generar albarán desde reparación:', err);
+      alert('Hubo un error al crear el albarán.');
+    }
+  };
+
   // Guardar (Crear o Modificar completo)
   const handleSubmitForm = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -138,6 +389,8 @@ export default function Reparaciones() {
       alert('Por favor, introduce el nombre o descripción de la reparación.');
       return;
     }
+
+    const calculatedMes = getMonthFromDateStr(formData.fecha);
 
     if (editingItem) {
       // Editar
@@ -147,13 +400,17 @@ export default function Reparaciones() {
         lugar: formData.lugar.trim(),
         tecnicoAsignado: formData.tecnicoAsignado.trim(),
         comercial: formData.comercial.trim(),
+        fecha: formData.fecha,
+        mes: calculatedMes,
         estado: formData.estado,
         observaciones: formData.observaciones.trim(),
         nota: formData.observaciones.trim()
       };
 
       const updatedList = reparaciones.map(r => 
-        (r.id === editingItem.id || r._docId === editingItem._docId) ? { ...r, ...updatedItem } : r
+        (r.id === editingItem.id || r._docId === editingItem._docId)
+          ? { ...r, ...updatedItem }
+          : r
       );
       updateLocalAndState(updatedList);
 
@@ -171,6 +428,8 @@ export default function Reparaciones() {
         lugar: formData.lugar.trim(),
         tecnicoAsignado: formData.tecnicoAsignado.trim(),
         comercial: formData.comercial.trim(),
+        fecha: formData.fecha,
+        mes: calculatedMes,
         estado: formData.estado,
         observaciones: formData.observaciones.trim(),
         nota: formData.observaciones.trim(),
@@ -207,8 +466,11 @@ export default function Reparaciones() {
     setDeleteConfirmId(null);
   };
 
+  // Filtrado por mes activo (excluyendo las ya facturadas para que desaparezcan de la lista)
+  const reparacionesDelMes = reparaciones.filter(r => getItemMonth(r) === activeMonth && !r.facturado);
+
   // Filtrado de la lista
-  const reparacionesFiltradas = reparaciones.filter(r => {
+  const reparacionesFiltradas = reparacionesDelMes.filter(r => {
     if (estadoFilter !== 'TODOS' && r.estado !== estadoFilter) {
       return false;
     }
@@ -219,17 +481,18 @@ export default function Reparaciones() {
       const matchTec = (r.tecnicoAsignado || '').toLowerCase().includes(q);
       const matchCom = (r.comercial || '').toLowerCase().includes(q);
       const matchNota = (r.nota || r.observaciones || '').toLowerCase().includes(q);
-      return matchRep || matchLugar || matchTec || matchCom || matchNota;
+      const matchFecha = (r.fecha || '').toLowerCase().includes(q);
+      return matchRep || matchLugar || matchTec || matchCom || matchNota || matchFecha;
     }
     return true;
   });
 
-  // Estadísticas
-  const totalCount = reparaciones.length;
-  const pendientesCount = reparaciones.filter(r => r.estado === 'Pendiente').length;
-  const enCursoCount = reparaciones.filter(r => r.estado === 'En curso').length;
-  const paradosCount = reparaciones.filter(r => r.estado === 'Parado').length;
-  const finalizadosCount = reparaciones.filter(r => r.estado === 'Finalizado').length;
+  // Estadísticas del mes activo
+  const totalCount = reparacionesDelMes.length;
+  const pendientesCount = reparacionesDelMes.filter(r => r.estado === 'Pendiente').length;
+  const enCursoCount = reparacionesDelMes.filter(r => r.estado === 'En curso').length;
+  const paradosCount = reparacionesDelMes.filter(r => r.estado === 'Parado').length;
+  const finalizadosCount = reparacionesDelMes.filter(r => r.estado === 'Finalizado').length;
 
   // Renderizador de Insignias de Estado (Colores requeridos)
   const renderEstadoBadge = (estado: string) => {
@@ -284,8 +547,8 @@ export default function Reparaciones() {
       {/* Header & Title */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-xl bg-red-50 border border-red-100 flex items-center justify-center text-red-600 shadow-sm">
+          <div className="flex flex-col sm:flex-row items-center gap-2.5 text-center sm:text-left">
+            <div className="w-10 h-10 rounded-xl bg-red-50 border border-red-100 flex items-center justify-center text-red-600 shadow-sm shrink-0">
               <Wrench className="w-5 h-5 stroke-[2.25]" />
             </div>
             <div>
@@ -302,6 +565,35 @@ export default function Reparaciones() {
           <Plus className="w-5 h-5" />
           Nueva Reparación
         </button>
+      </div>
+
+      {/* 12 Pestañas de los Meses con Toque de Colores por Estación y Mes */}
+      <div className="bg-white p-2.5 rounded-2xl border border-slate-200/80 shadow-sm mb-6 overflow-x-auto scrollbar-none">
+        <div className="flex items-center gap-2 min-w-max">
+          {MESES.map((mes) => {
+            const count = reparaciones.filter(r => getItemMonth(r) === mes).length;
+            const isActive = activeMonth === mes;
+            const cfg = MESES_CONFIG[mes] || MESES_CONFIG.Enero;
+
+            return (
+              <button
+                key={mes}
+                type="button"
+                onClick={() => setActiveMonth(mes)}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs border transition-all cursor-pointer ${
+                  isActive ? cfg.active : cfg.inactive
+                }`}
+              >
+                <span>{mes}</span>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] ${
+                  isActive ? cfg.badgeActive : cfg.badgeInactive
+                }`}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Counter Cards */}
@@ -409,7 +701,9 @@ export default function Reparaciones() {
               ) : reparacionesFiltradas.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-6 py-12 text-center text-slate-400 font-medium">
-                    No se encontraron tareas de reparación.
+                    {search || estadoFilter !== 'TODOS'
+                      ? 'No se encontraron tareas de reparación con los filtros aplicados.'
+                      : `No hay tareas de reparación registradas en ${activeMonth}.`}
                   </td>
                 </tr>
               ) : (
@@ -427,6 +721,12 @@ export default function Reparaciones() {
                           </div>
                           <div>
                             <p className="font-bold text-slate-900">{item.reparacion || 'Sin título'}</p>
+                            {item.fecha && (
+                              <span className="text-[11px] font-semibold text-slate-500 inline-flex items-center gap-1 mt-0.5 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200/80">
+                                <Calendar className="w-3 h-3 text-red-500" />
+                                {formatearFecha(item.fecha)}
+                              </span>
+                            )}
                           </div>
                         </div>
                       </td>
@@ -487,6 +787,18 @@ export default function Reparaciones() {
                       {/* ACCIONES */}
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenCrearAlbaran(item)}
+                            className={`p-2 rounded-xl transition-colors cursor-pointer ${
+                              item.albaranId 
+                                ? 'text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50' 
+                                : 'text-slate-600 hover:text-blue-600 hover:bg-blue-50'
+                            }`}
+                            title={item.albaranId ? `Albarán creado (${item.albaranId}) - Clic para generar otro` : "Crear Albarán"}
+                          >
+                            <ReceiptText className="w-4 h-4" />
+                          </button>
                           <button
                             onClick={() => handleOpenEditModal(item)}
                             className="p-2 rounded-xl text-slate-600 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
@@ -692,21 +1004,37 @@ export default function Reparaciones() {
                 </div>
               </div>
 
-              {/* ESTADO */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Estado
-                </label>
-                <select
-                  value={formData.estado}
-                  onChange={(e) => setFormData({ ...formData, estado: e.target.value as any })}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 bg-white"
-                >
-                  <option value="Pendiente">Pendiente (Gris)</option>
-                  <option value="En curso">En curso (Amarillo)</option>
-                  <option value="Parado">Parado (Rojo)</option>
-                  <option value="Finalizado">Finalizado (Verde)</option>
-                </select>
+              {/* FECHA Y ESTADO */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-red-500" />
+                    Fecha de Reparación <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={formData.fecha}
+                    onChange={(e) => setFormData({ ...formData, fecha: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Estado
+                  </label>
+                  <select
+                    value={formData.estado}
+                    onChange={(e) => setFormData({ ...formData, estado: e.target.value as any })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 bg-white"
+                  >
+                    <option value="Pendiente">Pendiente (Gris)</option>
+                    <option value="En curso">En curso (Amarillo)</option>
+                    <option value="Parado">Parado (Rojo)</option>
+                    <option value="Finalizado">Finalizado (Verde)</option>
+                  </select>
+                </div>
               </div>
 
               {/* NOTA / OBSERVACIONES */}
@@ -771,6 +1099,161 @@ export default function Reparaciones() {
                 Eliminar
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CREAR ALBARÁN DESDE REPARACIÓN */}
+      {albaranModalItem && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[9999] animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600 shadow-sm">
+                  <ReceiptText className="w-5 h-5 stroke-[2.25]" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900">Crear Albarán de Reparación</h3>
+                  <p className="text-xs text-slate-500 font-medium">Se enviará a la lista general de Albaranes</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAlbaranModalItem(null)}
+                className="w-9 h-9 rounded-xl hover:bg-slate-200/70 flex items-center justify-center text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveAlbaran} className="p-6 space-y-4">
+              {/* Información de la tarea origen */}
+              <div className="bg-blue-50/70 border border-blue-200/80 rounded-2xl p-4 text-xs space-y-1">
+                <div className="flex justify-between font-semibold text-blue-900">
+                  <span>Reparación: {albaranModalItem.reparacion}</span>
+                  <span>{albaranModalItem.fecha ? formatearFecha(albaranModalItem.fecha) : ''}</span>
+                </div>
+                <div className="text-blue-700">Lugar: {albaranModalItem.lugar || '—'}</div>
+                <div className="text-blue-700">Técnico: {albaranModalItem.tecnicoAsignado || 'Sin asignar'}</div>
+              </div>
+
+              {/* Empresa Mantenedora */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Empresa Mantenedora <span className="text-red-500">*</span>
+                </label>
+                <select
+                  required
+                  value={albaranData.empresaId}
+                  onChange={(e) => setAlbaranData(prev => ({ ...prev, empresaId: e.target.value }))}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
+                >
+                  <option value="">Selecciona Empresa...</option>
+                  {empresas.map((emp) => (
+                    <option key={emp.id} value={emp.id}>{emp.nombre}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Cliente */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Cliente <span className="text-red-500">*</span>
+                </label>
+                <select
+                  required
+                  value={albaranData.clienteId}
+                  onChange={(e) => setAlbaranData(prev => ({ ...prev, clienteId: e.target.value }))}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
+                >
+                  <option value="">Selecciona Cliente...</option>
+                  {clientes.map((cli) => (
+                    <option key={cli.id} value={cli.id}>{cli.nombre}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Centro */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Centro / Lugar
+                </label>
+                <select
+                  value={albaranData.centroId}
+                  onChange={(e) => setAlbaranData(prev => ({ ...prev, centroId: e.target.value }))}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
+                >
+                  <option value="">Sin centro específico o seleccionar...</option>
+                  {centros
+                    .filter(c => !albaranData.clienteId || c.clienteId === albaranData.clienteId)
+                    .map((c) => (
+                      <option key={c.id} value={c.id}>{c.nombre} {c.direccion ? `(${c.direccion})` : ''}</option>
+                    ))}
+                </select>
+              </div>
+
+              {/* Concepto */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Concepto del Albarán <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={albaranData.concepto}
+                  onChange={(e) => setAlbaranData(prev => ({ ...prev, concepto: e.target.value }))}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                />
+              </div>
+
+              {/* Descripción / Trabajos realizados */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Descripción / Detalle del trabajo
+                </label>
+                <textarea
+                  rows={2}
+                  value={albaranData.descripcion}
+                  onChange={(e) => setAlbaranData(prev => ({ ...prev, descripcion: e.target.value }))}
+                  placeholder="Detalle de las reparaciones realizadas o materiales..."
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                />
+              </div>
+
+              {/* Precio Unitario (€) */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Importe (€ sin IVA)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={albaranData.precioUnidad || ''}
+                  onChange={(e) => setAlbaranData(prev => ({ ...prev, precioUnidad: parseFloat(e.target.value) || 0 }))}
+                  placeholder="0.00"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                />
+              </div>
+
+              {/* Botones */}
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setAlbaranModalItem(null)}
+                  className="px-5 py-2.5 rounded-xl font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-white bg-blue-600 hover:bg-blue-700 transition-colors shadow-sm cursor-pointer"
+                >
+                  <ReceiptText className="w-4 h-4" />
+                  Crear Albarán
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

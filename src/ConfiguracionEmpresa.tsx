@@ -438,7 +438,7 @@ export default function ConfiguracionEmpresa() {
             className="flex items-center gap-2 text-sm font-medium text-zinc-500 hover:text-black mb-6 transition-colors">
             <ArrowLeft className="w-4 h-4" /> Volver a la lista
           </button>
-          <div className="mb-6">
+          <div className="mb-6 text-center sm:text-left flex flex-col items-center sm:items-start">
             <div className="w-10 h-10 bg-emerald-600 text-white rounded-2xl flex items-center justify-center mb-3 shadow-lg shadow-emerald-200">
               <Building2 className="w-5 h-5" />
             </div>
@@ -464,7 +464,7 @@ export default function ConfiguracionEmpresa() {
           <ArrowLeft className="w-4 h-4" /> Volver al panel
         </button>
 
-        <div className="mb-6">
+        <div className="mb-6 text-center sm:text-left flex flex-col items-center sm:items-start">
           <div className="w-10 h-10 bg-emerald-600 text-white rounded-2xl flex items-center justify-center mb-3 shadow-lg shadow-emerald-200">
             <Building2 className="w-5 h-5" />
           </div>

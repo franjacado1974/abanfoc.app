@@ -1,7 +1,13 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Search, X, Plus, Building2, Calendar, Clock, CheckCircle, FileText, Trash2, Edit, Save, ChevronDown, ArrowLeft } from 'lucide-react';
-import { subscribePedidos, addPedido, updatePedido, deletePedido, subscribeClientes, subscribeCentros, subscribePresupuestos, type Pedido, type Presupuesto, type Cliente, type Centro } from './firebase';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { Search, X, Plus, Building2, Calendar, Clock, CheckCircle, FileText, Trash2, Edit, Save, ChevronDown, ArrowLeft, Wrench, HardHat } from 'lucide-react';
+import { 
+  subscribePedidos, addPedido, updatePedido, deletePedido, 
+  subscribeClientes, subscribeCentros, subscribePresupuestos,
+  addReparacion, addInstalacion,
+  type Pedido, type Presupuesto, type Cliente, type Centro,
+  type ReparacionItem, type InstalacionItem
+} from './firebase';
 
 const ESTADOS = [
   { valor: 'Pendiente' as const, color: 'bg-amber-100 text-amber-700 border-amber-200', icono: Clock },
@@ -9,11 +15,27 @@ const ESTADOS = [
   { valor: 'Completado' as const, color: 'bg-emerald-100 text-emerald-700 border-emerald-200', icono: CheckCircle },
 ];
 
+const MESES = [
+  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+];
+
+const getMonthFromDate = (dateStr?: string): string => {
+  if (!dateStr) return MESES[new Date().getMonth()];
+  const parts = dateStr.slice(0, 10).split('-');
+  if (parts.length >= 2) {
+    const mIdx = parseInt(parts[1], 10) - 1;
+    if (mIdx >= 0 && mIdx < 12) return MESES[mIdx];
+  }
+  return MESES[new Date().getMonth()];
+};
+
 const formatMoneda = (valor: number) =>
   new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(valor || 0);
 
 export default function Pedidos() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
   const [presupuestos, setPresupuestos] = useState<Presupuesto[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
@@ -30,6 +52,8 @@ export default function Pedidos() {
     clienteId: '',
     centroId: '',
     fechaCreacion: new Date().toISOString(),
+    fechaPrevista: '',
+    tipoPedido: '',
     titulo: '',
     numeroPedido: '',
     items: [],
@@ -44,6 +68,18 @@ export default function Pedidos() {
     const unsubPresupuestos = subscribePresupuestos(setPresupuestos);
     return () => { unsubPedidos(); unsubClientes(); unsubCentros(); unsubPresupuestos(); };
   }, []);
+
+  // Detectar si venimos de aprobar un presupuesto para abrir Nuevo Pedido de inmediato
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const fromPresupuestoId = params.get('fromPresupuesto');
+    if (fromPresupuestoId && presupuestos.length > 0) {
+      const pres = presupuestos.find(p => (p as any)._docId === fromPresupuestoId || p.id === fromPresupuestoId);
+      if (pres) {
+        handleCrearDesdePresupuesto(pres);
+      }
+    }
+  }, [location.search, presupuestos]);
 
   const presupuestosAprobados = useMemo(() =>
     presupuestos.filter(p => p.estado === 'Aprobado' && !pedidos.some(ped => ped.presupuestoId === p.id)),
@@ -75,7 +111,8 @@ export default function Pedidos() {
       centroId: '',
       titulo: '',
       fechaCreacion: new Date().toISOString(),
-      fechaPrevista: '',
+      fechaPrevista: new Date().toISOString().slice(0, 10),
+      tipoPedido: '',
       items: [{ cantidad: 1, concepto: 'Trabajo', descripcion: '', precioUnidad: 0, subtotal: 0 }],
       estado: 'Pendiente',
       presupuestoId: '',
@@ -89,12 +126,13 @@ export default function Pedidos() {
     setEditingId(null);
     setForm({
       id: '',
-      empresaId: '',
+      empresaId: (p as any).empresaId || '',
       clienteId: p.clienteId,
-      centroId: '',
+      centroId: (p as any).centroId || '',
       titulo: p.titulo,
       fechaCreacion: new Date().toISOString(),
-      fechaPrevista: '',
+      fechaPrevista: new Date().toISOString().slice(0, 10),
+      tipoPedido: '',
       items: p.lineas.map(l => ({ cantidad: l.cantidad, concepto: l.concepto, descripcion: l.descripcion || '', precioUnidad: l.precioUnidad, subtotal: l.subtotal })),
       estado: 'Pendiente',
       presupuestoId: p.id,
@@ -110,18 +148,87 @@ export default function Pedidos() {
     setView('form');
   };
 
-  // Guarda el pedido en Firebase (colección "pedidos")
+  // Guarda el pedido en Firebase (colección "pedidos") y genera tarea si corresponde
   const handleSave = async () => {
     if (!form.titulo.trim() || !form.clienteId) {
       alert('Rellena el título y selecciona un cliente.');
       return;
     }
     try {
+      let savedForm: Pedido = { ...form };
+
+      // Si se especificó un tipo de pedido y es un pedido nuevo (o no tenía tarea previa generada)
+      if (form.tipoPedido && !form.tareaGeneradaId && !editingId) {
+        const fechaUso = form.fechaPrevista || (form.fechaCreacion ? form.fechaCreacion.slice(0, 10) : new Date().toISOString().slice(0, 10));
+        const mesUso = getMonthFromDate(fechaUso);
+
+        const centroObj = centros.find(c => (c._docId || c.id) === form.centroId);
+        const clienteObj = clientes.find(c => c.id === form.clienteId);
+        let lugar = '';
+        if (centroObj && clienteObj) {
+          lugar = `${centroObj.nombre} (${clienteObj.nombre})`;
+        } else if (centroObj) {
+          lugar = centroObj.nombre;
+        } else if (clienteObj) {
+          lugar = clienteObj.nombre;
+        }
+
+        const notaInicial = form.notas ? form.notas.trim() : `Pedido: ${form.numeroPedido || form.titulo}`;
+
+        if (form.tipoPedido === 'Reparación') {
+          const newRepId = `REP-${Date.now().toString().slice(-6)}`;
+          const newRep: ReparacionItem = {
+            id: newRepId,
+            reparacion: form.titulo.trim(),
+            lugar: lugar.trim(),
+            tecnicoAsignado: '',
+            comercial: '',
+            estado: 'Pendiente',
+            fechaCreacion: new Date().toISOString(),
+            fecha: fechaUso,
+            mes: mesUso,
+            observaciones: notaInicial,
+            nota: notaInicial,
+          };
+          await addReparacion(newRep);
+          savedForm.tareaGeneradaId = newRepId;
+
+          try {
+            const raw = localStorage.getItem('firecheck_db_reparaciones');
+            const arr = raw ? JSON.parse(raw) : [];
+            localStorage.setItem('firecheck_db_reparaciones', JSON.stringify([newRep, ...arr]));
+          } catch {}
+        } else if (form.tipoPedido === 'Instalación') {
+          const newInsId = `INS-${Date.now().toString().slice(-6)}`;
+          const newIns: InstalacionItem = {
+            id: newInsId,
+            instalacion: form.titulo.trim(),
+            lugar: lugar.trim(),
+            tecnicoAsignado: '',
+            comercial: '',
+            estado: 'Pendiente',
+            fechaCreacion: new Date().toISOString(),
+            fecha: fechaUso,
+            mes: mesUso,
+            observaciones: notaInicial,
+            nota: notaInicial,
+          };
+          await addInstalacion(newIns);
+          savedForm.tareaGeneradaId = newInsId;
+
+          try {
+            const raw = localStorage.getItem('firecheck_db_instalaciones');
+            const arr = raw ? JSON.parse(raw) : [];
+            localStorage.setItem('firecheck_db_instalaciones', JSON.stringify([newIns, ...arr]));
+          } catch {}
+        }
+      }
+
       if (editingId) {
-        const docId = (form as any)._docId || editingId;
-        await updatePedido(docId, form as Partial<Pedido>);
+        const docId = (savedForm as any)._docId || editingId;
+        await updatePedido(docId, savedForm as Partial<Pedido>);
       } else {
-        await addPedido(form);
+        await addPedido(savedForm);
       }
       setView('list');
       setEditingId(null);
@@ -168,7 +275,7 @@ export default function Pedidos() {
     return (
       <div className="min-h-screen bg-[#F8FAFC] px-8 py-6">
         {/* Header */}
-        <div className="mb-6">
+        <div className="mb-6 text-center sm:text-left flex flex-col items-center sm:items-start">
           <button 
             onClick={() => navigate('/')} 
             className="flex items-center gap-1.5 text-xs font-semibold text-zinc-500 hover:text-zinc-900 mb-3 transition-colors cursor-pointer"
@@ -304,6 +411,16 @@ export default function Pedidos() {
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border inline-flex items-center gap-1 ${estadoInfo.color}`}>
                           <EstadoIcono className="w-3 h-3" /> {estadoInfo.valor}
                         </span>
+                        {ped.tipoPedido && (
+                          <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border inline-flex items-center gap-1 ${
+                            ped.tipoPedido === 'Reparación'
+                              ? 'bg-amber-50 text-amber-800 border-amber-300'
+                              : 'bg-indigo-50 text-indigo-800 border-indigo-300'
+                          }`}>
+                            {ped.tipoPedido === 'Reparación' ? <Wrench className="w-3 h-3 text-amber-600" /> : <HardHat className="w-3 h-3 text-indigo-600" />}
+                            {ped.tipoPedido}
+                          </span>
+                        )}
                       </div>
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-zinc-500">
                         <span className="font-mono font-bold text-zinc-400">{ped.numeroPedido || ped.id}</span>
@@ -404,6 +521,21 @@ export default function Pedidos() {
                 <label className="text-xs font-bold text-zinc-500 uppercase">Estado</label>
                 <select value={form.estado} onChange={e => setForm({ ...form, estado: e.target.value as Pedido['estado'] })} className="w-full px-4 py-2.5 bg-white border border-zinc-200 rounded-xl text-sm outline-none">
                   {ESTADOS.map(e => <option key={e.valor} value={e.valor}>{e.valor}</option>)}
+                </select>
+              </div>
+              <div className="space-y-2 md:col-span-2 bg-zinc-50/80 p-3.5 rounded-2xl border border-zinc-200/80">
+                <label className="text-xs font-bold text-zinc-700 uppercase flex items-center gap-1.5 mb-1">
+                  Tipo de pedido
+                  <span className="text-[11px] text-zinc-500 font-normal lowercase">(al guardar, creará automáticamente una tarea en Reparaciones o Instalaciones)</span>
+                </label>
+                <select 
+                  value={form.tipoPedido || ''} 
+                  onChange={e => setForm({ ...form, tipoPedido: e.target.value as any })} 
+                  className="w-full px-4 py-2.5 bg-white border border-zinc-200 rounded-xl text-sm font-bold text-zinc-900 outline-none focus:ring-2 focus:ring-red-500/10 focus:border-red-500 shadow-sm cursor-pointer"
+                >
+                  <option value="">Ninguno / Sin especificar</option>
+                  <option value="Reparación">🔧 Reparación (Crea tarea en el menú Reparaciones)</option>
+                  <option value="Instalación">⛑️ Instalación (Crea tarea en el menú Instalaciones)</option>
                 </select>
               </div>
             </div>
