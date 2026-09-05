@@ -12,7 +12,8 @@ import {
   User,
   Building2,
   CalendarDays,
-  Briefcase
+  Briefcase,
+  Sparkles
 } from 'lucide-react';
 import {
   subscribePartes,
@@ -35,10 +36,76 @@ const MESES = [
 
 const DIAS_SEMANA = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 
+// Cálculo de festivos para Barcelona (Nacionales de España + Autonómicos de Catalunya + Locales de Barcelona)
+function getEasterSunday(y: number): Date {
+  const a = y % 19;
+  const b = Math.floor(y / 100);
+  const c = y % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31);
+  const day = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(y, month - 1, day);
+}
+
+function formatDateIso(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function getFestivosBarcelona(year: number): Record<string, string> {
+  const map: Record<string, string> = {};
+
+  // Fiestas con fecha fija
+  map[`${year}-01-01`] = 'Año Nuevo';
+  map[`${year}-01-06`] = 'Reyes';
+  map[`${year}-05-01`] = 'Día del Trabajador';
+  map[`${year}-06-24`] = 'Sant Joan';
+  map[`${year}-08-15`] = 'Asunción de la Virgen';
+  map[`${year}-09-11`] = 'Diada Nacional de Catalunya';
+  map[`${year}-09-24`] = 'La Mercè';
+  map[`${year}-10-12`] = 'Fiesta Nacional de España';
+  map[`${year}-11-01`] = 'Todos los Santos';
+  map[`${year}-12-06`] = 'Día de la Constitución';
+  map[`${year}-12-08`] = 'Inmaculada Concepción';
+  map[`${year}-12-25`] = 'Navidad';
+  map[`${year}-12-26`] = 'Sant Esteve';
+
+  // Fiestas móviles basadas en el Domingo de Pascua
+  const easter = getEasterSunday(year);
+
+  // Viernes Santo (2 días antes de Pascua)
+  const viernesSanto = new Date(easter);
+  viernesSanto.setDate(easter.getDate() - 2);
+  map[formatDateIso(viernesSanto)] = 'Viernes Santo';
+
+  // Lunes de Pascua (1 día después de Pascua - Catalunya)
+  const lunesPascua = new Date(easter);
+  lunesPascua.setDate(easter.getDate() + 1);
+  map[formatDateIso(lunesPascua)] = 'Lunes de Pascua';
+
+  // Pascua Granada / Segunda Pascua (50 días después de Pascua - Fiesta Local Barcelona)
+  const pascuaGranada = new Date(easter);
+  pascuaGranada.setDate(easter.getDate() + 50);
+  map[formatDateIso(pascuaGranada)] = 'Pascua Granada';
+
+  return map;
+}
+
+
 export interface EventoCalendario {
   id: string;
   rawDocId: string;
-  sigla: 'Rev.' | 'Rep.' | 'Inst.';
+  sigla: 'Rev.' | 'Rep.' | 'Inst.' | 'Fiesta:';
   clienteResumido: string;
   tituloCompleto: string;
   lugar?: string;
@@ -47,7 +114,7 @@ export interface EventoCalendario {
   comercial?: string;
   estado?: string;
   fecha: string; // YYYY-MM-DD
-  modulo: 'Mantenimientos' | 'Reparaciones' | 'Instalaciones';
+  modulo: 'Mantenimientos' | 'Reparaciones' | 'Instalaciones' | 'Festivo';
   tipoBadge: string;
   colorTag: string;
   colorBadge: string;
@@ -139,6 +206,16 @@ export default function Calendario() {
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
 
+  // Festivos oficiales de Barcelona y España para el año actual y adyacentes
+  const festivosPorFecha = useMemo(() => {
+    return {
+      ...getFestivosBarcelona(year - 1),
+      ...getFestivosBarcelona(year),
+      ...getFestivosBarcelona(year + 1)
+    };
+  }, [year]);
+
+
   const handlePrevMonth = () => {
     setCurrentDate(new Date(year, month - 1, 1));
   };
@@ -186,6 +263,26 @@ export default function Calendario() {
       if (!map[dateStr]) map[dateStr] = [];
       map[dateStr].push({ ...ev, fecha: dateStr });
     };
+
+    // 0. Festivos de Barcelona y España
+    Object.entries(festivosPorFecha).forEach(([fIso, fNombre]) => {
+      addEvento(fIso, {
+        id: `festivo-${fIso}`,
+        rawDocId: '',
+        sigla: 'Fiesta:',
+        clienteResumido: fNombre,
+        tituloCompleto: `Fiesta: ${fNombre}`,
+        lugar: 'Barcelona / España',
+        estado: 'Festivo Oficial',
+        fecha: fIso,
+        modulo: 'Festivo',
+        tipoBadge: 'Festivo Oficial Barcelona / España',
+        colorTag: 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-700 shadow-xs',
+        colorBadge: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+        icono: Sparkles,
+        detalles: `Día festivo no laborable: ${fNombre} (Festivo oficial en Barcelona y/o España).`
+      });
+    });
 
     // 1. Mantenimientos: "Rev. [Centro]"
     partes.forEach((p) => {
@@ -279,7 +376,7 @@ export default function Calendario() {
     });
 
     return map;
-  }, [partes, reparaciones, instalaciones, centros, clientes, tecnicos]);
+  }, [partes, reparaciones, instalaciones, centros, clientes, tecnicos, festivosPorFecha]);
 
   const getCalendarDays = () => {
     const firstDayOfMonth = new Date(year, month, 1).getDay();
@@ -594,6 +691,7 @@ export default function Calendario() {
               d.date.getMonth() === today.getMonth() &&
               d.date.getFullYear() === today.getFullYear();
 
+            const isHoliday = !!festivosPorFecha[d.iso];
             const eventosDia = eventosPorFecha[d.iso] || [];
             const isOverThisDay = dragOverDate === d.iso;
 
@@ -606,6 +704,8 @@ export default function Calendario() {
                 className={`p-1 sm:p-1.5 flex flex-col justify-start transition-all min-h-0 h-full overflow-hidden ${
                   isOverThisDay
                     ? 'bg-red-50/70 border-2 border-dashed border-red-400 scale-[0.99] shadow-inner'
+                    : isHoliday
+                    ? 'bg-slate-200/85 hover:bg-slate-200 text-slate-800'
                     : d.currentMonth
                     ? 'bg-white hover:bg-slate-50/70'
                     : 'bg-slate-50/40 text-slate-300'
@@ -633,19 +733,30 @@ export default function Calendario() {
 
                 {/* Lista de etiquetas arrastrables */}
                 <div className="flex-1 flex flex-col gap-0.5 sm:gap-1 overflow-y-auto pr-0.5 custom-calendar-scroll min-h-0">
-                  {eventosDia.map((ev) => (
-                    <div
-                      key={ev.id}
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, ev)}
-                      onClick={() => setSelectedEvento(ev)}
-                      className={`w-full text-left px-1.5 py-0.5 rounded border text-[10px] sm:text-[11px] font-bold transition-all cursor-grab active:cursor-grabbing shadow-2xs truncate flex items-center gap-1 active:scale-[0.98] shrink-0 select-none hover:shadow-xs ${ev.colorTag}`}
-                      title={`${ev.sigla} ${ev.clienteResumido} (Arrastra a otro día para reprogramar o haz clic para ver detalles)`}
-                    >
-                      <span className="font-extrabold tracking-tight shrink-0">{ev.sigla}</span>
-                      <span className="truncate font-semibold">{ev.clienteResumido}</span>
-                    </div>
-                  ))}
+                  {eventosDia.map((ev) => {
+                    const isFestivo = ev.modulo === 'Festivo';
+                    return (
+                      <div
+                        key={ev.id}
+                        draggable={!isFestivo}
+                        onDragStart={(e) => !isFestivo && handleDragStart(e, ev)}
+                        onClick={() => setSelectedEvento(ev)}
+                        className={`w-full text-left px-1.5 py-0.5 rounded border text-[10px] sm:text-[11px] font-bold transition-all shadow-2xs truncate flex items-center gap-1 shrink-0 select-none ${
+                          isFestivo
+                            ? 'cursor-pointer'
+                            : 'cursor-grab active:cursor-grabbing active:scale-[0.98] hover:shadow-xs'
+                        } ${ev.colorTag}`}
+                        title={
+                          isFestivo
+                            ? `${ev.tituloCompleto} (Festivo oficial en Barcelona / España)`
+                            : `${ev.sigla} ${ev.clienteResumido} (Arrastra a otro día para reprogramar o haz clic para ver detalles)`
+                        }
+                      >
+                        <span className="font-extrabold tracking-tight shrink-0">{ev.sigla}</span>
+                        <span className="truncate font-semibold">{ev.clienteResumido}</span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             );

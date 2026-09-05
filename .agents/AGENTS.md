@@ -438,4 +438,9 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
 - **Ocultación por Defecto del Fin de Semana y Conmutador Dinámico**:
   - En la vista principal del calendario, los días de fin de semana (Sábado y Domingo) DEBEN estar ocultos por defecto, mostrando de Lunes a Viernes en 5 columnas (`grid-cols-5`).
   - En la barra de herramientas superior, junto al botón «Hoy», DEBE incluirse un botón conmutador («Mostrar Finde» / «Ocultar Finde») que permite al usuario alternar entre la vista laboral de 5 días y la vista completa de 7 días (`grid-cols-7`).
+- **Festivos Oficiales de Barcelona y España**:
+  - El calendario debe calcular e integrar automáticamente todos los festivos nacionales de España, autonómicos de Catalunya y locales de Barcelona (ej. Año Nuevo, Reyes, Viernes Santo, Lunes de Pascua, Día del Trabajador, Pascua Granada, Sant Joan, Asunción, Diada, La Mercè, Fiesta Nacional, Todos los Santos, Constitución, Inmaculada, Navidad, Sant Esteve).
+  - La casilla del día festivo debe resaltar con fondo gris (`bg-slate-200`).
+  - Dentro de la celda se muestra una insignia verde con letras blancas (`bg-emerald-600 text-white font-bold`) con el texto `"Fiesta: [Nombre de la fiesta]"` (ej. `"Fiesta: La Mercè"`).
+
 
