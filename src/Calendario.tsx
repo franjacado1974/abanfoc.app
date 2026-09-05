@@ -13,7 +13,8 @@ import {
   Building2,
   CalendarDays,
   Briefcase,
-  Sparkles
+  Sparkles,
+  AlertTriangle
 } from 'lucide-react';
 import {
   subscribePartes,
@@ -22,11 +23,14 @@ import {
   updateReparacion,
   subscribeInstalaciones,
   updateInstalacion,
+  subscribeUrgencias,
+  updateUrgencia,
   subscribeCentros,
   subscribeClientes,
   type ParteFirestore,
   type ReparacionItem,
-  type InstalacionItem
+  type InstalacionItem,
+  type UrgenciaItem
 } from './firebase';
 
 const MESES = [
@@ -105,7 +109,7 @@ function getFestivosBarcelona(year: number): Record<string, string> {
 export interface EventoCalendario {
   id: string;
   rawDocId: string;
-  sigla: 'Rev.' | 'Rep.' | 'Inst.' | 'Fiesta:';
+  sigla: 'Rev.' | 'Rep.' | 'Inst.' | 'Urg.' | 'Fiesta:';
   clienteResumido: string;
   tituloCompleto: string;
   lugar?: string;
@@ -114,7 +118,8 @@ export interface EventoCalendario {
   comercial?: string;
   estado?: string;
   fecha: string; // YYYY-MM-DD
-  modulo: 'Mantenimientos' | 'Reparaciones' | 'Instalaciones' | 'Festivo';
+  modulo: 'Mantenimientos' | 'Reparaciones' | 'Instalaciones' | 'Urgencias' | 'Festivo';
+  prioridad?: 'Baja' | 'Media' | 'Alta';
   tipoBadge: string;
   colorTag: string;
   colorBadge: string;
@@ -127,6 +132,7 @@ export default function Calendario() {
   const [partes, setPartes] = useState<ParteFirestore[]>([]);
   const [reparaciones, setReparaciones] = useState<ReparacionItem[]>([]);
   const [instalaciones, setInstalaciones] = useState<InstalacionItem[]>([]);
+  const [urgencias, setUrgencias] = useState<UrgenciaItem[]>([]);
   const [centros, setCentros] = useState<any[]>([]);
   const [clientes, setClientes] = useState<any[]>([]);
   const [tecnicos, setTecnicos] = useState<any[]>([]);
@@ -201,6 +207,19 @@ export default function Calendario() {
       setInstalaciones(items || []);
     });
     return () => unsubInst();
+  }, []);
+
+  // Suscripción en tiempo real a Urgencias
+  useEffect(() => {
+    try {
+      const cached = JSON.parse(localStorage.getItem('firecheck_db_urgencias') || '[]');
+      if (Array.isArray(cached) && cached.length > 0) setUrgencias(cached);
+    } catch {}
+
+    const unsubUrg = subscribeUrgencias((items) => {
+      setUrgencias(items || []);
+    });
+    return () => unsubUrg();
   }, []);
 
   const year = currentDate.getFullYear();
@@ -375,8 +394,39 @@ export default function Calendario() {
       });
     });
 
+    // 4. Operaciones - Urgencias: "Urg. [Cliente / Lugar]" (Negro con letras amarillas)
+    urgencias.forEach((u) => {
+      const fecha = u.fecha || (u.fechaCreacion ? u.fechaCreacion.slice(0, 10) : '');
+      if (!fecha) return;
+
+      const c = centros.find((cent) => cent.nombre && u.lugar && cent.nombre.toLowerCase().includes(u.lugar.toLowerCase()));
+      const cl = clientes.find((cli) => (cli._docId || cli.id) === c?.clienteId || (cli.nombre && u.lugar && cli.nombre.toLowerCase().includes(u.lugar.toLowerCase())));
+      const nombreCliente = cl?.nombre || u.lugar || 'Cliente';
+
+      addEvento(fecha, {
+        id: `urg-${u.id || (u as any)._docId}`,
+        rawDocId: (u as any)._docId || u.id,
+        sigla: 'Urg.',
+        clienteResumido: nombreCliente,
+        tituloCompleto: u.urgencia || 'Urgencia / Aviso',
+        lugar: u.lugar,
+        cliente: cl?.nombre,
+        tecnico: u.tecnicoAsignado,
+        comercial: u.comercial || undefined,
+        estado: u.estado || 'Pendiente',
+        fecha,
+        modulo: 'Urgencias',
+        prioridad: u.prioridad || 'Alta',
+        tipoBadge: `Urgencia (${u.prioridad || 'Alta'})`,
+        colorTag: 'bg-black text-amber-300 border border-zinc-800 hover:bg-zinc-900 shadow-xs font-semibold',
+        colorBadge: 'bg-zinc-950 text-amber-300 border-zinc-800',
+        icono: AlertTriangle,
+        detalles: u.nota || u.observaciones || undefined
+      });
+    });
+
     return map;
-  }, [partes, reparaciones, instalaciones, centros, clientes, tecnicos, festivosPorFecha]);
+  }, [partes, reparaciones, instalaciones, urgencias, centros, clientes, tecnicos, festivosPorFecha]);
 
   const getCalendarDays = () => {
     const firstDayOfMonth = new Date(year, month, 1).getDay();
@@ -441,6 +491,7 @@ export default function Calendario() {
     let mantCount = 0;
     let repCount = 0;
     let instCount = 0;
+    let urgCount = 0;
 
     days.filter((d) => d.currentMonth).forEach((d) => {
       const evs = eventosPorFecha[d.iso] || [];
@@ -448,10 +499,11 @@ export default function Calendario() {
         if (ev.sigla === 'Rev.') mantCount++;
         else if (ev.sigla === 'Rep.') repCount++;
         else if (ev.sigla === 'Inst.') instCount++;
+        else if (ev.sigla === 'Urg.') urgCount++;
       });
     });
 
-    return { mantCount, repCount, instCount, total: mantCount + repCount + instCount };
+    return { mantCount, repCount, instCount, urgCount, total: mantCount + repCount + instCount + urgCount };
   }, [days, eventosPorFecha]);
 
   // Gestores de arrastre (Drag & Drop)
@@ -577,6 +629,34 @@ export default function Calendario() {
       } catch (err) {
         console.error('Error al mover instalación en Firestore:', err);
       }
+    } else if (modulo === 'Urgencias' || sigla === 'Urg.') {
+      setUrgencias((prev) =>
+        prev.map((u) => {
+          const docId = (u as any)._docId || u.id;
+          if (docId === rawDocId) {
+            return { ...u, fecha: targetIso };
+          }
+          return u;
+        })
+      );
+
+      try {
+        const stored = JSON.parse(localStorage.getItem('firecheck_db_urgencias') || '[]');
+        const updated = stored.map((u: any) => {
+          const docId = u._docId || u.id;
+          if (docId === rawDocId) {
+            return { ...u, fecha: targetIso };
+          }
+          return u;
+        });
+        localStorage.setItem('firecheck_db_urgencias', JSON.stringify(updated));
+      } catch {}
+
+      try {
+        await updateUrgencia(rawDocId, { fecha: targetIso });
+      } catch (err) {
+        console.error('Error al mover urgencia en Firestore:', err);
+      }
     }
   };
 
@@ -619,6 +699,10 @@ export default function Calendario() {
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-red-50 text-red-900 border border-red-300">
               <span className="font-extrabold text-red-700">Inst.</span>
               <span>Instalaciones ({statsMes.instCount})</span>
+            </span>
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-black text-amber-300 border border-zinc-800 shadow-xs">
+              <span className="font-extrabold text-amber-400">Urg.</span>
+              <span>Urgencias ({statsMes.urgCount})</span>
             </span>
           </div>
 
@@ -854,6 +938,25 @@ export default function Calendario() {
                     <span className="text-[10px] text-slate-600 font-bold block uppercase">Comercial</span>
                     <span className="font-bold text-slate-800">{selectedEvento.comercial}</span>
                   </div>
+                </div>
+              )}
+
+              {selectedEvento.prioridad && (
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                  <span className="text-[10px] text-slate-600 font-bold uppercase">Prioridad</span>
+                  {selectedEvento.prioridad === 'Alta' ? (
+                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-red-100 text-red-800 border border-red-300 shadow-xs">
+                      🚨 Alta
+                    </span>
+                  ) : selectedEvento.prioridad === 'Media' ? (
+                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                      ⚠️ Media
+                    </span>
+                  ) : (
+                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                      🟢 Baja
+                    </span>
+                  )}
                 </div>
               )}
 

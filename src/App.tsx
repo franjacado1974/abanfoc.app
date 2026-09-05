@@ -26,12 +26,14 @@ import RevisionChecklist from './RevisionChecklist';
 import Revisiones from './Revisiones';
 import Reparaciones from './Reparaciones';
 import Instalaciones from './Instalaciones';
+import Urgencias from './Urgencias';
 import Ajustes from './Ajustes';
 import Buzon from './Buzon';
 import RegistroHorario from './RegistroHorario';
 import PruebasTecnicas from './PruebasTecnicas';
 import Papelera from './Papelera';
 import Metodos from './Metodos';
+import Analisis from './Analisis';
 import Calendario from './Calendario';
 import Sidebar from './components/Sidebar';
 import { 
@@ -1406,6 +1408,11 @@ export default function App() {
             <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Reparaciones /></PageLayout>
           </ProtectedRoute>
         } />
+        <Route path="/urgencias" element={
+          <ProtectedRoute allowedRoles={['super-administrador', 'administrador']} user={loggedUser}>
+            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Urgencias /></PageLayout>
+          </ProtectedRoute>
+        } />
         <Route path="/catalogo" element={
           <ProtectedRoute allowedRoles={['super-administrador', 'administrador', 'editor']} user={loggedUser}>
             <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Catalogo /></PageLayout>
@@ -1464,6 +1471,11 @@ export default function App() {
         <Route path="/metodos" element={
           <ProtectedRoute allowedRoles={['super-administrador', 'administrador', 'editor', 'visualizador', 'tecnico']} user={loggedUser}>
             <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Metodos /></PageLayout>
+          </ProtectedRoute>
+        } />
+        <Route path="/analisis" element={
+          <ProtectedRoute allowedRoles={['super-administrador', 'administrador', 'editor', 'visualizador']} user={loggedUser}>
+            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Analisis /></PageLayout>
           </ProtectedRoute>
         } />
       </Routes>

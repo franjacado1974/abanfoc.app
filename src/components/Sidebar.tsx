@@ -5,7 +5,8 @@ import {
   HardHat, Calculator, Package, FileCheck, FileDigit, Receipt,
   Settings, Power, ChevronLeft, ChevronRight, LayoutDashboard,
   Menu, X, Inbox, Clock, Gauge, Trash2,
-  ChevronDown, Building2, FolderKanban, ClipboardCheck, Files, GraduationCap
+  ChevronDown, Building2, FolderKanban, ClipboardCheck, Files, GraduationCap,
+  AlertTriangle, BarChart3
 } from 'lucide-react';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -93,6 +94,15 @@ const CATEGORIAS_MENU: NavCategory[] = [
     ]
   },
 
+  // 4.1 Urgencias (Acceso directo independiente a la vista entre Operaciones y Documentos)
+  {
+    id: 'urgencias',
+    title: 'Urgencias',
+    Icon: AlertTriangle,
+    path: '/urgencias',
+    allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador', 'tecnico']
+  },
+
   // 5. Documentos (Certificados, Presupuestos, Pedidos, Albaranes, Facturas)
   {
     id: 'documentos',
@@ -115,6 +125,15 @@ const CATEGORIAS_MENU: NavCategory[] = [
     Icon: GraduationCap,
     path: '/metodos',
     allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador', 'tecnico']
+  },
+
+  // 8. Análisis (Gráficos y estadísticas operativas)
+  {
+    id: 'analisis',
+    title: 'Análisis',
+    Icon: BarChart3,
+    path: '/analisis',
+    allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador']
   },
 
   // 6. Papelera (Preservada permanentemente al fondo según Regla 29)
