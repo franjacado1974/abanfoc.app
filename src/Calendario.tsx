@@ -21,6 +21,8 @@ import {
   updateReparacion,
   subscribeInstalaciones,
   updateInstalacion,
+  subscribeCentros,
+  subscribeClientes,
   type ParteFirestore,
   type ReparacionItem,
   type InstalacionItem
@@ -81,6 +83,18 @@ export default function Calendario() {
     setCentros(safeParse('firecheck_db_centros'));
     setClientes(safeParse('firecheck_db_clientes'));
     setTecnicos(safeParse('firecheck_db_tecnicos'));
+
+    const unsubCentros = subscribeCentros((items) => {
+      setCentros(items || []);
+    });
+    const unsubClientes = subscribeClientes((items) => {
+      setClientes(items || []);
+    });
+
+    return () => {
+      unsubCentros();
+      unsubClientes();
+    };
   }, []);
 
   // Suscripción en tiempo real a Mantenimientos (Partes de trabajo planificados)
@@ -173,20 +187,21 @@ export default function Calendario() {
       map[dateStr].push({ ...ev, fecha: dateStr });
     };
 
-    // 1. Mantenimientos: "Rev. [Cliente / Centro]"
+    // 1. Mantenimientos: "Rev. [Centro]"
     partes.forEach((p) => {
       if (!p.fechaProgramada || p.estado === 'Cerrado') return;
       const c = centros.find((cent) => (cent._docId || cent.id) === p.centroId);
       const cl = clientes.find((cli) => (cli._docId || cli.id) === (p.clienteId || c?.clienteId));
       const tec = tecnicos.find((t) => (t._docId || t.id) === p.tecnicoId);
 
-      const nombreCliente = cl?.nombre || c?.nombre || p.nombreCentro || 'Cliente';
+      // Priorizar incondicionalmente el nombre del centro para la etiqueta del calendario
+      const nombreCentro = p.nombreCentro || c?.nombre || cl?.nombre || 'Centro';
 
       addEvento(p.fechaProgramada, {
         id: `parte-${p.id || (p as any)._docId}`,
         rawDocId: (p as any)._docId || p.id,
         sigla: 'Rev.',
-        clienteResumido: nombreCliente,
+        clienteResumido: nombreCentro,
         tituloCompleto: p.nombreCentro || c?.nombre || 'Revisión Mantenimiento',
         lugar: c?.nombre ? `${c.nombre} (${c.direccion || ''})` : c?.direccion,
         cliente: cl?.nombre,
