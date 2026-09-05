@@ -62,6 +62,7 @@ export default function Calendario() {
   const [clientes, setClientes] = useState<any[]>([]);
   const [tecnicos, setTecnicos] = useState<any[]>([]);
   const [selectedEvento, setSelectedEvento] = useState<EventoCalendario | null>(null);
+  const [mostrarFinSemana, setMostrarFinSemana] = useState(false);
 
   // Estados para Drag & Drop entre días
   const [draggedEvento, setDraggedEvento] = useState<EventoCalendario | null>(null);
@@ -315,6 +316,14 @@ export default function Calendario() {
   const today = new Date();
   const isCurrentMonth = today.getFullYear() === year && today.getMonth() === month;
 
+  // Filtrar días según visualización de fin de semana
+  const diasMostrados = useMemo(() => {
+    if (mostrarFinSemana) return days;
+    return days.filter((d) => d.date.getDay() !== 0 && d.date.getDay() !== 6);
+  }, [days, mostrarFinSemana]);
+
+  const diasSemanaCabecera = mostrarFinSemana ? DIAS_SEMANA : DIAS_SEMANA.slice(0, 5);
+
   // Estadísticas del mes en curso
   const statsMes = useMemo(() => {
     let mantCount = 0;
@@ -511,6 +520,20 @@ export default function Calendario() {
               <span>Hoy</span>
             </button>
 
+            <button
+              type="button"
+              onClick={() => setMostrarFinSemana((prev) => !prev)}
+              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-bold transition-all shadow-sm cursor-pointer active:scale-95 ${
+                mostrarFinSemana
+                  ? 'border-amber-400 bg-amber-50 text-amber-950 hover:bg-amber-100 shadow-xs'
+                  : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+              }`}
+              title={mostrarFinSemana ? 'Ocultar sábado y domingo' : 'Mostrar sábado y domingo'}
+            >
+              <CalendarDays className={`w-3.5 h-3.5 ${mostrarFinSemana ? 'text-amber-700' : 'text-slate-500'}`} />
+              <span>{mostrarFinSemana ? 'Ocultar F.S.' : 'Mostrar F.S.'}</span>
+            </button>
+
             <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/80">
               <button
                 type="button"
@@ -539,8 +562,8 @@ export default function Calendario() {
       {/* Contenedor del Calendario a toda la pantalla */}
       <div className="flex-1 bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden flex flex-col min-h-0">
         {/* Cabecera con Días de la Semana */}
-        <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50/80 text-center text-xs font-black text-slate-600 uppercase tracking-wider py-2.5 shrink-0">
-          {DIAS_SEMANA.map((dia, idx) => (
+        <div className={`grid ${mostrarFinSemana ? 'grid-cols-7' : 'grid-cols-5'} border-b border-slate-200 bg-slate-50/80 text-center text-xs font-black text-slate-600 uppercase tracking-wider py-2.5 shrink-0`}>
+          {diasSemanaCabecera.map((dia, idx) => (
             <div key={dia} className={idx >= 5 ? 'text-red-600' : ''}>
               <span className="hidden sm:inline">{dia}</span>
               <span className="sm:hidden">{dia.slice(0, 2)}</span>
@@ -549,8 +572,8 @@ export default function Calendario() {
         </div>
 
         {/* Cuadrícula de Días que ocupa el 100% del alto disponible */}
-        <div className="grid grid-cols-7 flex-1 auto-rows-fr divide-x divide-y divide-slate-200/80 bg-slate-100/30 min-h-0 overflow-hidden">
-          {days.map((d, index) => {
+        <div className={`grid ${mostrarFinSemana ? 'grid-cols-7' : 'grid-cols-5'} flex-1 auto-rows-fr divide-x divide-y divide-slate-200/80 bg-slate-100/30 min-h-0 overflow-hidden`}>
+          {diasMostrados.map((d, index) => {
             const isToday =
               d.date.getDate() === today.getDate() &&
               d.date.getMonth() === today.getMonth() &&

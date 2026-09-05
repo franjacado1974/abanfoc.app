@@ -435,4 +435,7 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
     - **Comercial** (con icono `Briefcase`, indicando el comercial asignado a la tarea o centro)
     - **Estado**
     - **Notas / Observaciones**
+- **Ocultación por Defecto del Fin de Semana y Conmutador Dinámico**:
+  - En la vista principal del calendario, los días de fin de semana (Sábado y Domingo) DEBEN estar ocultos por defecto, mostrando de Lunes a Viernes en 5 columnas (`grid-cols-5`).
+  - En la barra de herramientas superior, junto al botón «Hoy», DEBE incluirse un botón conmutador («Mostrar F.S.» / «Ocultar F.S.») que permite al usuario alternar entre la vista laboral de 5 días y la vista completa de 7 días (`grid-cols-7`).
 

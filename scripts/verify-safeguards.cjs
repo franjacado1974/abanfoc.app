@@ -381,6 +381,9 @@ if (!fs.existsSync(calPath)) {
   if (!calContent.includes('selectedEvento') || !calContent.includes('selectedEvento.comercial')) {
     errors.push('CRÍTICO: Calendario.tsx carece del modal de detalles o del campo Comercial (AGENTS.md REGLA 32).');
   }
+  if (!calContent.includes('mostrarFinSemana') || !calContent.includes('grid-cols-5')) {
+    errors.push('CRÍTICO: Calendario.tsx carece del conmutador o soporte para ocultar fin de semana (AGENTS.md REGLA 32).');
+  }
 }
 if (fs.existsSync(sidebarPath)) {
   const sideContent = fs.readFileSync(sidebarPath, 'utf8');
