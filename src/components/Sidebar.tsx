@@ -103,7 +103,7 @@ const CATEGORIAS_MENU: NavCategory[] = [
     allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador', 'tecnico']
   },
 
-  // 5. Documentos (Certificados, Presupuestos, Pedidos, Albaranes, Facturas)
+  // 5. Documentos (Certificados, Presupuestos, Albaranes, Facturas)
   {
     id: 'documentos',
     title: 'Documentos',
@@ -112,7 +112,6 @@ const CATEGORIAS_MENU: NavCategory[] = [
     subItems: [
       { id: 'certificados', path: '/certificados', title: 'Certificados', Icon: FileCheck, allowedRoles: ['super-administrador', 'administrador'] },
       { id: 'presupuestos', path: '/presupuestos', title: 'Presupuestos', Icon: Calculator, allowedRoles: ['super-administrador', 'administrador'] },
-      { id: 'pedidos', path: '/pedidos', title: 'Pedidos', Icon: FileText, allowedRoles: ['super-administrador', 'administrador'] },
       { id: 'albaranes', path: '/albaranes', title: 'Albaranes', Icon: FileDigit, allowedRoles: ['super-administrador', 'administrador', 'visualizador'] },
       { id: 'facturas', path: '/facturas', title: 'Facturas', Icon: Receipt, allowedRoles: ['super-administrador', 'administrador'] }
     ]

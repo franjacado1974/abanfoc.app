@@ -443,4 +443,18 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
   - La casilla del día festivo debe resaltar con fondo gris (`bg-slate-200`).
   - Dentro de la celda se muestra una insignia verde con letras blancas (`bg-emerald-600 text-white font-bold`) con el texto `"Fiesta: [Nombre de la fiesta]"` (ej. `"Fiesta: La Mercè"`).
 
+---
 
+## 33. Blindaje Inviolable del Flujo de Presupuestos, Pedidos de Venta y Albaranes
+- **Aceptación de Presupuesto y Modal de Selección de Tipo de Trabajo**:
+  - Al marcar un presupuesto como "Aprobado/Aceptado", se despliega obligatoriamente la ventana modal que pregunta el tipo de trabajo: **Reparación**, **Instalación** o **Prueba técnica**.
+  - Al confirmar, el presupuesto genera automáticamente un pedido en la colección `pedidos` y deriva la tarea correspondiente a su módulo operativo (`/reparaciones`, `/instalaciones` o `/pruebas-tecnicas`).
+- **Nomenclatura Correlativa PRV y PDV**:
+  - Los presupuestos se identifican siempre con el prefijo **`PRV`** (ej. `PRV 26300`).
+  - Al ser aceptados, el pedido de venta generado adquiere exactamente la misma numeración sustituyendo las siglas por **`PDV`** (ej. `PDV 26300`).
+  - En la tabla de Reparaciones e Instalaciones, el distintivo `PDV` debe ubicarse junto a la fecha con estilo badge mono índigo (`text-indigo-700 bg-indigo-50 border-indigo-200/80 font-mono font-bold`) sin icono.
+- **Generación Directa de Albarán desde Pedidos, Reparaciones e Instalaciones**:
+  - El botón con icono `ReceiptText` («Crear Albarán») en `Pedidos.tsx`, `Reparaciones.tsx` e `Instalaciones.tsx` DEBE abrir directamente la pantalla del formulario de Albarán (`/albaranes` con `view = 'form'`), navegando con `useNavigate()` e inyectando `location.state.prefillAlbaran`.
+  - Debe precargar automáticamente: Empresa Mantenedora, Cliente, Centro, Técnico asignado, Título, Código `PDV XXXX` en el número de pedido y la fecha de creación.
+- **Desglose de Líneas de Trabajo**:
+  - Cada línea del presupuesto debe cargarse en una fila independiente en el albarán, colocando la **familia** del artículo en el campo `Concepto` y la **descripción** del artículo en el campo `Descripción`.

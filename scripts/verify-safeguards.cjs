@@ -395,6 +395,34 @@ if (fs.existsSync(sidebarPath)) {
   }
 }
 
+// 21. Verificación de Presupuestos, Pedidos y Albaranes (AGENTS.md REGLA 33)
+const presupuestosPath = path.join(__dirname, '../src/Presupuestos.tsx');
+if (fs.existsSync(presupuestosPath)) {
+  const presContent = fs.readFileSync(presupuestosPath, 'utf8');
+  if (!presContent.includes('PRV') || !presContent.includes('tipoTrabajoSeleccionado') || !presContent.includes('presupuestoParaAceptar')) {
+    errors.push('CRÍTICO: Presupuestos.tsx carece del flujo modal o nomenclatura PRV (AGENTS.md REGLA 33).');
+  }
+}
+const pedidosPath = path.join(__dirname, '../src/Pedidos.tsx');
+if (fs.existsSync(pedidosPath)) {
+  const pedContent = fs.readFileSync(pedidosPath, 'utf8');
+  if (!pedContent.includes('handleOpenCrearAlbaran') || !pedContent.includes('ReceiptText') || !pedContent.includes('prefillAlbaran')) {
+    errors.push('CRÍTICO: Pedidos.tsx carece de la generación directa de albarán (AGENTS.md REGLA 33).');
+  }
+}
+if (fs.existsSync(instalacionesPath)) {
+  const insContent = fs.readFileSync(instalacionesPath, 'utf8');
+  if (!insContent.includes('navigate = useNavigate') || !insContent.includes('prefillAlbaran')) {
+    errors.push('CRÍTICO: Instalaciones.tsx carece de la navegación directa a albaranes (AGENTS.md REGLA 33).');
+  }
+}
+if (fs.existsSync(reparacionesPath)) {
+  const repContent = fs.readFileSync(reparacionesPath, 'utf8');
+  if (!repContent.includes('navigate = useNavigate') || !repContent.includes('prefillAlbaran')) {
+    errors.push('CRÍTICO: Reparaciones.tsx carece de la navegación directa a albaranes (AGENTS.md REGLA 33).');
+  }
+}
+
 // Resultado de la verificación
 if (errors.length > 0) {
   console.error('\n❌ ERROR CRÍTICO DE BLINDAJE INTEGRAL (AGENTS.md):');
