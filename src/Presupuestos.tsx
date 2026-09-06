@@ -604,10 +604,12 @@ export default function Presupuestos() {
     if (empId) {
       empresaSeleccionada = empresas.find(e => (e as any)._docId === empId || (e as any).id === empId || ((e as any).nombre && typeof (e as any).nombre === 'string' && (e as any).nombre.trim().toLowerCase() === empId.trim().toLowerCase()));
     }
+    const clienteObj = clientes.find(c => (c as any)._docId === p.clienteId || c.id === p.clienteId || (c.nombre && c.nombre === p.nombreCliente));
     generarPresupuestoPDF({
       titulo: p.titulo,
       numeroPresupuesto: p.numeroPresupuesto,
-      nombreCliente: p.nombreCliente || 'Cliente',
+      nombreCliente: p.nombreCliente || clienteObj?.nombre || 'Cliente',
+      cliente: clienteObj,
       fechaCreacion: p.fechaCreacion,
       fechaValidez: p.fechaValidez,
       estado: p.estado,
