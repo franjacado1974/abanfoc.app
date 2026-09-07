@@ -9,9 +9,10 @@ import {
 import { 
   subscribeInstalaciones, addInstalacion, updateInstalacion, deleteInstalacion, 
   subscribeTecnicos, subscribeCentros, subscribeClientes, subscribeEmpresas, subscribeAlbaranes,
-  subscribePresupuestos,
-  type InstalacionItem, type Albaran, type Cliente, type Centro, type Empresa, type Presupuesto 
+  subscribePresupuestos, subscribePedidos,
+  type InstalacionItem, type Albaran, type Cliente, type Centro, type Empresa, type Presupuesto, type Pedido 
 } from './firebase';
+import { generarPresupuestoPDF } from './pdfGenerator';
 
 const MESES = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 
@@ -116,6 +117,7 @@ export default function Instalaciones() {
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [albaranes, setAlbaranes] = useState<Albaran[]>([]);
   const [presupuestos, setPresupuestos] = useState<Presupuesto[]>([]);
+  const [pedidos, setPedidos] = useState<Pedido[]>([]);
 
   // Modales
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -201,6 +203,7 @@ export default function Instalaciones() {
     const unsubEmp = subscribeEmpresas((items) => setEmpresas(items));
     const unsubAlb = subscribeAlbaranes((items) => setAlbaranes(items));
     const unsubPres = subscribePresupuestos((items) => setPresupuestos(items));
+    const unsubPed = subscribePedidos((items) => setPedidos(items));
 
     return () => {
       unsubIns();
@@ -210,6 +213,7 @@ export default function Instalaciones() {
       unsubEmp();
       unsubAlb();
       unsubPres();
+      unsubPed();
     };
   }, []);
 
@@ -378,6 +382,102 @@ export default function Instalaciones() {
         }
       }
     });
+  };
+
+  // Descargar / Ver Pedido de Venta (PDV) en PDF
+  const handleDescargarPDV = async (item: InstalacionItem) => {
+    // 1. Buscar presupuesto o pedido vinculado
+    const matchPresupuesto = presupuestos.find(p => 
+      (item.presupuestoId && (p.id === item.presupuestoId || (p as any)._docId === item.presupuestoId)) ||
+      (item.pedidoId && (
+        p.numeroPresupuesto === item.pedidoId ||
+        `PDV ${p.numeroPresupuesto?.replace(/^(PDV|PRV|PRE)[-\s]*/i, '')}` === item.pedidoId ||
+        p.id === item.pedidoId
+      ))
+    );
+
+    const matchPedido = pedidos.find(ped => 
+      (item.pedidoId && (ped.numeroPedido === item.pedidoId || ped.id === item.pedidoId || (ped as any)._docId === item.pedidoId)) ||
+      (item.presupuestoId && ped.presupuestoId === item.presupuestoId)
+    );
+
+    // Buscar centro y cliente
+    const matchCentro = centros.find(c => 
+      (matchPresupuesto?.centroId && ((c as any)._docId === matchPresupuesto.centroId || c.id === matchPresupuesto.centroId)) ||
+      (matchPedido?.centroId && ((c as any)._docId === matchPedido.centroId || c.id === matchPedido.centroId)) ||
+      (c.nombre && item.lugar && c.nombre.toLowerCase().trim() === item.lugar.toLowerCase().trim()) ||
+      (c.direccion && item.lugar && c.direccion.toLowerCase().includes(item.lugar.toLowerCase()))
+    );
+
+    const clienteId = matchPresupuesto?.clienteId || matchPedido?.clienteId || matchCentro?.clienteId;
+    const clienteObj = clientes.find(c => (c as any)._docId === clienteId || c.id === clienteId);
+    const nombreCliente = clienteObj?.nombre || matchPresupuesto?.nombreCliente || (matchPedido as any)?.nombreCliente || item.lugar || 'Cliente';
+
+    // Empresa mantenedora
+    const empresaId = matchPresupuesto ? (matchPresupuesto as any).empresaId : (matchPedido?.empresaId || matchCentro?.empresaId);
+    let empresaSeleccionada = empresas.find(e => (e as any)._docId === empresaId || (e as any).id === empresaId);
+    if (!empresaSeleccionada && empresas.length > 0) {
+      empresaSeleccionada = empresas[0];
+    }
+
+    // Código de pedido (ej: PDV XXXXXX)
+    let codigoPDV = item.pedidoId || matchPedido?.numeroPedido || '';
+    if (!codigoPDV && matchPresupuesto?.numeroPresupuesto) {
+      codigoPDV = `PDV ${matchPresupuesto.numeroPresupuesto.replace(/^(PDV|PRV|PRE)[-\s]*/i, '')}`;
+    }
+    if (!codigoPDV) {
+      codigoPDV = `PDV-${item.id.replace(/^[A-Z]+-/, '')}`;
+    }
+
+    // Líneas del pedido
+    let lineasPDF: { concepto: string; codigo?: string; fotoUrl?: string; cantidad: number; precioUnidad: number; subtotal: number }[] = [];
+
+    if (matchPresupuesto?.lineas && matchPresupuesto.lineas.length > 0) {
+      lineasPDF = matchPresupuesto.lineas.map(l => ({
+        concepto: l.concepto,
+        codigo: l.codigo,
+        fotoUrl: l.fotoUrl,
+        cantidad: Number(l.cantidad) || 1,
+        precioUnidad: Number(l.precioUnidad) || 0,
+        subtotal: Number(l.subtotal) || ((Number(l.cantidad) || 1) * (Number(l.precioUnidad) || 0))
+      }));
+    } else if (matchPedido?.items && matchPedido.items.length > 0) {
+      lineasPDF = matchPedido.items.map(l => ({
+        concepto: l.concepto + (l.descripcion ? ` - ${l.descripcion}` : ''),
+        cantidad: Number(l.cantidad) || 1,
+        precioUnidad: Number(l.precioUnidad) || 0,
+        subtotal: Number(l.subtotal) || ((Number(l.cantidad) || 1) * (Number(l.precioUnidad) || 0))
+      }));
+    } else {
+      lineasPDF = [{
+        concepto: item.instalacion || 'Instalación',
+        cantidad: 1,
+        precioUnidad: 0,
+        subtotal: 0
+      }];
+    }
+
+    const subtotal = matchPresupuesto?.subtotal ?? lineasPDF.reduce((sum, l) => sum + l.subtotal, 0);
+    const iva = matchPresupuesto?.iva ?? (subtotal * 0.21);
+    const total = matchPresupuesto?.total ?? (subtotal + iva);
+    const notas = matchPresupuesto?.notas || matchPedido?.notas || item.observaciones || item.nota || '';
+    const fechaCreacion = matchPedido?.fechaCreacion || matchPresupuesto?.fechaCreacion || item.fecha || new Date().toISOString();
+
+    await generarPresupuestoPDF({
+      titulo: matchPresupuesto?.titulo || matchPedido?.titulo || `Instalación: ${item.instalacion}`,
+      numeroPresupuesto: codigoPDV,
+      nombreCliente,
+      cliente: clienteObj,
+      fechaCreacion,
+      estado: 'Aprobado',
+      lineas: lineasPDF,
+      subtotal,
+      iva,
+      total,
+      notas,
+      esPedido: true,
+      tituloDocumento: 'PEDIDO DE VENTA'
+    }, empresaSeleccionada);
   };
 
   // Guardar (Crear o Modificar completo)
@@ -790,6 +890,14 @@ export default function Instalaciones() {
                       {/* ACCIONES */}
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleDescargarPDV(item)}
+                            className="p-2 rounded-xl text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 transition-colors cursor-pointer"
+                            title="Ver / Descargar Pedido de Venta (PDV)"
+                          >
+                            <Search className="w-4 h-4" />
+                          </button>
                           <button
                             type="button"
                             onClick={() => handleOpenCrearAlbaran(item)}

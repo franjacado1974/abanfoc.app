@@ -423,6 +423,43 @@ if (fs.existsSync(reparacionesPath)) {
   }
 }
 
+// 22. Verificación de Presupuestos y PDV oficiales con ABANFOC S.L. (AGENTS.md REGLA 34)
+if (fs.existsSync(pdfGenPath)) {
+  const pdfContent = fs.readFileSync(pdfGenPath, 'utf8');
+  if (!pdfContent.includes('const empNombre = \'ABANFOC S.L.\'') || !pdfContent.includes('B16794679') || !pdfContent.includes('abanfoc@abanfoc.es')) {
+    errors.push('CRÍTICO: pdfGenerator.ts carece de los datos oficiales inviolables de ABANFOC S.L. en generarPresupuestoPDF (AGENTS.md REGLA 34).');
+  }
+}
+if (fs.existsSync(reparacionesPath)) {
+  const repContent = fs.readFileSync(reparacionesPath, 'utf8');
+  if (!repContent.includes('handleDescargarPDV') || !repContent.includes('Ver / Descargar Pedido de Venta (PDV)')) {
+    errors.push('CRÍTICO: Reparaciones.tsx carece de la acción de lupa para ver/descargar PDV (AGENTS.md REGLA 34).');
+  }
+}
+if (fs.existsSync(instalacionesPath)) {
+  const insContent = fs.readFileSync(instalacionesPath, 'utf8');
+  if (!insContent.includes('handleDescargarPDV') || !insContent.includes('Ver / Descargar Pedido de Venta (PDV)')) {
+    errors.push('CRÍTICO: Instalaciones.tsx carece de la acción de lupa para ver/descargar PDV (AGENTS.md REGLA 34).');
+  }
+}
+if (fs.existsSync(pedidosPath)) {
+  const pedContent = fs.readFileSync(pedidosPath, 'utf8');
+  if (!pedContent.includes('handleDescargarPDV') || !pedContent.includes('Ver / Descargar Pedido de Venta (PDV)')) {
+    errors.push('CRÍTICO: Pedidos.tsx carece de la acción de lupa para ver/descargar PDV (AGENTS.md REGLA 34).');
+  }
+}
+
+// 23. Verificación de Permisos en el Módulo Buzón (AGENTS.md REGLA 35)
+const buzonPath = path.join(__dirname, '../src/Buzon.tsx');
+if (fs.existsSync(buzonPath)) {
+  const buzonContent = fs.readFileSync(buzonPath, 'utf8');
+  if (!buzonContent.includes('rol === \'super-administrador\' || rol === \'superusuario\' || rol === \'superadministrador\'') ||
+      !buzonContent.includes('if (!id || !isSuperUser) return;') ||
+      !buzonContent.includes('if (!registroAEliminar || !registroAEliminar.id || !isSuperUser) return;')) {
+    errors.push('CRÍTICO: Buzon.tsx carece de las restricciones exclusivas de Super Administrador para editar, borrar o cambiar estado (AGENTS.md REGLA 35).');
+  }
+}
+
 // Resultado de la verificación
 if (errors.length > 0) {
   console.error('\n❌ ERROR CRÍTICO DE BLINDAJE INTEGRAL (AGENTS.md):');

@@ -458,3 +458,21 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
   - Debe precargar automáticamente: Empresa Mantenedora, Cliente, Centro, Técnico asignado, Título, Código `PDV XXXX` en el número de pedido y la fecha de creación.
 - **Desglose de Líneas de Trabajo**:
   - Cada línea del presupuesto debe cargarse en una fila independiente en el albarán, colocando la **familia** del artículo en el campo `Concepto` y la **descripción** del artículo en el campo `Descripción`.
+
+---
+
+## 34. Blindaje Inviolable de Presupuestos y Pedidos de Venta Oficiales con ABANFOC S.L. (pdfGenerator.ts)
+- **Emisión Exclusiva con Datos y Logotipo de ABANFOC S.L.**:
+  - En la generación de presupuestos y pedidos de venta en PDF (`generarPresupuestoPDF`), los datos de la cabecera, registro mercantil y RGPD, así como el logotipo principal, DEBEN corresponder **siempre e incondicionalmente** a **ABANFOC S.L.** (CIF: `B16794679`, `C/ America 16 B Ático (08921)`, `Sta. Coloma Gramanet, Barcelona`, RASIC: `10600168`, `www.abanfoc.es`, teléfonos: `930108917` / `615864999`, email: `abanfoc@abanfoc.es`).
+  - Queda estrictamente prohibido emitir presupuestos o pedidos de venta con logos o membretes de empresas secundarias, subcontratadas o mantenedoras ajenas asignadas a los centros o clientes.
+- **Acceso de Visualización y Descarga de Pedidos de Venta (PDV)**:
+  - En los módulos de Reparaciones (`Reparaciones.tsx`), Instalaciones (`Instalaciones.tsx`), Pedidos (`Pedidos.tsx`) y Pruebas Técnicas (`PruebasTecnicas.tsx`), DEBE incluirse en la columna de acciones el botón con el icono de la **lupa** (`Search`) para visualizar y descargar el Pedido de Venta (PDV) en PDF en cualquier momento.
+
+---
+
+## 35. Blindaje Inviolable de Permisos y Gestión en el Módulo Buzón (Buzon.tsx)
+- **Control Exclusivo de Gestión para Super Administrador**:
+  - Las acciones de **editar consulta** (icono lápiz `Pencil` y formulario completo), **eliminar consulta** (icono papelera `Trash2` y confirmación) y **cambiar estado / resolver** (botón de resolución y selector de estados *Pendiente*, *En revisión* y *Resuelto*) están reservadas **exclusivamente a usuarios con rol de Super Administrador** (`'super-administrador'`, `'superusuario'`, `'superadministrador'`).
+  - Las funciones mutadoras (`handleSaveResolucion`, `handleConfirmDelete`, `handleStartEdit` y `handleSaveEdit`) cuentan con salvaguardas internas estrictas que impiden cualquier ejecución no autorizada.
+- **Capacidad Universal de Creación y Participación**:
+  - Todos los usuarios de la aplicación (técnicos, administradores, editores, visualizadores) conservan la facultad de crear nuevas consultas (sugerencias o reporte de errores) y responder activamente en el hilo de comentarios/conversación de cualquier mensaje del buzón.

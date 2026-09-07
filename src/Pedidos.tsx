@@ -10,6 +10,7 @@ import {
   type Empresa, type Tecnico,
   type ReparacionItem, type InstalacionItem
 } from './firebase';
+import { generarPresupuestoPDF } from './pdfGenerator';
 
 const ESTADOS = [
   { valor: 'Pendiente' as const, color: 'bg-amber-100 text-amber-700 border-amber-200', icono: Clock },
@@ -365,6 +366,96 @@ export default function Pedidos() {
     });
   };
 
+  // Descargar / Ver Pedido de Venta (PDV) en PDF
+  const handleDescargarPDV = async (ped: Pedido) => {
+    // 1. Buscar presupuesto vinculado
+    const matchPresupuesto = presupuestos.find(p => 
+      (ped.presupuestoId && (p.id === ped.presupuestoId || (p as any)._docId === ped.presupuestoId)) ||
+      (ped.numeroPedido && (
+        p.numeroPresupuesto === ped.numeroPedido ||
+        `PDV ${p.numeroPresupuesto?.replace(/^(PDV|PRV|PRE)[-\s]*/i, '')}` === ped.numeroPedido ||
+        p.id === ped.numeroPedido
+      ))
+    );
+
+    // Buscar centro y cliente
+    const matchCentro = centros.find(c => 
+      (ped.centroId && (c.id === ped.centroId || (c as any)._docId === ped.centroId)) ||
+      (matchPresupuesto?.centroId && (c.id === matchPresupuesto.centroId || (c as any)._docId === matchPresupuesto.centroId)) ||
+      (c.clienteId === ped.clienteId)
+    );
+
+    const clienteId = ped.clienteId || matchPresupuesto?.clienteId || matchCentro?.clienteId;
+    const clienteObj = clientes.find(c => (c as any)._docId === clienteId || c.id === clienteId);
+    const nombreCliente = clienteObj?.nombre || matchPresupuesto?.nombreCliente || (ped as any)?.nombreCliente || 'Cliente';
+
+    // Empresa mantenedora
+    const empresaId = ped.empresaId || (matchPresupuesto as any)?.empresaId || matchCentro?.empresaId;
+    let empresaSeleccionada = empresas.find(e => (e as any)._docId === empresaId || (e as any).id === empresaId);
+    if (!empresaSeleccionada && empresas.length > 0) {
+      empresaSeleccionada = empresas[0];
+    }
+
+    // Código de pedido (ej: PDV XXXXXX)
+    let codigoPDV = ped.numeroPedido || '';
+    if (!codigoPDV && matchPresupuesto?.numeroPresupuesto) {
+      codigoPDV = `PDV ${matchPresupuesto.numeroPresupuesto.replace(/^(PDV|PRV|PRE)[-\s]*/i, '')}`;
+    }
+    if (!codigoPDV) {
+      codigoPDV = ped.id ? (ped.id.startsWith('PDV') ? ped.id : `PDV ${ped.id.replace(/^(PRV|PRE|PED)[-\s]*/i, '')}`) : `PDV-${Date.now().toString().slice(-6)}`;
+    }
+
+    // Líneas del pedido
+    let lineasPDF: { concepto: string; codigo?: string; fotoUrl?: string; cantidad: number; precioUnidad: number; subtotal: number }[] = [];
+
+    if (matchPresupuesto?.lineas && matchPresupuesto.lineas.length > 0) {
+      lineasPDF = matchPresupuesto.lineas.map(l => ({
+        concepto: l.concepto,
+        codigo: l.codigo,
+        fotoUrl: l.fotoUrl,
+        cantidad: Number(l.cantidad) || 1,
+        precioUnidad: Number(l.precioUnidad) || 0,
+        subtotal: Number(l.subtotal) || ((Number(l.cantidad) || 1) * (Number(l.precioUnidad) || 0))
+      }));
+    } else if (ped.items && ped.items.length > 0) {
+      lineasPDF = ped.items.map(l => ({
+        concepto: l.concepto + (l.descripcion ? ` - ${l.descripcion}` : ''),
+        cantidad: Number(l.cantidad) || 1,
+        precioUnidad: Number(l.precioUnidad) || 0,
+        subtotal: Number(l.subtotal) || ((Number(l.cantidad) || 1) * (Number(l.precioUnidad) || 0))
+      }));
+    } else {
+      lineasPDF = [{
+        concepto: ped.tipoPedido || 'Trabajo',
+        cantidad: 1,
+        precioUnidad: 0,
+        subtotal: 0
+      }];
+    }
+
+    const subtotal = matchPresupuesto?.subtotal ?? lineasPDF.reduce((sum, l) => sum + l.subtotal, 0);
+    const iva = matchPresupuesto?.iva ?? (subtotal * 0.21);
+    const total = matchPresupuesto?.total ?? (subtotal + iva);
+    const notas = matchPresupuesto?.notas || ped.notas || '';
+    const fechaCreacion = ped.fechaCreacion || matchPresupuesto?.fechaCreacion || new Date().toISOString();
+
+    await generarPresupuestoPDF({
+      titulo: matchPresupuesto?.titulo || ped.titulo || 'Pedido de Venta',
+      numeroPresupuesto: codigoPDV,
+      nombreCliente,
+      cliente: clienteObj,
+      fechaCreacion,
+      estado: 'Aprobado',
+      lineas: lineasPDF,
+      subtotal,
+      iva,
+      total,
+      notas,
+      esPedido: true,
+      tituloDocumento: 'PEDIDO DE VENTA'
+    }, empresaSeleccionada);
+  };
+
   const addItem = () => {
     setForm({ ...form, items: [...form.items, { cantidad: 1, concepto: 'Trabajo', descripcion: '', precioUnidad: 0, subtotal: 0 }] });
   };
@@ -581,6 +672,14 @@ export default function Pedidos() {
                           )}
                         </div>
                       )}
+                      <button 
+                        type="button" 
+                        onClick={() => handleDescargarPDV(ped)} 
+                        className="p-1.5 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-xl transition-colors cursor-pointer" 
+                        title="Ver / Descargar Pedido de Venta (PDV)"
+                      >
+                        <Search className="w-4 h-4" />
+                      </button>
                       <button 
                         type="button" 
                         onClick={() => handleOpenCrearAlbaran(ped)} 
