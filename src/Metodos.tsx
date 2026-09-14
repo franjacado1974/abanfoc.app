@@ -19,6 +19,7 @@ export interface VideoTutorial {
   categoria: 'general' | 'tablet' | 'mantenimientos' | 'operaciones' | 'documentos';
   duracion: string;
   videoUrl?: string;
+  miniaturaUrl?: string;
   destacado?: boolean;
   fechaCreacion?: string;
 }
@@ -88,6 +89,7 @@ export default function Metodos() {
     categoria: 'general' as VideoTutorial['categoria'],
     duracion: '',
     videoUrl: '',
+    miniaturaUrl: '',
     destacado: false
   });
 
@@ -135,6 +137,7 @@ export default function Metodos() {
             categoria: data.categoria || 'general',
             duracion: data.duracion || '0:00 min',
             videoUrl: data.videoUrl || '',
+            miniaturaUrl: data.miniaturaUrl || '',
             destacado: !!data.destacado,
             fechaCreacion: data.fechaCreacion || new Date().toISOString()
           };
@@ -220,6 +223,20 @@ export default function Metodos() {
     return { type: 'direct', src: trimmed };
   };
 
+  // Obtener URL de la miniatura (YouTube automática con máxima resolución o miniatura personalizada)
+  const getThumbnailUrl = (item: VideoTutorial): string | null => {
+    if (item.miniaturaUrl && item.miniaturaUrl.trim()) {
+      return item.miniaturaUrl.trim();
+    }
+    if (!item.videoUrl || !item.videoUrl.trim()) return null;
+    const trimmed = item.videoUrl.trim();
+    const ytMatch = trimmed.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/))([\w-]{11})/);
+    if (ytMatch && ytMatch[1]) {
+      return `https://img.youtube.com/vi/${ytMatch[1]}/hqdefault.jpg`;
+    }
+    return null;
+  };
+
   // Abrir modal de creación
   const handleOpenCreateModal = () => {
     setEditingItem(null);
@@ -229,6 +246,7 @@ export default function Metodos() {
       categoria: 'general',
       duracion: '5:00 min',
       videoUrl: '',
+      miniaturaUrl: '',
       destacado: false
     });
     setIsFormModalOpen(true);
@@ -243,6 +261,7 @@ export default function Metodos() {
       categoria: item.categoria,
       duracion: item.duracion,
       videoUrl: item.videoUrl || '',
+      miniaturaUrl: item.miniaturaUrl || '',
       destacado: !!item.destacado
     });
     setIsFormModalOpen(true);
@@ -264,6 +283,7 @@ export default function Metodos() {
         categoria: formData.categoria,
         duracion: formData.duracion.trim() || '0:00 min',
         videoUrl: formData.videoUrl.trim(),
+        miniaturaUrl: formData.miniaturaUrl.trim(),
         destacado: formData.destacado
       };
 
@@ -291,6 +311,7 @@ export default function Metodos() {
         categoria: formData.categoria,
         duracion: formData.duracion.trim() || '5:00 min',
         videoUrl: formData.videoUrl.trim(),
+        miniaturaUrl: formData.miniaturaUrl.trim(),
         destacado: formData.destacado,
         fechaCreacion: new Date().toISOString()
       };
@@ -374,31 +395,44 @@ export default function Metodos() {
       </div>
 
       {/* Banner Destacado Superior */}
-      {tutorialDestacado && (
-        <div className="bg-gradient-to-r from-zinc-950 via-slate-900 to-zinc-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl mb-8 relative overflow-hidden border border-zinc-800">
-          <div className="absolute top-0 right-0 w-96 h-96 bg-red-600/10 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
-          <div className="relative z-10 max-w-2xl">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-red-600/20 text-red-400 border border-red-500/30 mb-3">
-              <Sparkles className="w-3.5 h-3.5" />
-              Centro de Aprendizaje Salamandra
-            </span>
-            <h2 className="text-xl sm:text-2xl font-black mb-2">{tutorialDestacado.titulo}</h2>
-            <p className="text-sm text-slate-300 mb-6 leading-relaxed">
-              {tutorialDestacado.descripcion}
-            </p>
-            <div className="flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setSelectedVideo(tutorialDestacado)}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs shadow-md shadow-red-600/30 transition-all cursor-pointer"
-              >
-                <Play className="w-4 h-4 fill-white" />
-                Reproducir Video Destacado ({tutorialDestacado.duracion})
-              </button>
+      {tutorialDestacado && (() => {
+        const bannerThumb = getThumbnailUrl(tutorialDestacado);
+        return (
+          <div className="bg-gradient-to-r from-zinc-950 via-slate-900 to-zinc-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl mb-8 relative overflow-hidden border border-zinc-800">
+            {bannerThumb && (
+              <div className="absolute inset-0 z-0">
+                <img 
+                  src={bannerThumb} 
+                  alt="" 
+                  className="w-full h-full object-cover opacity-20 filter blur-xs scale-105" 
+                />
+                <div className="absolute inset-0 bg-gradient-to-r from-zinc-950 via-zinc-950/80 to-transparent" />
+              </div>
+            )}
+            <div className="absolute top-0 right-0 w-96 h-96 bg-red-600/10 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
+            <div className="relative z-10 max-w-2xl">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-red-600/20 text-red-400 border border-red-500/30 mb-3">
+                <Sparkles className="w-3.5 h-3.5" />
+                Centro de Aprendizaje Salamandra
+              </span>
+              <h2 className="text-xl sm:text-2xl font-black mb-2">{tutorialDestacado.titulo}</h2>
+              <p className="text-sm text-slate-300 mb-6 leading-relaxed">
+                {tutorialDestacado.descripcion}
+              </p>
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setSelectedVideo(tutorialDestacado)}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs shadow-md shadow-red-600/30 transition-all cursor-pointer"
+                >
+                  <Play className="w-4 h-4 fill-white" />
+                  Reproducir Video Destacado ({tutorialDestacado.duracion})
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Buscador y Filtros por Categoría */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6">
@@ -451,16 +485,35 @@ export default function Metodos() {
                   {/* Cabecera de la tarjeta con miniatura interactiva */}
                   <div 
                     onClick={() => setSelectedVideo(item)}
-                    className="h-44 bg-gradient-to-br from-slate-900 to-zinc-900 relative flex items-center justify-center cursor-pointer overflow-hidden"
+                    className="h-44 bg-gradient-to-br from-slate-900 to-zinc-900 relative flex items-center justify-center cursor-pointer overflow-hidden group/thumb"
                   >
-                    <div className="absolute inset-0 bg-red-600/10 opacity-0 group-hover:opacity-100 transition-opacity" />
-                    <div className="w-14 h-14 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-white group-hover:scale-110 transition-transform shadow-lg">
+                    {(() => {
+                      const thumb = getThumbnailUrl(item);
+                      if (thumb) {
+                        return (
+                          <>
+                            <img
+                              src={thumb}
+                              alt={item.titulo}
+                              className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                              loading="lazy"
+                            />
+                            <div className="absolute inset-0 bg-black/35 group-hover:bg-black/20 transition-colors" />
+                          </>
+                        );
+                      }
+                      return (
+                        <div className="absolute inset-0 bg-red-600/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      );
+                    })()}
+
+                    <div className="relative z-10 w-14 h-14 rounded-2xl bg-black/50 backdrop-blur-md border border-white/20 flex items-center justify-center text-white group-hover:scale-110 group-hover:bg-red-600/90 transition-all shadow-xl">
                       <Play className="w-6 h-6 fill-white ml-0.5" />
                     </div>
-                    <span className="absolute bottom-3 right-3 px-2.5 py-1 rounded-lg bg-black/70 backdrop-blur-sm text-[11px] font-bold text-white">
+                    <span className="relative z-10 absolute bottom-3 right-3 px-2.5 py-1 rounded-lg bg-black/75 backdrop-blur-sm text-[11px] font-bold text-white shadow-sm">
                       {item.duracion}
                     </span>
-                    <span className="absolute top-3 left-3 px-2.5 py-1 rounded-lg bg-red-600/90 text-[10px] font-extrabold uppercase tracking-wider text-white">
+                    <span className="relative z-10 absolute top-3 left-3 px-2.5 py-1 rounded-lg bg-red-600/90 text-[10px] font-extrabold uppercase tracking-wider text-white shadow-sm">
                       {item.categoria}
                     </span>
                   </div>
@@ -727,6 +780,23 @@ export default function Metodos() {
                 />
                 <p className="text-[11px] text-slate-400 mt-1">
                   Soporta enlaces de <strong>YouTube</strong>, <strong>Google Drive</strong>, <strong>Microsoft OneDrive</strong>, <strong>Vimeo</strong> o archivos <strong>MP4</strong> directos.
+                </p>
+              </div>
+
+              {/* URL de Miniatura (Opcional - Si es YouTube se extrae sola) */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  URL de Imagen de Miniatura (Opcional)
+                </label>
+                <input
+                  type="url"
+                  value={formData.miniaturaUrl}
+                  onChange={(e) => setFormData({ ...formData, miniaturaUrl: e.target.value })}
+                  placeholder="Se detecta automáticamente si es YouTube, o pon URL de imagen"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  En enlaces de YouTube la miniatura se carga <strong>automáticamente</strong>. Puedes pegar una URL personalizada si deseas sobreescribirla.
                 </p>
               </div>
 

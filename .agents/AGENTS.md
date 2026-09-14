@@ -476,3 +476,122 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
   - Las funciones mutadoras (`handleSaveResolucion`, `handleConfirmDelete`, `handleStartEdit` y `handleSaveEdit`) cuentan con salvaguardas internas estrictas que impiden cualquier ejecución no autorizada.
 - **Capacidad Universal de Creación y Participación**:
   - Todos los usuarios de la aplicación (técnicos, administradores, editores, visualizadores) conservan la facultad de crear nuevas consultas (sugerencias o reporte de errores) y responder activamente en el hilo de comentarios/conversación de cualquier mensaje del buzón.
+
+---
+
+## 36. Blindaje Inviolable de Personalización de Imagen y Escala del Loader de Inicio (Ajustes.tsx y Loader.tsx)
+- **Tarjeta de Configuración en Ajustes («Cambio de imagen inicio»)**:
+  - En `Ajustes.tsx` (y su réplica `oficina/pages/Ajustes.tsx`), se mantiene la tarjeta de configuración con icono de giro `RotateCw` y color rosa/rose (`bg-rose-100 text-rose-600 border-zinc-200`).
+  - Al acceder (`view === 'loader_image'`), dispone de un contenedor circular concéntrico idéntico al loader real de la app con giro lento (`animate-spin-slow origin-center`), anillo discontinuo exterior y previsualización reactiva.
+- **Control de Redimensionado y Ajuste al Círculo (`loaderEscala`)**:
+  - Campo deslizante (slider) de escala de 30% a 180% (paso 2) con indicador porcentual en tiempo real (`loaderEscala%`) para centrar y adaptar cualquier imagen, icono o logotipo redondo al diámetro del círculo sin que quede pequeño ni desfasado.
+  - La imagen aplica la escala directamente mediante estilo `transform: scale(${loaderEscala / 100})` con `transition-transform duration-100` y `object-contain`.
+- **Persistencia en la Nube y Caché Local**:
+  - Guardado sincronizado en Firestore (`configuracion_inicio/loader`) vía `saveLoaderConfig({ imagenUrl, escala })` y subida a Firebase Storage (`uploadFile`).
+  - Sincronización en tiempo real vía `subscribeLoaderConfig` y caché síncrona en LocalStorage (`firecheck_loader_image` y `firecheck_loader_escala`) para renderizado instantáneo en `Loader.tsx`.
+  - Opción de restablecimiento a los valores de fábrica (`/loader-racor.png` al 100%).
+
+---
+
+## 37. Blindaje Inviolable de Tarjeta Calendario en Panel del Técnico y Centrado de Mes (DashboardTecnico.tsx y Calendario.tsx)
+- **Tarjeta de Acceso en el Panel del Técnico**:
+  - En `DashboardTecnico.tsx` (y `mantenimientos/pages/DashboardTecnico.tsx`), la cuadrícula de accesos principales incorpora de forma permanente la tarjeta **«Calendario»** (`id: 'calendario' as TecnicoView`) con icono `Calendar`, paleta de color rose (`bg-rose-50 border-rose-200 text-rose-900`) y distintivo *«Planificación»*.
+  - Al pulsar sobre la tarjeta, se despliega la vista unificada del calendario a pantalla completa (`currentView === 'calendario'`) con una barra superior que incorpora el botón **«← Volver al panel»** (`onClick={() => setCurrentView('dashboard')}`) para un retorno inmediato y fluido.
+- **Centrado del Título del Mes sin Icono en el Calendario**:
+  - En la cabecera principal de `Calendario.tsx`, el bloque del mes (`MESES[month] {year}`) y la insignia de *Mes en curso* DEBEN estar perfectamente centrados en la interfaz (`w-full lg:w-auto text-center` con `justify-center`).
+  - Queda suprimido de la cabecera el recuadro rojo con el icono de calendario (`CalendarIcon`), manteniéndose la estética despejada y limpia.
+
+---
+
+## 38. Blindaje Inviolable del Módulo Urgencias y su Integración en el Calendario
+- **Ruta y Módulo Independiente de Urgencias (`/urgencias`)**:
+  - La ruta `/urgencias` en `src/App.tsx` debe renderizar de forma protegida el componente `Urgencias.tsx` para los roles: `['super-administrador', 'administrador', 'editor', 'visualizador', 'tecnico']`.
+  - En `Sidebar.tsx`, el acceso a Urgencias (`id: 'urgencias'`) se mantiene con icono `AlertTriangle` y ruta `/urgencias`.
+- **Estructura Operativa y Persistencia Dual en Urgencias (`Urgencias.tsx`)**:
+  - Colección en Firestore: `urgencias` con los métodos `subscribeUrgencias`, `addUrgencia`, `updateUrgencia` y `deleteUrgencia` en `src/firebase.tsx` con sanitización `cleanFirestoreData`.
+  - Caché síncrona en `firecheck_db_urgencias` (LocalStorage).
+  - 12 pestañas mensuales con `MESES_CONFIG`, contadores reactivos y tarjetas de métricas (*Total Urgencias*, *Pendientes*, *En curso*, *Paradas*, *Finalizadas*).
+  - Prioridades: `Alta` (con punto rojo pulsante `animate-pulse`), `Media` (ámbar) y `Baja` (gris).
+  - Notas con punto de notificación parpadeante (`StickyNote`) y modal flotante rápido.
+  - Creación directa de Albarán (`ReceiptText`) con redirección vinculada a `/albaranes`.
+- **Integración y Etiquetas en Negro con Letra Blanca en el Calendario (`Calendario.tsx`)**:
+  - En `Calendario.tsx`, las urgencias deben suscribirse en tiempo real (`subscribeUrgencias`) y cargarse desde `firecheck_db_urgencias`.
+  - Las etiquetas de urgencia en la cuadrícula de días DEBEN mostrarse en **fondo negro y letra blanca** (`bg-black text-white border-zinc-950 hover:bg-zinc-800`), con la sigla `Urg.` y el icono `AlertTriangle`.
+  - La insignia de conteo en la leyenda superior DEBE lucir igualmente en fondo negro y letra blanca (`bg-black text-white border-zinc-950`).
+  - Las urgencias son arrastrables entre días (*Drag & Drop*) para reprogramación automática y sincronización inmediata con Firestore y LocalStorage.
+
+---
+
+## 39. Blindaje Inviolable del Módulo Presupuestos, Modal de Acciones y Maquetación PDF
+- **Estructura de Líneas con Familia en Negrita y Descripción Editable (`Presupuestos.tsx` y `firebase.tsx`)**:
+  - En `PresupuestoLinea`, el campo `familia?: string` es permanente.
+  - En el formulario de presupuestos (`Presupuestos.tsx`), tanto en la línea añadida como en el desglose de artículos y servicios, la familia se muestra y edita en negrita sobre la descripción, permitiendo modificar libremente el texto de ambos campos.
+  - En el PDF generado (`generarPresupuestoPDF` en `pdfGenerator.ts`), la familia se imprime en negrita sobre la descripción en texto normal con el mismo cuerpo tipográfico (`7.5pt`), adaptándose la celda automáticamente a la altura requerida.
+- **Botón "Selecciona" en la Columna de Acciones de la Tabla**:
+  - En la lista de presupuestos (`Presupuestos.tsx`), la columna de acciones DEBE mostrar un único botón limpio con el texto exacto **`"Selecciona"`** acompañado de un icono `ChevronDown`, eliminando la acumulación de botones individuales.
+- **Ventana Modal de Acciones Ampliada (`max-w-2xl sm:max-w-3xl`) y Botón de Cierre Rojo con Cruz Blanca**:
+  - Al hacer clic en "Selecciona", se abre la ventana modal de acciones con las 7 opciones con icono, título y descripción detallada debajo:
+    1. **Editar Presupuesto** (`Edit`, ámbar)
+    2. **Duplicar Presupuesto** (`Copy`, violeta)
+    3. **Enviar por Enlace Seguro** (`Send`, sky)
+    4. **Historial y Seguimiento** (`Activity`, indigo)
+    5. **Crear Pedido de Trabajo** (`PackagePlus`, emerald)
+    6. **Descargar PDF Oficial** (`Download`, teal)
+    7. **Eliminar Presupuesto** (`Trash2`, red)
+  - La cabecera del modal DEBE incluir obligatoriamente el botón de cierre en **fondo rojo con la cruz en blanco puro** (`bg-red-600 hover:bg-red-700 text-white`).
+- **Acción Duplicar para Nueva Versión (`handleDuplicar`)**:
+  - La opción Duplicar debe clonar completamente el presupuesto original (partidas, familias, descripciones, cantidades, precios, cliente, centro y notas), asignando nuevos identificadores de línea, y calculando automáticamente la siguiente versión correlativa en el título (ej. `(v2)`, `(v3)`...), abriendo de inmediato el formulario para realizar las modificaciones solicitadas y guardarlo como nueva versión independiente.
+- **Selector Rápido de Estados al Pie de la Ventana Modal**:
+  - Al pie del modal de acciones DEBEN renderizarse los 5 estados oficiales (`Borrador`, `Enviado`, `En espera`, `Aprobado`, `Rechazado`).
+  - El estado actual del presupuesto debe mostrarse resaltado con insignia `Check`. Al pulsar en cualquier estado, se actualiza de inmediato en Firestore y en la interfaz.
+- **Maquetación Armónica de Cabecera en el PDF de Presupuestos (`pdfGenerator.ts`)**:
+  - En `generarPresupuestoPDF`, el logotipo oficial de Abanfoc (`logoY = Math.max(3, logoYCalculado - 2)`) y los textos oficiales de datos de empresa y formas de contacto (`12.5`, `16.3`, `20.1`, `23.9`) se mantienen balanceados y armonizados verticalmente con respecto a las dos líneas rojas de la cabecera (`9.5` a `25.5`).
+
+
+---
+
+## 40. Blindaje Inviolable del Cliente y Centro Puntual en Albaranes (`Albaranes.tsx` y `firebase.tsx`)
+- **Campos `clienteNombreLibre` y `centroNombreLibre` en la Interfaz `Albaran` (`firebase.tsx`)**:
+  - La interfaz `Albaran` DEBE conservar permanentemente los campos opcionales `clienteNombreLibre?: string` y `centroNombreLibre?: string`.
+  - Estos campos permiten grabar en el albarán un cliente o centro escrito manualmente sin crear ningún documento en Firestore (colecciones `clientes` ni `centros`).
+- **Campo Cliente con Búsqueda + Texto Libre (`Albaranes.tsx`)**:
+  - El campo **Cliente** en el formulario de albaranes DEBE ser un `<input type="text">` con dropdown personalizado que permita **dos modos**:
+    1. **Selección de la lista**: el usuario escribe, el dropdown filtra clientes de la BD y al seleccionar uno se guarda `form.clienteId` (y se limpian `clienteNombreLibre` y `centroNombreLibre`).
+    2. **Texto libre / cliente puntual**: si el texto escrito no coincide con ningún cliente de la lista, el dropdown muestra la opción **"✎ Usar 'X' como cliente puntual"**. Al seleccionarla o al perder el foco con texto no encontrado, se guarda en `form.clienteNombreLibre` (y se limpia `form.clienteId` a `''`).
+  - Cuando hay `clienteNombreLibre` activo, DEBE mostrarse bajo el campo el aviso: **"⚠ Cliente puntual — no guardado en la base de datos"** en color ámbar.
+  - El `onBlur` del campo usa un `setTimeout(150ms)` para dar prioridad al `onMouseDown` del dropdown antes de guardar texto libre.
+- **Campo Centro con Texto Libre cuando Cliente es Puntual (`Albaranes.tsx`)**:
+  - Si `form.clienteId` tiene valor (cliente de BD): se muestra el `<select>` normal filtrado por clienteId.
+  - Si `form.clienteId` está vacío (cliente puntual): se muestra un `<input type="text">` libre que guarda en `form.centroNombreLibre`.
+  - Queda ESTRICTAMENTE PROHIBIDO deshabilitar o eliminar este comportamiento condicional.
+- **Validación del Formulario**:
+  - La condición de validación en `handleSaveForm` DEBE aceptar el albarán si existe `form.clienteId` **O** `form.clienteNombreLibre` (no exigir ambos): `(!form.clienteId && !form.clienteNombreLibre)`.
+- **Panel "Datos de Ubicación"**:
+  - Si `form.clienteId` tiene valor: muestra datos del cliente/centro de la BD.
+  - Si `form.clienteNombreLibre` tiene valor (y no hay `clienteId`): muestra `centroNombreLibre || clienteNombreLibre` en negrita + aviso ámbar "Cliente puntual (no guardado en BD)".
+  - Si ninguno tiene valor: muestra "Selecciona un cliente o escribe uno nuevo."
+- **Lista de Albaranes y Buscador**:
+  - En la columna Centro de la tabla (mobile y desktop) DEBE usarse el fallback: `centro?.nombre || alb.centroNombreLibre || cliente?.nombre || alb.clienteNombreLibre || 'Desconocido'`.
+  - El buscador DEBE incluir `alb.clienteNombreLibre` en las condiciones de `matchesSearch`.
+- **Generación del PDF del Albarán**:
+  - En todos los botones de descarga de PDF de la lista, DEBE construirse un objeto sintético antes de llamar a `generarAlbaranPDF`:
+    ```ts
+    const clienteParaPDF = cliente || (alb.clienteNombreLibre ? { nombre: alb.clienteNombreLibre } : null);
+    const centroParaPDF = centro || (alb.centroNombreLibre ? { nombre: alb.centroNombreLibre } : null);
+    ```
+  - Queda ESTRICTAMENTE PROHIBIDO pasar `null` directamente cuando hay `clienteNombreLibre` disponible.
+
+---
+
+## 41. Blindaje Inviolable de CORRECTO/NO CORRECTO en Sistema Alumbrado de Emergencia (`SistemaAlumbradoEmergencia.tsx` y `pdfGenerator.ts`)
+- **Normalización de Valores en UI (`SistemaAlumbradoEmergencia.tsx`)**:
+  - Para los checkitems cuyas `itemOpciones` incluyan `'CORRECTO'` (desplegables tipo CORRECTO/NO CORRECTO), la normalización de `val` DEBE ser:
+    - `true`, `'true'`, `'SI'`, `undefined`, `''` → `'CORRECTO'`
+    - `false`, `'false'`, `'NO'` → `'NO CORRECTO'`
+  - `isChecked` para estos items DEBE detectar `'CORRECTO'` y `'CONFORME'` como string, además de `true`/`'true'`.
+- **PDF de Alumbrado con Texto CORRECTO/NO CORRECTO (NO con checkmarks vectoriales) (`pdfGenerator.ts`)**:
+  - En la tabla del sistema Alumbrado de Emergencia (`esAlumbrado`), las columnas de "Funcionamiento en reposo" y "Funcionamiento sin tensión" (índices ≥ 5 en la cabecera horizontal) DEBEN imprimirse con texto literal **`'CORRECTO'`** (en verde bold) o **`'NO CORRECTO'`** (en rojo bold), nunca con el símbolo de checkmark vectorial.
+  - Función `getAlumbradoVal(checkKey, keywords)`: busca el valor por clave directa, luego por keywords en `checkItemsDeSistema`, retornando `'CORRECTO'` como default (nunca `'TICK'`). Traduce `true` → `'CORRECTO'`, `false` → `'NO CORRECTO'`.
+  - En `didParseCell`: para `esAlumbrado && data.column.index >= 5`, se fuerza `data.cell.text = ['CORRECTO']` (verde bold) o `data.cell.text = ['NO CORRECTO']` (rojo bold).
+  - En `didDrawCell`: el dibujo del checkmark vectorial DEBE estar condicionado a `!esAlumbrado` para NO dibujar sobre el texto en las columnas 5 y 6 del sistema Alumbrado.
+

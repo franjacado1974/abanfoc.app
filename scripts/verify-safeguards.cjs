@@ -460,6 +460,87 @@ if (fs.existsSync(buzonPath)) {
   }
 }
 
+// 24. Verificación de Personalización de Imagen y Escala del Loader (AGENTS.md REGLA 36)
+const ajustesPath = path.join(__dirname, '../src/Ajustes.tsx');
+if (fs.existsSync(ajustesPath)) {
+  const ajustesContent = fs.readFileSync(ajustesPath, 'utf8');
+  if (!ajustesContent.includes('Cambio de imagen inicio') || !ajustesContent.includes('loaderEscala') || !ajustesContent.includes('saveLoaderConfig') || !ajustesContent.includes('subscribeLoaderConfig')) {
+    errors.push('CRÍTICO: Ajustes.tsx carece de la tarjeta o lógica de personalización y escala del loader (AGENTS.md REGLA 36).');
+  }
+}
+const loaderPath = path.join(__dirname, '../src/components/Loader.tsx');
+if (fs.existsSync(loaderPath)) {
+  const loaderContent = fs.readFileSync(loaderPath, 'utf8');
+  if (!loaderContent.includes('subscribeLoaderConfig') || !loaderContent.includes('loaderEscala') || !loaderContent.includes('loaderImage')) {
+    errors.push('CRÍTICO: Loader.tsx carece de la reactividad a la imagen o escala configurada (AGENTS.md REGLA 36).');
+  }
+}
+
+// 25. Verificación de Tarjeta Calendario en Panel Técnico y Centrado de Mes (AGENTS.md REGLA 37)
+const dashTecnicoPath = path.join(__dirname, '../src/DashboardTecnico.tsx');
+if (fs.existsSync(dashTecnicoPath)) {
+  const dashContent = fs.readFileSync(dashTecnicoPath, 'utf8');
+  if (!dashContent.includes('id: \'calendario\'') || !dashContent.includes('currentView === \'calendario\'') || !dashContent.includes('Volver al panel')) {
+    errors.push('CRÍTICO: DashboardTecnico.tsx carece de la tarjeta de Calendario o de su navegación con retorno (AGENTS.md REGLA 37).');
+  }
+}
+const calendarioPath = path.join(__dirname, '../src/Calendario.tsx');
+if (fs.existsSync(calendarioPath)) {
+  const calContent = fs.readFileSync(calendarioPath, 'utf8');
+  if (calContent.includes('CalendarIcon') || !calContent.includes('justify-center gap-2')) {
+    errors.push('CRÍTICO: Calendario.tsx debe mantener centrado el mes y no tener CalendarIcon en cabecera (AGENTS.md REGLA 37).');
+  }
+}
+
+// 26. Verificación de Módulo Urgencias e Integración en Calendario (AGENTS.md REGLA 38)
+const urgenciasPath = path.join(__dirname, '../src/Urgencias.tsx');
+if (!fs.existsSync(urgenciasPath)) {
+  errors.push('CRÍTICO: No se encontró src/Urgencias.tsx (AGENTS.md REGLA 38).');
+} else {
+  const urgContent = fs.readFileSync(urgenciasPath, 'utf8');
+  if (!urgContent.includes('subscribeUrgencias') || !urgContent.includes('firecheck_db_urgencias')) {
+    errors.push('CRÍTICO: Urgencias.tsx carece de la sincronización dual con Firestore y LocalStorage (AGENTS.md REGLA 38).');
+  }
+}
+if (fs.existsSync(appPath)) {
+  const appContent = fs.readFileSync(appPath, 'utf8');
+  if (!appContent.includes('path="/urgencias"') || !appContent.includes('<Urgencias />')) {
+    errors.push('CRÍTICO: App.tsx carece del enrutamiento protegido para /urgencias (AGENTS.md REGLA 38).');
+  }
+}
+if (fs.existsSync(calendarioPath)) {
+  const calContent = fs.readFileSync(calendarioPath, 'utf8');
+  if (!calContent.includes('subscribeUrgencias') || !calContent.includes('bg-black text-white')) {
+    errors.push('CRÍTICO: Calendario.tsx debe mostrar las urgencias en fondo negro con letra blanca y suscribirse a subscribeUrgencias (AGENTS.md REGLA 38).');
+  }
+}
+
+// 27. Verificación de Presupuestos, Modal de Acciones y Maquetación PDF (AGENTS.md REGLA 39)
+const presPath = path.join(__dirname, '../src/Presupuestos.tsx');
+if (!fs.existsSync(presPath)) {
+  errors.push('CRÍTICO: No se encontró src/Presupuestos.tsx (AGENTS.md REGLA 39).');
+} else {
+  const pContent = fs.readFileSync(presPath, 'utf8');
+  if (!pContent.includes('Selecciona') || !pContent.includes('presupuestoParaAcciones')) {
+    errors.push('CRÍTICO: Presupuestos.tsx carece del botón limpio "Selecciona" o del estado modal de acciones (AGENTS.md REGLA 39).');
+  }
+  if (!pContent.includes('handleDuplicar')) {
+    errors.push('CRÍTICO: Presupuestos.tsx carece de la función handleDuplicar para clonar y crear nuevas versiones (AGENTS.md REGLA 39).');
+  }
+  if (!pContent.includes('bg-red-600') || !pContent.includes('text-white')) {
+    errors.push('CRÍTICO: Presupuestos.tsx carece del botón de cierre en fondo rojo con cruz blanca en el modal de acciones (AGENTS.md REGLA 39).');
+  }
+  if (!pContent.includes('Cambiar estado del presupuesto:') || !pContent.includes('ESTADOS.map')) {
+    errors.push('CRÍTICO: Presupuestos.tsx carece del selector rápido de estados al pie del modal de acciones (AGENTS.md REGLA 39).');
+  }
+}
+if (fs.existsSync(pdfGenPath)) {
+  const pdfContent = fs.readFileSync(pdfGenPath, 'utf8');
+  if (!pdfContent.includes('generarPresupuestoPDF') || !pdfContent.includes('familia') || !pdfContent.includes('logoYCalculado')) {
+    errors.push('CRÍTICO: pdfGenerator.ts carece del soporte de familia en líneas o de la posición ajustada de cabecera en presupuestos (AGENTS.md REGLA 39).');
+  }
+}
+
 // Resultado de la verificación
 if (errors.length > 0) {
   console.error('\n❌ ERROR CRÍTICO DE BLINDAJE INTEGRAL (AGENTS.md):');

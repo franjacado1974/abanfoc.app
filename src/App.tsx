@@ -13,6 +13,7 @@ import Clientes from './Clientes';
 import Centros from './Centros';
 import ClientesCentros from './ClientesCentros';
 import Presupuestos from './Presupuestos';
+import PortalPresupuesto from './PortalPresupuesto';
 import Catalogo from './Catalogo';
 import Articulos from './Articulos';
 import Servicios from './Servicios';
@@ -501,6 +502,7 @@ function normalizeRole(r?: string) {
   const clean = (r || '').toLowerCase().trim();
   if (clean === 'administracion' || clean === 'administración' || clean === 'admin' || clean === 'administrador') return 'administrador';
   if (clean === 'superadministrador' || clean === 'superusuario' || clean === 'super_administrador' || clean === 'super-usuario' || clean === 'super-administrador') return 'super-administrador';
+  if (clean === 'tecnico' || clean === 'técnico') return 'tecnico';
   return clean || 'visualizador';
 }
 
@@ -597,86 +599,94 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
   useEffect(() => {
     const unsubs: (() => void)[] = [];
 
+    const safeLocalSet = (key: string, value: string) => {
+      try {
+        localStorage.setItem(key, value);
+      } catch (e) {
+        console.warn(`[StorageQuota] Error guardando ${key} en localStorage:`, e);
+      }
+    };
+
     const updateStats = () => {
       setStats(getStats());
     };
 
     try {
       unsubs.push(subscribeClientes((items) => {
-        localStorage.setItem('firecheck_db_clientes', JSON.stringify(items));
+        safeLocalSet('firecheck_db_clientes', JSON.stringify(items));
         updateStats();
       }));
     } catch (e) { console.error('subscribeClientes failed', e); }
 
     try {
       unsubs.push(subscribeCentros((items) => {
-        localStorage.setItem('firecheck_db_centros', JSON.stringify(items));
+        safeLocalSet('firecheck_db_centros', JSON.stringify(items));
         updateStats();
       }));
     } catch (e) { console.error('subscribeCentros failed', e); }
 
     try {
       unsubs.push(subscribeArticulos((items) => {
-        localStorage.setItem('firecheck_db_articulos', JSON.stringify(items));
+        safeLocalSet('firecheck_db_articulos', JSON.stringify(items));
         updateStats();
       }));
     } catch (e) { console.error('subscribeArticulos failed', e); }
 
     try {
       unsubs.push(subscribeAlbaranes((items) => {
-        localStorage.setItem('firecheck_db_albaranes', JSON.stringify(items));
+        safeLocalSet('firecheck_db_albaranes', JSON.stringify(items));
         updateStats();
       }));
     } catch (e) { console.error('subscribeAlbaranes failed', e); }
 
     try {
       unsubs.push(subscribeCertificados((items) => {
-        localStorage.setItem('firecheck_db_certificados', JSON.stringify(items));
+        safeLocalSet('firecheck_db_certificados', JSON.stringify(items));
         updateStats();
       }));
     } catch (e) { console.error('subscribeCertificados failed', e); }
 
     try {
       unsubs.push(subscribePedidos((items) => {
-        localStorage.setItem('firecheck_db_pedidos', JSON.stringify(items));
+        safeLocalSet('firecheck_db_pedidos', JSON.stringify(items));
         updateStats();
       }));
     } catch (e) { console.error('subscribePedidos failed', e); }
 
     try {
       unsubs.push(subscribeTecnicos((items) => {
-        localStorage.setItem('firecheck_db_tecnicos', JSON.stringify(items));
+        safeLocalSet('firecheck_db_tecnicos', JSON.stringify(items));
       }));
     } catch (e) { console.error('subscribeTecnicos failed', e); }
 
     try {
       unsubs.push(subscribeEmpresas((items) => {
-        localStorage.setItem('firecheck_db_empresas', JSON.stringify(items));
+        safeLocalSet('firecheck_db_empresas', JSON.stringify(items));
       }));
     } catch (e) { console.error('subscribeEmpresas failed', e); }
 
     try {
       unsubs.push(subscribeTrabajos((items) => {
-        localStorage.setItem('firecheck_db_trabajos', JSON.stringify(items));
+        safeLocalSet('firecheck_db_trabajos', JSON.stringify(items));
       }));
     } catch (e) { console.error('subscribeTrabajos failed', e); }
 
     try {
       unsubs.push(subscribeSistemasCategorias((items) => {
-        localStorage.setItem('firecheck_db_sistemas_categorias', JSON.stringify(items));
+        safeLocalSet('firecheck_db_sistemas_categorias', JSON.stringify(items));
       }));
     } catch (e) { console.error('subscribeSistemasCategorias failed', e); }
 
     try {
       unsubs.push(subscribePartes((items) => {
-        localStorage.setItem('firecheck_db_partes', JSON.stringify(items));
+        safeLocalSet('firecheck_db_partes', JSON.stringify(items));
         updateStats();
       }));
     } catch (e) { console.error('subscribePartes failed', e); }
 
     try {
       unsubs.push(subscribePresupuestos((items) => {
-        localStorage.setItem('firecheck_db_presupuestos', JSON.stringify(items));
+        safeLocalSet('firecheck_db_presupuestos', JSON.stringify(items));
         updateStats();
       }));
     } catch (e) { console.error('subscribePresupuestos failed', e); }
@@ -1263,7 +1273,16 @@ export default function App() {
   const [loggedUser, setLoggedUser] = useState<Usuario | null>(() => {
     try {
       const session = sessionStorage.getItem('firecheck_logged_user') || localStorage.getItem('firecheck_logged_user');
-      return session ? JSON.parse(session) : null;
+      if (!session) return null;
+      const parsed = JSON.parse(session);
+      if (parsed && typeof parsed === 'object') {
+        return {
+          ...parsed,
+          nombre: parsed.nombre || parsed.usuario || 'Usuario',
+          apellidos: parsed.apellidos || ''
+        };
+      }
+      return null;
     } catch { return null; }
   });
   const [availableUsers, setAvailableUsers] = useState<Usuario[]>(() => {
@@ -1304,6 +1323,13 @@ export default function App() {
   };
 
 
+
+  // Detección de ruta pública: Portal del cliente para presupuestos
+  const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
+  if (pathname.startsWith('/portal-presupuesto/') || pathname.startsWith('/p/')) {
+    const token = pathname.replace(/^\/(portal-presupuesto|p)\//, '').split('/')[0];
+    return <PortalPresupuesto token={token} />;
+  }
 
   if (!loggedUser) {
     return (
@@ -1408,11 +1434,6 @@ export default function App() {
             <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Reparaciones /></PageLayout>
           </ProtectedRoute>
         } />
-        <Route path="/urgencias" element={
-          <ProtectedRoute allowedRoles={['super-administrador', 'administrador']} user={loggedUser}>
-            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Urgencias /></PageLayout>
-          </ProtectedRoute>
-        } />
         <Route path="/catalogo" element={
           <ProtectedRoute allowedRoles={['super-administrador', 'administrador', 'editor']} user={loggedUser}>
             <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Catalogo /></PageLayout>
@@ -1451,6 +1472,11 @@ export default function App() {
         <Route path="/pruebas-tecnicas" element={
           <ProtectedRoute allowedRoles={['super-administrador', 'administrador', 'editor', 'visualizador', 'tecnico']} user={loggedUser}>
             <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><PruebasTecnicas /></PageLayout>
+          </ProtectedRoute>
+        } />
+        <Route path="/urgencias" element={
+          <ProtectedRoute allowedRoles={['super-administrador', 'administrador', 'editor', 'visualizador', 'tecnico']} user={loggedUser}>
+            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Urgencias /></PageLayout>
           </ProtectedRoute>
         } />
         <Route path="/registro-horario" element={

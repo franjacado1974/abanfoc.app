@@ -348,7 +348,8 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
       alb.id.toLowerCase().includes(term) ||
       (alb.numeroMantenimiento && String(alb.numeroMantenimiento).toLowerCase().includes(term)) ||
       (alb.numeroPedido && String(alb.numeroPedido).toLowerCase().includes(term)) ||
-      (cliente && cliente.nombre.toLowerCase().includes(term));
+      (cliente && cliente.nombre.toLowerCase().includes(term)) ||
+      (alb.clienteNombreLibre && alb.clienteNombreLibre.toLowerCase().includes(term));
       
     const matchesFilter = !showOnlyPending || !alb.facturado;
     
@@ -474,7 +475,7 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
 
   const handleSaveForm = async (e: React.FormEvent) => {
     e.preventDefault(); // Prevent default form submission
-    if (!form.id || !form.empresaId || !form.clienteId) {
+    if (!form.id || !form.empresaId || (!form.clienteId && !form.clienteNombreLibre)) {
       alert('Por favor, rellena los campos obligatorios.');
       return;
     }
@@ -711,7 +712,9 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                               }
                               const tecnico = tecnicos.find(t => t.id === alb.tecnicoId);
                               const tecnicoNombre = tecnico ? `${tecnico.nombre} ${tecnico.apellidos}` : '';
-                              await generarAlbaranPDF(cliente as any || null, centro as any || null, eqsDelCentro as any[], alb.numeroMantenimiento || alb.id, tecnicoNombre, alb.firmaCliente, alb.firmaTecnico, alb.nombreFirmante, alb.items, empresa as any, false, alb.titulo, alb.periodicidad, undefined, alb.numeroPedido, alb.fechaCreacion);
+                              const clienteParaPDF = cliente || (alb.clienteNombreLibre ? { nombre: alb.clienteNombreLibre } : null);
+                              const centroParaPDF = centro || (alb.centroNombreLibre ? { nombre: alb.centroNombreLibre } : null);
+                              await generarAlbaranPDF(clienteParaPDF as any, centroParaPDF as any, eqsDelCentro as any[], alb.numeroMantenimiento || alb.id, tecnicoNombre, alb.firmaCliente, alb.firmaTecnico, alb.nombreFirmante, alb.items, empresa as any, false, alb.titulo, alb.periodicidad, undefined, alb.numeroPedido, alb.fechaCreacion);
                             }} className="p-1.5 text-red-650 hover:bg-red-50 rounded-xl transition-colors" title="Descargar PDF"><Download className="w-4 h-4" /></button>
                             <button onClick={() => handleEditAlbaran(alb)} className="p-1.5 text-black hover:bg-zinc-100 rounded-xl transition-colors"><Edit className="w-4 h-4" /></button>
                           </div>
@@ -720,11 +723,11 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                           <div className="flex-1 min-w-0 space-y-1">
                             <div className="flex items-center gap-1.5 text-xs font-medium text-zinc-500 truncate">
                               <Building2 className="w-3.5 h-3.5 shrink-0 text-zinc-400" />
-                              <span>{cliente?.nombre || 'Cliente Desconocido'}</span>
+                              <span>{cliente?.nombre || alb.clienteNombreLibre || 'Cliente Desconocido'}</span>
                             </div>
                             <div className="flex items-center gap-1.5 text-sm font-bold text-zinc-900 truncate uppercase">
                               <MapPin className="w-3.5 h-3.5 shrink-0 text-zinc-400" />
-                              <span>{centro?.nombre || cliente?.nombre || 'Centro Desconocido'}</span>
+                              <span>{centro?.nombre || alb.centroNombreLibre || cliente?.nombre || alb.clienteNombreLibre || 'Centro Desconocido'}</span>
                             </div>
                             <div className="text-[10px] text-zinc-400 pl-5">
                               {new Date(alb.fechaCreacion).toLocaleDateString()}
@@ -735,7 +738,7 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                           <div className="pr-3" style={getColStyle('albaran')}><span className="text-[11px] font-mono font-bold text-zinc-500 bg-zinc-100 px-1.5 py-0.5 rounded">{alb.id}</span></div>
                           <div className="pr-3 text-sm text-zinc-600" style={getColStyle('fecha')}>{new Date(alb.fechaCreacion).toLocaleDateString()}</div>
                           <div className="pr-3 text-sm text-zinc-600 truncate" style={getColStyle('pedido')}>{alb.numeroPedido || '-'}</div>
-                          <div className="pr-3 text-sm text-zinc-600 truncate flex items-center gap-1" style={getColStyle('centro')}><MapPin className="w-3 h-3 text-zinc-400 shrink-0" />{centro?.nombre || cliente?.nombre || 'Desconocido'}</div>
+                          <div className="pr-3 text-sm text-zinc-600 truncate flex items-center gap-1" style={getColStyle('centro')}><MapPin className="w-3 h-3 text-zinc-400 shrink-0" />{centro?.nombre || alb.centroNombreLibre || cliente?.nombre || alb.clienteNombreLibre || 'Desconocido'}</div>
                           <div className="pr-3 min-w-0" style={getColStyle('titulo')}><p className="text-sm font-bold text-zinc-900 truncate">{alb.titulo || '-'}</p></div>
                           <div className="flex-1 min-w-0"></div>
                           <div className="flex justify-center pr-2" style={getColStyle('estado')}>
@@ -773,7 +776,9 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                               }
                               const tecnico = tecnicos.find(t => t.id === alb.tecnicoId);
                               const tecnicoNombre = tecnico ? `${tecnico.nombre} ${tecnico.apellidos}` : '';
-                              await generarAlbaranPDF(cliente as any || null, centro as any || null, eqsDelCentro as any[], alb.numeroMantenimiento || alb.id, tecnicoNombre, alb.firmaCliente, alb.firmaTecnico, alb.nombreFirmante, alb.items, empresa as any, false, alb.titulo, alb.periodicidad, undefined, alb.numeroPedido, alb.fechaCreacion);
+                              const clienteParaPDF = cliente || (alb.clienteNombreLibre ? { nombre: alb.clienteNombreLibre } : null);
+                              const centroParaPDF = centro || (alb.centroNombreLibre ? { nombre: alb.centroNombreLibre } : null);
+                              await generarAlbaranPDF(clienteParaPDF as any, centroParaPDF as any, eqsDelCentro as any[], alb.numeroMantenimiento || alb.id, tecnicoNombre, alb.firmaCliente, alb.firmaTecnico, alb.nombreFirmante, alb.items, empresa as any, false, alb.titulo, alb.periodicidad, undefined, alb.numeroPedido, alb.fechaCreacion);
                             }} className="p-1.5 text-red-650 hover:bg-red-50 rounded-xl transition-colors" title="Descargar PDF"><Download className="w-4 h-4" /></button>
                             {!isVisualizador && <button onClick={() => handleEditAlbaran(alb)} className="p-1.5 text-black hover:bg-zinc-100 rounded-xl transition-colors" title="Editar"><Edit className="w-4 h-4" /></button>}
                             {!isVisualizador && !isTecnicoMode && <button onClick={() => handleDuplicateAlbaran(alb)} className="p-1.5 text-violet-600 hover:bg-violet-50 rounded-xl transition-colors" title="Duplicar"><Copy className="w-4 h-4" /></button>}
@@ -852,26 +857,41 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                     <div className="relative">
                       <input
                         type="text"
-                        placeholder="Escribe para buscar cliente..."
-                        value={showClienteDropdown ? clienteSearchTerm : (clientes.find(c => c.id === form.clienteId)?.nombre || '')}
+                        placeholder="Escribe para buscar o añade uno nuevo..."
+                        value={showClienteDropdown ? clienteSearchTerm : (form.clienteNombreLibre || clientes.find(c => c.id === form.clienteId)?.nombre || '')}
                         onFocus={() => {
                           setShowClienteDropdown(true);
-                          setClienteSearchTerm('');
+                          setClienteSearchTerm(form.clienteNombreLibre || clientes.find(c => c.id === form.clienteId)?.nombre || '');
                         }}
                         onChange={(e) => {
                           setClienteSearchTerm(e.target.value);
                           setShowClienteDropdown(true);
                         }}
+                        onBlur={() => {
+                          // Cuando pierde foco sin haber seleccionado de la lista,
+                          // guardar el texto escrito como clienteNombreLibre (texto libre)
+                          setTimeout(() => {
+                            if (showClienteDropdown) {
+                              const match = clientes.find(c => c.nombre.toLowerCase() === clienteSearchTerm.trim().toLowerCase());
+                              if (match) {
+                                setForm({ ...form, clienteId: match.id, centroId: '', clienteNombreLibre: '', centroNombreLibre: '' });
+                              } else if (clienteSearchTerm.trim()) {
+                                setForm({ ...form, clienteId: '', centroId: '', clienteNombreLibre: clienteSearchTerm.trim() });
+                              }
+                              setShowClienteDropdown(false);
+                            }
+                          }, 150);
+                        }}
                         className="w-full px-5 py-3.5 bg-zinc-50 border border-zinc-200 rounded-3xl outline-none focus:ring-2 focus:ring-violet-500/20"
                       />
-                      {showClienteDropdown && (
+                      {showClienteDropdown && clienteSearchTerm && (
                         <div className="absolute z-50 w-full mt-1 bg-white border border-zinc-200 rounded-xl shadow-xl max-h-60 overflow-y-auto">
                           {clientes.filter(c => c.nombre.toLowerCase().includes(clienteSearchTerm.toLowerCase())).map(cli => (
                             <div 
                               key={cli.id} 
                               className="px-4 py-3 hover:bg-zinc-50 cursor-pointer text-sm font-medium border-b border-zinc-50 last:border-0"
-                              onClick={() => {
-                                setForm({...form, clienteId: cli.id, centroId: ''});
+                              onMouseDown={() => {
+                                setForm({ ...form, clienteId: cli.id, centroId: '', clienteNombreLibre: '', centroNombreLibre: '' });
                                 setShowClienteDropdown(false);
                               }}
                             >
@@ -879,7 +899,15 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                             </div>
                           ))}
                           {clientes.filter(c => c.nombre.toLowerCase().includes(clienteSearchTerm.toLowerCase())).length === 0 && (
-                            <div className="px-4 py-3 text-sm text-zinc-500 italic">No se encontraron clientes</div>
+                            <div
+                              className="px-4 py-3 text-sm text-violet-600 font-medium cursor-pointer hover:bg-violet-50 border-b border-zinc-50"
+                              onMouseDown={() => {
+                                setForm({ ...form, clienteId: '', centroId: '', clienteNombreLibre: clienteSearchTerm.trim(), centroNombreLibre: '' });
+                                setShowClienteDropdown(false);
+                              }}
+                            >
+                              ✎ Usar "<span className="font-bold">{clienteSearchTerm.trim()}</span>" como cliente puntual
+                            </div>
                           )}
                         </div>
                       )}
@@ -887,18 +915,32 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                     {showClienteDropdown && (
                       <div className="fixed inset-0 z-40" onClick={() => setShowClienteDropdown(false)} />
                     )}
+                    {form.clienteNombreLibre && (
+                      <p className="text-[11px] text-amber-600 font-semibold ml-1">⚠ Cliente puntual — no guardado en la base de datos</p>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Centro de Trabajo</label>
-                    <select 
-                      value={form.centroId}
-                      onChange={e => setForm({...form, centroId: e.target.value})}
-                      className="w-full px-5 py-3.5 bg-zinc-50 border border-zinc-200 rounded-3xl outline-none disabled:opacity-50"
-                      disabled={!form.clienteId}
-                    >
-                      <option value="">Sin centro (Usar datos cliente)</option>
-                      {filteredCentros.map(cen => <option key={cen._docId || cen.id} value={cen._docId || cen.id}>{cen.nombre}</option>)}
-                    </select>
+                    {form.clienteId ? (
+                      // Cliente de BD: mostrar select filtrado por clienteId
+                      <select 
+                        value={form.centroId}
+                        onChange={e => setForm({...form, centroId: e.target.value})}
+                        className="w-full px-5 py-3.5 bg-zinc-50 border border-zinc-200 rounded-3xl outline-none"
+                      >
+                        <option value="">Sin centro (Usar datos cliente)</option>
+                        {filteredCentros.map(cen => <option key={cen._docId || cen.id} value={cen._docId || cen.id}>{cen.nombre}</option>)}
+                      </select>
+                    ) : (
+                      // Cliente libre: campo de texto libre para el centro
+                      <input
+                        type="text"
+                        placeholder="Escribe el centro de trabajo (opcional)..."
+                        value={form.centroNombreLibre || ''}
+                        onChange={e => setForm({ ...form, centroNombreLibre: e.target.value })}
+                        className="w-full px-5 py-3.5 bg-zinc-50 border border-zinc-200 rounded-3xl outline-none focus:ring-2 focus:ring-violet-500/20"
+                      />
+                    )}
                   </div>
                 </div>
 
@@ -914,9 +956,16 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                       <p>{selectedCentro?.poblacion || selectedCliente?.poblacion} ({selectedCentro?.provincia || selectedCliente?.provincia})</p>
                       <p>Tel: {selectedCentro?.telefono || selectedCliente?.telefono}</p>
                     </div>
+                  ) : form.clienteNombreLibre ? (
+                    <div className="text-sm space-y-1">
+                      <p className="font-bold text-zinc-900">{form.centroNombreLibre || form.clienteNombreLibre}</p>
+                      {form.centroNombreLibre && <p className="text-zinc-500">{form.clienteNombreLibre}</p>}
+                      <p className="text-amber-600 text-[11px] font-semibold">Cliente puntual (no guardado en BD)</p>
+                    </div>
                   ) : (
-                    <p className="text-sm text-zinc-400 italic">Selecciona un cliente para ver los datos.</p>
+                    <p className="text-sm text-zinc-400 italic">Selecciona un cliente o escribe uno nuevo.</p>
                   )}
+
                 </div>
               </div>
 

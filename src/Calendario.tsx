@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
-  Calendar as CalendarIcon,
   ChevronLeft,
   ChevronRight,
   Clock,
@@ -119,7 +118,6 @@ export interface EventoCalendario {
   estado?: string;
   fecha: string; // YYYY-MM-DD
   modulo: 'Mantenimientos' | 'Reparaciones' | 'Instalaciones' | 'Urgencias' | 'Festivo';
-  prioridad?: 'Baja' | 'Media' | 'Alta';
   tipoBadge: string;
   colorTag: string;
   colorBadge: string;
@@ -394,7 +392,7 @@ export default function Calendario() {
       });
     });
 
-    // 4. Operaciones - Urgencias: "Urg. [Cliente / Lugar]" (Negro con letras amarillas)
+    // 4. Operaciones - Urgencias: "Urg. [Cliente / Lugar]" (Rosa/Rojo vibrante con AlertTriangle)
     urgencias.forEach((u) => {
       const fecha = u.fecha || (u.fechaCreacion ? u.fechaCreacion.slice(0, 10) : '');
       if (!fecha) return;
@@ -408,7 +406,7 @@ export default function Calendario() {
         rawDocId: (u as any)._docId || u.id,
         sigla: 'Urg.',
         clienteResumido: nombreCliente,
-        tituloCompleto: u.urgencia || 'Urgencia / Aviso',
+        tituloCompleto: u.urgencia || 'Aviso de Urgencia',
         lugar: u.lugar,
         cliente: cl?.nombre,
         tecnico: u.tecnicoAsignado,
@@ -416,10 +414,9 @@ export default function Calendario() {
         estado: u.estado || 'Pendiente',
         fecha,
         modulo: 'Urgencias',
-        prioridad: u.prioridad || 'Alta',
-        tipoBadge: `Urgencia (${u.prioridad || 'Alta'})`,
-        colorTag: 'bg-black text-amber-300 border border-zinc-800 hover:bg-zinc-900 shadow-xs font-semibold',
-        colorBadge: 'bg-zinc-950 text-amber-300 border-zinc-800',
+        tipoBadge: u.prioridad ? `Urgencia (${u.prioridad})` : 'Aviso de Urgencia',
+        colorTag: 'bg-black text-white border-zinc-950 hover:bg-zinc-800 shadow-xs',
+        colorBadge: 'bg-zinc-900 text-white border-black',
         icono: AlertTriangle,
         detalles: u.nota || u.observaciones || undefined
       });
@@ -665,12 +662,9 @@ export default function Calendario() {
       {/* Barra de cabecera del Calendario */}
       <div className="bg-white rounded-2xl border border-slate-200/80 px-4 py-3 sm:px-5 sm:py-3.5 shadow-sm mb-3 shrink-0">
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
-          <div className="flex items-center gap-3 w-full lg:w-auto">
-            <div className="w-12 h-12 rounded-2xl bg-red-50 border border-red-200/60 flex items-center justify-center text-red-600 shadow-sm shrink-0">
-              <CalendarIcon className="w-6 h-6 stroke-[2.25]" />
-            </div>
+          <div className="w-full lg:w-auto text-center">
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center justify-center gap-2">
                 <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight capitalize">
                   {MESES[month]} {year}
                 </h1>
@@ -700,8 +694,8 @@ export default function Calendario() {
               <span className="font-extrabold text-red-700">Inst.</span>
               <span>Instalaciones ({statsMes.instCount})</span>
             </span>
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-black text-amber-300 border border-zinc-800 shadow-xs">
-              <span className="font-extrabold text-amber-400">Urg.</span>
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-black text-white border border-zinc-950 shadow-xs">
+              <span className="font-extrabold text-white">Urg.</span>
               <span>Urgencias ({statsMes.urgCount})</span>
             </span>
           </div>
@@ -938,25 +932,6 @@ export default function Calendario() {
                     <span className="text-[10px] text-slate-600 font-bold block uppercase">Comercial</span>
                     <span className="font-bold text-slate-800">{selectedEvento.comercial}</span>
                   </div>
-                </div>
-              )}
-
-              {selectedEvento.prioridad && (
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                  <span className="text-[10px] text-slate-600 font-bold uppercase">Prioridad</span>
-                  {selectedEvento.prioridad === 'Alta' ? (
-                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-red-100 text-red-800 border border-red-300 shadow-xs">
-                      🚨 Alta
-                    </span>
-                  ) : selectedEvento.prioridad === 'Media' ? (
-                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
-                      ⚠️ Media
-                    </span>
-                  ) : (
-                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                      🟢 Baja
-                    </span>
-                  )}
                 </div>
               )}
 

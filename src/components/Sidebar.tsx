@@ -94,10 +94,10 @@ const CATEGORIAS_MENU: NavCategory[] = [
     ]
   },
 
-  // 4.1 Urgencias (Acceso directo independiente a la vista entre Operaciones y Documentos)
+  // 4.1 Avisos / Urgencias (Acceso directo independiente a la vista entre Operaciones y Documentos)
   {
     id: 'urgencias',
-    title: 'Urgencias',
+    title: 'Avisos',
     Icon: AlertTriangle,
     path: '/urgencias',
     allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador', 'tecnico']
@@ -311,6 +311,7 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
     const clean = (r || '').toLowerCase().trim();
     if (clean === 'administracion' || clean === 'administración' || clean === 'admin' || clean === 'administrador') return 'administrador';
     if (clean === 'superadministrador' || clean === 'superusuario' || clean === 'super_administrador' || clean === 'super-usuario' || clean === 'super-administrador') return 'super-administrador';
+    if (clean === 'tecnico' || clean === 'técnico') return 'tecnico';
     return clean || 'visualizador';
   };
 
@@ -677,17 +678,17 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
         {!collapsed && user && (
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-red-500/20 rounded-full flex items-center justify-center text-xs font-bold text-red-500 border border-red-500/30">
-              {user.nombre.charAt(0)}{user.apellidos.charAt(0)}
+              {(user.nombre || (user as any).usuario || 'U').charAt(0).toUpperCase()}{(user.apellidos || '').charAt(0).toUpperCase()}
             </div>
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-white truncate">{user.nombre} {user.apellidos}</p>
+              <p className="text-sm font-semibold text-white truncate">{user.nombre || (user as any).usuario || 'Usuario'} {user.apellidos || ''}</p>
               <p className="text-[9px] text-red-500 uppercase font-bold tracking-wider truncate">{user.rol}</p>
             </div>
           </div>
         )}
         {collapsed && user && (
           <div className="w-8 h-8 bg-red-500/20 rounded-full flex items-center justify-center text-xs font-bold text-red-500 border border-red-500/30">
-            {user.nombre.charAt(0)}{user.apellidos.charAt(0)}
+            {(user.nombre || (user as any).usuario || 'U').charAt(0).toUpperCase()}{(user.apellidos || '').charAt(0).toUpperCase()}
           </div>
         )}
       </div>

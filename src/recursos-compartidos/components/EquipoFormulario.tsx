@@ -1,0 +1,1349 @@
+/**
+ * EquipoFormulario.tsx
+ * 
+ * Muestra EXACTAMENTE los campos definidos en la plantilla
+ * del Editor de Plantillas (Ajustes > Plantillas).
+ * 
+ * - Busca la plantilla por nombre EXACTO del sistema
+ * - Renderiza únicamente los items de la plantilla
+ * - Sin campos fijos: no muestra Orden, Tipo/Nombre ni Ubicación
+ * - Foto solo visible en modo revisión
+ * - Al guardar, persiste id, centroId, sistemaId y todos los campos de la plantilla
+ */
+import { useState, useEffect, memo } from 'react';
+import { X, Save, Camera, CheckCircle2, XCircle, RefreshCw, Trash2 } from 'lucide-react';
+import { getPlantillas, subscribeItemsDePlantilla, type ItemPlantilla } from '../types/plantillas';
+import { uploadFile, subscribeSistemasCategorias } from '../firebase/firebase';
+import type { EquipoInstalado } from '../types/models';
+
+const readFileAsDataUrl = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+            const rawDataUrl = reader.result as string;
+            if (!rawDataUrl) {
+                reject(new Error('FileReader vacío'));
+                return;
+            }
+            const img = new window.Image();
+            img.onload = () => {
+                try {
+                    const canvas = document.createElement('canvas');
+                    const MAX = 800;
+                    let w = img.width, h = img.height;
+                    if (w > MAX || h > MAX) {
+                        if (w > h) { h = Math.floor(h * MAX / w); w = MAX; }
+                        else { if (h > MAX) { w = Math.floor(w * MAX / h); h = MAX; } }
+                    }
+                    canvas.width = w; canvas.height = h;
+                    const ctx = canvas.getContext('2d');
+                    if (ctx) {
+                        ctx.drawImage(img, 0, 0, w, h);
+                        resolve(canvas.toDataURL('image/jpeg', 0.8));
+                        return;
+                    }
+                } catch { /* use rawDataUrl */ }
+                resolve(rawDataUrl);
+            };
+            img.onerror = () => resolve(rawDataUrl);
+            img.src = rawDataUrl;
+        };
+        reader.onerror = () => reject(new Error('FileReader error'));
+        reader.readAsDataURL(file);
+    });
+};
+
+interface EquipoFormularioProps {
+    equipo: Partial<EquipoInstalado> | null;
+    sistemaId: string;
+    sistemaNombre: string;
+    centroId: string;
+    parteId?: string;
+    plantillaId?: string;
+    onSave: (equipo: Partial<EquipoInstalado>) => Promise<void>;
+    onCancel: () => void;
+    isNew?: boolean;
+    equiposExistentes?: EquipoInstalado[];
+}
+
+const isUbicacionMarcaModelo = (label?: string, key?: string) => {
+    const lbl = (label || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const k = (key || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    return lbl.includes('ubicacion') || lbl.includes('marca') || lbl.includes('modelo') || lbl.includes('planta') || lbl.includes('nivel') ||
+           k.includes('ubicacion') || k.includes('marca') || k.includes('modelo') || k.includes('planta') || k.includes('nivel');
+};
+
+function EquipoFormulario({
+    equipo,
+    sistemaId,
+    sistemaNombre,
+    centroId,
+    parteId: _parteId,
+    plantillaId: _plantillaId,
+    onSave,
+    onCancel,
+    isNew = false,
+    equiposExistentes = []
+}: EquipoFormularioProps) {
+    const [formData, setFormData] = useState<Partial<EquipoInstalado>>(equipo || {});
+    const [plantillaItems, setPlantillaItems] = useState<ItemPlantilla[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [uploadingFoto, setUploadingFoto] = useState(false);
+    const [plantillaEncontradaNombre, setPlantillaEncontradaNombre] = useState<string | null>(null);
+    const [tiposSistema, setTiposSistema] = useState<{ id: string; nombre: string }[]>([]);
+
+    const modoRevision = true;
+
+    // Cargar tipos del sistema actual
+    useEffect(() => {
+        const unsub = subscribeSistemasCategorias((categorias) => {
+            const normalizarNombre = (nombre: string) =>
+                nombre
+                    .toLowerCase()
+                    .trim()
+                    .replace(/^sistema\s+/i, '')
+                    .replace(/\s+/g, ' ')
+                    .replace(/[áàäâ]/g, 'a')
+                    .replace(/[éèëê]/g, 'e')
+                    .replace(/[íìïî]/g, 'i')
+                    .replace(/[óòöô]/g, 'o')
+                    .replace(/[úùüû]/g, 'u');
+
+            const nombreSistemaNorm = normalizarNombre(sistemaNombre);
+            
+            const cat = categorias.find(c => {
+                const nombreCatNorm = normalizarNombre(c.nombre);
+                return nombreCatNorm === nombreSistemaNorm || nombreCatNorm.includes(nombreSistemaNorm) || nombreSistemaNorm.includes(nombreCatNorm);
+            });
+            
+            if (cat && cat.tipos) {
+                setTiposSistema(cat.tipos);
+            } else {
+                setTiposSistema([]);
+            }
+        });
+        return () => unsub();
+    }, [sistemaNombre]);
+
+    // Cargar items de la plantilla buscando por nombre EXACTO del sistema
+    useEffect(() => {
+        let unsub: (() => void) | undefined;
+
+        const cargarPlantilla = async () => {
+            try {
+                setLoading(true);
+
+                const plantillas = await getPlantillas();
+
+                const normalizarNombre = (nombre: string) =>
+                    nombre
+                        .toLowerCase()
+                        .trim()
+                        .replace(/^sistema\s+/i, '')
+                        .replace(/^check\s*list\s+/i, '')
+                        .replace(/^checklist\s+/i, '')
+                        .replace(/\s+/g, ' ')
+                        .replace(/[áàäâ]/g, 'a')
+                        .replace(/[éèëê]/g, 'e')
+                        .replace(/[íìïî]/g, 'i')
+                        .replace(/[óòöô]/g, 'o')
+                        .replace(/[úùüû]/g, 'u');
+
+                const nombreSistemaNorm = normalizarNombre(sistemaNombre);
+
+                // Buscar la plantilla que coincida con el nombre del sistema con orden de prioridad
+                // 1. Coincidencia exacta
+                let plantillaEncontrada = plantillas.find((p: any) => {
+                    const nombrePlantillaNorm = normalizarNombre(p.nombre || '');
+                    return nombrePlantillaNorm === nombreSistemaNorm;
+                });
+
+                // 2. Coincidencia por inclusión (si una contiene a la otra)
+                if (!plantillaEncontrada) {
+                    plantillaEncontrada = plantillas.find((p: any) => {
+                        const nombrePlantillaNorm = normalizarNombre(p.nombre || '');
+                        return nombrePlantillaNorm.includes(nombreSistemaNorm) || nombreSistemaNorm.includes(nombrePlantillaNorm);
+                    });
+                }
+
+                // 3. Coincidencia por palabras compartidas
+                if (!plantillaEncontrada) {
+                    plantillaEncontrada = plantillas.find((p: any) => {
+                        const nombrePlantillaNorm = normalizarNombre(p.nombre || '');
+                        const palabrasSistema = nombreSistemaNorm.split(' ').filter(w => w.length > 3);
+                        const palabrasPlantilla = nombrePlantillaNorm.split(' ').filter(w => w.length > 3);
+                        return palabrasSistema.some(ps => palabrasPlantilla.some(pp => ps === pp || pp.includes(ps) || ps.includes(pp)));
+                    });
+                }
+
+                if (plantillaEncontrada) {
+                    console.log(`✅ Plantilla encontrada: "${plantillaEncontrada.nombre}" (ID: ${plantillaEncontrada.id})`);
+                    setPlantillaEncontradaNombre(plantillaEncontrada.nombre);
+                    unsub = subscribeItemsDePlantilla(plantillaEncontrada.id, (items: any[]) => {
+                        const ordenados = [...items].sort((a, b) => a.orden - b.orden);
+                        const nameLower = sistemaNombre.toLowerCase();
+                        const esAreaCobertura = nameLower.includes('detecci') || nameLower.includes('rociador') || nameLower.includes('sprinkler') || (nameLower.includes('puesto') && nameLower.includes('control'));
+                        const itemsModificados = ordenados.map(it => {
+                            const lbl = (it.label || '').toLowerCase();
+                            if (esAreaCobertura && (lbl.includes('ubicacion') || lbl.includes('ubicación') || lbl.includes('cobertura'))) {
+                                return { ...it, label: 'Área de cobertura de este sistema' };
+                            }
+                            return it;
+                        });
+                        setPlantillaItems(itemsModificados);
+                        setLoading(false);
+                    });
+                } else {
+                    console.warn(`⚠️ No se encontró plantilla para sistema: "${sistemaNombre}". Buscando coincidencias...`);
+                    // Debug: mostrar plantillas disponibles
+                    console.log('Plantillas disponibles:', plantillas.map((p: any) => `"${p.nombre}"`).join(', '));
+                    setPlantillaEncontradaNombre(null);
+                    setPlantillaItems([]);
+                    setLoading(false);
+                }
+            } catch (error) {
+                console.error('Error cargando plantilla:', error);
+                setPlantillaItems([]);
+                setLoading(false);
+            }
+        };
+
+        cargarPlantilla();
+
+        return () => {
+            if (unsub) unsub();
+        };
+    }, [sistemaNombre]);
+
+    // Auto-generar código para equipos nuevos
+    useEffect(() => {
+        if (isNew && !equipo?.id) {
+            const equiposDelSistema = equiposExistentes;
+            let siguienteNumero = 1;
+            
+            // Buscar la clave dinámica de "Orden de lista" si existe
+            const itemOrden = plantillaItems.find(it => it.label?.toLowerCase().trim() === 'orden de lista');
+            const ordenKey = itemOrden?.key;
+
+            if (equiposDelSistema.length > 0) {
+                // Intentar buscar números ya sea por el campo "codigo" o por el campo dinámico "Orden de lista"
+                const numeros = equiposDelSistema
+                    .map(e => {
+                        const val = ordenKey ? (e as any)[ordenKey] || e.codigo : e.codigo;
+                        return parseInt(val || '0');
+                    })
+                    .filter(n => !isNaN(n));
+                siguienteNumero = numeros.length > 0 ? Math.max(...numeros) + 1 : equiposDelSistema.length + 1;
+            }
+            
+            const nextStr = siguienteNumero.toString().padStart(2, '0');
+            
+            setFormData(prev => {
+                const newData = { ...prev, codigo: prev.codigo || nextStr };
+                if (ordenKey && !(newData as any)[ordenKey]) {
+                    (newData as any)[ordenKey] = nextStr;
+                }
+                return newData;
+            });
+        }
+    }, [isNew, equipo?.id, equiposExistentes, plantillaItems]);
+
+    // Inicializar formData con el equipo existente
+    useEffect(() => {
+        if (equipo) {
+            const cleaned = { ...equipo };
+            const isInvalidText = (v: any) => {
+                if (v === undefined || v === null || v === '') return false;
+                const s = String(v).trim().toLowerCase();
+                return s === 'true' || s === 'false' || s === 'sí' || s === 'no' || s === 'ok' || s === 'correcto' || s === 'incorrecto';
+            };
+            if (isInvalidText(cleaned.tipo)) {
+                cleaned.tipo = !isInvalidText(cleaned.nombre) ? cleaned.nombre : (!isInvalidText(cleaned.clase) ? cleaned.clase : (!isInvalidText(cleaned.modelo) ? cleaned.modelo : (!isInvalidText(cleaned.pesoCapacidad) ? cleaned.pesoCapacidad : 'Equipo sin tipo')));
+            }
+            if (isInvalidText(cleaned.nombre)) {
+                cleaned.nombre = cleaned.tipo || cleaned.clase || cleaned.modelo || cleaned.pesoCapacidad || 'Equipo sin tipo';
+            }
+            if (isInvalidText(cleaned.tipo)) {
+                cleaned.tipo = cleaned.nombre;
+            }
+            setFormData(cleaned);
+        }
+    }, [equipo]);
+
+    const handleChange = (key: string, value: any) => {
+        setFormData(prev => {
+            const currentItem = plantillaItems.find(it => it.key === key);
+            const keyLower = key.toLowerCase();
+            const labelLower = (currentItem?.label || '').toLowerCase();
+            const isUbicacionField = keyLower === 'ubicacion' || keyLower === 'cobertura' || keyLower.includes('ubicacion') || labelLower.includes('ubicacion') || labelLower.includes('cobertura') || labelLower.includes('nivel planta') || labelLower.includes('planta') || labelLower.includes('nivel');
+
+            let finalVal = value;
+            if (typeof value === 'string' && isUbicacionField) {
+                finalVal = value.toUpperCase();
+            }
+
+            const updated = { ...prev, [key]: finalVal };
+            if (isUbicacionField && typeof finalVal === 'string') {
+                updated.ubicacion = finalVal;
+            }
+            
+            // Auto-gestionar anomalías en el campo de Observaciones
+            const notasItem = plantillaItems.find(item => {
+                const lbl = (item.label || '').toLowerCase();
+                return lbl.includes('anomal') || ((lbl.includes('notas') || lbl.includes('observaciones')) && !plantillaItems.some(i => (i.label||'').toLowerCase().includes('anomal')));
+            });
+            const notasKey = notasItem?.key || 'anomalias';
+
+            if (notasKey && currentItem && key !== notasKey && key !== 'anomalias') {
+                const isAnomalia = value === false || value === 'false' || (
+                    typeof value === 'string' && (
+                        value.toUpperCase().trim().includes('NO CORRECTO') ||
+                        value.toUpperCase().trim().includes('NO CONFORME') ||
+                        value.toUpperCase().trim() === 'INCORRECTO' ||
+                        value.toUpperCase().trim() === 'NO' ||
+                        value.toUpperCase().includes('"NO CORRECTO"') ||
+                        value.toUpperCase().includes('"NO CONFORME"') ||
+                        value.toUpperCase().includes('"INCORRECTO"')
+                    )
+                );
+                const labelToUse = currentItem.label || '';
+                if (labelToUse) {
+                    const notasActuales = typeof (updated as any)[notasKey] === 'string' 
+                        ? ((updated as any)[notasKey] as string) 
+                        : '';
+                    const escapedLabel = labelToUse.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    const regexCheck = new RegExp(escapedLabel + '(?:,\\s*|\\s*:\\s*|\\s+-\\s*|\\s+)mal\\b', 'i');
+                    const regexRemove = new RegExp(escapedLabel + '(?:,\\s*|\\s*:\\s*|\\s+-\\s*|\\s+)mal\\b', 'gi');
+                    
+                    if (isAnomalia) {
+                        if (!regexCheck.test(notasActuales)) {
+                            const textoAnomaliaMal = `${labelToUse}, MAL`;
+                            const nuevoTexto = notasActuales.trim() 
+                                ? notasActuales.trim() + ', ' + textoAnomaliaMal 
+                                : textoAnomaliaMal;
+                            (updated as any)[notasKey] = nuevoTexto;
+                        }
+                    } else {
+                        if (notasActuales) {
+                            let limpiado = notasActuales.replace(regexRemove, '');
+                            limpiado = limpiado
+                                .split('\n')
+                                .map(line => {
+                                    return line
+                                        .split(',')
+                                        .map(part => part.trim())
+                                        .filter(part => part !== '')
+                                        .join(', ');
+                                })
+                                .filter(line => line.trim() !== '')
+                                .join('\n');
+                            (updated as any)[notasKey] = limpiado;
+                        }
+                    }
+                }
+            }
+
+            return updated;
+        });
+    };
+
+    const handleSave = async () => {
+        setSaving(true);
+        try {
+            const equipoToSave: Partial<EquipoInstalado> = {
+                ...formData,
+                centroId,
+                sistemaId,
+            };
+
+            // Mapear campos dinámicos conocidos a propiedades fijas para que se vean en el listado y se sincronicen en BD
+            plantillaItems.forEach(item => {
+                const label = (item.label || '').toLowerCase().trim();
+                const value = (formData as any)[item.key];
+                
+                if (value !== undefined && value !== null) {
+                    const strVal = String(value);
+                    const isBoolOrCheck = item.tipoRespuesta === 'check' || typeof value === 'boolean' || strVal.trim().toLowerCase() === 'true' || strVal.trim().toLowerCase() === 'false';
+
+                    if (label === 'orden de lista' || label === 'orden') {
+                        equipoToSave.codigo = strVal;
+                    } else if (
+                        !isBoolOrCheck &&
+                        (label === 'nombre' || label === 'nombre del equipo' || label === 'nombre/tipo' || label === 'nombre / tipo' || label === 'tipo' || label === 'tipo de equipo')
+                    ) {
+                        if (label === 'tipo' || label === 'tipo de equipo') {
+                            equipoToSave.tipo = strVal;
+                            if (!equipoToSave.nombre || equipoToSave.nombre.trim().toLowerCase() === 'true' || equipoToSave.nombre.trim().toLowerCase() === 'false') {
+                                equipoToSave.nombre = strVal;
+                            }
+                        } else {
+                            equipoToSave.nombre = strVal;
+                        }
+                    } else if (
+                        !isBoolOrCheck &&
+                        (label.includes('ubicación') || label.includes('ubicacion') || label.includes('cobertura') || label.includes('planta') || label.includes('nivel'))
+                    ) {
+                        equipoToSave.ubicacion = strVal.toUpperCase();
+                        (equipoToSave as any)[item.key] = strVal.toUpperCase();
+                    } else if (!isBoolOrCheck && label.includes('marca')) {
+                        equipoToSave.marca = strVal.toUpperCase();
+                        (equipoToSave as any)[item.key] = strVal.toUpperCase();
+                    } else if (!isBoolOrCheck && label.includes('modelo')) {
+                        equipoToSave.modelo = strVal.toUpperCase();
+                        (equipoToSave as any)[item.key] = strVal.toUpperCase();
+                    } else if (label.includes('fabricaci')) {
+                        equipoToSave.fechaFabricacion = strVal;
+                    } else if (label.includes('retimbre') && !isBoolOrCheck) {
+                        equipoToSave.ultimoRetimbre = strVal;
+                    } else if ((label.includes('hidra') || label.includes('prueba')) && !isBoolOrCheck) {
+                        equipoToSave.pruebaHidraulica = strVal;
+                    }
+                }
+            });
+
+            const isInvalidText = (v: any) => {
+                if (v === undefined || v === null || v === '') return false;
+                const s = String(v).trim().toLowerCase();
+                return s === 'true' || s === 'false' || s === 'sí' || s === 'no' || s === 'ok' || s === 'correcto' || s === 'incorrecto';
+            };
+            if (isInvalidText(equipoToSave.tipo)) {
+                equipoToSave.tipo = !isInvalidText(equipoToSave.nombre) ? equipoToSave.nombre : (!isInvalidText(equipoToSave.clase) ? equipoToSave.clase : (!isInvalidText(equipoToSave.modelo) ? equipoToSave.modelo : (!isInvalidText(equipoToSave.pesoCapacidad) ? equipoToSave.pesoCapacidad : 'Equipo sin tipo')));
+            }
+            if (isInvalidText(equipoToSave.nombre)) {
+                equipoToSave.nombre = equipoToSave.tipo || equipoToSave.clase || equipoToSave.modelo || equipoToSave.pesoCapacidad || 'Equipo sin tipo';
+            }
+            if (isInvalidText(equipoToSave.tipo)) {
+                equipoToSave.tipo = equipoToSave.nombre;
+            }
+            if (equipoToSave.ubicacion) equipoToSave.ubicacion = equipoToSave.ubicacion.toUpperCase();
+            if (equipoToSave.marca) equipoToSave.marca = equipoToSave.marca.toUpperCase();
+            if (equipoToSave.modelo) equipoToSave.modelo = equipoToSave.modelo.toUpperCase();
+
+            // Si es nuevo, generar ID
+            if (isNew && !equipoToSave.id) {
+                try {
+                    equipoToSave.id = `EQ-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+                } catch {
+                    equipoToSave.id = `EQ-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+                }
+            }
+
+            await onSave(equipoToSave);
+        } catch (error: any) {
+            console.error('Error al guardar equipo:', error);
+            alert('Error al guardar el equipo: ' + (error?.message || String(error)));
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleUploadFoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setUploadingFoto(true);
+        try {
+            const dataUrl = await readFileAsDataUrl(file);
+            handleChange('foto', dataUrl);
+
+            if (navigator.onLine) {
+                try {
+                    const res = await fetch(dataUrl);
+                    const blobData = await res.blob();
+                    const thumbFile = new File([blobData], `thumb_${Date.now()}.jpg`, { type: 'image/jpeg' });
+                    const path = `equipos/${centroId}/${sistemaId}/${formData.id || 'temp'}/foto_${Date.now()}`;
+                    const url = await uploadFile(thumbFile, path);
+                    handleChange('foto', url);
+                } catch (netErr) {
+                    console.warn('Subida online falló, conservando dataUrl local:', netErr);
+                }
+            }
+        } catch (err) {
+            console.error('Error al procesar imagen:', err);
+            alert('Error al procesar la imagen');
+        } finally {
+            setUploadingFoto(false);
+        }
+    };
+
+    // ── Logica Avisos Extintores ──────────────────────────────────────────
+    const isExtintor = sistemaNombre.toLowerCase().includes('extintor');
+    const fabItem = isExtintor ? plantillaItems.find(i => i.label.toLowerCase().includes('fabricaci')) : null;
+    const retItem = isExtintor ? plantillaItems.find(i => i.label.toLowerCase().includes('retimbre')) : null;
+    const anoItem = isExtintor ? plantillaItems.find(i => i.label.toLowerCase().includes('anomal') || i.label.toLowerCase().includes('observacion')) : null;
+
+    // ── Logica Avisos BIEs ──────────────────────────────────────────────────
+    const isBie = sistemaNombre.toLowerCase().includes('bie') || sistemaNombre.toLowerCase().includes('boca');
+    const fabItemBie = isBie ? plantillaItems.find(i => i.label.toLowerCase().includes('fabricaci')) : null;
+    const hidraulicaItemBie = isBie ? plantillaItems.find(i => i.label.toLowerCase().includes('hidra') || i.label.toLowerCase().includes('prueba')) : null;
+    const anoItemBie = isBie ? plantillaItems.find(i => i.label.toLowerCase().includes('anomal') || i.label.toLowerCase().includes('observacion') || i.label.toLowerCase().includes('notas')) : null;
+
+    const isCasetas = sistemaNombre.toLowerCase().includes('caseta') || sistemaNombre.toLowerCase().includes('dotacion');
+    const item70Fab = isCasetas ? plantillaItems.find(i => {
+        const lbl = i.label.toLowerCase();
+        return lbl.includes('tramo 70') || (lbl.includes('70 mm') && lbl.includes('fabricaci'));
+    }) : null;
+    const item70PH = isCasetas ? plantillaItems.find(i => {
+        const lbl = i.label.toLowerCase();
+        return lbl.includes('70 mm') && (lbl.includes('p.h.') || lbl.includes('prueba') || lbl.includes('ultima'));
+    }) : null;
+    const item45Fab = isCasetas ? plantillaItems.find(i => {
+        const lbl = i.label.toLowerCase();
+        return lbl.includes('tramo 45') || (lbl.includes('45 mm') && lbl.includes('fabricaci'));
+    }) : null;
+    const item45PH = isCasetas ? plantillaItems.find(i => {
+        const lbl = i.label.toLowerCase();
+        return lbl.includes('45 mm') && (lbl.includes('p.h.') || lbl.includes('prueba') || lbl.includes('ultima'));
+    }) : null;
+    const anoItemCasetas = isCasetas ? plantillaItems.find(i => i.label.toLowerCase().includes('anomal') || i.label.toLowerCase().includes('observacion') || i.label.toLowerCase().includes('notas')) : null;
+
+    let caducado = false;
+    let necesitaRetimbre = false;
+    let seAproxima = false;
+    let autoMsg = "";
+
+    if (isExtintor && fabItem) {
+        const valFab = formData[fabItem.key as keyof EquipoInstalado] as string;
+        const valRet = retItem ? formData[retItem.key as keyof EquipoInstalado] as string : null;
+        
+        if (valFab) {
+            const today = new Date();
+            const dateFab = new Date(valFab);
+            if (!isNaN(dateFab.getTime())) {
+                const monthsSinceFab = (today.getFullYear() - dateFab.getFullYear()) * 12 + today.getMonth() - dateFab.getMonth();
+                
+                if (monthsSinceFab >= 240) {
+                    caducado = true;
+                    autoMsg = "Extintor caducado + 20 años";
+                } else {
+                    let refDate = dateFab;
+                    if (valRet) {
+                        const dr = new Date(valRet);
+                        if (!isNaN(dr.getTime())) refDate = dr;
+                    }
+                    const monthsSinceRef = (today.getFullYear() - refDate.getFullYear()) * 12 + today.getMonth() - refDate.getMonth();
+                    
+                    if (monthsSinceRef >= 60) {
+                        necesitaRetimbre = true;
+                        autoMsg = "Extintor necesita retimbre";
+                    } else if (monthsSinceFab >= 237 || monthsSinceRef >= 57) {
+                        seAproxima = true;
+                        autoMsg = "Se aproxima caducidad o retimbrado del equipo";
+                    }
+                }
+            }
+        }
+    }
+
+    // Efecto para autocompletar anomalias de extintor
+    useEffect(() => {
+        if (!isExtintor || !anoItem) return;
+        
+        setFormData(prev => {
+            const currentAno = (prev[anoItem.key as keyof EquipoInstalado] as string) || "";
+            const autoMsgs = ["Extintor caducado + 20 años", "Extintor necesita retimbre", "Se aproxima caducidad o retimbrado del equipo"];
+            
+            const hasAnyOld = autoMsgs.some(m => currentAno.includes(m));
+            if (!autoMsg && !hasAnyOld) return prev; // Nada que hacer
+            
+            let newVal = currentAno;
+            if (autoMsg && currentAno.includes(autoMsg)) {
+                // Ya tiene el mensaje correcto, comprobamos que no tenga otros viejos
+                const otherMsgs = autoMsgs.filter(m => m !== autoMsg);
+                if (!otherMsgs.some(m => currentAno.includes(m))) {
+                    return prev;
+                }
+            }
+
+            // Quitar mensajes viejos
+            autoMsgs.forEach(m => { newVal = newVal.replace(m, '').trim(); });
+            
+            // Añadir el nuevo
+            if (autoMsg) {
+                newVal = (newVal + (newVal ? "\n" : "") + autoMsg).trim();
+            }
+
+            if (newVal === currentAno) return prev; // Sin cambios
+            
+            return { ...prev, [anoItem.key]: newVal };
+        });
+    }, [formData[fabItem?.key || ''], formData[retItem?.key || ''], autoMsg, isExtintor, anoItem?.key]);
+
+    let caducadoBie = false;
+    let necesitaPruebaBie = false;
+    let autoMsgCaducadoBie = "";
+    let autoMsgHidraBie = "";
+
+    if (isBie) {
+        if (fabItemBie) {
+            const valFab = formData[fabItemBie.key as keyof EquipoInstalado] as string;
+            if (valFab) {
+                const today = new Date();
+                const dateFab = new Date(valFab);
+                if (!isNaN(dateFab.getTime())) {
+                    let diffYears = today.getFullYear() - dateFab.getFullYear();
+                    if (today.getMonth() < dateFab.getMonth() || (today.getMonth() === dateFab.getMonth() && today.getDate() < dateFab.getDate())) {
+                        diffYears--;
+                    }
+                    if (diffYears >= 20) {
+                        caducadoBie = true;
+                        autoMsgCaducadoBie = "Equipo caducado + de 20 años se debe sustituir tramo de manguera según normativa.";
+                    }
+                }
+            }
+        }
+
+        if (hidraulicaItemBie) {
+            const valHidra = formData[hidraulicaItemBie.key as keyof EquipoInstalado] as string;
+            if (valHidra) {
+                const today = new Date();
+                const dateHidra = new Date(valHidra);
+                if (!isNaN(dateHidra.getTime())) {
+                    let diffYears = today.getFullYear() - dateHidra.getFullYear();
+                    if (today.getMonth() < dateHidra.getMonth() || (today.getMonth() === dateHidra.getMonth() && today.getDate() < dateHidra.getDate())) {
+                        diffYears--;
+                    }
+                    if (diffYears >= 5) {
+                        necesitaPruebaBie = true;
+                        autoMsgHidraBie = "Se necesita realizar prueba hidráulica obligatoria cada 5 años.";
+                    }
+                }
+            }
+        }
+    }
+
+    // Efecto para autocompletar anomalias de BIE
+    useEffect(() => {
+        if (!isBie || !anoItemBie) return;
+        
+        setFormData(prev => {
+            const currentAno = (prev[anoItemBie.key as keyof EquipoInstalado] as string) || "";
+            const msgCaducado = "Equipo caducado + de 20 años se debe sustituir tramo de manguera según normativa.";
+            const msgHidra = "Se necesita realizar prueba hidráulica obligatoria cada 5 años.";
+            
+            let newVal = currentAno;
+            newVal = newVal.replace(msgCaducado, '').trim();
+            newVal = newVal.replace(msgHidra, '').trim();
+            newVal = newVal.replace(/\n\n+/g, '\n').trim();
+
+            if (autoMsgCaducadoBie) {
+                newVal = (newVal + (newVal ? "\n" : "") + autoMsgCaducadoBie).trim();
+            }
+            if (autoMsgHidraBie) {
+                newVal = (newVal + (newVal ? "\n" : "") + autoMsgHidraBie).trim();
+            }
+
+            if (newVal === currentAno) return prev; // Sin cambios
+            
+            return { ...prev, [anoItemBie.key]: newVal };
+        });
+    }, [
+        formData[fabItemBie?.key || ''], 
+        formData[hidraulicaItemBie?.key || ''], 
+        autoMsgCaducadoBie, 
+        autoMsgHidraBie, 
+        isBie, 
+        anoItemBie?.key
+    ]);
+
+    let caducado70 = false;
+    let necesitaPrueba70 = false;
+    let caducado45 = false;
+    let necesitaPrueba45 = false;
+    let autoMsg70Fab = "";
+    let autoMsg70PH = "";
+    let autoMsg45Fab = "";
+    let autoMsg45PH = "";
+
+    if (isCasetas) {
+        if (item70Fab) {
+            const val = formData[item70Fab.key as keyof EquipoInstalado] as string;
+            if (val) {
+                const today = new Date();
+                const d = new Date(val);
+                if (!isNaN(d.getTime())) {
+                    let diff = today.getFullYear() - d.getFullYear();
+                    if (today.getMonth() < d.getMonth() || (today.getMonth() === d.getMonth() && today.getDate() < d.getDate())) diff--;
+                    if (diff >= 20) {
+                        caducado70 = true;
+                        autoMsg70Fab = "Manguera 70 mm. caducada + de 20 años se debe sustituir según normativa.";
+                    }
+                }
+            }
+        }
+        if (item70PH) {
+            const val = formData[item70PH.key as keyof EquipoInstalado] as string;
+            if (val) {
+                const today = new Date();
+                const d = new Date(val);
+                if (!isNaN(d.getTime())) {
+                    let diff = today.getFullYear() - d.getFullYear();
+                    if (today.getMonth() < d.getMonth() || (today.getMonth() === d.getMonth() && today.getDate() < d.getDate())) diff--;
+                    if (diff >= 5) {
+                        necesitaPrueba70 = true;
+                        autoMsg70PH = "Manguera 70 mm. necesita prueba hidráulica (última hace + de 5 años).";
+                    }
+                }
+            }
+        }
+        if (item45Fab) {
+            const val = formData[item45Fab.key as keyof EquipoInstalado] as string;
+            if (val) {
+                const today = new Date();
+                const d = new Date(val);
+                if (!isNaN(d.getTime())) {
+                    let diff = today.getFullYear() - d.getFullYear();
+                    if (today.getMonth() < d.getMonth() || (today.getMonth() === d.getMonth() && today.getDate() < d.getDate())) diff--;
+                    if (diff >= 20) {
+                        caducado45 = true;
+                        autoMsg45Fab = "Manguera 45 mm. caducada + de 20 años se debe sustituir según normativa.";
+                    }
+                }
+            }
+        }
+        if (item45PH) {
+            const val = formData[item45PH.key as keyof EquipoInstalado] as string;
+            if (val) {
+                const today = new Date();
+                const d = new Date(val);
+                if (!isNaN(d.getTime())) {
+                    let diff = today.getFullYear() - d.getFullYear();
+                    if (today.getMonth() < d.getMonth() || (today.getMonth() === d.getMonth() && today.getDate() < d.getDate())) diff--;
+                    if (diff >= 5) {
+                        necesitaPrueba45 = true;
+                        autoMsg45PH = "Manguera 45 mm. necesita prueba hidráulica (última hace + de 5 años).";
+                    }
+                }
+            }
+        }
+    }
+
+    useEffect(() => {
+        if (!isCasetas || !anoItemCasetas) return;
+        
+        setFormData(prev => {
+            const currentAno = (prev[anoItemCasetas.key as keyof EquipoInstalado] as string) || "";
+            const msgs = [
+                "Manguera 70 mm. caducada + de 20 años se debe sustituir según normativa.",
+                "Manguera 70 mm. necesita prueba hidráulica (última hace + de 5 años).",
+                "Manguera 45 mm. caducada + de 20 años se debe sustituir según normativa.",
+                "Manguera 45 mm. necesita prueba hidráulica (última hace + de 5 años)."
+            ];
+            
+            let newVal = currentAno;
+            msgs.forEach(m => { newVal = newVal.replace(m, '').trim(); });
+            newVal = newVal.replace(/\n\n+/g, '\n').trim();
+
+            if (autoMsg70Fab) {
+                newVal = (newVal + (newVal ? "\n" : "") + autoMsg70Fab).trim();
+            }
+            if (autoMsg70PH) {
+                newVal = (newVal + (newVal ? "\n" : "") + autoMsg70PH).trim();
+            }
+            if (autoMsg45Fab) {
+                newVal = (newVal + (newVal ? "\n" : "") + autoMsg45Fab).trim();
+            }
+            if (autoMsg45PH) {
+                newVal = (newVal + (newVal ? "\n" : "") + autoMsg45PH).trim();
+            }
+
+            if (newVal === currentAno) return prev;
+            
+            return { ...prev, [anoItemCasetas.key]: newVal };
+        });
+    }, [
+        formData[item70Fab?.key || ''], 
+        formData[item70PH?.key || ''], 
+        formData[item45Fab?.key || ''], 
+        formData[item45PH?.key || ''], 
+        autoMsg70Fab, 
+        autoMsg70PH,
+        autoMsg45Fab,
+        autoMsg45PH,
+        isCasetas, 
+        anoItemCasetas?.key
+    ]);
+
+
+    // ── Render de cada campo según tipoRespuesta ──────────────────────────
+
+    const renderField = (item: ItemPlantilla) => {
+        const value = formData[item.key as keyof EquipoInstalado];
+        const tipo = (item.tipoRespuesta as string) || 'texto';
+        const isUCase = isUbicacionMarcaModelo(item.label, item.key);
+        const isErrorDate = 
+            ((caducado || necesitaRetimbre || seAproxima) && (item.key === fabItem?.key || item.key === retItem?.key)) ||
+            (isBie && ((caducadoBie && item.key === fabItemBie?.key) || (necesitaPruebaBie && item.key === hidraulicaItemBie?.key))) ||
+            (isCasetas && (
+                (caducado70 && item.key === item70Fab?.key) || 
+                (necesitaPrueba70 && item.key === item70PH?.key) ||
+                (caducado45 && item.key === item45Fab?.key) ||
+                (necesitaPrueba45 && item.key === item45PH?.key)
+            ));
+        const itemLblLower = (item.label || '').toLowerCase();
+        const isAnomaliaField = itemLblLower.includes('anomal') || item.key === 'anomalias';
+        const isObservacionField = (itemLblLower.includes('observaci') || itemLblLower.includes('nota')) && !isAnomaliaField;
+        const isAnoFieldWithMsg = isAnomaliaField && typeof value === 'string' && value.trim() !== '';
+        const isObsFieldWithMsg = isObservacionField && typeof value === 'string' && value.trim() !== '';
+
+        if (item.horizontal || tipo === 'pregunta-horizontal') {
+            const isCheck = tipo === 'check';
+            const isNumero = tipo === 'numero';
+            const isFecha = tipo === 'fecha';
+            const isTextoLargo = tipo === 'texto-largo';
+            const isDesplegable = tipo === 'desplegable';
+
+            return (
+                <div key={item.key} className="col-span-full border-b border-slate-100 pb-3 flex items-center justify-between gap-4">
+                    <span className="text-sm font-semibold text-slate-700">{item.label}</span>
+                    <div className="w-64 shrink-0">
+                        {isCheck ? (
+                            (() => {
+                                const isChecked = value === true;
+                                const isUnchecked = value === false;
+                                return (
+                                    <label
+                                        className={`flex items-center gap-2 cursor-pointer text-sm px-3 py-2 rounded-lg transition-all select-none ${
+                                            isUnchecked
+                                                ? 'text-red-600 font-semibold bg-red-50 hover:bg-red-100'
+                                                : isChecked
+                                                ? 'text-green-700 font-medium bg-green-50 hover:bg-green-100'
+                                                : 'text-slate-600 font-medium bg-white hover:bg-slate-50 border border-slate-200'
+                                        }`}
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            checked={isChecked}
+                                            onChange={(e) => handleChange(item.key, e.target.checked)}
+                                            className={`w-4 h-4 rounded cursor-pointer ${
+                                                isUnchecked
+                                                    ? 'text-red-500 border-red-300 focus:ring-red-400'
+                                                    : isChecked
+                                                    ? 'text-green-500 border-green-300 focus:ring-green-400'
+                                                    : 'text-slate-400 border-slate-300 focus:ring-slate-400'
+                                            }`}
+                                        />
+                                        <span>OK</span>
+                                        {isChecked && <CheckCircle2 className="w-4 h-4 text-green-500 ml-auto" />}
+                                        {isUnchecked && <XCircle className="w-4 h-4 text-red-400 ml-auto" />}
+                                    </label>
+                                );
+                            })()
+                        ) : isNumero ? (
+                            <input
+                                type="number"
+                                value={typeof value === 'number' ? value : ''}
+                                onChange={(e) => handleChange(item.key, e.target.value ? Number(e.target.value) : '')}
+                                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                                placeholder="0"
+                            />
+                        ) : isFecha ? (
+                            (() => {
+                                const esFechaRevision = (item.label || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes('revision');
+                                const fechaVal = typeof value === 'string' && value ? (esFechaRevision ? value.substring(0, 10) : value.substring(0, 7)) : '';
+                                return (
+                                    <input
+                                        type={esFechaRevision ? "date" : "month"}
+                                        value={fechaVal}
+                                        onChange={(e) => handleChange(item.key, esFechaRevision ? e.target.value : (e.target.value ? e.target.value + '-01' : ''))}
+                                        className={`w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 transition-colors ${
+                                            isErrorDate 
+                                            ? 'bg-red-50 border-red-400 text-red-700 focus:border-red-500 focus:ring-red-500/20' 
+                                            : 'bg-white border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20'
+                                        }`}
+                                    />
+                                );
+                            })()
+                        ) : isTextoLargo ? (
+                            <textarea
+                                value={typeof value === 'string' ? value : ''}
+                                onChange={(e) => handleChange(item.key, e.target.value)}
+                                className={`w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 resize-none transition-colors ${
+                                    isAnoFieldWithMsg
+                                    ? 'bg-red-50 border-red-400 text-red-700 focus:border-red-500 focus:ring-red-500/20'
+                                    : 'bg-white border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20'
+                                }`}
+                                rows={2}
+                                placeholder="..."
+                            />
+                        ) : isDesplegable ? (
+                            (() => {
+                                const labelLower = (item.label || '').toLowerCase().trim();
+                                const isTipoField = labelLower === 'tipo' || labelLower === 'tipo de equipo';
+                                const isDeteccion = sistemaNombre.toLowerCase().includes('detecci');
+                                const opciones = (isDeteccion && isTipoField)
+                                    ? ['CONVENCIONAL', 'ANALÓGICA']
+                                    : ((item as any).opciones || []);
+                                return (
+                                    <select
+                                        value={typeof value === 'string' ? value : ''}
+                                        onChange={(e) => handleChange(item.key, e.target.value)}
+                                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                                    >
+                                        <option value="">Selecciona...</option>
+                                        {opciones.map((opt: string, idx: number) => (
+                                            <option key={idx} value={opt}>{opt}</option>
+                                        ))}
+                                    </select>
+                                );
+                            })()
+                        ) : (
+                            (() => {
+                                const labelLower = (item.label || '').toLowerCase().trim();
+                                const isTipoField = labelLower === 'tipo' || labelLower === 'tipo de equipo';
+                                const isDeteccion = sistemaNombre.toLowerCase().includes('detecci');
+                                if (isTipoField && (isDeteccion || tiposSistema.length > 0)) {
+                                    const opciones = isDeteccion ? ['CONVENCIONAL', 'ANALÓGICA'] : tiposSistema.map(ts => ts.nombre);
+                                    return (
+                                        <select
+                                            value={typeof value === 'string' ? value : ''}
+                                            onChange={(e) => handleChange(item.key, e.target.value)}
+                                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                                        >
+                                            <option value="">Selecciona un tipo...</option>
+                                            {opciones.map((opt: string, idx: number) => (
+                                                <option key={idx} value={opt}>{opt}</option>
+                                            ))}
+                                        </select>
+                                    );
+                                }
+                                return (
+                                    <input
+                                        type="text"
+                                        value={typeof value === 'string' ? value : ''}
+                                        onChange={(e) => handleChange(item.key, e.target.value)}
+                                        className={`w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 transition-colors ${isUCase ? 'uppercase' : ''} ${
+                                            isErrorDate || isAnoFieldWithMsg
+                                            ? 'bg-red-50 border-red-400 text-red-700 focus:border-red-500 focus:ring-red-500/20' 
+                                            : 'bg-white border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20'
+                                        }`}
+                                        placeholder="..."
+                                    />
+                                );
+                            })()
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        // Campos tipo "check" se muestran como checkboxes
+        if (tipo === 'check') {
+            const isChecked = value === true;
+            const isUnchecked = value === false;
+            
+            return (
+                <label
+                    key={item.key}
+                    className={`flex items-center gap-2 cursor-pointer text-sm px-3 py-2 rounded-lg transition-all select-none ${
+                        isUnchecked
+                            ? 'text-red-600 font-semibold bg-red-50 hover:bg-red-100'
+                            : isChecked
+                            ? 'text-green-700 font-medium bg-green-50 hover:bg-green-100'
+                            : 'text-slate-600 font-medium bg-white hover:bg-slate-50 border border-slate-200'
+                    }`}
+                >
+                    <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={(e) => handleChange(item.key, e.target.checked)}
+                        className={`w-4 h-4 rounded cursor-pointer ${
+                            isUnchecked
+                                ? 'text-red-500 border-red-300 focus:ring-red-400'
+                                : isChecked
+                                ? 'text-green-500 border-green-300 focus:ring-green-400'
+                                : 'text-slate-400 border-slate-300 focus:ring-slate-400'
+                        }`}
+                    />
+                    {item.label}
+                    {isChecked && <CheckCircle2 className="w-4 h-4 text-green-500 ml-auto" />}
+                    {isUnchecked && <XCircle className="w-4 h-4 text-red-400 ml-auto" />}
+                </label>
+            );
+        }
+
+        // Campos normales (texto, número, fecha, texto-largo, imagen)
+        switch (tipo) {
+            case 'seccion':
+                return (
+                    <div key={item.key} className="col-span-full border-b border-slate-200 pb-1.5 pt-4 mb-2 flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">{item.label}</span>
+                    </div>
+                );
+
+            case 'numero':
+                return (
+                    <div key={item.key} className="flex flex-col gap-1">
+                        <label className="text-xs font-semibold text-slate-600">{item.label}</label>
+                        <input
+                            type="number"
+                            value={typeof value === 'number' ? value : ''}
+                            onChange={(e) => handleChange(item.key, e.target.value ? Number(e.target.value) : '')}
+                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                            placeholder="0"
+                        />
+                    </div>
+                );
+
+            case 'fecha': {
+                const esFechaRevision = (item.label || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes('revision');
+                const fechaVal = typeof value === 'string' && value ? (esFechaRevision ? value.substring(0, 10) : value.substring(0, 7)) : '';
+                return (
+                    <div key={item.key} className="flex flex-col gap-1">
+                        <label className="text-xs font-semibold text-slate-600">{item.label}</label>
+                        <input
+                            type={esFechaRevision ? "date" : "month"}
+                            value={fechaVal}
+                            onChange={(e) => handleChange(item.key, esFechaRevision ? e.target.value : (e.target.value ? e.target.value + '-01' : ''))}
+                            className={`w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 transition-colors ${
+                                isErrorDate 
+                                ? 'bg-red-50 border-red-400 text-red-700 focus:border-red-500 focus:ring-red-500/20' 
+                                : 'bg-white border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20'
+                            }`}
+                        />
+                    </div>
+                );
+            }
+
+            case 'imagen': {
+                const imgUrl = typeof (formData as any)[item.key] === 'string' ? (formData as any)[item.key] : '';
+                const imgInputId = `img-field-${item.key}`;
+
+                if (!modoRevision) {
+                    return (
+                        <div key={item.key} className="flex flex-col gap-1">
+                            <label className="text-xs font-semibold text-slate-600">{item.label}</label>
+                            <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 border border-dashed border-slate-200 rounded-lg text-xs text-slate-400">
+                                <Camera className="w-4 h-4" /> Disponible en revisión
+                            </div>
+                        </div>
+                    );
+                }
+
+                return (
+                    <div key={item.key} className="flex flex-col gap-1">
+                        <label className="text-xs font-semibold text-slate-600">{item.label}</label>
+                        <input type="file" accept="image/*" capture="environment" id={imgInputId}
+                            className="hidden" onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                try {
+                                    const dataUrl = await new Promise<string>((resolve, reject) => {
+                                        const img = new window.Image();
+                                        const url = URL.createObjectURL(file);
+                                        img.onload = () => {
+                                            URL.revokeObjectURL(url);
+                                            const canvas = document.createElement('canvas');
+                                            const MAX = 640;
+                                            let w = img.width, h = img.height;
+                                            if (w > h) { if (w > MAX) { h = Math.floor(h * MAX / w); w = MAX; } }
+                                            else { if (h > MAX) { w = Math.floor(w * MAX / h); h = MAX; } }
+                                            canvas.width = w; canvas.height = h;
+                                            const ctx = canvas.getContext('2d');
+                                            if (!ctx) { reject(new Error('canvas error')); return; }
+                                            ctx.drawImage(img, 0, 0, w, h);
+                                            resolve(canvas.toDataURL('image/jpeg', 0.75));
+                                        };
+                                        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('load error')); };
+                                        img.src = url;
+                                    });
+
+                                    if (navigator.onLine) {
+                                        try {
+                                            const res = await fetch(dataUrl);
+                                            const blobData = await res.blob();
+                                            const thumbFile = new File([blobData], `thumb_${Date.now()}.jpg`, { type: 'image/jpeg' });
+                                            const path = `equipos/${centroId}/${sistemaId}/${formData.id || 'temp'}/${item.key}_${Date.now()}`;
+                                            const uploadedUrl = await uploadFile(thumbFile, path);
+                                            handleChange(item.key, uploadedUrl);
+                                            return;
+                                        } catch (netErr) {
+                                            console.warn('Falló la subida online de imagen de campo, usando dataUrl local:', netErr);
+                                        }
+                                    }
+
+                                    handleChange(item.key, dataUrl);
+                                } catch (err) {
+                                    console.error('Error procesando imagen de campo:', err);
+                                    alert('Error al procesar la imagen');
+                                }
+                            }}
+                        />
+                        {imgUrl ? (
+                            <div className="relative w-full h-36 rounded-xl overflow-hidden border-2 border-indigo-200 bg-slate-50 shadow-sm group">
+                                <img src={imgUrl} alt={item.label} className="w-full h-full object-cover" />
+                                <button 
+                                    type="button"
+                                    onClick={() => handleChange(item.key, '')}
+                                    className="absolute top-2 right-2 p-1.5 bg-red-600 text-white rounded-full hover:bg-red-700 shadow-md transition-all active:scale-95 flex items-center justify-center"
+                                    title="Eliminar foto"
+                                >
+                                    <Trash2 className="w-4 h-4" />
+                                </button>
+                            </div>
+                        ) : (
+                            <label htmlFor={imgInputId}
+                                className="flex items-center justify-center gap-2 px-3 py-4 border border-dashed border-indigo-300 rounded-lg cursor-pointer hover:bg-indigo-50 transition-colors">
+                                <Camera className="w-4 h-4 text-indigo-400" />
+                                <span className="text-xs text-indigo-500 font-medium">Hacer foto</span>
+                            </label>
+                        )}
+                    </div>
+                );
+            }
+
+            case 'texto-largo':
+                return (
+                    <div key={item.key} className="flex flex-col gap-1 col-span-2">
+                        <label className={`text-xs font-semibold ${
+                            isAnoFieldWithMsg ? 'text-red-700' : isObsFieldWithMsg ? 'text-blue-700' : 'text-slate-600'
+                        }`}>{item.label}</label>
+                        <textarea
+                            value={typeof value === 'string' ? value : ''}
+                            onChange={(e) => handleChange(item.key, e.target.value)}
+                            className={`w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 resize-none transition-colors ${
+                                isAnoFieldWithMsg
+                                ? 'bg-red-50 border-red-400 text-red-700 focus:border-red-500 focus:ring-red-500/20'
+                                : isObsFieldWithMsg
+                                ? 'bg-blue-50 border-blue-400 text-blue-700 focus:border-blue-500 focus:ring-blue-500/20'
+                                : 'bg-white border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20'
+                            }`}
+                            rows={4}
+                            placeholder="..."
+                        />
+                    </div>
+                );
+
+            case 'desplegable': {
+                const labelLower = (item.label || '').toLowerCase().trim();
+                const isTipoField = labelLower === 'tipo' || labelLower === 'tipo de equipo';
+                const isDeteccion = sistemaNombre.toLowerCase().includes('detecci');
+                const opciones = (isDeteccion && isTipoField)
+                    ? ['CONVENCIONAL', 'ANALÓGICA']
+                    : ((item as any).opciones || []);
+                return (
+                    <div key={item.key} className="flex flex-col gap-1">
+                        <label className="text-xs font-semibold text-slate-600">{item.label}</label>
+                        <select
+                            value={typeof value === 'string' ? value : ''}
+                            onChange={(e) => handleChange(item.key, e.target.value)}
+                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                        >
+                            <option value="">Selecciona...</option>
+                            {opciones.map((opt: string, idx: number) => (
+                                <option key={idx} value={opt}>{opt}</option>
+                            ))}
+                        </select>
+                    </div>
+                );
+            }
+
+            case 'texto':
+            default: {
+                const labelLower = (item.label || '').toLowerCase().trim();
+                const isTipoField = labelLower === 'tipo' || labelLower === 'tipo de equipo';
+                const isDeteccion = sistemaNombre.toLowerCase().includes('detecci');
+                
+                if (isTipoField && (isDeteccion || tiposSistema.length > 0)) {
+                    const opciones = isDeteccion ? ['CONVENCIONAL', 'ANALÓGICA'] : tiposSistema.map(ts => ts.nombre);
+                    return (
+                        <div key={item.key} className="flex flex-col gap-1">
+                            <label className="text-xs font-semibold text-slate-600">{item.label}</label>
+                            <select
+                                value={typeof value === 'string' ? value : ''}
+                                onChange={(e) => handleChange(item.key, e.target.value)}
+                                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                            >
+                                <option value="">Selecciona un tipo...</option>
+                                {opciones.map((opt: string, idx: number) => (
+                                    <option key={idx} value={opt}>{opt}</option>
+                                ))}
+                            </select>
+                        </div>
+                    );
+                }
+
+                return (
+                    <div key={item.key} className="flex flex-col gap-1">
+                        <label className="text-xs font-semibold text-slate-600">{item.label}</label>
+                        <input
+                            type="text"
+                            value={typeof value === 'string' ? value : ''}
+                            onChange={(e) => handleChange(item.key, e.target.value)}
+                            className={`w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 transition-colors ${isUCase ? 'uppercase' : ''} ${
+                                isErrorDate || isAnoFieldWithMsg
+                                ? 'bg-red-50 border-red-400 text-red-700 focus:border-red-500 focus:ring-red-500/20' 
+                                : 'bg-white border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20'
+                            }`}
+                            placeholder="..."
+                        />
+                    </div>
+                );
+            }
+        }
+    };
+
+    if (loading) {
+        return (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[100]">
+                <div className="bg-white rounded-3xl p-8 shadow-2xl text-center">
+                    <div className="w-8 h-8 border-2 border-slate-300 border-t-slate-600 rounded-full animate-spin mx-auto" />
+                    <p className="text-slate-500 text-sm font-medium mt-3">Cargando plantilla...</p>
+                </div>
+            </div>
+        );
+    }
+
+    // ── Render principal ────────────────────────────────────────────────
+
+    return (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[100]">
+            <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[90vh]">
+                {/* Header */}
+                <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
+                    <div>
+                        <h2 className="text-lg font-bold text-slate-800">
+                            {isNew ? 'Nuevo Equipo' : 'Editar Equipo'}
+                        </h2>
+                        <p className="text-xs font-semibold text-indigo-600 uppercase tracking-wider">
+                            Sistema: {sistemaNombre}
+                        </p>
+                        {plantillaEncontradaNombre && (
+                            <p className="text-xs text-emerald-600 font-medium mt-1">
+                                Plantilla: {plantillaEncontradaNombre}
+                            </p>
+                        )}
+                        {modoRevision && (
+                            <p className="text-xs text-amber-600 font-medium mt-1">
+                                Modo Revisión
+                            </p>
+                        )}
+                    </div>
+                    <button
+                        onClick={onCancel}
+                        className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors"
+                    >
+                        <X className="w-5 h-5" />
+                    </button>
+                </div>
+
+                {/* Body */}
+                <div className="p-6 overflow-y-auto flex-1">
+                    {plantillaItems.length === 0 ? (
+                        /* Sin plantilla: campos mínimos */
+                        <div className="space-y-4">
+                            <p className="text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+                                ⚠️ No se encontró una plantilla para este sistema. 
+                                {'Crea una en Configuraciones > Plantillas con el nombre exacto: '}<strong>{sistemaNombre}</strong>
+                            </p>
+                            <div className="flex flex-col gap-1">
+                                <label className="text-xs font-semibold text-slate-600">Nombre / Tipo</label>
+                                <input
+                                    type="text"
+                                    value={formData.nombre || ''}
+                                    onChange={(e) => handleChange('nombre', e.target.value)}
+                                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                                    placeholder="Nombre del equipo..."
+                                />
+                            </div>
+                            <div className="flex flex-col gap-1">
+                                <label className="text-xs font-semibold text-slate-600">
+                                    {(sistemaNombre.toLowerCase().includes('detecci') || sistemaNombre.toLowerCase().includes('rociador') || sistemaNombre.toLowerCase().includes('sprinkler') || (sistemaNombre.toLowerCase().includes('puesto') && sistemaNombre.toLowerCase().includes('control'))) ? 'Área de cobertura de este sistema' : 'Ubicación'}
+                                </label>
+                                <input
+                                    type="text"
+                                    value={formData.ubicacion || ''}
+                                    onChange={(e) => handleChange('ubicacion', e.target.value)}
+                                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 uppercase"
+                                    placeholder={(sistemaNombre.toLowerCase().includes('detecci') || sistemaNombre.toLowerCase().includes('rociador') || sistemaNombre.toLowerCase().includes('sprinkler') || (sistemaNombre.toLowerCase().includes('puesto') && sistemaNombre.toLowerCase().includes('control'))) ? 'Área de cobertura de este sistema...' : 'Ubicación...'}
+                                />
+                            </div>
+                        </div>
+                    ) : (
+                        /* ÚNICAMENTE los campos de la plantilla */
+                        <div className="space-y-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                {plantillaItems.map(item => renderField(item))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Foto (solo modo revisión) */}
+                    {modoRevision && (
+                        <div className="border-t border-slate-200 pt-6 mt-6">
+                            <h3 className="text-sm font-bold text-slate-700 mb-4">Fotografía</h3>
+                            <div className="flex items-center gap-4">
+                                <input type="file" accept="image/*" capture="environment"
+                                    onChange={handleUploadFoto} className="hidden" id="foto-upload" disabled={uploadingFoto} />
+                                <label htmlFor="foto-upload"
+                                    className={`inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer ${uploadingFoto ? 'opacity-70 cursor-wait' : ''}`}>
+                                    {uploadingFoto ? (
+                                        <>
+                                            <RefreshCw className="w-4 h-4 animate-spin text-white" />
+                                            <span>Procesando foto...</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Camera className="w-4 h-4 text-white" />
+                                            <span>Añadir foto</span>
+                                        </>
+                                    )}
+                                </label>
+                                {(formData as any).foto && typeof (formData as any).foto === 'string' && (formData as any).foto.trim() !== '' && (
+                                    <div className="flex items-center gap-3">
+                                        <div className="relative w-24 h-24 rounded-2xl overflow-hidden border-2 border-indigo-200 shadow-md bg-slate-100 group">
+                                            <img src={(formData as any).foto} alt="Foto equipo" className="w-full h-full object-cover" />
+                                            <button 
+                                                type="button"
+                                                onClick={() => handleChange('foto', '')}
+                                                className="absolute top-1.5 right-1.5 p-1.5 bg-red-600 hover:bg-red-700 text-white rounded-full shadow-lg transition-all active:scale-95 flex items-center justify-center"
+                                                title="Eliminar foto"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleChange('foto', '')}
+                                            className="inline-flex items-center gap-1.5 px-3 py-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-xl text-xs font-bold transition-all active:scale-95 cursor-pointer shadow-sm"
+                                            title="Eliminar foto"
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                            <span>Eliminar foto</span>
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* Footer */}
+                <div className="px-6 py-4 border-t border-slate-100 flex gap-3 shrink-0">
+                    <button type="button" onClick={onCancel}
+                        className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100 transition-colors"
+                        disabled={saving}>
+                        Cancelar
+                    </button>
+                    <button type="button" onClick={handleSave} disabled={saving}
+                        className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2">
+                        {saving ? (
+                            <>
+                                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                Guardando...
+                            </>
+                        ) : (
+                            <>
+                                <Save className="w-4 h-4" />
+                                Guardar equipo
+                            </>
+                        )}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+export default memo(EquipoFormulario);

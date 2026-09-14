@@ -410,7 +410,9 @@ export default function Pedidos() {
 
     if (matchPresupuesto?.lineas && matchPresupuesto.lineas.length > 0) {
       lineasPDF = matchPresupuesto.lineas.map(l => ({
+        familia: l.familia,
         concepto: l.concepto,
+        descripcion: l.descripcion,
         codigo: l.codigo,
         fotoUrl: l.fotoUrl,
         cantidad: Number(l.cantidad) || 1,
@@ -419,7 +421,9 @@ export default function Pedidos() {
       }));
     } else if (ped.items && ped.items.length > 0) {
       lineasPDF = ped.items.map(l => ({
-        concepto: l.concepto + (l.descripcion ? ` - ${l.descripcion}` : ''),
+        familia: (l as any).familia,
+        concepto: l.concepto,
+        descripcion: l.descripcion,
         cantidad: Number(l.cantidad) || 1,
         precioUnidad: Number(l.precioUnidad) || 0,
         subtotal: Number(l.subtotal) || ((Number(l.cantidad) || 1) * (Number(l.precioUnidad) || 0))
