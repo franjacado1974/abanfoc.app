@@ -4937,6 +4937,21 @@ export const generarPresupuestoPDF = async (
   const descImp = Number(presupuesto.descuentoImporte) || (presupuesto.subtotal * descPorc / 100);
   const baseTrasDescuento = Math.max(0, presupuesto.subtotal - descImp);
 
+  // ── SALTO DE PÁGINA PREVENTIVO ──────────────────────────────────────────────
+  // Calcular altura total del bloque de totales para saber si cabe antes del pie
+  // Descuento: ~12mm | Subtotal: 5.5mm | IVA: 5.5mm | sep: 3.8mm | TOTAL: 5.5mm = ~32mm sin desc, ~44mm con desc
+  const alturaBloqueTotal = (tieneDescuento ? 13 : 0) + 32;
+  const firmaBoxHEstimado = 35;
+  const footerSafeZone = 30 + firmaBoxHEstimado + 6; // margen seguro sobre el pie de página
+  const limiteDisponible = pageHeight - footerSafeZone;
+
+  if (currentTotY + alturaBloqueTotal > limiteDisponible) {
+    doc.addPage();
+    currentTotY = 20; // Margen superior en página nueva
+  }
+  // ────────────────────────────────────────────────────────────────────────────
+
+
   // LÍNEA DE DESCUENTO AL FINAL DE TODOS LOS ARTÍCULOS ANTES DEL PRECIO, IVA, ETC.
   if (tieneDescuento) {
     const descPorcStr = descPorc.toFixed(2).replace('.', ',');

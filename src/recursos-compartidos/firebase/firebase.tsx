@@ -1,7 +1,8 @@
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
-import { getFirestore, collection, getDocs, getDoc, query, where, orderBy, addDoc, doc, updateDoc, setDoc, deleteDoc, onSnapshot, enableMultiTabIndexedDbPersistence } from "firebase/firestore";
+import { getFirestore, collection, getDocs, getDoc, query, where, orderBy, addDoc, doc, updateDoc, setDoc, deleteDoc, onSnapshot, enableMultiTabIndexedDbPersistence, documentId } from "firebase/firestore";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { generarAlbaranPDF } from "../../pdfGenerator";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyADw32Czr9wMORD5fY1MPWL78Gl3tNxTZg",
@@ -84,9 +85,13 @@ export interface Albaran {
   firmaTecnico?: string;
   numeroMantenimiento?: string;
   parteId?: string;
+  reparacionId?: string;
+  instalacionId?: string;
   numeroPedido?: string;
   titulo?: string;
   periodicidad?: string;
+  clienteNombreLibre?: string;
+  centroNombreLibre?: string;
   _docId?: string;
 }
 
@@ -952,12 +957,13 @@ async function enviarCorreoAlbaran(albaran: Albaran) {
     let clientePoblacion = '';
     let clienteProvincia = '';
     let clienteCp = '';
+    let clientData: Record<string, any> | null = null;
     if (albaran.clienteId) {
       try {
         const clientDocRef = doc(db, 'clientes', albaran.clienteId);
         const clientSnap = await getDoc(clientDocRef);
         if (clientSnap.exists()) {
-          const clientData = clientSnap.data();
+          clientData = clientSnap.data();
           if (clientData) {
             clienteName = clientData.nombre || 'Cliente sin nombre';
             clienteCif = clientData.cif || '-';
@@ -978,12 +984,13 @@ async function enviarCorreoAlbaran(albaran: Albaran) {
     let centroPoblacion = '';
     let centroProvincia = '';
     let centroCp = '';
+    let centroData: Record<string, any> | null = null;
     if (albaran.centroId) {
       try {
         const centroDocRef = doc(db, 'centros', albaran.centroId);
         const centroSnap = await getDoc(centroDocRef);
         if (centroSnap.exists()) {
-          const centroData = centroSnap.data();
+          centroData = centroSnap.data();
           if (centroData) {
             centroName = centroData.nombre || 'Centro sin nombre';
             centroDireccion = centroData.direccion || '';
@@ -1065,6 +1072,78 @@ async function enviarCorreoAlbaran(albaran: Albaran) {
 
     const ivaImporte = subtotalTotal * 0.21;
     const totalConIva = subtotalTotal + ivaImporte;
+
+    // 4. Obtener datos de empresa para el PDF
+    let empresaData: Record<string, any> | undefined = undefined;
+    const empId = albaran.empresaId || centroData?.empresaId;
+    if (empId) {
+      try {
+        const empDocRef = doc(db, 'empresa', empId);
+        const empSnap = await getDoc(empDocRef);
+        if (empSnap.exists()) {
+          empresaData = { _docId: empSnap.id, ...(empSnap.data() as any) };
+        }
+      } catch (err) {
+        console.error("Error fetching empresa for email PDF:", err);
+      }
+    }
+
+    // 5. Generar el PDF del albarán para adjuntarlo al correo
+    let attachments: { filename: string; content: string; encoding: string; contentType: string }[] | undefined = undefined;
+    try {
+      const clienteParaPDF = clientData || (clienteName !== 'Cliente desconocido' ? {
+        nombre: clienteName,
+        cif: clienteCif,
+        direccion: clienteDireccion,
+        poblacion: clientePoblacion,
+        provincia: clienteProvincia,
+        cp: clienteCp
+      } : { nombre: 'Cliente sin nombre' });
+
+      const centroParaPDF = centroData || (centroName !== 'Centro desconocido' ? {
+        nombre: centroName,
+        direccion: centroDireccion,
+        poblacion: centroPoblacion,
+        provincia: centroProvincia,
+        cp: centroCp,
+        empresaId: empId
+      } : { nombre: 'Centro sin nombre' });
+
+      const pdfDoc = await generarAlbaranPDF(
+        clienteParaPDF as any,
+        centroParaPDF as any,
+        [],
+        albaran.numeroMantenimiento || albaran.id,
+        tecnicoNombre,
+        albaran.firmaCliente,
+        albaran.firmaTecnico,
+        albaran.nombreFirmante,
+        albaran.items,
+        empresaData as any,
+        true, // noSave: no descargar en navegador
+        albaran.titulo,
+        albaran.periodicidad,
+        undefined,
+        albaran.numeroPedido,
+        albaran.fechaCreacion
+      );
+
+      const dataUri = pdfDoc.output('datauristring');
+      const base64Pdf = dataUri.split(',')[1];
+      if (base64Pdf) {
+        const safeNumero = (albaran.numeroMantenimiento || albaran.id || 'albaran').replace(/[^a-zA-Z0-9_-]/g, '_');
+        attachments = [
+          {
+            filename: `Albaran_${safeNumero}.pdf`,
+            content: base64Pdf,
+            encoding: 'base64',
+            contentType: 'application/pdf'
+          }
+        ];
+      }
+    } catch (pdfErr) {
+      console.error("Error generando PDF para adjuntar en correo de albarán:", pdfErr);
+    }
 
     const emailPayload = {
       to: 'abanfoc@abanfoc.es',
@@ -1163,7 +1242,8 @@ async function enviarCorreoAlbaran(albaran: Albaran) {
               <p>Este es un correo automático generado por el sistema de gestión de Abanfoc.</p>
             </div>
           </div>
-        `
+        `,
+        ...(attachments ? { attachments } : {})
       }
     };
 
@@ -1181,28 +1261,116 @@ async function enviarCorreoAlbaran(albaran: Albaran) {
   }
 }
 
-export async function addAlbaran(albaran: Albaran) {
+/**
+ * Obtiene el siguiente código correlativo único para un albarán consultando directamente Firestore
+ * Formato: ALB-YY-XXX (ej. ALB-26-001, ALB-26-002...)
+ */
+export async function obtenerSiguienteNumeroAlbaran(): Promise<string> {
+  const year = new Date().getFullYear().toString().slice(-2);
+  const prefix = `ALB-${year}-`;
+  let maxNum = 0;
+
   try {
     const col = collection(db, 'albaranes');
-    
+    const q = query(
+      col,
+      where(documentId(), '>=', prefix),
+      where(documentId(), '<=', prefix + '\uf8ff')
+    );
+    const snap = await getDocs(q);
+    snap.forEach((docSnap) => {
+      const id = docSnap.id;
+      if (id.startsWith(prefix)) {
+        const parts = id.split('-');
+        const num = parseInt(parts[parts.length - 1], 10);
+        if (!isNaN(num) && num > maxNum) {
+          maxNum = num;
+        }
+      }
+    });
+  } catch (err) {
+    console.error('Error al consultar Firestore para correlativo de albaranes:', err);
+  }
+
+  // Comprobar también contra la caché local como respaldo
+  try {
+    const localAlbaranes: Albaran[] = JSON.parse(localStorage.getItem('firecheck_db_albaranes') || '[]');
+    localAlbaranes.forEach((alb) => {
+      if (alb.id && alb.id.startsWith(prefix)) {
+        const parts = alb.id.split('-');
+        const num = parseInt(parts[parts.length - 1], 10);
+        if (!isNaN(num) && num > maxNum) {
+          maxNum = num;
+        }
+      }
+    });
+  } catch {}
+
+  const nextNum = maxNum + 1;
+  const numDigits = Math.max(3, String(nextNum).length);
+  return `${prefix}${String(nextNum).padStart(numDigits, '0')}`;
+}
+
+export async function addAlbaran(albaran: Albaran) {
+  try {
+    let targetId = (albaran.id || '').trim();
+
+    // 1. Si no tiene ID asignado, obtener el siguiente correlativo seguro desde Firestore
+    if (!targetId) {
+      targetId = await obtenerSiguienteNumeroAlbaran();
+    } else {
+      // 2. Salvaguarda anti-machaque: verificar si ya existe en Firestore
+      try {
+        const existingDocRef = doc(db, 'albaranes', targetId);
+        const existingDocSnap = await getDoc(existingDocRef);
+        if (existingDocSnap.exists()) {
+          const existingData = existingDocSnap.data() as Albaran;
+          // Si el documento existente NO es del mismo trabajo/origen (es una colisión de ID entre dispositivos)
+          const esMismoDocumento = (
+            (albaran.parteId && existingData.parteId === albaran.parteId) ||
+            (albaran.reparacionId && existingData.reparacionId === albaran.reparacionId) ||
+            (albaran.instalacionId && existingData.instalacionId === albaran.instalacionId)
+          );
+
+          if (!esMismoDocumento) {
+            console.warn(`[addAlbaran] ALERTA: El ID ${targetId} ya existe en Firestore para otro trabajo. Asignando nuevo ID único para evitar sobrescritura...`);
+            targetId = await obtenerSiguienteNumeroAlbaran();
+            // Asegurar que el nuevo ID no colisione
+            let recheck = await getDoc(doc(db, 'albaranes', targetId));
+            while (recheck.exists()) {
+              const parts = targetId.split('-');
+              const curNum = parseInt(parts[parts.length - 1], 10) || 1;
+              const year = new Date().getFullYear().toString().slice(-2);
+              const next = curNum + 1;
+              const numDigits = Math.max(3, String(next).length);
+              targetId = `ALB-${year}-${String(next).padStart(numDigits, '0')}`;
+              recheck = await getDoc(doc(db, 'albaranes', targetId));
+            }
+          }
+        }
+      } catch (checkErr) {
+        console.warn('[addAlbaran] Advertencia al verificar existencia previa:', checkErr);
+      }
+    }
+
     const albaranToSave = {
       ...albaran,
+      id: targetId,
       updatedAt: new Date().toISOString()
     };
 
-    let finalAlbaran: Albaran;
+    const docRef = doc(db, 'albaranes', targetId);
+    await setDoc(docRef, albaranToSave);
+    console.info('addAlbaran: guardado con ID único garantizado', targetId);
+    const finalAlbaran: Albaran = { ...albaranToSave, _docId: targetId };
 
-    if (albaran.id) {
-      const docRef = doc(db, 'albaranes', albaran.id);
-      await setDoc(docRef, albaranToSave);
-      console.info('addAlbaran: created with custom ID', albaran.id);
-      finalAlbaran = { ...albaranToSave, _docId: albaran.id };
-    } else {
-      const newDocRef = await addDoc(col, albaranToSave);
-      console.info('addAlbaran: created with generated ID', newDocRef.id);
-      const { id: _, ...rest } = albaranToSave;
-      finalAlbaran = { ...rest, _docId: newDocRef.id, id: newDocRef.id };
-    }
+    // Actualizar inmediatamente la caché local para latencia cero
+    try {
+      const stored = JSON.parse(localStorage.getItem('firecheck_db_albaranes') || '[]');
+      const filtered = stored.filter((a: any) => a.id !== targetId && (a._docId !== targetId));
+      filtered.unshift(finalAlbaran);
+      localStorage.setItem('firecheck_db_albaranes', JSON.stringify(filtered));
+    } catch {}
 
     try {
       await enviarCorreoAlbaran(finalAlbaran);
@@ -2377,6 +2545,10 @@ export async function deleteInstalacion(docId: string) {
 export interface UrgenciaItem {
   id: string;
   _docId?: string;
+  titulo?: string;
+  clienteId?: string;
+  clienteNombre?: string;
+  centroId?: string;
   urgencia: string;
   lugar: string;
   tecnicoAsignado: string;
@@ -2401,6 +2573,10 @@ export function subscribeUrgencias(callback: (items: UrgenciaItem[]) => void) {
         return {
           _docId: d.id,
           id: data?.id ?? d.id,
+          titulo: data?.titulo || '',
+          clienteId: data?.clienteId || '',
+          clienteNombre: data?.clienteNombre || '',
+          centroId: data?.centroId || '',
           urgencia: data?.urgencia || '',
           lugar: data?.lugar || '',
           tecnicoAsignado: data?.tecnicoAsignado || '',

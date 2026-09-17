@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, FileDigit, Download, Search, CheckCircle2, Circle, Clock, Trash2, Plus, Building2, MapPin, Save, Trash, Edit, Copy, Maximize2, X, Signature } from 'lucide-react';
-import { addAlbaran, updateAlbaran, deleteAlbaran, subscribeAlbaranes, subscribeEmpresas, subscribeTecnicos, subscribeCentros, subscribeClientes, subscribeTrabajos, db, type Albaran, type Cliente, type Centro, type Equipo, type Tecnico, type Empresa, type TrabajoConfig, updateParte, updateReparacion, updateInstalacion } from './firebase';
+import { addAlbaran, updateAlbaran, deleteAlbaran, subscribeAlbaranes, subscribeEmpresas, subscribeTecnicos, subscribeCentros, subscribeClientes, subscribeTrabajos, db, type Albaran, type Cliente, type Centro, type Equipo, type Tecnico, type Empresa, type TrabajoConfig, updateParte, updateReparacion, updateInstalacion, obtenerSiguienteNumeroAlbaran } from './firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { generarAlbaranPDF } from './pdfGenerator';
 import ConfirmationModal from './ConfirmationModal';
@@ -167,6 +167,11 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
   const [signingRole, setSigningRole] = useState<'cliente' | 'tecnico' | null>(null);
   const modalCanvasRef = useRef<HTMLCanvasElement>(null);
 
+  // Estados para modal de progreso de guardado y registro en Firebase
+  const [isSending, setIsSending] = useState(false);
+  const [sendProgress, setSendProgress] = useState(0);
+  const [sendCompleted, setSendCompleted] = useState(false);
+
   const pendingCount = useMemo(() => 
     albaranes.filter(alb => !alb.facturado).length,
   [albaranes]);
@@ -216,29 +221,31 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
   useEffect(() => {
     const prefill = (location.state as any)?.prefillAlbaran;
     if (prefill) {
-      const generatedId = prefill.id || generateNextAlbaranId();
-      setForm({
-        id: generatedId,
-        empresaId: prefill.empresaId || '',
-        clienteId: prefill.clienteId || '',
-        centroId: prefill.centroId || '',
-        tecnicoId: prefill.tecnicoId || '',
-        fechaCreacion: prefill.fechaCreacion || new Date().toISOString(),
-        items: prefill.items && prefill.items.length > 0
-          ? prefill.items
-          : [{ cantidad: 1, concepto: '', descripcion: '', precioUnidad: 0, subtotal: 0 }],
-        nombreFirmante: '',
-        facturado: false,
-        numeroPedido: prefill.numeroPedido || '',
-        titulo: prefill.titulo || '',
-        reparacionId: prefill.reparacionId || '',
-        instalacionId: prefill.instalacionId || '',
-      });
-      setEditingId(null);
-      setView('form');
+      (async () => {
+        const generatedId = prefill.id || await obtenerSiguienteNumeroAlbaran();
+        setForm({
+          id: generatedId,
+          empresaId: prefill.empresaId || '',
+          clienteId: prefill.clienteId || '',
+          centroId: prefill.centroId || '',
+          tecnicoId: prefill.tecnicoId || '',
+          fechaCreacion: prefill.fechaCreacion || new Date().toISOString(),
+          items: prefill.items && prefill.items.length > 0
+            ? prefill.items
+            : [{ cantidad: 1, concepto: '', descripcion: '', precioUnidad: 0, subtotal: 0 }],
+          nombreFirmante: '',
+          facturado: false,
+          numeroPedido: prefill.numeroPedido || '',
+          titulo: prefill.titulo || '',
+          reparacionId: prefill.reparacionId || '',
+          instalacionId: prefill.instalacionId || '',
+        });
+        setEditingId(null);
+        setView('form');
 
-      // Limpiar el estado en el historial del navegador para evitar que al refrescar se reinicie
-      window.history.replaceState({}, document.title);
+        // Limpiar el estado en el historial del navegador para evitar que al refrescar se reinicie
+        window.history.replaceState({}, document.title);
+      })();
     }
   }, [location.state]);
 
@@ -319,9 +326,9 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
     setAlbaranIdToDelete(null);
   };
 
-  const handleDuplicateAlbaran = (alb: Albaran) => {
-    // Usar el generador de IDs existente para mantener formato ALB-YY-XXX
-    const newId = generateNextAlbaranId();
+  const handleDuplicateAlbaran = async (alb: Albaran) => {
+    // Usar el generador seguro de IDs consultando Firestore
+    const newId = await obtenerSiguienteNumeroAlbaran();
 
     // Copiar albarán con nuevo ID y limpiar firmas
     const duplicatedAlbaran: Albaran = {
@@ -359,22 +366,6 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
     const dateB = b.fechaCreacion ? new Date(b.fechaCreacion).getTime() : 0;
     return dateB - dateA;
   });
-
-  const generateNextAlbaranId = () => {
-    const year = new Date().getFullYear().toString().slice(-2);
-    const prefix = `ALB-${year}-`;
-    const yearAlbaranes = albaranes.filter(alb => alb.id?.startsWith(prefix));
-    
-    let nextNum = 1;
-    if (yearAlbaranes.length > 0) {
-      const nums = yearAlbaranes.map(alb => {
-        const parts = alb.id.split('-');
-        return parseInt(parts[parts.length - 1]);
-      }).filter(n => !isNaN(n));
-      if (nums.length > 0) nextNum = Math.max(...nums) + 1;
-    }
-    return `${prefix}${nextNum.toString().padStart(3, '0')}`;
-  };
 
   const addItem = () => {
     setForm({
@@ -493,20 +484,28 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
       fechaCreacion: form.fechaCreacion || new Date().toISOString()
     };
 
+    setIsSending(true);
+    setSendProgress(20);
+    setSendCompleted(false);
+
     try {
+      setSendProgress(45);
       if (editingId) {
         await updateAlbaran(albaranToSave);
       } else {
-        await addAlbaran(albaranToSave);
+        const savedAlbaran = await addAlbaran(albaranToSave);
+        const finalId = savedAlbaran.id || albaranToSave.id;
+
+        setSendProgress(75);
 
         // Si proviene de una reparación, vincular el albaranId a la tarea
         if (albaranToSave.reparacionId) {
           try {
-            await updateReparacion(albaranToSave.reparacionId, { albaranId: albaranToSave.id });
+            await updateReparacion(albaranToSave.reparacionId, { albaranId: finalId });
             const storedReps = JSON.parse(localStorage.getItem('firecheck_db_reparaciones') || '[]');
             const updatedReps = storedReps.map((r: any) =>
               (r.id === albaranToSave.reparacionId || r._docId === albaranToSave.reparacionId)
-                ? { ...r, albaranId: albaranToSave.id }
+                ? { ...r, albaranId: finalId }
                 : r
             );
             localStorage.setItem('firecheck_db_reparaciones', JSON.stringify(updatedReps));
@@ -518,11 +517,11 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
         // Si proviene de una instalación, vincular el albaranId a la tarea
         if (albaranToSave.instalacionId) {
           try {
-            await updateInstalacion(albaranToSave.instalacionId, { albaranId: albaranToSave.id });
+            await updateInstalacion(albaranToSave.instalacionId, { albaranId: finalId });
             const storedInsts = JSON.parse(localStorage.getItem('firecheck_db_instalaciones') || '[]');
             const updatedInsts = storedInsts.map((i: any) =>
               (i.id === albaranToSave.instalacionId || i._docId === albaranToSave.instalacionId)
-                ? { ...i, albaranId: albaranToSave.id }
+                ? { ...i, albaranId: finalId }
                 : i
             );
             localStorage.setItem('firecheck_db_instalaciones', JSON.stringify(updatedInsts));
@@ -531,26 +530,34 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
           }
         }
       }
+
+      setSendProgress(100);
+      setSendCompleted(true);
+
+      setTimeout(() => {
+        setIsSending(false);
+        setSendCompleted(false);
+        setView('list');
+        setEditingId(null);
+        setForm({
+          id: '',
+          empresaId: '',
+          clienteId: '',
+          centroId: '',
+          fechaCreacion: new Date().toISOString(),
+          items: [{ cantidad: 1, concepto: 'Revisión', descripcion: '', precioUnidad: 0, subtotal: 0 }],
+          nombreFirmante: '',
+          tecnicoId: '',
+          facturado: false,
+          numeroPedido: ''
+        });
+      }, 2000);
     } catch (error) {
       console.error("Error saving albaran to Firebase:", error);
+      setIsSending(false);
       alert("Error al guardar el albarán. Por favor, inténtalo de nuevo.");
       return;
     }
-    
-    setView('list');
-    setEditingId(null);
-    setForm({ // Removed type assertion
-      id: '',
-      empresaId: '',
-      clienteId: '',
-      centroId: '',
-      fechaCreacion: new Date().toISOString(),
-      items: [{ cantidad: 1, concepto: 'Revisión', descripcion: '', precioUnidad: 0, subtotal: 0 }],
-      nombreFirmante: '',
-      tecnicoId: '',
-      facturado: false,
-      numeroPedido: ''
-    });
   };
 
   if (view === 'list') {
@@ -611,9 +618,9 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
           {/* Botones de acción */}
           {!isVisualizador && (
             <button
-              onClick={() => {
+              onClick={async () => {
                 setEditingId(null);
-                const nextId = generateNextAlbaranId();
+                const nextId = await obtenerSiguienteNumeroAlbaran();
                 setForm({ id: nextId, empresaId: '', clienteId: '', centroId: '', fechaCreacion: new Date().toISOString(), items: [{ cantidad: 1, concepto: '', descripcion: '', precioUnidad: 0, subtotal: 0 }], nombreFirmante: '', tecnicoId: '', facturado: false, numeroPedido: '' });
                 setView('form');
               }}
@@ -1335,6 +1342,40 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                    <button type="button" onClick={() => setEditingLineIndex(null)} className="px-6 py-2.5 bg-black text-white rounded-xl font-bold text-sm hover:bg-zinc-800 transition-colors shadow-md active:scale-95">Guardar Línea</button>
                 </div>
              </div>
+          </div>
+        )}
+
+        {/* OVERLAY DE ENVÍO Y REGISTRO EN FIREBASE */}
+        {isSending && (
+          <div className="fixed inset-0 bg-black/75 backdrop-blur-md flex items-center justify-center p-4 z-[300] animate-in fade-in duration-200">
+            <div className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl flex flex-col items-center text-center animate-in zoom-in-95 duration-200">
+              {!sendCompleted ? (
+                <>
+                  <div className="w-16 h-16 bg-red-50 rounded-2xl flex items-center justify-center mb-4 relative overflow-hidden">
+                    <div className="w-8 h-8 border-4 border-red-600 border-t-transparent rounded-full animate-spin"></div>
+                  </div>
+                  <h3 className="text-lg font-bold text-slate-800">Registrando albarán...</h3>
+                  <p className="text-xs text-slate-500 mt-1 mb-5">Guardando firmas y registrando datos en Firebase</p>
+                  
+                  {/* Barra de progreso */}
+                  <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden mb-2 p-0.5 border border-slate-200">
+                    <div 
+                      className="bg-gradient-to-r from-red-500 to-red-600 h-full rounded-full transition-all duration-300 shadow-sm"
+                      style={{ width: `${sendProgress}%` }}
+                    ></div>
+                  </div>
+                  <span className="text-[11px] font-bold text-red-600 font-mono">{sendProgress}%</span>
+                </>
+              ) : (
+                <div className="animate-in zoom-in-95 duration-300 py-2">
+                  <div className="w-16 h-16 bg-emerald-100 rounded-2xl flex items-center justify-center mx-auto mb-4 text-emerald-600 shadow-md">
+                    <CheckCircle2 className="w-10 h-10 stroke-[2.5]" />
+                  </div>
+                  <h3 className="text-lg font-bold text-slate-800">Albarán registrado en Firebase</h3>
+                  <p className="text-xs text-slate-500 mt-2">El albarán ha sido guardado y sincronizado correctamente.</p>
+                </div>
+              )}
+            </div>
           </div>
         )}
     </div>

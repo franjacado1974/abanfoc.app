@@ -3,8 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { 
   Wrench, Plus, Search, Filter, Edit, Trash2, CheckCircle2, 
   Clock, PauseCircle, User, MapPin, Briefcase, 
-  X, Save, ChevronDown, FileText, StickyNote, Bell, Calendar,
-  ReceiptText
+  X, Save, ChevronDown, FileText, StickyNote, Bell, Calendar
 } from 'lucide-react';
 import { 
   subscribeReparaciones, addReparacion, updateReparacion, deleteReparacion, 
@@ -130,6 +129,10 @@ export default function Reparaciones() {
 
   // Formulario de edición/creación
   const [formData, setFormData] = useState({
+    titulo: '',
+    clienteId: '',
+    clienteNombre: '',
+    centroId: '',
     reparacion: '',
     lugar: '',
     tecnicoAsignado: '',
@@ -227,6 +230,10 @@ export default function Reparaciones() {
   const handleOpenCreateModal = () => {
     setEditingItem(null);
     setFormData({
+      titulo: '',
+      clienteId: '',
+      clienteNombre: '',
+      centroId: '',
       reparacion: '',
       lugar: '',
       tecnicoAsignado: '',
@@ -242,6 +249,10 @@ export default function Reparaciones() {
   const handleOpenEditModal = (item: ReparacionItem) => {
     setEditingItem(item);
     setFormData({
+      titulo: item.titulo || '',
+      clienteId: item.clienteId || '',
+      clienteNombre: item.clienteNombre || '',
+      centroId: item.centroId || '',
       reparacion: item.reparacion || '',
       lugar: item.lugar || '',
       tecnicoAsignado: item.tecnicoAsignado || '',
@@ -357,8 +368,8 @@ export default function Reparaciones() {
       items = [
         {
           cantidad: 1,
-          concepto: item.reparacion || 'Reparación',
-          descripcion: item.nota || item.observaciones || '',
+          concepto: 'Reparación',
+          descripcion: item.titulo || item.reparacion || item.nota || item.observaciones || '',
           precioUnidad: 0,
           subtotal: 0
         }
@@ -483,10 +494,6 @@ export default function Reparaciones() {
   // Guardar (Crear o Modificar completo)
   const handleSubmitForm = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.reparacion.trim()) {
-      alert('Por favor, introduce el nombre o descripción de la reparación.');
-      return;
-    }
 
     const calculatedMes = getMonthFromDateStr(formData.fecha);
 
@@ -494,7 +501,11 @@ export default function Reparaciones() {
       // Editar
       const docId = editingItem._docId || editingItem.id;
       const updatedItem: Partial<ReparacionItem> = {
-        reparacion: formData.reparacion.trim(),
+        titulo: formData.titulo?.trim() || '',
+        clienteId: formData.clienteId?.trim() || '',
+        clienteNombre: formData.clienteNombre?.trim() || '',
+        centroId: formData.centroId?.trim() || '',
+        reparacion: formData.titulo?.trim() || '',
         lugar: formData.lugar.trim(),
         tecnicoAsignado: formData.tecnicoAsignado.trim(),
         comercial: formData.comercial.trim(),
@@ -522,7 +533,11 @@ export default function Reparaciones() {
       const newId = `REP-${Date.now().toString().slice(-6)}`;
       const newItem: ReparacionItem = {
         id: newId,
-        reparacion: formData.reparacion.trim(),
+        titulo: formData.titulo?.trim() || '',
+        clienteId: formData.clienteId?.trim() || '',
+        clienteNombre: formData.clienteNombre?.trim() || '',
+        centroId: formData.centroId?.trim() || '',
+        reparacion: formData.titulo?.trim() || '',
         lugar: formData.lugar.trim(),
         tecnicoAsignado: formData.tecnicoAsignado.trim(),
         comercial: formData.comercial.trim(),
@@ -903,14 +918,18 @@ export default function Reparaciones() {
                           <button
                             type="button"
                             onClick={() => handleOpenCrearAlbaran(item)}
-                            className={`p-2 rounded-xl transition-colors cursor-pointer ${
+                            className={`p-1.5 rounded-xl transition-colors cursor-pointer ${
                               item.albaranId 
                                 ? 'text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50' 
                                 : 'text-slate-600 hover:text-blue-600 hover:bg-blue-50'
                             }`}
                             title={item.albaranId ? `Albarán creado (${item.albaranId}) - Clic para generar otro` : "Crear Albarán"}
                           >
-                            <ReceiptText className="w-4 h-4" />
+                            <svg className="w-5 h-5 inline-block" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                              <polyline points="14 2 14 8 20 8" />
+                              <text x="12" y="19" textAnchor="middle" fill="currentColor" stroke="none" fontSize="11.5" fontWeight="900" fontFamily="system-ui, -apple-system, sans-serif">A</text>
+                            </svg>
                           </button>
                           <button
                             onClick={() => handleOpenEditModal(item)}
@@ -1047,19 +1066,71 @@ export default function Reparaciones() {
             </div>
 
             <form onSubmit={handleSubmitForm} className="p-6 flex flex-col gap-4">
-              {/* REPARACIÓN */}
+              {/* TÍTULO */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Reparación (Descripción / Tarea) <span className="text-red-500">*</span>
+                  Título de la Tarea <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
                   required
-                  value={formData.reparacion}
-                  onChange={(e) => setFormData({ ...formData, reparacion: e.target.value })}
-                  placeholder="Ej: Cambio de manómetro en BIE 2"
+                  value={formData.titulo}
+                  onChange={(e) => setFormData({ ...formData, titulo: e.target.value })}
+                  placeholder="Ej: Revisión anual extintores planta 2"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
                 />
+              </div>
+
+              {/* CLIENTE */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Cliente
+                </label>
+                <select
+                  value={formData.clienteId}
+                  onChange={(e) => {
+                    const sel: any = clientes.find((c: any) => c.id === e.target.value || c._docId === e.target.value);
+                    setFormData({
+                      ...formData,
+                      clienteId: e.target.value,
+                      clienteNombre: sel ? (sel.nombre || sel.razonSocial || '') : '',
+                      centroId: '',
+                      lugar: ''
+                    });
+                  }}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 bg-white"
+                >
+                  <option value="">-- Seleccionar cliente --</option>
+                  {clientes.map((c: any) => (
+                    <option key={c.id || c._docId} value={c.id || c._docId}>{c.nombre || c.razonSocial || c.id}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* CENTRO */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Centro
+                </label>
+                <select
+                  value={formData.centroId}
+                  onChange={(e) => {
+                    const sel = centros.find((c: any) => c.id === e.target.value || c._docId === e.target.value);
+                    setFormData({
+                      ...formData,
+                      centroId: e.target.value,
+                      lugar: sel ? (sel.nombre || '') : formData.lugar
+                    });
+                  }}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 bg-white"
+                >
+                  <option value="">-- Seleccionar centro --</option>
+                  {centros
+                    .filter((c: any) => !formData.clienteId || c.clienteId === formData.clienteId || c.cliente === formData.clienteId || c.cliente === formData.clienteNombre)
+                    .map((c: any) => (
+                      <option key={c.id || c._docId} value={c.id || c._docId}>{c.nombre || c.id}</option>
+                    ))}
+                </select>
               </div>
 
               {/* LUGAR */}

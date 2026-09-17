@@ -3,8 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { 
   HardHat, Plus, Search, Filter, Edit, Trash2, CheckCircle2, 
   Clock, PauseCircle, User, MapPin, Briefcase, 
-  X, Save, ChevronDown, FileText, StickyNote, Bell, Calendar,
-  ReceiptText
+  X, Save, ChevronDown, FileText, StickyNote, Bell, Calendar
 } from 'lucide-react';
 import { 
   subscribeInstalaciones, addInstalacion, updateInstalacion, deleteInstalacion, 
@@ -130,6 +129,10 @@ export default function Instalaciones() {
 
   // Formulario de edición/creación
   const [formData, setFormData] = useState({
+    titulo: '',
+    clienteId: '',
+    clienteNombre: '',
+    centroId: '',
     instalacion: '',
     lugar: '',
     tecnicoAsignado: '',
@@ -227,6 +230,10 @@ export default function Instalaciones() {
   const handleOpenCreateModal = () => {
     setEditingItem(null);
     setFormData({
+      titulo: '',
+      clienteId: '',
+      clienteNombre: '',
+      centroId: '',
       instalacion: '',
       lugar: '',
       tecnicoAsignado: '',
@@ -242,6 +249,10 @@ export default function Instalaciones() {
   const handleOpenEditModal = (item: InstalacionItem) => {
     setEditingItem(item);
     setFormData({
+      titulo: item.titulo || '',
+      clienteId: item.clienteId || '',
+      clienteNombre: item.clienteNombre || '',
+      centroId: item.centroId || '',
       instalacion: item.instalacion || '',
       lugar: item.lugar || '',
       tecnicoAsignado: item.tecnicoAsignado || '',
@@ -357,8 +368,8 @@ export default function Instalaciones() {
       items = [
         {
           cantidad: 1,
-          concepto: item.instalacion || 'Instalación',
-          descripcion: item.nota || item.observaciones || '',
+          concepto: 'Instalación',
+          descripcion: item.titulo || item.instalacion || item.nota || item.observaciones || '',
           precioUnidad: 0,
           subtotal: 0
         }
@@ -494,7 +505,11 @@ export default function Instalaciones() {
       // Editar
       const docId = editingItem._docId || editingItem.id;
       const updatedItem: Partial<InstalacionItem> = {
-        instalacion: formData.instalacion.trim(),
+        titulo: formData.titulo?.trim() || '',
+        clienteId: formData.clienteId?.trim() || '',
+        clienteNombre: formData.clienteNombre?.trim() || '',
+        centroId: formData.centroId?.trim() || '',
+        instalacion: formData.titulo?.trim() || '',
         lugar: formData.lugar.trim(),
         tecnicoAsignado: formData.tecnicoAsignado.trim(),
         comercial: formData.comercial.trim(),
@@ -520,7 +535,11 @@ export default function Instalaciones() {
       const newId = `INS-${Date.now().toString().slice(-6)}`;
       const newItem: InstalacionItem = {
         id: newId,
-        instalacion: formData.instalacion.trim(),
+        titulo: formData.titulo?.trim() || '',
+        clienteId: formData.clienteId?.trim() || '',
+        clienteNombre: formData.clienteNombre?.trim() || '',
+        centroId: formData.centroId?.trim() || '',
+        instalacion: formData.titulo?.trim() || '',
         lugar: formData.lugar.trim(),
         tecnicoAsignado: formData.tecnicoAsignado.trim(),
         comercial: formData.comercial.trim(),
@@ -901,14 +920,18 @@ export default function Instalaciones() {
                           <button
                             type="button"
                             onClick={() => handleOpenCrearAlbaran(item)}
-                            className={`p-2 rounded-xl transition-colors cursor-pointer ${
+                            className={`p-1.5 rounded-xl transition-colors cursor-pointer ${
                               item.albaranId 
                                 ? 'text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50' 
                                 : 'text-slate-600 hover:text-blue-600 hover:bg-blue-50'
                             }`}
                             title={item.albaranId ? `Albarán creado (${item.albaranId}) - Clic para generar otro` : "Crear Albarán"}
                           >
-                            <ReceiptText className="w-4 h-4" />
+                            <svg className="w-5 h-5 inline-block" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                              <polyline points="14 2 14 8 20 8" />
+                              <text x="12" y="19" textAnchor="middle" fill="currentColor" stroke="none" fontSize="11.5" fontWeight="900" fontFamily="system-ui, -apple-system, sans-serif">A</text>
+                            </svg>
                           </button>
                           <button
                             onClick={() => handleOpenEditModal(item)}
@@ -1045,19 +1068,71 @@ export default function Instalaciones() {
             </div>
 
             <form onSubmit={handleSubmitForm} className="p-6 flex flex-col gap-4">
-              {/* INSTALACIÓN */}
+              {/* TÍTULO */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Instalación (Descripción / Proyecto) <span className="text-red-500">*</span>
+                  Título de la Tarea <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
                   required
-                  value={formData.instalacion}
-                  onChange={(e) => setFormData({ ...formData, instalacion: e.target.value })}
-                  placeholder="Ej: Montaje de sistema de detección en Nave B"
+                  value={formData.titulo}
+                  onChange={(e) => setFormData({ ...formData, titulo: e.target.value })}
+                  placeholder="Ej: Montaje sistema detección nave B"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
                 />
+              </div>
+
+              {/* CLIENTE */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Cliente
+                </label>
+                <select
+                  value={formData.clienteId}
+                  onChange={(e) => {
+                    const sel: any = clientes.find((c: any) => c.id === e.target.value || c._docId === e.target.value);
+                    setFormData({
+                      ...formData,
+                      clienteId: e.target.value,
+                      clienteNombre: sel ? (sel.nombre || sel.razonSocial || '') : '',
+                      centroId: '',
+                      lugar: ''
+                    });
+                  }}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 bg-white"
+                >
+                  <option value="">-- Seleccionar cliente --</option>
+                  {clientes.map((c: any) => (
+                    <option key={c.id || c._docId} value={c.id || c._docId}>{c.nombre || c.razonSocial || c.id}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* CENTRO */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Centro
+                </label>
+                <select
+                  value={formData.centroId}
+                  onChange={(e) => {
+                    const sel = centros.find((c: any) => c.id === e.target.value || c._docId === e.target.value);
+                    setFormData({
+                      ...formData,
+                      centroId: e.target.value,
+                      lugar: sel ? (sel.nombre || '') : formData.lugar
+                    });
+                  }}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 bg-white"
+                >
+                  <option value="">-- Seleccionar centro --</option>
+                  {centros
+                    .filter((c: any) => !formData.clienteId || c.clienteId === formData.clienteId || c.cliente === formData.clienteId || c.cliente === formData.clienteNombre)
+                    .map((c: any) => (
+                      <option key={c.id || c._docId} value={c.id || c._docId}>{c.nombre || c.id}</option>
+                    ))}
+                </select>
               </div>
 
               {/* LUGAR */}

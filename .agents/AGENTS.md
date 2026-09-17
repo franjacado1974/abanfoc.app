@@ -595,3 +595,62 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
   - En `didParseCell`: para `esAlumbrado && data.column.index >= 5`, se fuerza `data.cell.text = ['CORRECTO']` (verde bold) o `data.cell.text = ['NO CORRECTO']` (rojo bold).
   - En `didDrawCell`: el dibujo del checkmark vectorial DEBE estar condicionado a `!esAlumbrado` para NO dibujar sobre el texto en las columnas 5 y 6 del sistema Alumbrado.
 
+---
+
+## 42. Blindaje Inviolable de Adjunto PDF del Albarán en Correos Automáticos (`firebase.tsx`)
+- **Generación Automática del PDF y Adjunto Base64**:
+  - En la función `enviarCorreoAlbaran` de `src/firebase.tsx` y `src/recursos-compartidos/firebase/firebase.tsx`, cuando un albarán esté firmado por el cliente (`isFirmaValida(albaran.firmaCliente)`), DEBE generarse obligatoriamente su PDF oficial mediante `generarAlbaranPDF(..., true)`.
+  - El PDF se codifica en Base64 (`doc.output('datauristring').split(',')[1]`) y se adjunta obligatoriamente en el mensaje:
+    ```ts
+    attachments: [
+      {
+        filename: `Albaran_${safeNumero}.pdf`,
+        content: base64Pdf,
+        encoding: 'base64',
+        contentType: 'application/pdf'
+      }
+    ]
+    ```
+  - Queda ESTRICTAMENTE PROHIBIDO adjuntar cualquier otro documento (certificados, actas o partes). Únicamente el PDF del albarán firmado.
+  - El asunto, destinatario (`abanfoc@abanfoc.es`) y cuerpo HTML deben preservarse de forma inalterable.
+
+---
+
+## 43. Blindaje Inviolable de Ventana Modal de Progreso y Confirmación Verde en Albaranes (`Albaranes.tsx`)
+- **Modal de Progreso y Sincronización**:
+  - Al guardar o crear un albarán (`handleSaveForm`), la interfaz DEBE desplegar de forma obligatoria e inmediata la ventana modal flotante desenfocada (`fixed inset-0 bg-black/75 backdrop-blur-md`).
+  - Durante el proceso de guardado y firma (`!sendCompleted`), muestra un spinner animado, el texto **"Registrando albarán..."**, la barra de progreso animada (`sendProgress`) y el porcentaje numérico en tiempo real.
+- **Aviso Verde de Registro Exitoso**:
+  - Una vez confirmada la persistencia en Firebase y almacenamiento local, la tarjeta cambia automáticamente a estado completado (`sendCompleted === true`):
+    - Icono circular en fondo verde esmeralda con check: `CheckCircle2` (`bg-emerald-100 text-emerald-600`).
+    - Título exacto: **`"Albarán registrado en Firebase"`**.
+    - Mensaje secundario: *"El albarán ha sido guardado y sincronizado correctamente."*
+  - La tarjeta permanece en pantalla durante **2 segundos exactos (2000 ms)** antes de cerrar el modal y regresar al listado de albaranes.
+
+---
+
+## 44. Blindaje Inviolable de Estructura de 3 Tarjetas y Permisos en el Buzón (`Buzon.tsx`)
+- **Menú Principal de 3 Tarjetas Separadas e Independientes**:
+  - En el menú Buzón (`src/Buzon.tsx` y `src/oficina/pages/Buzon.tsx`), la vista principal DEBE mostrar 3 tarjetas de acceso directo con navegación independiente:
+    1. **"Sugerencias de Mejora"**: Para propuestas y feedback de optimización.
+    2. **"Reporte de Fallos"**: Para reporte de incidencias técnicas o anomalías detectadas.
+    3. **"Versiones"**: Para el registro, control cronológico y seguimiento de versiones de la aplicación (`APP_VERSION`).
+  - Al hacer clic en cada tarjeta, la vista conmuta a una página dedicada con botón de retorno al menú del Buzón (`Volver al menú de opciones`).
+- **Permisos Estrictos y Control de Fechas/Orden en la Tarjeta Versiones**:
+  - **Exclusividad de Escritura para Super Administrador (`isSuperUser`)**:
+    - Únicamente los usuarios con rol `'super-administrador'`, `'superusuario'` o `'superadministrador'` pueden crear, modificar o eliminar registros en la colección `'versiones'`.
+    - Las funciones controladoras `handleSaveVersion`, `handleStartEditVersion` y `handleConfirmDeleteVersion` DEBEN contener la cláusula de guardia incondicional:
+      `if (!isSuperUser) return;`
+    - El formulario de registro/edición de versión y la columna/botones de `Acciones` solo se renderizan si `isSuperUser`.
+  - **Modificación de Fecha en Versiones**:
+    - El formulario de versiones incluye selector de fecha (`type="date"`, precargado con la fecha del registro al editar) para permitir registrar o corregir la fecha real de la actualización (`DD/MM/YYYY`).
+  - **Reordenación de Notas y Versiones**:
+    - La columna de acciones incluye botones para subir (`ArrowUp`) y bajar (`ArrowDown`) la posición de cada versión (`handleMoveVersion`).
+    - La cabecera incluye el botón `"Ordenar por Fecha"` (`ArrowUpDown`) para reordenar de forma cronológica descendente en un clic (`handleAutoOrdenarPorFecha`).
+    - Las versiones antiguas anotadas posteriormente se posicionan automáticamente en su orden cronológico correspondiente.
+  - **Acceso de Solo Lectura para los Demás Roles**:
+    - Cualquier otro usuario (técnico, administrador, editor, visualizador) puede acceder a la tarjeta "Versiones" únicamente para **consultar la tabla** de 2 columnas (`Versión` y `Descripción`), sin ver formulario de edición ni botones de acción.
+- **Permisos en Sugerencias de Mejora y Reporte de Fallos**:
+  - Todos los usuarios pueden redactar y enviar propuestas o reportar fallos con su nombre de usuario.
+  - El Super Administrador es el único facultado para cambiar el estado, redactar la resolución oficial o eliminar registros.
+  - El hilo de comentarios / chat multiusuario permite la participación de todos los usuarios registrados.

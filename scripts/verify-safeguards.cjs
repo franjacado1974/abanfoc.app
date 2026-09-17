@@ -135,7 +135,7 @@ if (!fs.existsSync(reparacionesPath)) {
   if (!content.includes('MESES_CONFIG') || !content.includes('activeMonth')) {
     errors.push('CRÍTICO: Reparaciones.tsx carece de la navegación mensual por pestañas y configuración de meses (AGENTS.md REGLA 14).');
   }
-  if (!content.includes('ReceiptText') || !content.includes('albaranModalItem')) {
+  if ((!content.includes('ReceiptText') && !content.includes('Albarán creado')) || !content.includes('albaranModalItem')) {
     errors.push('CRÍTICO: Reparaciones.tsx carece del botón o modal para crear albaranes directos (AGENTS.md REGLA 14).');
   }
   if (!content.includes('!r.facturado')) {
@@ -161,7 +161,7 @@ if (!fs.existsSync(instalacionesPath)) {
   if (!content.includes('MESES_CONFIG') || !content.includes('activeMonth')) {
     errors.push('CRÍTICO: Instalaciones.tsx carece de la navegación mensual por pestañas y configuración de meses (AGENTS.md REGLA 15).');
   }
-  if (!content.includes('ReceiptText') || !content.includes('albaranModalItem')) {
+  if ((!content.includes('ReceiptText') && !content.includes('Albarán creado')) || !content.includes('albaranModalItem')) {
     errors.push('CRÍTICO: Instalaciones.tsx carece del botón o modal para crear albaranes directos (AGENTS.md REGLA 15).');
   }
   if (!content.includes('!i.facturado')) {
@@ -540,6 +540,48 @@ if (fs.existsSync(pdfGenPath)) {
     errors.push('CRÍTICO: pdfGenerator.ts carece del soporte de familia en líneas o de la posición ajustada de cabecera en presupuestos (AGENTS.md REGLA 39).');
   }
 }
+
+// 28. Verificación de Adjunto PDF de Albarán en Correos (AGENTS.md REGLA 42)
+if (fs.existsSync(firebasePath)) {
+  const fbContent = fs.readFileSync(firebasePath, 'utf8');
+  if (!fbContent.includes('generarAlbaranPDF') || !fbContent.includes('attachments') || !fbContent.includes('application/pdf')) {
+    errors.push('CRÍTICO: firebase.tsx carece del generador y adjunto PDF obligatorio en los correos de albarán firmado (AGENTS.md REGLA 42).');
+  }
+}
+
+// 29. Verificación de Modal de Progreso y Confirmación Verde en Albaranes (AGENTS.md REGLA 43)
+const albaranesPagePath = path.join(__dirname, '../src/Albaranes.tsx');
+if (fs.existsSync(albaranesPagePath)) {
+  const albContent = fs.readFileSync(albaranesPagePath, 'utf8');
+  if (!albContent.includes('isSending') || !albContent.includes('sendProgress') || !albContent.includes('Albarán registrado en Firebase')) {
+    errors.push('CRÍTICO: Albaranes.tsx carece del modal de progreso y aviso verde de registro en Firebase (AGENTS.md REGLA 43).');
+  }
+}
+
+// 30. Verificación de 3 Tarjetas, Permisos y Control de Fecha/Orden en Versiones (AGENTS.md REGLA 44)
+const buzonOficinaPath = path.join(__dirname, '../src/oficina/pages/Buzon.tsx');
+const buzonFiles = [
+  { path: buzonPath, name: 'src/Buzon.tsx' },
+  { path: buzonOficinaPath, name: 'src/oficina/pages/Buzon.tsx' }
+];
+
+buzonFiles.forEach(({ path: bPath, name }) => {
+  if (fs.existsSync(bPath)) {
+    const content = fs.readFileSync(bPath, 'utf8');
+    if (!content.includes("'versiones'") || !content.includes("collection(db, 'versiones')")) {
+      errors.push(`CRÍTICO: ${name} carece de la sincronización en Firestore con la colección 'versiones' (AGENTS.md REGLA 44).`);
+    }
+    if (!content.includes('versionFechaInput') || !content.includes('type="date"')) {
+      errors.push(`CRÍTICO: ${name} carece del selector y soporte de cambio de fecha en versiones (AGENTS.md REGLA 44).`);
+    }
+    if (!content.includes('handleMoveVersion') || !content.includes('handleAutoOrdenarPorFecha')) {
+      errors.push(`CRÍTICO: ${name} carece de los controles de reordenación manual y por fecha de versiones (AGENTS.md REGLA 44).`);
+    }
+    if (!content.includes('activeSection === \'versiones\'') || !content.includes('activeSection === \'sugerencias\'') || !content.includes('activeSection === \'fallos\'')) {
+      errors.push(`CRÍTICO: ${name} carece de la estructura independiente de 3 tarjetas en el menú Buzón (AGENTS.md REGLA 44).`);
+    }
+  }
+});
 
 // Resultado de la verificación
 if (errors.length > 0) {

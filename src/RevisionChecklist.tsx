@@ -21,7 +21,7 @@ import SistemaAlumbradoEmergencia from './components/RevisionSistemas/SistemaAlu
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Save, Layers, ChevronDown, ChevronUp, Plus, X, CheckCircle2, AlertTriangle, PenLine, RotateCcw, CheckCheck, Lock, MessageSquare, Unlock, Calendar, Wifi, WifiOff, RefreshCw } from 'lucide-react';
-import { addEquipoInstalado, addAlbaran, updateEquipoInstalado, updateParte as updateParteFirestore, updateCentro, subscribePartes, subscribeCentros, subscribeClientes, subscribeCentroSistemas, subscribeEquiposInstalados, subscribeArticulos, subscribeSistemasCategorias, generateNumeroMantenimiento, uploadFile, type Albaran, type ChecklistItem } from './firebase';
+import { addEquipoInstalado, addAlbaran, updateEquipoInstalado, updateParte as updateParteFirestore, updateCentro, subscribePartes, subscribeCentros, subscribeClientes, subscribeCentroSistemas, subscribeEquiposInstalados, subscribeArticulos, subscribeSistemasCategorias, generateNumeroMantenimiento, uploadFile, obtenerSiguienteNumeroAlbaran, type Albaran, type ChecklistItem } from './firebase';
 import { subscribePlantillas, subscribeItemsDePlantilla, type ItemPlantilla } from './plantillas';
 import { getParteOfflineBundle, updateParteOfflineData, getPendingSyncItems, markSyncItemDone, markSyncItemFailed, addPendingSyncItem } from './offlineDB';
 import type { Centro, Parte, Cliente, CentroSistema, EquipoInstalado } from './Centros';
@@ -1280,20 +1280,8 @@ export default function RevisionChecklist() {
 
             setSendProgress(35);
 
-            // 1. Generar ID correlativo de Albarán para guardar las firmas
-            const albaranesExistentes: Albaran[] = JSON.parse(localStorage.getItem('firecheck_db_albaranes') || '[]');
-            const year = new Date().getFullYear().toString().slice(-2);
-            const prefix = `ALB-${year}-`;
-            const patterned = albaranesExistentes.filter((alb) => alb.id?.startsWith(prefix));
-            let nextNum = 1;
-            if (patterned.length > 0) {
-                const nums = patterned.map((alb) => {
-                    const parts = alb.id.split('-');
-                    return parseInt(parts[parts.length - 1]);
-                }).filter((n) => !isNaN(n));
-                if (nums.length > 0) nextNum = Math.max(...nums) + 1;
-            }
-            const nextId = `${prefix}${nextNum.toString().padStart(3, '0')}`;
+            // 1. Generar ID correlativo único de Albarán consultando Firestore (sin colisiones)
+            const nextId = await obtenerSiguienteNumeroAlbaran();
 
             const numMantenimiento = parte?.numeroMantenimiento || await generateNumeroMantenimiento();
 
