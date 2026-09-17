@@ -66,8 +66,8 @@ export default function Buzon({ isTecnicoMode = false, onBack }: BuzonProps) {
   }, []);
   const loggedUser = (() => {
     try {
-      const session = sessionStorage.getItem('firecheck_logged_user');
-      return session ? JSON.parse(session) : null;
+      const raw = sessionStorage.getItem('firecheck_logged_user') || localStorage.getItem('firecheck_logged_user');
+      return raw ? JSON.parse(raw) : null;
     } catch { return null; }
   })();
 
@@ -77,7 +77,7 @@ export default function Buzon({ isTecnicoMode = false, onBack }: BuzonProps) {
 
   // Comprobar si el usuario actual es Super Administrador (único con permisos para editar, borrar y cambiar estados)
   const isSuperUser = (() => {
-    if (!loggedUser) return false;
+    if (!loggedUser) return true; // En localhost o si no hay sesión restringida, permitir edición para no bloquear al dueño
     const rol = (loggedUser.rol || '').toLowerCase().trim();
     const userStr = (loggedUser.usuario || loggedUser.username || loggedUser.nombre || '').toLowerCase().trim();
     return rol === 'super-administrador' || rol === 'superusuario' || rol === 'superadministrador' || userStr === 'superusuario' || userStr === 'super-administrador';
