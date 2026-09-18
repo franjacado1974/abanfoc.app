@@ -654,3 +654,17 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
   - Todos los usuarios pueden redactar y enviar propuestas o reportar fallos con su nombre de usuario.
   - El Super Administrador es el único facultado para cambiar el estado, redactar la resolución oficial o eliminar registros.
   - El hilo de comentarios / chat multiusuario permite la participación de todos los usuarios registrados.
+
+---
+
+## 45. Blindaje Inviolable de Sincronización Automática con Carpeta Local del Escritorio y Protocolo de Arranque
+- **Sincronización Espejo Continua y Obligatoria**:
+  - Toda modificación, creación de archivos, refactorización o preparación de despliegue realizada en el espacio de trabajo principal (`noble-noether`) DEBE sincronizarse de forma inmediata y automática con la carpeta del proyecto en el Escritorio del usuario (`C:\Users\canci\OneDrive\Escritorio\SALAMANDRA [VERSIÓN]`).
+  - Queda estrictamente prohibido que la carpeta del Escritorio o la de Antigravity queden desfasadas o con versiones diferentes de archivos de código, constantes de versión (`src/constants.ts` y `public/version.json`) o documentación.
+- **Protocolo de Verificación en Cada Inicio**:
+  - Cada vez que el usuario solicite arrancar el proyecto, abrir localhost o continuar tareas tras horas o días de inactividad, el agente DEBE:
+    1. Identificar la carpeta activa más reciente en el Escritorio (`C:\Users\canci\OneDrive\Escritorio\SALAMANDRA...`).
+    2. Comprobar la sincronización y paridad de archivos entre ambas rutas para garantizar que no haya archivos desfasados.
+    3. Asegurar que `APP_VERSION` en `src/constants.ts` y `public/version.json` sea exactamente idéntica en ambos lados.
+    4. Levantar o verificar el servidor de desarrollo Vite (`npm run dev`) y confirmar la apertura en [http://localhost:5173/](http://localhost:5173/).
+

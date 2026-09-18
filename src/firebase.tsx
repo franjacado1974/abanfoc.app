@@ -977,9 +977,10 @@ export function subscribeFamilias(callback: (familias: Familia[]) => void) {
 }
 
 function isFirmaValida(firma: string | undefined): boolean {
-  if (!firma) return false;
-  if (firma.length <= 4400) return false;
-  if (firma.startsWith('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAlgAADICAYAAAA0n5+2')) return false;
+  if (!firma || typeof firma !== 'string') return false;
+  const trimmed = firma.trim();
+  if (trimmed.length < 300) return false;
+  if (trimmed.startsWith('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAlgAADICAYAAAA0n5+2')) return false;
   return true;
 }
 
@@ -1005,18 +1006,30 @@ async function enviarCorreoAlbaran(albaran: Albaran) {
         const clientSnap = await getDoc(clientDocRef);
         if (clientSnap.exists()) {
           clientData = clientSnap.data();
-          if (clientData) {
-            clienteName = clientData.nombre || 'Cliente sin nombre';
-            clienteCif = clientData.cif || '-';
-            clienteDireccion = clientData.direccion || '';
-            clientePoblacion = clientData.poblacion || '';
-            clienteProvincia = clientData.provincia || '';
-            clienteCp = clientData.cp || '';
-          }
         }
       } catch (err) {
         console.error("Error fetching client details for email:", err);
       }
+
+      if (!clientData) {
+        try {
+          const localClients = JSON.parse(localStorage.getItem('firecheck_db_clientes') || '[]');
+          const found = localClients.find((c: any) => c.id === albaran.clienteId || c._docId === albaran.clienteId);
+          if (found) clientData = found;
+        } catch {}
+      }
+
+      if (clientData) {
+        clienteName = clientData.nombre || 'Cliente sin nombre';
+        clienteCif = clientData.cif || '-';
+        clienteDireccion = clientData.direccion || '';
+        clientePoblacion = clientData.poblacion || '';
+        clienteProvincia = clientData.provincia || '';
+        clienteCp = clientData.cp || '';
+      }
+    }
+    if (albaran.clienteNombreLibre && (clienteName === 'Cliente desconocido' || clienteName === 'Cliente sin nombre')) {
+      clienteName = albaran.clienteNombreLibre;
     }
 
     // 2. Obtener detalles del centro para el correo
@@ -1032,17 +1045,29 @@ async function enviarCorreoAlbaran(albaran: Albaran) {
         const centroSnap = await getDoc(centroDocRef);
         if (centroSnap.exists()) {
           centroData = centroSnap.data();
-          if (centroData) {
-            centroName = centroData.nombre || 'Centro sin nombre';
-            centroDireccion = centroData.direccion || '';
-            centroPoblacion = centroData.poblacion || '';
-            centroProvincia = centroData.provincia || '';
-            centroCp = centroData.cp || '';
-          }
         }
       } catch (err) {
         console.error("Error fetching centro details for email:", err);
       }
+
+      if (!centroData) {
+        try {
+          const localCentros = JSON.parse(localStorage.getItem('firecheck_db_centros') || '[]');
+          const found = localCentros.find((c: any) => c.id === albaran.centroId || c._docId === albaran.centroId);
+          if (found) centroData = found;
+        } catch {}
+      }
+
+      if (centroData) {
+        centroName = centroData.nombre || 'Centro sin nombre';
+        centroDireccion = centroData.direccion || '';
+        centroPoblacion = centroData.poblacion || '';
+        centroProvincia = centroData.provincia || '';
+        centroCp = centroData.cp || '';
+      }
+    }
+    if (albaran.centroNombreLibre && (centroName === 'Centro desconocido' || centroName === 'Centro sin nombre')) {
+      centroName = albaran.centroNombreLibre;
     }
 
     // 3. Obtener nombre del técnico para el correo
@@ -1064,6 +1089,16 @@ async function enviarCorreoAlbaran(albaran: Albaran) {
         }
       } catch (err) {
         console.error("Error fetching tecnico for email:", err);
+      }
+
+      if (tecnicoNombre === 'No asignado' || !tecnicoNombre.trim()) {
+        try {
+          const localTecnicos = JSON.parse(localStorage.getItem('firecheck_db_tecnicos') || '[]');
+          const found = localTecnicos.find((t: any) => t.id === albaran.tecnicoId || t._docId === albaran.tecnicoId);
+          if (found) {
+            tecnicoNombre = `${found.nombre || ''} ${found.apellidos || ''}`.trim();
+          }
+        } catch {}
       }
     }
 
@@ -1116,7 +1151,7 @@ async function enviarCorreoAlbaran(albaran: Albaran) {
 
     // 4. Obtener datos de empresa para el PDF
     let empresaData: Record<string, any> | undefined = undefined;
-    const empId = albaran.empresaId || centroData?.empresaId;
+    const empId = albaran.empresaId || centroData?.empresaId || clientData?.empresaId;
     if (empId) {
       try {
         const empDocRef = doc(db, 'empresa', empId);
@@ -1127,6 +1162,21 @@ async function enviarCorreoAlbaran(albaran: Albaran) {
       } catch (err) {
         console.error("Error fetching empresa for email PDF:", err);
       }
+
+      if (!empresaData) {
+        try {
+          const localEmp = JSON.parse(localStorage.getItem('firecheck_db_empresas') || localStorage.getItem('firecheck_db_empresa') || '[]');
+          const arr = Array.isArray(localEmp) ? localEmp : [localEmp];
+          const found = arr.find((e: any) => e.id === empId || e._docId === empId);
+          if (found) empresaData = found;
+        } catch {}
+      }
+    }
+    if (!empresaData) {
+      try {
+        const localEmp = JSON.parse(localStorage.getItem('firecheck_db_empresa') || 'null');
+        if (localEmp && typeof localEmp === 'object') empresaData = localEmp;
+      } catch {}
     }
 
     // 5. Generar el PDF del albarán para adjuntarlo al correo

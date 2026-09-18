@@ -1261,6 +1261,20 @@ export default function RevisionChecklist() {
         setFirmaOk(false);
     };
 
+    const isCanvasBlank = (canvas: HTMLCanvasElement | null): boolean => {
+        if (!canvas) return true;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return true;
+        try {
+            const buffer = new Uint32Array(
+                ctx.getImageData(0, 0, canvas.width, canvas.height).data.buffer
+            );
+            return !buffer.some(color => color !== 0);
+        } catch {
+            return false;
+        }
+    };
+
     const handleFinalizarConFirmas = async () => {
         if (!nombreClienteFirma.trim()) {
             alert('Por favor, introduce el nombre del cliente.');
@@ -1275,8 +1289,12 @@ export default function RevisionChecklist() {
         setSendCompleted(false);
 
         try {
-            const firmaCliente = canvasClienteRef.current?.toDataURL('image/png') || '';
-            const firmaTecnico = canvasTecnicoRef.current?.toDataURL('image/png') || '';
+            const isClienteBlank = !firmaClienteOk || isCanvasBlank(canvasClienteRef.current);
+            const isTecnicoBlank = !firmaTecnicoOk || isCanvasBlank(canvasTecnicoRef.current);
+            const rawFirmaCliente = canvasClienteRef.current?.toDataURL('image/png') || '';
+            const rawFirmaTecnico = canvasTecnicoRef.current?.toDataURL('image/png') || '';
+            const firmaCliente = isClienteBlank ? '' : rawFirmaCliente;
+            const firmaTecnico = isTecnicoBlank ? '' : rawFirmaTecnico;
 
             setSendProgress(35);
 
@@ -1316,12 +1334,15 @@ export default function RevisionChecklist() {
 
             const nuevoAlbaran: Albaran = {
                 id: nextId,
-                centroId: centro?.id || '',
-                clienteId: centro?.clienteId || '',
-                empresaId: centro?.empresaId || '',
+                titulo: parte?.periodicidad ? `Mantenimiento: Revisión ${parte.periodicidad}` : 'Revisión de Mantenimiento',
+                periodicidad: per,
+                centroId: centro?.id || parte?.centroId || '',
+                clienteId: centro?.clienteId || parte?.clienteId || '',
+                empresaId: centro?.empresaId || parte?.empresaId || '',
                 parteId: parteId,
                 tecnicoId: parte?.tecnicoId || '',
                 numeroMantenimiento: numMantenimiento,
+                numeroPedido: (parte as any)?.numeroPedido || '',
                 fechaCreacion: new Date().toISOString(),
                 facturado: false,
                 items: albaranItems,

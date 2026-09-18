@@ -26,10 +26,12 @@ import {
   updateUrgencia,
   subscribeCentros,
   subscribeClientes,
+  subscribeAlbaranes,
   type ParteFirestore,
   type ReparacionItem,
   type InstalacionItem,
-  type UrgenciaItem
+  type UrgenciaItem,
+  type Albaran
 } from './firebase';
 
 const MESES = [
@@ -123,6 +125,7 @@ export interface EventoCalendario {
   colorBadge: string;
   icono: typeof ClipboardCheck;
   detalles?: string;
+  completado?: boolean;
 }
 
 export default function Calendario() {
@@ -131,6 +134,7 @@ export default function Calendario() {
   const [reparaciones, setReparaciones] = useState<ReparacionItem[]>([]);
   const [instalaciones, setInstalaciones] = useState<InstalacionItem[]>([]);
   const [urgencias, setUrgencias] = useState<UrgenciaItem[]>([]);
+  const [albaranes, setAlbaranes] = useState<Albaran[]>([]);
   const [centros, setCentros] = useState<any[]>([]);
   const [clientes, setClientes] = useState<any[]>([]);
   const [tecnicos, setTecnicos] = useState<any[]>([]);
@@ -220,6 +224,19 @@ export default function Calendario() {
     return () => unsubUrg();
   }, []);
 
+  // Suscripción en tiempo real a Albaranes para detectar tareas completadas
+  useEffect(() => {
+    try {
+      const cached = JSON.parse(localStorage.getItem('firecheck_db_albaranes') || '[]');
+      if (Array.isArray(cached) && cached.length > 0) setAlbaranes(cached);
+    } catch {}
+
+    const unsubAlb = subscribeAlbaranes((items) => {
+      setAlbaranes(items || []);
+    });
+    return () => unsubAlb();
+  }, []);
+
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
 
@@ -301,15 +318,20 @@ export default function Calendario() {
       });
     });
 
+    const COLOR_COMPLETADO_TAG = 'bg-slate-100 text-slate-400 border-slate-200 hover:bg-slate-200/60 opacity-80';
+    const COLOR_COMPLETADO_BADGE = 'bg-slate-50 text-slate-500 border-slate-200';
+
     // 1. Mantenimientos: "Rev. [Centro]"
     partes.forEach((p) => {
-      if (!p.fechaProgramada || p.estado === 'Cerrado') return;
+      if (!p.fechaProgramada) return;
       const c = centros.find((cent) => (cent._docId || cent.id) === p.centroId);
       const cl = clientes.find((cli) => (cli._docId || cli.id) === (p.clienteId || c?.clienteId));
       const tec = tecnicos.find((t) => (t._docId || t.id) === p.tecnicoId);
 
       // Priorizar incondicionalmente el nombre del centro para la etiqueta del calendario
       const nombreCentro = p.nombreCentro || c?.nombre || cl?.nombre || 'Centro';
+      const tieneAlbaran = albaranes.some((a) => a.parteId === p.id || a.parteId === (p as any)._docId || (p.numeroMantenimiento && a.numeroMantenimiento === p.numeroMantenimiento));
+      const completado = tieneAlbaran || p.estado === 'Finalizado' || p.estado === 'Cerrado';
 
       addEvento(p.fechaProgramada, {
         id: `parte-${p.id || (p as any)._docId}`,
@@ -325,10 +347,11 @@ export default function Calendario() {
         fecha: p.fechaProgramada,
         modulo: 'Mantenimientos',
         tipoBadge: p.periodicidad ? `Revisión ${p.periodicidad}` : 'Revisión Mantenimiento',
-        colorTag: 'bg-amber-100 text-amber-900 border-amber-300 hover:bg-amber-200/90',
-        colorBadge: 'bg-amber-50 text-amber-800 border-amber-200',
+        colorTag: completado ? COLOR_COMPLETADO_TAG : 'bg-amber-100 text-amber-900 border-amber-300 hover:bg-amber-200/90',
+        colorBadge: completado ? COLOR_COMPLETADO_BADGE : 'bg-amber-50 text-amber-800 border-amber-200',
         icono: ClipboardCheck,
-        detalles: p.observacionesTecnico || p.comentariosPrivados || undefined
+        detalles: p.observacionesTecnico || p.comentariosPrivados || undefined,
+        completado
       });
     });
 
@@ -340,6 +363,8 @@ export default function Calendario() {
       const c = centros.find((cent) => cent.nombre && r.lugar && cent.nombre.toLowerCase().includes(r.lugar.toLowerCase()));
       const cl = clientes.find((cli) => (cli._docId || cli.id) === c?.clienteId || (cli.nombre && r.lugar && cli.nombre.toLowerCase().includes(r.lugar.toLowerCase())));
       const nombreCliente = cl?.nombre || r.lugar || 'Cliente';
+      const tieneAlbaran = !!r.albaranId || albaranes.some((a) => a.reparacionId === r.id || a.reparacionId === (r as any)._docId || a.id === r.albaranId);
+      const completado = tieneAlbaran || r.estado === 'Finalizado';
 
       addEvento(fecha, {
         id: `rep-${r.id || (r as any)._docId}`,
@@ -355,10 +380,11 @@ export default function Calendario() {
         fecha,
         modulo: 'Reparaciones',
         tipoBadge: 'Reparación / Avería',
-        colorTag: 'bg-sky-100 text-sky-900 border-sky-300 hover:bg-sky-200/90',
-        colorBadge: 'bg-sky-50 text-sky-800 border-sky-200',
+        colorTag: completado ? COLOR_COMPLETADO_TAG : 'bg-sky-100 text-sky-900 border-sky-300 hover:bg-sky-200/90',
+        colorBadge: completado ? COLOR_COMPLETADO_BADGE : 'bg-sky-50 text-sky-800 border-sky-200',
         icono: Wrench,
-        detalles: r.nota || r.observaciones || undefined
+        detalles: r.nota || r.observaciones || undefined,
+        completado
       });
     });
 
@@ -370,6 +396,8 @@ export default function Calendario() {
       const c = centros.find((cent) => cent.nombre && i.lugar && cent.nombre.toLowerCase().includes(i.lugar.toLowerCase()));
       const cl = clientes.find((cli) => (cli._docId || cli.id) === c?.clienteId || (cli.nombre && i.lugar && cli.nombre.toLowerCase().includes(i.lugar.toLowerCase())));
       const nombreCliente = cl?.nombre || i.lugar || 'Cliente';
+      const tieneAlbaran = !!i.albaranId || albaranes.some((a) => a.instalacionId === i.id || a.instalacionId === (i as any)._docId || a.id === i.albaranId);
+      const completado = tieneAlbaran || i.estado === 'Finalizado';
 
       addEvento(fecha, {
         id: `inst-${i.id || (i as any)._docId}`,
@@ -385,10 +413,11 @@ export default function Calendario() {
         fecha,
         modulo: 'Instalaciones',
         tipoBadge: 'Instalación / Montaje',
-        colorTag: 'bg-red-100 text-red-900 border-red-300 hover:bg-red-200/90',
-        colorBadge: 'bg-red-50 text-red-800 border-red-200',
+        colorTag: completado ? COLOR_COMPLETADO_TAG : 'bg-red-100 text-red-900 border-red-300 hover:bg-red-200/90',
+        colorBadge: completado ? COLOR_COMPLETADO_BADGE : 'bg-red-50 text-red-800 border-red-200',
         icono: HardHat,
-        detalles: i.nota || i.observaciones || undefined
+        detalles: i.nota || i.observaciones || undefined,
+        completado
       });
     });
 
@@ -400,6 +429,8 @@ export default function Calendario() {
       const c = centros.find((cent) => cent.nombre && u.lugar && cent.nombre.toLowerCase().includes(u.lugar.toLowerCase()));
       const cl = clientes.find((cli) => (cli._docId || cli.id) === c?.clienteId || (cli.nombre && u.lugar && cli.nombre.toLowerCase().includes(u.lugar.toLowerCase())));
       const nombreCliente = cl?.nombre || u.lugar || 'Cliente';
+      const tieneAlbaran = !!u.albaranId || albaranes.some((a) => a.reparacionId === u.id || a.reparacionId === (u as any)._docId || (a as any).urgenciaId === u.id || (a as any).urgenciaId === (u as any)._docId || a.id === u.albaranId);
+      const completado = tieneAlbaran || u.estado === 'Finalizado';
 
       addEvento(fecha, {
         id: `urg-${u.id || (u as any)._docId}`,
@@ -415,15 +446,16 @@ export default function Calendario() {
         fecha,
         modulo: 'Urgencias',
         tipoBadge: u.prioridad ? `Urgencia (${u.prioridad})` : 'Aviso de Urgencia',
-        colorTag: 'bg-black text-white border-zinc-950 hover:bg-zinc-800 shadow-xs',
-        colorBadge: 'bg-zinc-900 text-white border-black',
+        colorTag: completado ? COLOR_COMPLETADO_TAG : 'bg-black text-white border-zinc-950 hover:bg-zinc-800 shadow-xs',
+        colorBadge: completado ? COLOR_COMPLETADO_BADGE : 'bg-zinc-900 text-white border-black',
         icono: AlertTriangle,
-        detalles: u.nota || u.observaciones || undefined
+        detalles: u.nota || u.observaciones || undefined,
+        completado
       });
     });
 
     return map;
-  }, [partes, reparaciones, instalaciones, urgencias, centros, clientes, tecnicos, festivosPorFecha]);
+  }, [partes, reparaciones, instalaciones, urgencias, albaranes, centros, clientes, tecnicos, festivosPorFecha]);
 
   const getCalendarDays = () => {
     const firstDayOfMonth = new Date(year, month, 1).getDay();
@@ -827,7 +859,7 @@ export default function Calendario() {
                         title={
                           isFestivo
                             ? `${ev.tituloCompleto} (Festivo oficial en Barcelona / España)`
-                            : `${ev.sigla} ${ev.clienteResumido} (Arrastra a otro día para reprogramar o haz clic para ver detalles)`
+                            : `${ev.sigla} ${ev.clienteResumido}${ev.completado ? ' · Completada (Albarán generado)' : ''} (Arrastra a otro día para reprogramar o haz clic para ver detalles)`
                         }
                       >
                         <span className="font-extrabold tracking-tight shrink-0">{ev.sigla}</span>
@@ -938,9 +970,16 @@ export default function Calendario() {
               {selectedEvento.estado && (
                 <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
                   <span className="text-[10px] text-slate-600 font-bold uppercase">Estado</span>
-                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-white border border-slate-200 text-slate-800 shadow-xs">
-                    {selectedEvento.estado}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    {selectedEvento.completado && (
+                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-200 text-slate-700 border border-slate-300">
+                        Albarán generado
+                      </span>
+                    )}
+                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-white border border-slate-200 text-slate-800 shadow-xs">
+                      {selectedEvento.estado}
+                    </span>
+                  </div>
                 </div>
               )}
 

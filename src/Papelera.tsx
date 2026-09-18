@@ -10,12 +10,18 @@ import {
   restaurarElementoPapelera, 
   eliminarDefinitivoPapelera, 
   vaciarPapeleraCompleta,
-  type PapeleraItem 
+  subscribeClientes,
+  subscribeCentros,
+  type PapeleraItem,
+  type Cliente,
+  type Centro
 } from './firebase';
 
 export default function Papelera() {
   const navigate = useNavigate();
   const [items, setItems] = useState<PapeleraItem[]>([]);
+  const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [centros, setCentros] = useState<Centro[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTipo, setSelectedTipo] = useState<string>('TODOS');
@@ -34,6 +40,82 @@ export default function Papelera() {
     });
     return () => unsub();
   }, []);
+
+  // Carga y suscripción a Clientes y Centros para resolución de nombres
+  useEffect(() => {
+    try {
+      const cachedCli = JSON.parse(localStorage.getItem('firecheck_db_clientes') || '[]');
+      if (Array.isArray(cachedCli) && cachedCli.length > 0) setClientes(cachedCli);
+      const cachedCent = JSON.parse(localStorage.getItem('firecheck_db_centros') || '[]');
+      if (Array.isArray(cachedCent) && cachedCent.length > 0) setCentros(cachedCent);
+    } catch {}
+
+    const unsubCli = subscribeClientes((c) => setClientes(c || []));
+    const unsubCent = subscribeCentros((c) => setCentros(c || []));
+    return () => {
+      unsubCli();
+      unsubCent();
+    };
+  }, []);
+
+  // Función robusta para resolver Cliente y Centro de cualquier tipo de documento
+  const getClienteYCentro = (item: PapeleraItem) => {
+    const d = item.datos || {};
+
+    // 1. Centro
+    let centroNombre = (
+      item.centroNombre ||
+      d.centroNombre ||
+      d.nombreCentro ||
+      d.centroNombreLibre ||
+      d.centro ||
+      ''
+    ).trim();
+
+    if (!centroNombre && d.centroId) {
+      const foundCent = centros.find((c) => (c._docId || c.id) === d.centroId);
+      if (foundCent?.nombre) {
+        centroNombre = foundCent.nombre.trim();
+      }
+    }
+
+    if (!centroNombre && d.lugar) {
+      centroNombre = String(d.lugar).trim();
+    }
+
+    // 2. Cliente
+    let clienteNombre = (
+      item.clienteNombre ||
+      d.clienteNombre ||
+      d.nombreCliente ||
+      d.clienteNombreLibre ||
+      d.cliente ||
+      ''
+    ).trim();
+
+    if (!clienteNombre && d.clienteId) {
+      const foundCli = clientes.find((c) => ((c as any)._docId || c.id) === d.clienteId);
+      if (foundCli?.nombre) {
+        clienteNombre = foundCli.nombre.trim();
+      }
+    }
+
+    // Si no hay cliente pero encontramos centro que tenga clienteId
+    if (!clienteNombre && d.centroId) {
+      const foundCent = centros.find((c) => (c._docId || c.id) === d.centroId);
+      if (foundCent?.clienteId) {
+        const foundCli = clientes.find((c) => ((c as any)._docId || c.id) === foundCent.clienteId);
+        if (foundCli?.nombre) {
+          clienteNombre = foundCli.nombre.trim();
+        }
+      }
+    }
+
+    return {
+      cliente: clienteNombre || 'Sin cliente',
+      centro: centroNombre || 'Sin centro'
+    };
+  };
 
   const showToast = (msg: string) => {
     setSuccessToast(msg);
@@ -81,10 +163,11 @@ export default function Papelera() {
   const filteredItems = useMemo(() => {
     return items.filter(item => {
       const term = searchTerm.toLowerCase().trim();
+      const info = getClienteYCentro(item);
       const matchesSearch = !term || 
         (item.titulo && item.titulo.toLowerCase().includes(term)) ||
-        (item.clienteNombre && item.clienteNombre.toLowerCase().includes(term)) ||
-        (item.centroNombre && item.centroNombre.toLowerCase().includes(term)) ||
+        (info.cliente && info.cliente.toLowerCase().includes(term)) ||
+        (info.centro && info.centro.toLowerCase().includes(term)) ||
         (item.tipo && item.tipo.toLowerCase().includes(term)) ||
         (item.eliminadoPor && item.eliminadoPor.toLowerCase().includes(term));
 
@@ -92,7 +175,7 @@ export default function Papelera() {
 
       return matchesSearch && matchesTipo;
     });
-  }, [items, searchTerm, selectedTipo]);
+  }, [items, searchTerm, selectedTipo, clientes, centros]);
 
   // Manejar Restauración
   const handleRestaurar = async () => {
@@ -314,6 +397,7 @@ export default function Papelera() {
                 <tr className="bg-zinc-50/80 border-b border-zinc-200/60 text-[11px] font-black uppercase text-zinc-450 tracking-wider">
                   <th className="py-4 px-6 text-center">TIPO</th>
                   <th className="py-4 px-6">DOCUMENTO / DETALLE</th>
+                  <th className="py-4 px-6">CLIENTE / CENTRO</th>
                   <th className="py-4 px-6">ELIMINADO POR</th>
                   <th className="py-4 px-6">FECHA ELIMINACIÓN</th>
                   <th className="py-4 px-6 text-center">RETENCIÓN (100 DÍAS)</th>
@@ -325,6 +409,7 @@ export default function Papelera() {
                   const diasRestantes = calcularDiasRestantes(item.fechaExpiracion);
                   const isExpiringSoon = diasRestantes <= 10;
                   const isMidExpiring = diasRestantes <= 30;
+                  const info = getClienteYCentro(item);
 
                   return (
                     <tr 
@@ -337,18 +422,19 @@ export default function Papelera() {
                       </td>
 
                       {/* DOCUMENTO / DETALLE */}
+                      <td className="py-4 px-6 font-semibold text-zinc-700 text-xs">
+                        {item.titulo || 'Sin detalle'}
+                      </td>
+
+                      {/* CLIENTE / CENTRO */}
                       <td className="py-4 px-6">
-                        <div className="max-w-md">
-                          <span className="font-semibold text-zinc-800 block text-xs">
-                            {item.titulo || 'Sin título'}
+                        <div className="max-w-xs">
+                          <span className="font-bold text-black text-xs block leading-tight">
+                            {info.cliente}
                           </span>
-                          {(item.clienteNombre || item.centroNombre) && (
-                            <div className="flex items-center gap-1.5 text-[11px] text-zinc-500 font-medium mt-0.5">
-                              {item.clienteNombre && <span>{item.clienteNombre}</span>}
-                              {item.clienteNombre && item.centroNombre && <span>•</span>}
-                              {item.centroNombre && <span className="text-zinc-400">{item.centroNombre}</span>}
-                            </div>
-                          )}
+                          <span className="text-zinc-500 font-medium text-[11px] block mt-1 leading-tight">
+                            {info.centro}
+                          </span>
                         </div>
                       </td>
 
