@@ -3951,8 +3951,8 @@ export const generarCertificadoPDF = async (
   const tituloHeader = getTituloPorTipo(tipoCert);
   const subtituloHeader = parte?.subtitulo || `Instalaciones y sistemas de protección contra incendios - ${parte?.numeroMantenimiento || parte?.id || '—'}`;
 
-  // ── CABECERA: TÍTULO CENTRADO (10 ptos más arriba) ──
-  let y = 8;
+  // ── CABECERA: TÍTULO CENTRADO (y = 18) ──
+  let y = 18;
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(16);
   doc.setTextColor(40, 40, 40);

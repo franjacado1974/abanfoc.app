@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, X, Download, Edit, Send, Trash2, Save, Package, PackagePlus, Wrench, Type, Calculator, CheckCircle, Clock, Ban, ChevronDown, ChevronUp, GripVertical, FileText, ArrowLeft, Plus, HardHat, Gauge, Check, Mail, Eye, Copy, ExternalLink, Activity, ShieldCheck } from 'lucide-react';
+import { Search, X, Download, Edit, Send, Trash2, Save, Package, PackagePlus, Wrench, Type, Calculator, CheckCircle, Clock, Ban, ChevronDown, ChevronUp, GripVertical, FileText, ArrowLeft, Plus, HardHat, Gauge, Check, Mail, Eye, Copy, ExternalLink, Activity, ShieldCheck, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import { 
   subscribePresupuestos, addPresupuesto, updatePresupuesto, deletePresupuesto, 
   subscribeClientes, subscribeArticulos, subscribeCentros, subscribeImpuestos, subscribeEmpresas,
@@ -81,6 +81,19 @@ export default function Presupuestos() {
   const [showCatalogo, setShowCatalogo] = useState<'articulo' | 'servicio' | null>(null);
   const [presupuestoParaAcciones, setPresupuestoParaAcciones] = useState<Presupuesto | null>(null);
   const [catalogoSearch, setCatalogoSearch] = useState('');
+
+  // Estados para ordenación de la tabla
+  const [sortField, setSortField] = useState<'fecha' | 'referencia' | 'estado'>('fecha');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+
+  const handleSort = (field: 'fecha' | 'referencia' | 'estado') => {
+    if (sortField === field) {
+      setSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortOrder(field === 'fecha' ? 'desc' : 'asc');
+    }
+  };
 
   // Estados para modal de aceptación y derivación
   const [presupuestoParaAceptar, setPresupuestoParaAceptar] = useState<Presupuesto | null>(null);
@@ -196,22 +209,41 @@ export default function Presupuestos() {
     return () => { try { unsub1(); } catch {} try { unsub2(); } catch {} try { unsub3(); } catch {} try { unsub4(); } catch {} try { unsub5(); } catch {} try { unsub6(); } catch {} };
   }, []);
 
-  // Filtrar presupuestos
+  // Filtrar y ordenar presupuestos
   const filteredPresupuestos = useMemo(() => {
     let result = presupuestos;
     if (statusFilter !== 'Todos') {
       result = result.filter(p => p.estado === statusFilter);
     }
-    if (!searchTerm.trim()) return result;
-    const term = searchTerm.toLowerCase().trim();
-    return result.filter(p =>
-      p.titulo.toLowerCase().includes(term) ||
-      (p.nombreCliente || '').toLowerCase().includes(term) ||
-      p.fechaCreacion.includes(term) ||
-      p.id.toLowerCase().includes(term) ||
-      (p.numeroPresupuesto || '').toLowerCase().includes(term)
-    );
-  }, [presupuestos, searchTerm, statusFilter]);
+    if (searchTerm.trim()) {
+      const term = searchTerm.toLowerCase().trim();
+      result = result.filter(p =>
+        p.titulo.toLowerCase().includes(term) ||
+        (p.nombreCliente || '').toLowerCase().includes(term) ||
+        p.fechaCreacion.includes(term) ||
+        p.id.toLowerCase().includes(term) ||
+        (p.numeroPresupuesto || '').toLowerCase().includes(term)
+      );
+    }
+
+    return [...result].sort((a, b) => {
+      let comparison = 0;
+      if (sortField === 'fecha') {
+        const timeA = a.fechaCreacion ? new Date(a.fechaCreacion).getTime() : 0;
+        const timeB = b.fechaCreacion ? new Date(b.fechaCreacion).getTime() : 0;
+        comparison = timeA - timeB;
+      } else if (sortField === 'referencia') {
+        const refA = (a.numeroPresupuesto || a.id || '').trim();
+        const refB = (b.numeroPresupuesto || b.id || '').trim();
+        comparison = refA.localeCompare(refB, undefined, { numeric: true, sensitivity: 'base' });
+      } else if (sortField === 'estado') {
+        const estA = (a.estado || '').trim();
+        const estB = (b.estado || '').trim();
+        comparison = estA.localeCompare(estB, undefined, { sensitivity: 'base' });
+      }
+      return sortOrder === 'asc' ? comparison : -comparison;
+    });
+  }, [presupuestos, searchTerm, statusFilter, sortField, sortOrder]);
 
   // Calcular totales del formulario
   const formSubtotal = useMemo(() =>
@@ -979,13 +1011,52 @@ export default function Presupuestos() {
             <div className="overflow-x-auto w-full">
               <table className="w-full text-sm min-w-[780px]">
               <thead>
-                <tr className="bg-zinc-50 text-zinc-500 font-bold uppercase tracking-wider text-xs">
-                  <th className="px-4 py-3 text-left">Referencia</th>
+                <tr className="bg-zinc-200/90 text-zinc-700 font-extrabold uppercase tracking-wider text-xs border-b border-zinc-300">
+                  <th 
+                    onClick={() => handleSort('referencia')} 
+                    className="px-4 py-3 text-left cursor-pointer hover:bg-zinc-300/80 transition-colors select-none group"
+                    title="Ordenar por número de referencia"
+                  >
+                    <div className="inline-flex items-center gap-1.5">
+                      <span>Referencia</span>
+                      {sortField === 'referencia' ? (
+                        sortOrder === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-red-600 stroke-[2.5]" /> : <ArrowDown className="w-3.5 h-3.5 text-red-600 stroke-[2.5]" />
+                      ) : (
+                        <ArrowUpDown className="w-3.5 h-3.5 text-zinc-400 group-hover:text-zinc-600 transition-colors" />
+                      )}
+                    </div>
+                  </th>
+                  <th 
+                    onClick={() => handleSort('fecha')} 
+                    className="px-4 py-3 text-left cursor-pointer hover:bg-zinc-300/80 transition-colors select-none group"
+                    title="Ordenar por fecha"
+                  >
+                    <div className="inline-flex items-center gap-1.5">
+                      <span>Fecha</span>
+                      {sortField === 'fecha' ? (
+                        sortOrder === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-red-600 stroke-[2.5]" /> : <ArrowDown className="w-3.5 h-3.5 text-red-600 stroke-[2.5]" />
+                      ) : (
+                        <ArrowUpDown className="w-3.5 h-3.5 text-zinc-400 group-hover:text-zinc-600 transition-colors" />
+                      )}
+                    </div>
+                  </th>
                   <th className="px-4 py-3 text-left">Cliente</th>
                   <th className="px-4 py-3 text-left">Centro</th>
                   <th className="px-4 py-3 text-left">Título</th>
-                  <th className="px-4 py-3 text-left">Estado</th>
-                  <th className="px-4 py-3 text-left">Fecha</th>
+                  <th 
+                    onClick={() => handleSort('estado')} 
+                    className="px-4 py-3 text-left cursor-pointer hover:bg-zinc-300/80 transition-colors select-none group"
+                    title="Ordenar por estado"
+                  >
+                    <div className="inline-flex items-center gap-1.5">
+                      <span>Estado</span>
+                      {sortField === 'estado' ? (
+                        sortOrder === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-red-600 stroke-[2.5]" /> : <ArrowDown className="w-3.5 h-3.5 text-red-600 stroke-[2.5]" />
+                      ) : (
+                        <ArrowUpDown className="w-3.5 h-3.5 text-zinc-400 group-hover:text-zinc-600 transition-colors" />
+                      )}
+                    </div>
+                  </th>
                   <th className="px-4 py-3 text-right">Importe</th>
                   <th className="px-4 py-3 text-center">Acciones</th>
                 </tr>
@@ -996,12 +1067,15 @@ export default function Presupuestos() {
                   const EstadoIcono = estadoInfo.icono;
                   const nombreCentro = centros.find(c => c._docId === p.centroId || c.id === p.centroId)?.nombre || '';
                   return (
-                    <tr key={p.id} className="hover:bg-white transition-colors">
+                    <tr key={p.id} className="hover:bg-zinc-50/80 transition-colors">
                       <td className="px-4 py-3">
                         <p className="text-xs font-mono font-bold text-zinc-800">{formatCodigoPresupuesto(p.numeroPresupuesto, p.id)}</p>
                       </td>
                       <td className="px-4 py-3">
-                        <p className="text-sm text-zinc-800">{p.nombreCliente || 'Cliente'}</p>
+                        <p className="text-xs font-semibold text-zinc-600">{formatFecha(p.fechaCreacion)}</p>
+                      </td>
+                      <td className="px-4 py-3">
+                        <p className="text-sm text-zinc-800 font-medium">{p.nombreCliente || 'Cliente'}</p>
                       </td>
                       <td className="px-4 py-3">
                         <p className="text-sm text-zinc-600">{nombreCentro || '—'}</p>
@@ -1030,9 +1104,6 @@ export default function Presupuestos() {
                             </span>
                           ) : null}
                         </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <p className="text-xs text-zinc-500">{formatFecha(p.fechaCreacion)}</p>
                       </td>
                       <td className="px-4 py-3 text-right">
                         <p className="font-black text-zinc-900">{formatMoneda(p.total)}</p>

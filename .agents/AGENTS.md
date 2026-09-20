@@ -78,7 +78,7 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
 ---
 
 ## 8. Maquetación Inviolable del PDF Certificado (pdfGenerator.ts)
-- **Posición de Cabecera**: El título principal del PDF Certificado inicia en `y = 8` (10 ptos más arriba que los 18 ptos por defecto).
+- **Posición de Cabecera**: El título principal del PDF Certificado inicia en `y = 18`.
 - **Ordenación Estricta de Sistemas**:
   - **Columna Izquierda (`col0`)**:
     1. **Primero**: Extintores (`sistemasExtintores`).
