@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import SearchableSelect from './components/SearchableSelect';
 import { 
   HardHat, Plus, Search, Filter, Edit, Trash2, CheckCircle2, 
   Clock, PauseCircle, User, MapPin, Briefcase, 
@@ -141,6 +142,30 @@ export default function Instalaciones() {
     estado: 'Pendiente' as 'Pendiente' | 'En curso' | 'Parado' | 'Finalizado',
     observaciones: ''
   });
+
+  // Opciones ordenadas alfabéticamente para búsqueda interactiva
+  const clienteOptions = useMemo(() => {
+    return clientes
+      .map((c: any) => ({
+        value: c.id || c._docId,
+        label: c.nombre || c.razonSocial || c.id || '',
+        sublabel: c.cif || c.nif || ''
+      }))
+      .filter(opt => opt.value && opt.label)
+      .sort((a, b) => a.label.localeCompare(b.label, 'es', { sensitivity: 'base' }));
+  }, [clientes]);
+
+  const centroOptions = useMemo(() => {
+    return centros
+      .filter((c: any) => !formData.clienteId || c.clienteId === formData.clienteId || c.cliente === formData.clienteId || c.cliente === formData.clienteNombre)
+      .map((c: any) => ({
+        value: c.id || c._docId,
+        label: c.nombre || c.id || '',
+        sublabel: c.direccion || c.poblacion || ''
+      }))
+      .filter(opt => opt.value && opt.label)
+      .sort((a, b) => a.label.localeCompare(b.label, 'es', { sensitivity: 'base' }));
+  }, [centros, formData.clienteId, formData.clienteNombre]);
 
   // Funciones auxiliares para fechas y meses
   const getItemMonth = (item: { fecha?: string; mes?: string; fechaCreacion?: string }): string => {
@@ -1067,7 +1092,7 @@ export default function Instalaciones() {
               </button>
             </div>
 
-            <form onSubmit={handleSubmitForm} className="p-6 flex flex-col gap-4">
+            <form onSubmit={handleSubmitForm} className="p-6 flex flex-col gap-4 max-h-[82vh] overflow-y-auto">
               {/* TÍTULO */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
@@ -1088,25 +1113,20 @@ export default function Instalaciones() {
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                   Cliente
                 </label>
-                <select
+                <SearchableSelect
+                  options={clienteOptions}
                   value={formData.clienteId}
-                  onChange={(e) => {
-                    const sel: any = clientes.find((c: any) => c.id === e.target.value || c._docId === e.target.value);
+                  onChange={(val, opt) => {
                     setFormData({
                       ...formData,
-                      clienteId: e.target.value,
-                      clienteNombre: sel ? (sel.nombre || sel.razonSocial || '') : '',
+                      clienteId: val,
+                      clienteNombre: opt?.label || '',
                       centroId: '',
                       lugar: ''
                     });
                   }}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 bg-white"
-                >
-                  <option value="">-- Seleccionar cliente --</option>
-                  {clientes.map((c: any) => (
-                    <option key={c.id || c._docId} value={c.id || c._docId}>{c.nombre || c.razonSocial || c.id}</option>
-                  ))}
-                </select>
+                  placeholder="-- Buscar o seleccionar cliente --"
+                />
               </div>
 
               {/* CENTRO */}
@@ -1114,25 +1134,27 @@ export default function Instalaciones() {
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                   Centro
                 </label>
-                <select
+                <SearchableSelect
+                  options={centroOptions}
                   value={formData.centroId}
-                  onChange={(e) => {
-                    const sel = centros.find((c: any) => c.id === e.target.value || c._docId === e.target.value);
+                  onChange={(val, opt) => {
+                    const sel = centros.find((c: any) => (c.id || c._docId) === val);
+                    const patch: any = {
+                      centroId: val,
+                      lugar: sel?.nombre || opt?.label || formData.lugar
+                    };
+                    if (sel?.clienteId && !formData.clienteId) {
+                      patch.clienteId = sel.clienteId;
+                      const cMatch: any = clientes.find((c: any) => (c.id || c._docId) === sel.clienteId);
+                      patch.clienteNombre = cMatch?.nombre || cMatch?.razonSocial || '';
+                    }
                     setFormData({
                       ...formData,
-                      centroId: e.target.value,
-                      lugar: sel ? (sel.nombre || '') : formData.lugar
+                      ...patch
                     });
                   }}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 bg-white"
-                >
-                  <option value="">-- Seleccionar centro --</option>
-                  {centros
-                    .filter((c: any) => !formData.clienteId || c.clienteId === formData.clienteId || c.cliente === formData.clienteId || c.cliente === formData.clienteNombre)
-                    .map((c: any) => (
-                      <option key={c.id || c._docId} value={c.id || c._docId}>{c.nombre || c.id}</option>
-                    ))}
-                </select>
+                  placeholder="-- Buscar o seleccionar centro --"
+                />
               </div>
 
               {/* LUGAR */}

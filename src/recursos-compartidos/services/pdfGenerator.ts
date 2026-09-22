@@ -3938,6 +3938,9 @@ export const generarCertificadoPDF = async (
     }
   };
   const tituloHeader = getTituloPorTipo(tipoCert);
+  const esInstalacion = tipoCert === 'instalacion' || 
+    (typeof parte?.tipoCertificado === 'string' && parte.tipoCertificado.toLowerCase().includes('instalaci')) ||
+    (typeof parte?.tituloCertificado === 'string' && parte.tituloCertificado.toLowerCase().includes('instalaci'));
   const subtituloHeader = parte?.subtitulo || `Instalaciones y sistemas de protección contra incendios - ${parte?.numeroMantenimiento || parte?.id || '—'}`;
 
   // ── CABECERA: TÍTULO CENTRADO (y = 18) ──
@@ -4064,13 +4067,20 @@ export const generarCertificadoPDF = async (
   datosInstalacion.forEach(([label, value], i) => {
     const col = i < 4 ? colA : colB;
     const ry = y + 11 + (i % 4) * rowH;
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7);
-    doc.setTextColor(100, 100, 100);
+    
+    // Etiqueta (pregunta) en fuente normal
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(80, 80, 80);
     doc.text(label, col, ry);
-    doc.setFont('helvetica', i === 6 ? 'bold' : 'normal');
-    doc.setTextColor(50, 50, 50);
-    doc.text(value, col + 28, ry, { maxWidth: i < 4 ? 60 : 50 });
+
+    // Respuesta (valor) en negrita (columna izquierda desplazada 8 puntos a la izquierda: de 28 a 20)
+    const offsetVal = i < 4 ? 20 : 28;
+    const maxValW = i < 4 ? 68 : 54;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(40, 40, 40);
+    doc.text(value, col + offsetVal, ry, { maxWidth: maxValW });
   });
 
   y += cardInstalacionH + 4;
@@ -4258,7 +4268,8 @@ export const generarCertificadoPDF = async (
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(9);
     doc.setTextColor(60, 60, 60);
-    doc.text('SISTEMAS Y EQUIPOS REVISADOS', pageWidth / 2, y + 6, { align: 'center' });
+    const tituloSistemas = esInstalacion ? 'SISTEMAS Y EQUIPOS INSTALADOS' : 'SISTEMAS Y EQUIPOS REVISADOS';
+    doc.text(tituloSistemas, pageWidth / 2, y + 6, { align: 'center' });
 
     let currentBlockY = y + 11;
 
@@ -4318,47 +4329,137 @@ export const generarCertificadoPDF = async (
   const nifTecnico = empData?.ingenieroNif || empData?.nifTecnico || 'N.I.F. no especificado';
   const numTecnico = empData?.ingenieroColegiado || empData?.numTecnicoTitulado || 'N.º de colegiado no especificado';
 
-  const textoCertificacion = parte?.textoCertificado || parte?.observaciones ||
-    `Don ${tecnicoTitulado}, con N.I.F. ${nifTecnico}, Técnico titulado n.º ${numTecnico} y en calidad de responsable técnico ` +
-    `de la empresa instaladora y mantenedora de sistemas de protección contra incendios ${empNombre} con N.I.F. ` +
-    `${empCif}, autorizada por la Generalitat de Catalunya con n.º de RASIC ${empData?.rasic || '106001687'}, ` +
-    `CERTIFICA que se ha efectuado la revisión/actuación correspondiente en las instalaciones de "${nombreCentro}" ` +
-    `según REAL DECRETO 513/2017 del Reglamento de Instalaciones de Protección Contra Incendios.`;
+  let textoCertificacion = parte?.textoCertificado || parte?.observaciones ||
+    (esInstalacion
+      ? `ABANFOC S.L. CERTIFICA: que se ha realizado la instalación completa de los sistemas de protección contra incendios indicados en "${nombreCentro}", habiendo sido ejecutados según proyecto técnico y normativa R.D. 513/2017.`
+      : `Don ${tecnicoTitulado}, con N.I.F. ${nifTecnico}, Técnico titulado n.º ${numTecnico} y en calidad de responsable técnico ` +
+        `de la empresa instaladora y mantenedora de sistemas de protección contra incendios ${empNombre} con N.I.F. ` +
+        `${empCif}, autorizada por la Generalitat de Catalunya con n.º de RASIC ${empData?.rasic || '106001687'}, ` +
+        `CERTIFICA que se ha efectuado la revisión/actuación correspondiente en las instalaciones de "${nombreCentro}" ` +
+        `según REAL DECRETO 513/2017 del Reglamento de Instalaciones de Protección Contra Incendios.`);
 
-  // Establecer el formato de la fuente antes de medir con splitTextToSize para que el wrap sea correcto
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
+  if (esInstalacion) {
+    let cleanT = textoCertificacion.trim();
+    if (!cleanT.toUpperCase().startsWith('ABANFOC S.L. CERTIFICA')) {
+      if (cleanT.toUpperCase().startsWith('CERTIFICA:')) {
+        cleanT = 'ABANFOC S.L. ' + cleanT;
+      } else if (cleanT.toUpperCase().startsWith('CERTIFICA')) {
+        cleanT = 'ABANFOC S.L. CERTIFICA: ' + cleanT.substring(9).replace(/^[:\s]+/, '');
+      } else {
+        cleanT = 'ABANFOC S.L. CERTIFICA: ' + cleanT;
+      }
+    }
+    textoCertificacion = cleanT;
+  }
 
-  // Usar splitTextToSize para un word-wrap más robusto
-  // Dejamos un margen interno de 5 mm a cada lado del texto dentro de la tarjeta
-  const textLines = doc.splitTextToSize(textoCertificacion, pageWidth - margen * 2 - 10);
-
+  const contentWidth = pageWidth - margen * 2 - 10;
   const lineSpacing = 4.2;
-  const cardResultH = 11 + (textLines.length * lineSpacing) + 7;
+
+  // Comprobar si la frase empieza por ABANFOC S.L. CERTIFICA:
+  const matchCertifica = textoCertificacion.match(/^ABANFOC\s+S\.L\.?\s*CERTIFICA:?\s*/i);
+  let cardResultH = 0;
+  let firstLineRest = '';
+  let boldPrefixStr = '';
+  let prefixWidth = 0;
+  let subsequentLines: string[] = [];
+
+  if (matchCertifica) {
+    boldPrefixStr = 'ABANFOC S.L. CERTIFICA: ';
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    prefixWidth = doc.getTextWidth(boldPrefixStr);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    const availFirstLineW = contentWidth - prefixWidth;
+    const restText = textoCertificacion.slice(matchCertifica[0].length).trim();
+    const paragraphs = restText.split(/\r?\n/);
+
+    if (paragraphs.length > 0) {
+      const para0Words = paragraphs[0].split(/\s+/).filter(Boolean);
+      let wordIdx = 0;
+      for (; wordIdx < para0Words.length; wordIdx++) {
+        const candidate = firstLineRest ? `${firstLineRest} ${para0Words[wordIdx]}` : para0Words[wordIdx];
+        if (doc.getTextWidth(candidate) <= availFirstLineW) {
+          firstLineRest = candidate;
+        } else {
+          break;
+        }
+      }
+      const remainingInPara0 = para0Words.slice(wordIdx).join(' ');
+      if (remainingInPara0) {
+        const linesPara0 = doc.splitTextToSize(remainingInPara0, contentWidth);
+        subsequentLines.push(...linesPara0);
+      }
+      for (let p = 1; p < paragraphs.length; p++) {
+        if (paragraphs[p].trim()) {
+          const linesP = doc.splitTextToSize(paragraphs[p], contentWidth);
+          subsequentLines.push(...linesP);
+        } else {
+          subsequentLines.push('');
+        }
+      }
+    }
+
+    const totalLinesCount = 1 + subsequentLines.length;
+    cardResultH = 11 + (totalLinesCount * lineSpacing) + (esInstalacion ? 2 : 7);
+  } else {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    const textLines = doc.splitTextToSize(textoCertificacion, contentWidth);
+    subsequentLines = textLines;
+    cardResultH = 11 + (textLines.length * lineSpacing) + (esInstalacion ? 2 : 7);
+  }
+
   doc.setDrawColor(220, 220, 220);
   doc.setFillColor(250, 251, 252);
   doc.roundedRect(margen, y, pageWidth - margen * 2, cardResultH, 3, 3, 'FD');
 
+  const tituloResultado = esInstalacion ? 'SISTEMAS Y EQUIPOS INSTALADOS:' : 'RESULTADO DE LA REVISIÓN';
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);
   doc.setTextColor(60, 60, 60);
-  doc.text('RESULTADO DE LA REVISIÓN', margen + 5, y + 6);
+  doc.text(tituloResultado, margen + 5, y + 6);
 
   let ly = y + 11;
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.setTextColor(60, 60, 60);
-  textLines.forEach((line: string) => {
-    doc.text(line, margen + 5, ly);
-    ly += lineSpacing;
-  });
+  if (matchCertifica) {
+    // Dibujar primera línea con ABANFOC S.L. CERTIFICA: en mayúscula y negrita
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(60, 60, 60);
+    doc.text(boldPrefixStr, margen + 5, ly);
 
-  // Estado del resultado
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9);
-  const colorRes: [number, number, number] = esNegativo ? [220, 38, 38] : [22, 163, 74];
-  doc.setTextColor(colorRes[0], colorRes[1], colorRes[2]);
-  doc.text(`Resultado: ${estadoLimpio}`, margen + 5, ly + 1);
+    if (firstLineRest) {
+      doc.setFont('helvetica', 'normal');
+      doc.text(firstLineRest, margen + 5 + prefixWidth, ly);
+    }
+
+    // Dibujar líneas posteriores en texto normal
+    doc.setFont('helvetica', 'normal');
+    subsequentLines.forEach((line: string) => {
+      ly += lineSpacing;
+      if (line) {
+        doc.text(line, margen + 5, ly);
+      }
+    });
+  } else {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(60, 60, 60);
+    subsequentLines.forEach((line: string) => {
+      doc.text(line, margen + 5, ly);
+      ly += lineSpacing;
+    });
+  }
+
+  // Estado del resultado (no se muestra en certificados de instalación)
+  if (!esInstalacion) {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    const colorRes: [number, number, number] = esNegativo ? [220, 38, 38] : [22, 163, 74];
+    doc.setTextColor(colorRes[0], colorRes[1], colorRes[2]);
+    doc.text(`Resultado: ${estadoLimpio}`, margen + 5, ly + 1);
+  }
 
   y += cardResultH + 8;
 

@@ -39,7 +39,7 @@ export const CATEGORIAS_CERTIFICADO = [
     colorBadge: 'bg-blue-50 text-blue-700 border-blue-200',
     colorBtn: 'bg-blue-600 hover:bg-blue-700',
     colorIconBg: 'bg-blue-100 text-blue-700',
-    plantillaTexto: 'CERTIFICA que se ha realizado la instalación completa de los sistemas de protección contra incendios indicados, habiendo sido ejecutados según proyecto técnico y normativa R.D. 513/2017.'
+    plantillaTexto: 'ABANFOC S.L. CERTIFICA: que se ha realizado la instalación completa de los sistemas de protección contra incendios indicados, habiendo sido ejecutados según proyecto técnico y normativa R.D. 513/2017.'
   },
   {
     id: 'reparacion',

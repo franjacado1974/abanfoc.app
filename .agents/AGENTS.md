@@ -668,3 +668,38 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
     3. Asegurar que `APP_VERSION` en `src/constants.ts` y `public/version.json` sea exactamente idéntica en ambos lados.
     4. Levantar o verificar el servidor de desarrollo Vite (`npm run dev`) y confirmar la apertura en [http://localhost:5173/](http://localhost:5173/).
 
+---
+
+## 46. Blindaje Inviolable del Certificado de Instalación en Certificados Oficiales (`pdfGenerator.ts` y `Certificados.tsx`)
+- **Título Oficial en Certificados de Instalación**:
+  - En certificados con tipo `instalacion` (`tipoCertificado === 'instalacion'` o por título), el encabezado principal de la tarjeta de resultados DEBE imprimirse estrictamente en mayúsculas como **`SISTEMAS Y EQUIPOS INSTALADOS:`**.
+  - Si el centro dispone de equipos asociados, la cabecera correspondiente cambia a **`SISTEMAS Y EQUIPOS INSTALADOS`** (en lugar de `REVISADOS`).
+- **Inicio Obligatorio de la Declaración Oficial**:
+  - La redacción en el PDF y la plantilla del formulario de creación DEBE iniciar estrictamente con:
+    **`ABANFOC S.L. CERTIFICA:`** en mayúsculas y negrita (`helvetica`, `bold`), seguido del texto legal reglamentario en tipografía regular.
+- **Supresión del Resultado de la Revisión**:
+  - En los Certificados de Instalación queda ESTRICTAMENTE PROHIBIDO mostrar la leyenda de resultado `"Resultado: Favorable"` o `"Resultado: NO favorable"` al pie del documento.
+  - La altura de la tarjeta (`cardResultH`) debe ajustarse automáticamente sin dejar espacios vacíos.
+- **Datos de la Instalación: Pregunta Normal, Respuesta en Negrita y Alineación**:
+  - En la sección `DATOS DE LA INSTALACIÓN`:
+    - Las preguntas/etiquetas (*Cliente:*, *Centro:*, *Dirección:*, *Población:*, *Provincia:*, *N.º Mantenimiento:*, *Fecha de emisión:*, *Técnico actuante:*) se imprimen en fuente regular normal.
+    - Las respuestas/valores se imprimen en **negrita** (`helvetica`, `bold`).
+    - En la columna izquierda (*Cliente*, *Centro*, *Dirección*, *Población*), las respuestas se posicionan **8 puntos más a la izquierda** (`offsetVal = i < 4 ? 20 : 28`) para quedar más próximas a sus respectivas etiquetas.
+
+---
+
+## 47. Blindaje Inviolable de Selectores con Búsqueda Predictiva en Tiempo Real y Orden Alfabético para Cliente y Centro (`SearchableSelect.tsx`, `Reparaciones.tsx`, `Instalaciones.tsx` y `Urgencias.tsx`)
+- **Componente Reutilizable `SearchableSelect.tsx`**:
+  - Reemplaza de forma permanente los `<select>` estáticos de Cliente y Centro en los formularios modales de **Reparaciones**, **Instalaciones** y **Avisos (Urgencias)**.
+  - Permite escribir directamente en el campo para filtrar los resultados en tiempo real mientras el usuario teclea.
+  - Búsqueda insensible a mayúsculas, minúsculas y tildes/acentos mediante normalización NFD.
+  - Botón de limpieza rápida (`X`) y chevron indicador.
+- **Compatibilidad Táctil Completa en Dispositivos Móviles**:
+  - El componente DEBE gestionar eventos táctiles (`onTouchEnd` y `onMouseDown`) con `e.preventDefault()` en las opciones del menú para evitar que el blur del input o el teclado virtual de smartphones/tablets impidan la selección.
+  - Los formularios modales contenedores DEBEN contar con scroll táctil (`max-h-[80vh] overflow-y-auto` o `max-h-[82vh] overflow-y-auto`) para garantizar acceso a todos los campos en pantallas móviles.
+- **Orden Alfabético y Reactividad Cruzada Cliente-Centro**:
+  - Tanto los clientes como los centros deben presentarse siempre ordenados alfabéticamente (`localeCompare` con sensibilidad base).
+  - Al seleccionar un cliente, el selector de centros se filtra dinámicamente para ofrecer únicamente los centros de dicho cliente.
+  - Si se selecciona un centro sin haber indicado cliente previamente, el sistema autocompleta automáticamente el cliente asociado.
+
+

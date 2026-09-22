@@ -583,6 +583,52 @@ buzonFiles.forEach(({ path: bPath, name }) => {
   }
 });
 
+// 31. Verificación de Certificado de Instalación (AGENTS.md REGLA 46)
+if (fs.existsSync(pdfGenPath)) {
+  const pdfContent = fs.readFileSync(pdfGenPath, 'utf8');
+  if (!pdfContent.includes('SISTEMAS Y EQUIPOS INSTALADOS:') || !pdfContent.includes('ABANFOC S.L. CERTIFICA:')) {
+    errors.push('CRÍTICO: pdfGenerator.ts carece del título "SISTEMAS Y EQUIPOS INSTALADOS:" o del prefijo en negrita "ABANFOC S.L. CERTIFICA:" (AGENTS.md REGLA 46).');
+  }
+  if (!pdfContent.includes('!esInstalacion') || !pdfContent.includes('i < 4 ? 20 : 28')) {
+    errors.push('CRÍTICO: pdfGenerator.ts carece de la supresión de resultado o el desplazamiento de 8 puntos en certificados de instalación (AGENTS.md REGLA 46).');
+  }
+}
+if (fs.existsSync(certsPath)) {
+  const certContent = fs.readFileSync(certsPath, 'utf8');
+  if (!certContent.includes('ABANFOC S.L. CERTIFICA:')) {
+    errors.push('CRÍTICO: Certificados.tsx carece del prefijo oficial "ABANFOC S.L. CERTIFICA:" en la plantilla de instalación (AGENTS.md REGLA 46).');
+  }
+}
+
+// 32. Verificación de Búsqueda Predictiva en Tiempo Real para Cliente y Centro (AGENTS.md REGLA 47)
+const searchableSelectPath = path.join(__dirname, '../src/components/SearchableSelect.tsx');
+if (!fs.existsSync(searchableSelectPath)) {
+  errors.push('CRÍTICO: No se encontró src/components/SearchableSelect.tsx (AGENTS.md REGLA 47).');
+} else {
+  const sContent = fs.readFileSync(searchableSelectPath, 'utf8');
+  if (!sContent.includes('onTouchEnd') || !sContent.includes("normalize('NFD')")) {
+    errors.push('CRÍTICO: SearchableSelect.tsx carece de soporte táctil móvil onTouchEnd o de normalización de acentos NFD (AGENTS.md REGLA 47).');
+  }
+}
+if (fs.existsSync(reparacionesPath)) {
+  const repContent = fs.readFileSync(reparacionesPath, 'utf8');
+  if (!repContent.includes('SearchableSelect') || !repContent.includes('clienteOptions') || !repContent.includes('centroOptions')) {
+    errors.push('CRÍTICO: Reparaciones.tsx carece de SearchableSelect o de opciones ordenadas de cliente y centro (AGENTS.md REGLA 47).');
+  }
+}
+if (fs.existsSync(instalacionesPath)) {
+  const insContent = fs.readFileSync(instalacionesPath, 'utf8');
+  if (!insContent.includes('SearchableSelect') || !insContent.includes('clienteOptions') || !insContent.includes('centroOptions')) {
+    errors.push('CRÍTICO: Instalaciones.tsx carece de SearchableSelect o de opciones ordenadas de cliente y centro (AGENTS.md REGLA 47).');
+  }
+}
+if (fs.existsSync(urgenciasPath)) {
+  const urgContent = fs.readFileSync(urgenciasPath, 'utf8');
+  if (!urgContent.includes('SearchableSelect') || !urgContent.includes('clienteOptions') || !urgContent.includes('centroOptions')) {
+    errors.push('CRÍTICO: Urgencias.tsx carece de SearchableSelect o de opciones ordenadas de cliente y centro (AGENTS.md REGLA 47).');
+  }
+}
+
 // Resultado de la verificación
 if (errors.length > 0) {
   console.error('\n❌ ERROR CRÍTICO DE BLINDAJE INTEGRAL (AGENTS.md):');
