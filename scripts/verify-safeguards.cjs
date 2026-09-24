@@ -704,6 +704,9 @@ if (fs.existsSync(partesTecPath)) {
   if (!ptContent.includes('Ext+20 años:') || !ptContent.includes('Bie+20 años:') || !ptContent.includes('PH:')) {
     errors.push('CRÍTICO: PartesTecnico.tsx carece del formato exacto de alertas (Ext+20 años:, Bie+20 años:, PH:) (AGENTS.md REGLA 49).');
   }
+  if (!ptContent.includes('Todas las alertas preventivas en la parte inferior')) {
+    errors.push('CRÍTICO: PartesTecnico.tsx carece del bloque de alertas en la parte inferior de la tarjeta móvil (AGENTS.md REGLA 49).');
+  }
 }
 
 const revisionesPath = path.join(__dirname, '../src/Revisiones.tsx');

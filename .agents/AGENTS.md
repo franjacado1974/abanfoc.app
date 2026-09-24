@@ -754,6 +754,7 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
   - BIEs con prueba hidráulica $\ge 5$ años: **`PH: {alertasBie.pruebasHidraulicas5} und.`**
   - Estilo visual reglamentario: fondo rojo suave con borde rojo e insignia tipográfica destacada (`text-[10px]` o `text-[11px] font-extrabold text-red-600 bg-red-50 border border-red-200 shadow-xs`).
   - Ubicación jerárquica: Los avisos de BIEs (`Bie+20 años` y `PH`) DEBEN situarse siempre inmediatamente debajo de los avisos de extintores en las vistas de Partes de Escritorio (`Partes.tsx`), Panel Móvil y Escritorio del Técnico (`PartesTecnico.tsx`) y Listado de Revisiones (`Revisiones.tsx`).
+  - **Ubicación en Tarjeta del Técnico (Dispositivos Móviles)**: En las tarjetas de la vista técnico (`PartesTecnico.tsx`), TODAS las alertas preventivas (tanto extintores como BIEs) DEBEN situarse exclusivamente en la **parte inferior** de la tarjeta, en un contenedor independiente por debajo de la fila de fecha programada, periodicidad, recuento de sistemas y botón de descarga offline, separadas por una línea divisoria (`pt-2 border-t border-zinc-100`).
 
 
 

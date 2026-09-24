@@ -605,32 +605,6 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
                             <Layers className="w-3.5 h-3.5 text-zinc-400" />
                             {sistCount} sist.
                           </span>
-                          {(() => {
-                            const alertas = alertasExtintoresPorCentro[parte.centroId] ||
-                                            (centro?._docId ? alertasExtintoresPorCentro[centro._docId] : undefined) ||
-                                            (centro?.id ? alertasExtintoresPorCentro[centro.id] : undefined);
-                            if (!alertas) return null;
-                            return (
-                              <>
-                                {alertas.caducados20 > 0 && (
-                                  <span 
-                                    className="text-[11px] font-extrabold text-red-600 bg-red-50 px-2 py-0.5 rounded-md border border-red-200 shadow-xs"
-                                    title={`${alertas.caducados20} extintores caducados de más de 20 años`}
-                                  >
-                                    Ext+20 años: {alertas.caducados20} und.
-                                  </span>
-                                )}
-                                {alertas.retimbres5 > 0 && (
-                                  <span 
-                                    className="text-[11px] font-extrabold text-red-600 bg-red-50 px-2 py-0.5 rounded-md border border-red-200 shadow-xs"
-                                    title={`${alertas.retimbres5} extintores para retimbrar (más de 5 años)`}
-                                  >
-                                    RT: {alertas.retimbres5} und.
-                                  </span>
-                                )}
-                              </>
-                            );
-                          })()}
                         </div>
 
                         {/* Botón Descargar Parte Completo Offline */}
@@ -664,29 +638,58 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
                         </button>
                       </div>
 
-                      {/* Avisos de BIEs debajo de los avisos de los extintores */}
+                      {/* Todas las alertas preventivas en la parte inferior (debajo de fecha, periodicidad y sistemas) */}
                       {(() => {
+                        const alertasExt = alertasExtintoresPorCentro[parte.centroId] ||
+                                           (centro?._docId ? alertasExtintoresPorCentro[centro._docId] : undefined) ||
+                                           (centro?.id ? alertasExtintoresPorCentro[centro.id] : undefined);
                         const alertasBie = alertasBiesPorCentro[parte.centroId] ||
                                            (centro?._docId ? alertasBiesPorCentro[centro._docId] : undefined) ||
                                            (centro?.id ? alertasBiesPorCentro[centro.id] : undefined);
-                        if (!alertasBie || (alertasBie.caducados20 === 0 && alertasBie.pruebasHidraulicas5 === 0)) return null;
+                        const hasExt = alertasExt && (alertasExt.caducados20 > 0 || alertasExt.retimbres5 > 0);
+                        const hasBie = alertasBie && (alertasBie.caducados20 > 0 || alertasBie.pruebasHidraulicas5 > 0);
+                        if (!hasExt && !hasBie) return null;
                         return (
-                          <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-zinc-50">
-                            {alertasBie.caducados20 > 0 && (
-                              <span 
-                                className="text-[11px] font-extrabold text-red-600 bg-red-50 px-2 py-0.5 rounded-md border border-red-200 shadow-xs"
-                                title={`${alertasBie.caducados20} BIEs caducados de más de 20 años`}
-                              >
-                                Bie+20 años: {alertasBie.caducados20} und.
-                              </span>
+                          <div className="flex flex-col gap-1.5 pt-2 border-t border-zinc-100">
+                            {hasExt && (
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                {alertasExt.caducados20 > 0 && (
+                                  <span 
+                                    className="text-[11px] font-extrabold text-red-600 bg-red-50 px-2 py-0.5 rounded-md border border-red-200 shadow-xs"
+                                    title={`${alertasExt.caducados20} extintores caducados de más de 20 años`}
+                                  >
+                                    Ext+20 años: {alertasExt.caducados20} und.
+                                  </span>
+                                )}
+                                {alertasExt.retimbres5 > 0 && (
+                                  <span 
+                                    className="text-[11px] font-extrabold text-red-600 bg-red-50 px-2 py-0.5 rounded-md border border-red-200 shadow-xs"
+                                    title={`${alertasExt.retimbres5} extintores para retimbrar (más de 5 años)`}
+                                  >
+                                    RT: {alertasExt.retimbres5} und.
+                                  </span>
+                                )}
+                              </div>
                             )}
-                            {alertasBie.pruebasHidraulicas5 > 0 && (
-                              <span 
-                                className="text-[11px] font-extrabold text-red-600 bg-red-50 px-2 py-0.5 rounded-md border border-red-200 shadow-xs"
-                                title={`${alertasBie.pruebasHidraulicas5} BIEs para prueba hidráulica (más de 5 años)`}
-                              >
-                                PH: {alertasBie.pruebasHidraulicas5} und.
-                              </span>
+                            {hasBie && (
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                {alertasBie.caducados20 > 0 && (
+                                  <span 
+                                    className="text-[11px] font-extrabold text-red-600 bg-red-50 px-2 py-0.5 rounded-md border border-red-200 shadow-xs"
+                                    title={`${alertasBie.caducados20} BIEs caducados de más de 20 años`}
+                                  >
+                                    Bie+20 años: {alertasBie.caducados20} und.
+                                  </span>
+                                )}
+                                {alertasBie.pruebasHidraulicas5 > 0 && (
+                                  <span 
+                                    className="text-[11px] font-extrabold text-red-600 bg-red-50 px-2 py-0.5 rounded-md border border-red-200 shadow-xs"
+                                    title={`${alertasBie.pruebasHidraulicas5} BIEs para prueba hidráulica (más de 5 años)`}
+                                  >
+                                    PH: {alertasBie.pruebasHidraulicas5} und.
+                                  </span>
+                                )}
+                              </div>
                             )}
                           </div>
                         );
