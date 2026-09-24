@@ -8,8 +8,11 @@ import {
 import { 
   subscribeCentros, subscribeEmpresas, 
   subscribeRevisiones, updateRevision, addRevision, deleteRevision,
+  getEquiposInstalados, db,
   type RevisionItem 
 } from './firebase';
+import { collection, getDocs } from 'firebase/firestore';
+import { calcularAlertasExtintores, calcularAlertasBies, type ExtintorAlertas, type BieAlertas } from './recursos-compartidos/services/sistemasUtils';
 
 const MESES = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 
@@ -109,6 +112,55 @@ export default function Revisiones() {
   const [empresas, setEmpresas] = useState<any[]>([]);
   const [revisionesState, setRevisionesState] = useState<RevisionItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [alertasExtintoresPorCentro, setAlertasExtintoresPorCentro] = useState<Record<string, ExtintorAlertas>>(() => {
+    try {
+      const allEquipos: any[] = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
+      const storedCentros: any[] = JSON.parse(localStorage.getItem('firecheck_db_centros') || '[]');
+      const map: Record<string, ExtintorAlertas> = {};
+      const equiposPorCentro: Record<string, any[]> = {};
+      for (const eq of allEquipos) {
+        if (eq.centroId) {
+          if (!equiposPorCentro[eq.centroId]) equiposPorCentro[eq.centroId] = [];
+          equiposPorCentro[eq.centroId].push(eq);
+        }
+      }
+      for (const cId of Object.keys(equiposPorCentro)) {
+        const alertRes = calcularAlertasExtintores(equiposPorCentro[cId]);
+        map[cId] = alertRes;
+        const cObj = storedCentros.find((c: any) => c._docId === cId || c.id === cId);
+        if (cObj?._docId) map[cObj._docId] = alertRes;
+        if (cObj?.id) map[cObj.id] = alertRes;
+      }
+      return map;
+    } catch {
+      return {};
+    }
+  });
+
+  const [alertasBiesPorCentro, setAlertasBiesPorCentro] = useState<Record<string, BieAlertas>>(() => {
+    try {
+      const allEquipos: any[] = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
+      const storedCentros: any[] = JSON.parse(localStorage.getItem('firecheck_db_centros') || '[]');
+      const map: Record<string, BieAlertas> = {};
+      const equiposPorCentro: Record<string, any[]> = {};
+      for (const eq of allEquipos) {
+        if (eq.centroId) {
+          if (!equiposPorCentro[eq.centroId]) equiposPorCentro[eq.centroId] = [];
+          equiposPorCentro[eq.centroId].push(eq);
+        }
+      }
+      for (const cId of Object.keys(equiposPorCentro)) {
+        const alertRes = calcularAlertasBies(equiposPorCentro[cId]);
+        map[cId] = alertRes;
+        const cObj = storedCentros.find((c: any) => c._docId === cId || c.id === cId);
+        if (cObj?._docId) map[cObj._docId] = alertRes;
+        if (cObj?.id) map[cObj.id] = alertRes;
+      }
+      return map;
+    } catch {
+      return {};
+    }
+  });
 
   // Filtro de búsqueda por texto y filtros
   const [search, setSearch] = useState('');
@@ -174,6 +226,108 @@ export default function Revisiones() {
       unsubRev();
     };
   }, []);
+
+  // Cargar equipos de extintores para alertas preventivas (+20 años y RT 5 años)
+  useEffect(() => {
+    if (centros.length === 0) return;
+
+    let isMounted = true;
+
+    const cargarAlertasCentros = async () => {
+      const nuevosMap: Record<string, any[]> = {};
+
+      try {
+        const stored = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
+        for (const eq of stored) {
+          if (eq.centroId) {
+            if (!nuevosMap[eq.centroId]) nuevosMap[eq.centroId] = [];
+            nuevosMap[eq.centroId].push(eq);
+          }
+        }
+      } catch { /* ignore */ }
+
+      for (const centro of centros) {
+        const targetDocId = centro._docId || centro.id;
+        if (!targetDocId) continue;
+
+        try {
+          let snapInv = await getDocs(collection(db, 'centros', targetDocId, 'inventario'));
+          if (snapInv.empty && centro.id && targetDocId !== centro.id) {
+            snapInv = await getDocs(collection(db, 'centros', centro.id, 'inventario'));
+          }
+          let snapSis = await getDocs(collection(db, 'centros', targetDocId, 'sistemas'));
+          if (snapSis.empty && centro.id && targetDocId !== centro.id) {
+            snapSis = await getDocs(collection(db, 'centros', centro.id, 'sistemas'));
+          }
+
+          const seenSist = new Set<string>();
+          const allDocs = [...snapInv.docs, ...snapSis.docs].filter(d => {
+            if (seenSist.has(d.id)) return false;
+            seenSist.add(d.id);
+            return true;
+          });
+
+          const sistemasInteres = allDocs.filter(d => {
+            const data = d.data();
+            const nombre = ((data.tipo || '') + ' ' + (data.familia || '') + ' ' + (data.nombre || '') + ' ' + d.id).toLowerCase();
+            return nombre.includes('extintor') || nombre.includes('bie') || nombre.includes('boca');
+          });
+
+          for (const sDoc of sistemasInteres) {
+            let list = await getEquiposInstalados(targetDocId, sDoc.id);
+            if ((!list || list.length === 0) && centro.id && targetDocId !== centro.id) {
+              list = await getEquiposInstalados(centro.id, sDoc.id);
+            }
+            if (list && list.length > 0) {
+              const sData = sDoc.data() || {};
+              const sNombre = sData.tipo || sData.familia || sData.nombre || sDoc.id || '';
+              const sTipo = sData.tipo || sDoc.id || '';
+              const taggedList = list.map(e => ({
+                ...e,
+                sistemaNombre: e.sistemaNombre || sNombre,
+                sistemaTipo: e.sistemaTipo || sTipo,
+                sistemaId: e.sistemaId || sDoc.id
+              }));
+              const keys = [targetDocId, centro._docId, centro.id].filter(Boolean) as string[];
+              for (const k of keys) {
+                if (!nuevosMap[k]) nuevosMap[k] = [];
+                const otros = (nuevosMap[k] || []).filter(e => e.sistemaId !== sDoc.id);
+                nuevosMap[k] = [...otros, ...taggedList];
+              }
+            }
+          }
+        } catch { /* ignore */ }
+      }
+
+      if (!isMounted) return;
+
+      const resultMapExt: Record<string, ExtintorAlertas> = {};
+      const resultMapBie: Record<string, BieAlertas> = {};
+      for (const k of Object.keys(nuevosMap)) {
+        const centro = centros.find(c => c._docId === k || c.id === k);
+        const alertExt = calcularAlertasExtintores(nuevosMap[k]);
+        const alertBie = calcularAlertasBies(nuevosMap[k]);
+        resultMapExt[k] = alertExt;
+        resultMapBie[k] = alertBie;
+        if (centro?._docId) {
+          resultMapExt[centro._docId] = alertExt;
+          resultMapBie[centro._docId] = alertBie;
+        }
+        if (centro?.id) {
+          resultMapExt[centro.id] = alertExt;
+          resultMapBie[centro.id] = alertBie;
+        }
+      }
+      setAlertasExtintoresPorCentro(resultMapExt);
+      setAlertasBiesPorCentro(resultMapBie);
+    };
+
+    cargarAlertasCentros();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [centros]);
 
   // Función de mapa de empresas para búsqueda rápida por id
   const empresasMap = empresas.reduce((acc: Record<string, string>, emp: any) => {
@@ -720,7 +874,65 @@ export default function Revisiones() {
 
                     {/* TIPO DE REVISIÓN */}
                     <td className="py-4 px-6 text-center">
-                      {renderTipoBadge(item.tipoRevision, item.tag)}
+                      <div className="flex flex-col items-center gap-1">
+                        {renderTipoBadge(item.tipoRevision, item.tag)}
+                        {(() => {
+                          const centro = centros.find(c => c._docId === item.centroId || c.id === item.centroId);
+                          const alertasExt = alertasExtintoresPorCentro[item.centroId] ||
+                                             (centro?._docId ? alertasExtintoresPorCentro[centro._docId] : undefined) ||
+                                             (centro?.id ? alertasExtintoresPorCentro[centro.id] : undefined);
+                          const alertasBie = alertasBiesPorCentro[item.centroId] ||
+                                             (centro?._docId ? alertasBiesPorCentro[centro._docId] : undefined) ||
+                                             (centro?.id ? alertasBiesPorCentro[centro.id] : undefined);
+                          const hasExt = alertasExt && (alertasExt.caducados20 > 0 || alertasExt.retimbres5 > 0);
+                          const hasBie = alertasBie && (alertasBie.caducados20 > 0 || alertasBie.pruebasHidraulicas5 > 0);
+                          if (!hasExt && !hasBie) return null;
+                          return (
+                            <>
+                              {hasExt && (
+                                <div className="flex flex-wrap items-center justify-center gap-1 mt-0.5">
+                                  {alertasExt.caducados20 > 0 && (
+                                    <span 
+                                      className="inline-flex items-center text-[10px] font-extrabold text-red-600 bg-red-50 px-1.5 py-0.5 rounded-md border border-red-200 shadow-xs"
+                                      title={`${alertasExt.caducados20} extintores caducados de más de 20 años`}
+                                    >
+                                      Ext+20 años: {alertasExt.caducados20} und.
+                                    </span>
+                                  )}
+                                  {alertasExt.retimbres5 > 0 && (
+                                    <span 
+                                      className="inline-flex items-center text-[10px] font-extrabold text-red-600 bg-red-50 px-1.5 py-0.5 rounded-md border border-red-200 shadow-xs"
+                                      title={`${alertasExt.retimbres5} extintores para retimbrar (más de 5 años)`}
+                                    >
+                                      RT: {alertasExt.retimbres5} und.
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                              {hasBie && (
+                                <div className="flex flex-wrap items-center justify-center gap-1 mt-0.5">
+                                  {alertasBie.caducados20 > 0 && (
+                                    <span 
+                                      className="inline-flex items-center text-[10px] font-extrabold text-red-600 bg-red-50 px-1.5 py-0.5 rounded-md border border-red-200 shadow-xs"
+                                      title={`${alertasBie.caducados20} BIEs caducados de más de 20 años`}
+                                    >
+                                      Bie+20 años: {alertasBie.caducados20} und.
+                                    </span>
+                                  )}
+                                  {alertasBie.pruebasHidraulicas5 > 0 && (
+                                    <span 
+                                      className="inline-flex items-center text-[10px] font-extrabold text-red-600 bg-red-50 px-1.5 py-0.5 rounded-md border border-red-200 shadow-xs"
+                                      title={`${alertasBie.pruebasHidraulicas5} BIEs para prueba hidráulica (más de 5 años)`}
+                                    >
+                                      PH: {alertasBie.pruebasHidraulicas5} und.
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                            </>
+                          );
+                        })()}
+                      </div>
                     </td>
 
                     {/* EMPRESA MANTENEDORA */}

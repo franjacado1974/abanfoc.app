@@ -4,12 +4,14 @@ import {
   ChevronRight, Layers, Clock, Filter,
   DownloadCloud, CheckCircle2, RefreshCw, HardDrive, Database
 } from 'lucide-react';
-import { subscribePartes, subscribeCentroSistemas, subscribeClientes, subscribeCentros, updateParte, getEquiposInstalados } from './firebase';
+import { db, subscribePartes, subscribeCentroSistemas, subscribeClientes, subscribeCentros, updateParte, getEquiposInstalados } from './firebase';
+import { collection, getDocs } from 'firebase/firestore';
 import { getPlantillas } from './plantillas';
 import { saveParteOfflineBundle, getParteOfflineBundle, getOfflineDiagnostics, type OfflineParteBundle } from './offlineDB';
 import { useNavigate } from 'react-router-dom';
 import type { Parte, Centro, Cliente, CentroSistema } from './Centros';
 import type { Tecnico } from './firebase';
+import { calcularAlertasExtintores, calcularAlertasBies, type ExtintorAlertas, type BieAlertas } from './recursos-compartidos/services/sistemasUtils';
 
 interface PartesTecnicoProps {
   loggedUser: { id: string; nombre: string; apellidos: string; rol: string };
@@ -33,6 +35,55 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
   });
   const [centroSistemas, setCentroSistemas] = useState<CentroSistema[]>(() => {
     try { return JSON.parse(localStorage.getItem('firecheck_db_centro_sistemas') || '[]'); } catch { return []; }
+  });
+  const [alertasExtintoresPorCentro, setAlertasExtintoresPorCentro] = useState<Record<string, ExtintorAlertas>>(() => {
+    try {
+      const allEquipos: any[] = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
+      const storedCentros: any[] = JSON.parse(localStorage.getItem('firecheck_db_centros') || '[]');
+      const map: Record<string, ExtintorAlertas> = {};
+      const equiposPorCentro: Record<string, any[]> = {};
+      for (const eq of allEquipos) {
+        if (eq.centroId) {
+          if (!equiposPorCentro[eq.centroId]) equiposPorCentro[eq.centroId] = [];
+          equiposPorCentro[eq.centroId].push(eq);
+        }
+      }
+      for (const cId of Object.keys(equiposPorCentro)) {
+        const alertRes = calcularAlertasExtintores(equiposPorCentro[cId]);
+        map[cId] = alertRes;
+        const cObj = storedCentros.find((c: any) => c._docId === cId || c.id === cId);
+        if (cObj?._docId) map[cObj._docId] = alertRes;
+        if (cObj?.id) map[cObj.id] = alertRes;
+      }
+      return map;
+    } catch {
+      return {};
+    }
+  });
+
+  const [alertasBiesPorCentro, setAlertasBiesPorCentro] = useState<Record<string, BieAlertas>>(() => {
+    try {
+      const allEquipos: any[] = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
+      const storedCentros: any[] = JSON.parse(localStorage.getItem('firecheck_db_centros') || '[]');
+      const map: Record<string, BieAlertas> = {};
+      const equiposPorCentro: Record<string, any[]> = {};
+      for (const eq of allEquipos) {
+        if (eq.centroId) {
+          if (!equiposPorCentro[eq.centroId]) equiposPorCentro[eq.centroId] = [];
+          equiposPorCentro[eq.centroId].push(eq);
+        }
+      }
+      for (const cId of Object.keys(equiposPorCentro)) {
+        const alertRes = calcularAlertasBies(equiposPorCentro[cId]);
+        map[cId] = alertRes;
+        const cObj = storedCentros.find((c: any) => c._docId === cId || c.id === cId);
+        if (cObj?._docId) map[cObj._docId] = alertRes;
+        if (cObj?.id) map[cObj.id] = alertRes;
+      }
+      return map;
+    } catch {
+      return {};
+    }
   });
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -170,6 +221,109 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
     );
     return () => unsubs.forEach(u => u());
   }, [partes.length]);
+
+  // Cargar equipos de extintores y BIEs para alertas preventivas (+20 años, RT 5 años, PH 5 años)
+  useEffect(() => {
+    const centroIds = [...new Set(partes.map(p => p.centroId).filter(Boolean))];
+    if (centroIds.length === 0) return;
+
+    let isMounted = true;
+
+    const cargarEquiposAlertas = async () => {
+      const nuevosMap: Record<string, any[]> = {};
+
+      try {
+        const stored = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
+        for (const eq of stored) {
+          if (eq.centroId) {
+            if (!nuevosMap[eq.centroId]) nuevosMap[eq.centroId] = [];
+            nuevosMap[eq.centroId].push(eq);
+          }
+        }
+      } catch { /* ignore */ }
+
+      for (const cId of centroIds) {
+        try {
+          const centro = centros.find(c => c._docId === cId || c.id === cId);
+          const targetDocId = centro?._docId || centro?.id || cId;
+
+          let snapInv = await getDocs(collection(db, 'centros', targetDocId, 'inventario'));
+          if (snapInv.empty && centro?.id && targetDocId !== centro.id) {
+            snapInv = await getDocs(collection(db, 'centros', centro.id, 'inventario'));
+          }
+          let snapSis = await getDocs(collection(db, 'centros', targetDocId, 'sistemas'));
+          if (snapSis.empty && centro?.id && targetDocId !== centro.id) {
+            snapSis = await getDocs(collection(db, 'centros', centro.id, 'sistemas'));
+          }
+
+          const seenSist = new Set<string>();
+          const allDocs = [...snapInv.docs, ...snapSis.docs].filter(d => {
+            if (seenSist.has(d.id)) return false;
+            seenSist.add(d.id);
+            return true;
+          });
+
+          const sistemasInteres = allDocs.filter(d => {
+            const data = d.data();
+            const nombre = ((data.tipo || '') + ' ' + (data.familia || '') + ' ' + (data.nombre || '') + ' ' + d.id).toLowerCase();
+            return nombre.includes('extintor') || nombre.includes('bie') || nombre.includes('boca');
+          });
+
+          for (const sDoc of sistemasInteres) {
+            let list = await getEquiposInstalados(targetDocId, sDoc.id);
+            if ((!list || list.length === 0) && centro?.id && targetDocId !== centro.id) {
+              list = await getEquiposInstalados(centro.id, sDoc.id);
+            }
+            if (list && list.length > 0) {
+              const sData = sDoc.data() || {};
+              const sNombre = sData.tipo || sData.familia || sData.nombre || sDoc.id || '';
+              const sTipo = sData.tipo || sDoc.id || '';
+              const taggedList = list.map(e => ({
+                ...e,
+                sistemaNombre: e.sistemaNombre || sNombre,
+                sistemaTipo: e.sistemaTipo || sTipo,
+                sistemaId: e.sistemaId || sDoc.id
+              }));
+              const keysToPopulate = [cId, targetDocId, centro?._docId, centro?.id].filter(Boolean) as string[];
+              for (const key of keysToPopulate) {
+                if (!nuevosMap[key]) nuevosMap[key] = [];
+                const otros = (nuevosMap[key] || []).filter(e => e.sistemaId !== sDoc.id);
+                nuevosMap[key] = [...otros, ...taggedList];
+              }
+            }
+          }
+        } catch { /* ignore */ }
+      }
+
+      if (!isMounted) return;
+
+      const resultMapExt: Record<string, ExtintorAlertas> = {};
+      const resultMapBie: Record<string, BieAlertas> = {};
+      for (const cId of Object.keys(nuevosMap)) {
+        const centro = centros.find(c => c._docId === cId || c.id === cId);
+        const alertExt = calcularAlertasExtintores(nuevosMap[cId]);
+        const alertBie = calcularAlertasBies(nuevosMap[cId]);
+        resultMapExt[cId] = alertExt;
+        resultMapBie[cId] = alertBie;
+        if (centro?._docId) {
+          resultMapExt[centro._docId] = alertExt;
+          resultMapBie[centro._docId] = alertBie;
+        }
+        if (centro?.id) {
+          resultMapExt[centro.id] = alertExt;
+          resultMapBie[centro.id] = alertBie;
+        }
+      }
+      setAlertasExtintoresPorCentro(resultMapExt);
+      setAlertasBiesPorCentro(resultMapBie);
+    };
+
+    cargarEquiposAlertas();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [partes, centros]);
 
   // Buscar el técnico que corresponde al usuario logueado (por nombre)
   const tecnicoLogueado = tecnicos.find(t =>
@@ -435,52 +589,108 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
                     </div>
 
                     {/* Fecha programada, recuento de sistemas y periodicidad */}
-                    <div className="flex flex-wrap items-center justify-between gap-y-2 gap-x-4 pt-2.5 border-t border-zinc-100">
-                      <div className="flex items-center gap-3">
-                        <span className="flex items-center gap-1.5 text-xs font-bold text-blue-600">
-                          <Calendar className="w-3.5 h-3.5" />
-                          {parte.fechaProgramada
-                            ? parte.fechaProgramada.replace(/-/g, '/')
-                            : 'Sin fecha'}
-                        </span>
-                        <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-purple-600 bg-purple-50 px-2 py-0.5 rounded-md">
-                          {parte.periodicidad || 'Revisión'}
-                        </span>
-                        <span className="flex items-center gap-1.5 text-xs text-zinc-500 font-medium">
-                          <Layers className="w-3.5 h-3.5 text-zinc-400" />
-                          {sistCount} sist.
-                        </span>
+                    <div className="flex flex-col gap-2 pt-2.5 border-t border-zinc-100">
+                      <div className="flex flex-wrap items-center justify-between gap-y-2 gap-x-4">
+                        <div className="flex flex-wrap items-center gap-3">
+                          <span className="flex items-center gap-1.5 text-xs font-bold text-blue-600">
+                            <Calendar className="w-3.5 h-3.5" />
+                            {parte.fechaProgramada
+                              ? parte.fechaProgramada.replace(/-/g, '/')
+                              : 'Sin fecha'}
+                          </span>
+                          <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-purple-600 bg-purple-50 px-2 py-0.5 rounded-md">
+                            {parte.periodicidad || 'Revisión'}
+                          </span>
+                          <span className="flex items-center gap-1.5 text-xs text-zinc-500 font-medium">
+                            <Layers className="w-3.5 h-3.5 text-zinc-400" />
+                            {sistCount} sist.
+                          </span>
+                          {(() => {
+                            const alertas = alertasExtintoresPorCentro[parte.centroId] ||
+                                            (centro?._docId ? alertasExtintoresPorCentro[centro._docId] : undefined) ||
+                                            (centro?.id ? alertasExtintoresPorCentro[centro.id] : undefined);
+                            if (!alertas) return null;
+                            return (
+                              <>
+                                {alertas.caducados20 > 0 && (
+                                  <span 
+                                    className="text-[11px] font-extrabold text-red-600 bg-red-50 px-2 py-0.5 rounded-md border border-red-200 shadow-xs"
+                                    title={`${alertas.caducados20} extintores caducados de más de 20 años`}
+                                  >
+                                    Ext+20 años: {alertas.caducados20} und.
+                                  </span>
+                                )}
+                                {alertas.retimbres5 > 0 && (
+                                  <span 
+                                    className="text-[11px] font-extrabold text-red-600 bg-red-50 px-2 py-0.5 rounded-md border border-red-200 shadow-xs"
+                                    title={`${alertas.retimbres5} extintores para retimbrar (más de 5 años)`}
+                                  >
+                                    RT: {alertas.retimbres5} und.
+                                  </span>
+                                )}
+                              </>
+                            );
+                          })()}
+                        </div>
+
+                        {/* Botón Descargar Parte Completo Offline */}
+                        <button
+                          type="button"
+                          onClick={(e) => handleDescargarParteOffline(parte, e)}
+                          disabled={downloadingParteId === parte.id}
+                          className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl transition-all ${
+                            downloadedPartesMap[parte.id]
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-300 hover:bg-emerald-100'
+                              : 'bg-sky-50 text-sky-700 border border-sky-300 hover:bg-sky-100 active:scale-95'
+                          }`}
+                          title="Guardar cliente, centro, equipos y plantillas en IndexedDB para trabajar offline sin red"
+                        >
+                          {downloadingParteId === parte.id ? (
+                            <>
+                              <RefreshCw className="w-3.5 h-3.5 animate-spin text-sky-600" />
+                              <span>Descargando...</span>
+                            </>
+                          ) : downloadedPartesMap[parte.id] ? (
+                            <>
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                              <span>Descargado</span>
+                            </>
+                          ) : (
+                            <>
+                              <DownloadCloud className="w-3.5 h-3.5 text-sky-600" />
+                              <span>Descargar parte</span>
+                            </>
+                          )}
+                        </button>
                       </div>
 
-                      {/* Botón Descargar Parte Completo Offline */}
-                      <button
-                        type="button"
-                        onClick={(e) => handleDescargarParteOffline(parte, e)}
-                        disabled={downloadingParteId === parte.id}
-                        className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl transition-all ${
-                          downloadedPartesMap[parte.id]
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-300 hover:bg-emerald-100'
-                            : 'bg-sky-50 text-sky-700 border border-sky-300 hover:bg-sky-100 active:scale-95'
-                        }`}
-                        title="Guardar cliente, centro, equipos y plantillas en IndexedDB para trabajar offline sin red"
-                      >
-                        {downloadingParteId === parte.id ? (
-                          <>
-                            <RefreshCw className="w-3.5 h-3.5 animate-spin text-sky-600" />
-                            <span>Descargando...</span>
-                          </>
-                        ) : downloadedPartesMap[parte.id] ? (
-                          <>
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                            <span>Descargado</span>
-                          </>
-                        ) : (
-                          <>
-                            <DownloadCloud className="w-3.5 h-3.5 text-sky-600" />
-                            <span>Descargar parte</span>
-                          </>
-                        )}
-                      </button>
+                      {/* Avisos de BIEs debajo de los avisos de los extintores */}
+                      {(() => {
+                        const alertasBie = alertasBiesPorCentro[parte.centroId] ||
+                                           (centro?._docId ? alertasBiesPorCentro[centro._docId] : undefined) ||
+                                           (centro?.id ? alertasBiesPorCentro[centro.id] : undefined);
+                        if (!alertasBie || (alertasBie.caducados20 === 0 && alertasBie.pruebasHidraulicas5 === 0)) return null;
+                        return (
+                          <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-zinc-50">
+                            {alertasBie.caducados20 > 0 && (
+                              <span 
+                                className="text-[11px] font-extrabold text-red-600 bg-red-50 px-2 py-0.5 rounded-md border border-red-200 shadow-xs"
+                                title={`${alertasBie.caducados20} BIEs caducados de más de 20 años`}
+                              >
+                                Bie+20 años: {alertasBie.caducados20} und.
+                              </span>
+                            )}
+                            {alertasBie.pruebasHidraulicas5 > 0 && (
+                              <span 
+                                className="text-[11px] font-extrabold text-red-600 bg-red-50 px-2 py-0.5 rounded-md border border-red-200 shadow-xs"
+                                title={`${alertasBie.pruebasHidraulicas5} BIEs para prueba hidráulica (más de 5 años)`}
+                              >
+                                PH: {alertasBie.pruebasHidraulicas5} und.
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
 
@@ -492,6 +702,49 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
                       <p className="text-[10px] text-zinc-400 font-mono mt-0.5">
                         <span className="text-blue-600 font-bold">Parte: {parte.numeroMantenimiento || parte.id}</span>{centro?.poblacion ? ` - ${centro.poblacion}` : ''}
                       </p>
+                      {(() => {
+                        const alertasExt = alertasExtintoresPorCentro[parte.centroId] ||
+                                           (centro?._docId ? alertasExtintoresPorCentro[centro._docId] : undefined) ||
+                                           (centro?.id ? alertasExtintoresPorCentro[centro.id] : undefined);
+                        const alertasBie = alertasBiesPorCentro[parte.centroId] ||
+                                           (centro?._docId ? alertasBiesPorCentro[centro._docId] : undefined) ||
+                                           (centro?.id ? alertasBiesPorCentro[centro.id] : undefined);
+                        const hasExt = alertasExt && (alertasExt.caducados20 > 0 || alertasExt.retimbres5 > 0);
+                        const hasBie = alertasBie && (alertasBie.caducados20 > 0 || alertasBie.pruebasHidraulicas5 > 0);
+                        if (!hasExt && !hasBie) return null;
+                        return (
+                          <div className="flex flex-col gap-1 mt-1">
+                            {hasExt && (
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                {alertasExt.caducados20 > 0 && (
+                                  <span className="text-[11px] font-extrabold text-red-600 bg-red-50 px-2 py-0.5 rounded-md border border-red-200 shadow-xs" title={`${alertasExt.caducados20} extintores caducados de más de 20 años`}>
+                                    Ext+20 años: {alertasExt.caducados20} und.
+                                  </span>
+                                )}
+                                {alertasExt.retimbres5 > 0 && (
+                                  <span className="text-[11px] font-extrabold text-red-600 bg-red-50 px-2 py-0.5 rounded-md border border-red-200 shadow-xs" title={`${alertasExt.retimbres5} extintores para retimbrar (más de 5 años)`}>
+                                    RT: {alertasExt.retimbres5} und.
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                            {hasBie && (
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                {alertasBie.caducados20 > 0 && (
+                                  <span className="text-[11px] font-extrabold text-red-600 bg-red-50 px-2 py-0.5 rounded-md border border-red-200 shadow-xs" title={`${alertasBie.caducados20} BIEs caducados de más de 20 años`}>
+                                    Bie+20 años: {alertasBie.caducados20} und.
+                                  </span>
+                                )}
+                                {alertasBie.pruebasHidraulicas5 > 0 && (
+                                  <span className="text-[11px] font-extrabold text-red-600 bg-red-50 px-2 py-0.5 rounded-md border border-red-200 shadow-xs" title={`${alertasBie.pruebasHidraulicas5} BIEs para prueba hidráulica (más de 5 años)`}>
+                                    PH: {alertasBie.pruebasHidraulicas5} und.
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                     <div className="w-24 text-center">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-purple-600 bg-purple-50 px-2 py-1 rounded-md inline-block whitespace-nowrap">

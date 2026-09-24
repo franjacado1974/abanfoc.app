@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileText, Building2, MapPin, CalendarDays, Search, Trash2, Download, Eye, X, Check, ArrowLeft, Filter, ChevronDown } from 'lucide-react';
-import { subscribePartes, subscribeCentros, subscribeClientes, subscribeTecnicos, deleteParte, db, updateParte } from './firebase';
+import { FileText, Building2, MapPin, CalendarDays, Search, Trash2, Download, Eye, X, Check, ArrowLeft, Filter, ChevronDown, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
+import { subscribePartes, subscribeCentros, subscribeClientes, subscribeTecnicos, deleteParte, db, updateParte, getEquiposInstalados } from './firebase';
 import { collection, getDocs, doc, getDoc, query, where } from 'firebase/firestore';
 import { generarActaExtintoresPDF, generarAlbaranPDF, generarCertificadoPDF } from './pdfGenerator';
 import { generarContratoPDF } from './pdfContratoGenerator';
+import { calcularAlertasExtintores, calcularAlertasBies, type ExtintorAlertas, type BieAlertas } from './recursos-compartidos/services/sistemasUtils';
 
 interface ParteItem {
   id: string;
@@ -51,16 +52,84 @@ interface Centro {
 
 export default function Partes() {
   const navigate = useNavigate();
-  const [partes, setPartes] = useState<ParteItem[]>([]);
-  const [centros, setCentros] = useState<Centro[]>([]);
-  const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [tecnicos, setTecnicos] = useState<any[]>([]);
+  const [partes, setPartes] = useState<ParteItem[]>(() => {
+    try { return JSON.parse(localStorage.getItem('firecheck_db_partes') || '[]'); } catch { return []; }
+  });
+  const [centros, setCentros] = useState<Centro[]>(() => {
+    try { return JSON.parse(localStorage.getItem('firecheck_db_centros') || '[]'); } catch { return []; }
+  });
+  const [clientes, setClientes] = useState<Cliente[]>(() => {
+    try { return JSON.parse(localStorage.getItem('firecheck_db_clientes') || '[]'); } catch { return []; }
+  });
+  const [tecnicos, setTecnicos] = useState<any[]>(() => {
+    try { return JSON.parse(localStorage.getItem('firecheck_db_tecnicos') || '[]'); } catch { return []; }
+  });
   const [search, setSearch] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [estadoFilter, setEstadoFilter] = useState('TODOS');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
+  const [sortField, setSortField] = useState<'fecha' | 'cliente' | 'centro' | 'poblacion' | 'tipo'>('fecha');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+
+  const handleSort = (field: 'fecha' | 'cliente' | 'centro' | 'poblacion' | 'tipo') => {
+    if (sortField === field) {
+      setSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortOrder(field === 'fecha' ? 'desc' : 'asc');
+    }
+  };
+  const [alertasExtintoresPorCentro, setAlertasExtintoresPorCentro] = useState<Record<string, ExtintorAlertas>>(() => {
+    try {
+      const allEquipos: any[] = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
+      const storedCentros: any[] = JSON.parse(localStorage.getItem('firecheck_db_centros') || '[]');
+      const map: Record<string, ExtintorAlertas> = {};
+      const equiposPorCentro: Record<string, any[]> = {};
+      for (const eq of allEquipos) {
+        if (eq.centroId) {
+          if (!equiposPorCentro[eq.centroId]) equiposPorCentro[eq.centroId] = [];
+          equiposPorCentro[eq.centroId].push(eq);
+        }
+      }
+      for (const cId of Object.keys(equiposPorCentro)) {
+        const alertRes = calcularAlertasExtintores(equiposPorCentro[cId]);
+        map[cId] = alertRes;
+        const cObj = storedCentros.find((c: any) => c._docId === cId || c.id === cId);
+        if (cObj?._docId) map[cObj._docId] = alertRes;
+        if (cObj?.id) map[cObj.id] = alertRes;
+      }
+      return map;
+    } catch {
+      return {};
+    }
+  });
+
+  const [alertasBiesPorCentro, setAlertasBiesPorCentro] = useState<Record<string, BieAlertas>>(() => {
+    try {
+      const allEquipos: any[] = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
+      const storedCentros: any[] = JSON.parse(localStorage.getItem('firecheck_db_centros') || '[]');
+      const map: Record<string, BieAlertas> = {};
+      const equiposPorCentro: Record<string, any[]> = {};
+      for (const eq of allEquipos) {
+        if (eq.centroId) {
+          if (!equiposPorCentro[eq.centroId]) equiposPorCentro[eq.centroId] = [];
+          equiposPorCentro[eq.centroId].push(eq);
+        }
+      }
+      for (const cId of Object.keys(equiposPorCentro)) {
+        const alertRes = calcularAlertasBies(equiposPorCentro[cId]);
+        map[cId] = alertRes;
+        const cObj = storedCentros.find((c: any) => c._docId === cId || c.id === cId);
+        if (cObj?._docId) map[cObj._docId] = alertRes;
+        if (cObj?.id) map[cObj.id] = alertRes;
+      }
+      return map;
+    } catch {
+      return {};
+    }
+  });
 
   const [showDownloadModal, setShowDownloadModal] = useState(false);
   const [selectedParteToDownload, setSelectedParteToDownload] = useState<ParteItem | null>(null);
@@ -119,6 +188,109 @@ export default function Partes() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Cargar equipos de extintores para alertas preventivas (+20 años y RT 5 años)
+  useEffect(() => {
+    const centroIds = [...new Set(partes.map(p => p.centroId).filter(Boolean))];
+    if (centroIds.length === 0) return;
+
+    let isMounted = true;
+
+    const cargarAlertasCentros = async () => {
+      const nuevosMap: Record<string, any[]> = {};
+
+      try {
+        const stored = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
+        for (const eq of stored) {
+          if (eq.centroId) {
+            if (!nuevosMap[eq.centroId]) nuevosMap[eq.centroId] = [];
+            nuevosMap[eq.centroId].push(eq);
+          }
+        }
+      } catch { /* ignore */ }
+
+      for (const cId of centroIds) {
+        try {
+          const centro = centros.find(c => c._docId === cId || c.id === cId);
+          const targetDocId = centro?._docId || centro?.id || cId;
+
+          let snapInv = await getDocs(collection(db, 'centros', targetDocId, 'inventario'));
+          if (snapInv.empty && centro?.id && targetDocId !== centro.id) {
+            snapInv = await getDocs(collection(db, 'centros', centro.id, 'inventario'));
+          }
+          let snapSis = await getDocs(collection(db, 'centros', targetDocId, 'sistemas'));
+          if (snapSis.empty && centro?.id && targetDocId !== centro.id) {
+            snapSis = await getDocs(collection(db, 'centros', centro.id, 'sistemas'));
+          }
+
+          const seenSist = new Set<string>();
+          const allDocs = [...snapInv.docs, ...snapSis.docs].filter(d => {
+            if (seenSist.has(d.id)) return false;
+            seenSist.add(d.id);
+            return true;
+          });
+
+          const sistemasInteres = allDocs.filter(d => {
+            const data = d.data();
+            const nombre = ((data.tipo || '') + ' ' + (data.familia || '') + ' ' + (data.nombre || '') + ' ' + d.id).toLowerCase();
+            return nombre.includes('extintor') || nombre.includes('bie') || nombre.includes('boca');
+          });
+
+          for (const sDoc of sistemasInteres) {
+            let list = await getEquiposInstalados(targetDocId, sDoc.id);
+            if ((!list || list.length === 0) && centro?.id && targetDocId !== centro.id) {
+              list = await getEquiposInstalados(centro.id, sDoc.id);
+            }
+            if (list && list.length > 0) {
+              const sData = sDoc.data() || {};
+              const sNombre = sData.tipo || sData.familia || sData.nombre || sDoc.id || '';
+              const sTipo = sData.tipo || sDoc.id || '';
+              const taggedList = list.map(e => ({
+                ...e,
+                sistemaNombre: e.sistemaNombre || sNombre,
+                sistemaTipo: e.sistemaTipo || sTipo,
+                sistemaId: e.sistemaId || sDoc.id
+              }));
+              const keys = [cId, targetDocId, centro?._docId, centro?.id].filter(Boolean) as string[];
+              for (const k of keys) {
+                if (!nuevosMap[k]) nuevosMap[k] = [];
+                const otros = (nuevosMap[k] || []).filter(e => e.sistemaId !== sDoc.id);
+                nuevosMap[k] = [...otros, ...taggedList];
+              }
+            }
+          }
+        } catch { /* ignore */ }
+      }
+
+      if (!isMounted) return;
+
+      const resultMapExt: Record<string, ExtintorAlertas> = {};
+      const resultMapBie: Record<string, BieAlertas> = {};
+      for (const k of Object.keys(nuevosMap)) {
+        const centro = centros.find(c => c._docId === k || c.id === k);
+        const alertExt = calcularAlertasExtintores(nuevosMap[k]);
+        const alertBie = calcularAlertasBies(nuevosMap[k]);
+        resultMapExt[k] = alertExt;
+        resultMapBie[k] = alertBie;
+        if (centro?._docId) {
+          resultMapExt[centro._docId] = alertExt;
+          resultMapBie[centro._docId] = alertBie;
+        }
+        if (centro?.id) {
+          resultMapExt[centro.id] = alertExt;
+          resultMapBie[centro.id] = alertBie;
+        }
+      }
+      setAlertasExtintoresPorCentro(resultMapExt);
+      setAlertasBiesPorCentro(resultMapBie);
+    };
+
+    cargarAlertasCentros();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [partes, centros]);
 
   const getCliente = (clienteId: string) => clientes.find(c => c.id === clienteId);
   const getCentro = (centroId: string) => centros.find(c => c._docId === centroId || c.id === centroId);
@@ -639,16 +811,42 @@ export default function Partes() {
     }
     return pass;
   }).sort((a, b) => {
-    const hasA = a.fechaProgramada && typeof a.fechaProgramada === 'string' && a.fechaProgramada.trim() !== '';
-    const hasB = b.fechaProgramada && typeof b.fechaProgramada === 'string' && b.fechaProgramada.trim() !== '';
-    if (!hasA && !hasB) {
-      return (b.fechaCreacion || '').localeCompare(a.fechaCreacion || '');
+    let comparison = 0;
+    if (sortField === 'fecha') {
+      const hasA = a.fechaProgramada && typeof a.fechaProgramada === 'string' && a.fechaProgramada.trim() !== '';
+      const hasB = b.fechaProgramada && typeof b.fechaProgramada === 'string' && b.fechaProgramada.trim() !== '';
+      if (!hasA && !hasB) {
+        comparison = (a.fechaCreacion || '').localeCompare(b.fechaCreacion || '');
+      } else if (!hasA) {
+        comparison = 1;
+      } else if (!hasB) {
+        comparison = -1;
+      } else {
+        const [da, ma, ya] = (typeof a.fechaProgramada === 'string' ? a.fechaProgramada : '').split('-').map(Number);
+        const [db, mb, yb] = (typeof b.fechaProgramada === 'string' ? b.fechaProgramada : '').split('-').map(Number);
+        const numA = (ya || 0) * 10000 + (ma || 0) * 100 + (da || 0);
+        const numB = (yb || 0) * 10000 + (mb || 0) * 100 + (db || 0);
+        comparison = numA - numB;
+      }
+    } else if (sortField === 'cliente') {
+      const clienteA = getCliente(a.clienteId)?.nombre || '';
+      const clienteB = getCliente(b.clienteId)?.nombre || '';
+      comparison = clienteA.localeCompare(clienteB, 'es', { sensitivity: 'base' });
+    } else if (sortField === 'centro') {
+      const centroA = getCentro(a.centroId)?.nombre || a.nombreCentro || '';
+      const centroB = getCentro(b.centroId)?.nombre || b.nombreCentro || '';
+      comparison = centroA.localeCompare(centroB, 'es', { sensitivity: 'base' });
+    } else if (sortField === 'poblacion') {
+      const pobA = getCentro(a.centroId)?.poblacion || '';
+      const pobB = getCentro(b.centroId)?.poblacion || '';
+      comparison = pobA.localeCompare(pobB, 'es', { sensitivity: 'base' });
+    } else if (sortField === 'tipo') {
+      const tipoA = getTipoRevision(a.periodicidad);
+      const tipoB = getTipoRevision(b.periodicidad);
+      comparison = tipoA.localeCompare(tipoB, 'es', { sensitivity: 'base' });
     }
-    if (!hasA) return 1;
-    if (!hasB) return -1;
-    const [da, ma, ya] = (typeof a.fechaProgramada === 'string' ? a.fechaProgramada : '').split('-').map(Number);
-    const [db, mb, yb] = (typeof b.fechaProgramada === 'string' ? b.fechaProgramada : '').split('-').map(Number);
-    return (yb * 10000 + mb * 100 + db) - (ya * 10000 + ma * 100 + da);
+
+    return sortOrder === 'asc' ? comparison : -comparison;
   });
 
   return (
@@ -789,43 +987,88 @@ export default function Partes() {
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-zinc-200/85 bg-white">
-                    <th className="text-left px-6 py-4 text-xs font-bold uppercase tracking-wider text-red-600">
-                      <div className="flex items-center gap-2">
-                        <Building2 className="w-4 h-4" />
-                        Cliente
+                  <tr className="bg-zinc-200/90 border-b border-zinc-300 text-[11px] font-extrabold uppercase tracking-wider text-zinc-700">
+                    <th 
+                      onClick={() => handleSort('cliente')} 
+                      className="px-6 py-3.5 text-left whitespace-nowrap cursor-pointer hover:text-zinc-950 transition-colors select-none group"
+                      title="Ordenar por cliente"
+                    >
+                      <div className="inline-flex items-center gap-1.5">
+                        <Building2 className="w-3.5 h-3.5 text-zinc-500" />
+                        <span>Cliente</span>
+                        {sortField === 'cliente' ? (
+                          sortOrder === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-red-600 stroke-[2.5]" /> : <ArrowDown className="w-3.5 h-3.5 text-red-600 stroke-[2.5]" />
+                        ) : (
+                          <ArrowUpDown className="w-3.5 h-3.5 text-zinc-400 group-hover:text-zinc-600 transition-colors" />
+                        )}
                       </div>
                     </th>
-                    <th className="text-left px-6 py-4 text-xs font-bold uppercase tracking-wider text-red-600">
-                      <div className="flex items-center gap-2">
-                        <Building2 className="w-4 h-4" />
-                        Centro
+                    <th 
+                      onClick={() => handleSort('centro')} 
+                      className="px-6 py-3.5 text-left whitespace-nowrap cursor-pointer hover:text-zinc-950 transition-colors select-none group"
+                      title="Ordenar por centro"
+                    >
+                      <div className="inline-flex items-center gap-1.5">
+                        <Building2 className="w-3.5 h-3.5 text-zinc-500" />
+                        <span>Centro</span>
+                        {sortField === 'centro' ? (
+                          sortOrder === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-red-600 stroke-[2.5]" /> : <ArrowDown className="w-3.5 h-3.5 text-red-600 stroke-[2.5]" />
+                        ) : (
+                          <ArrowUpDown className="w-3.5 h-3.5 text-zinc-400 group-hover:text-zinc-600 transition-colors" />
+                        )}
                       </div>
                     </th>
-                    <th className="text-left px-6 py-4 text-xs font-bold uppercase tracking-wider text-red-600">
-                      <div className="flex items-center gap-2">
-                        <MapPin className="w-4 h-4" />
-                        Población
+                    <th 
+                      onClick={() => handleSort('poblacion')} 
+                      className="px-6 py-3.5 text-left whitespace-nowrap cursor-pointer hover:text-zinc-950 transition-colors select-none group"
+                      title="Ordenar por población"
+                    >
+                      <div className="inline-flex items-center gap-1.5">
+                        <MapPin className="w-3.5 h-3.5 text-zinc-500" />
+                        <span>Población</span>
+                        {sortField === 'poblacion' ? (
+                          sortOrder === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-red-600 stroke-[2.5]" /> : <ArrowDown className="w-3.5 h-3.5 text-red-600 stroke-[2.5]" />
+                        ) : (
+                          <ArrowUpDown className="w-3.5 h-3.5 text-zinc-400 group-hover:text-zinc-600 transition-colors" />
+                        )}
                       </div>
                     </th>
-                    <th className="text-left px-6 py-4 text-xs font-bold uppercase tracking-wider text-red-600">
-                      <div className="flex items-center gap-2">
-                        <CalendarDays className="w-4 h-4" />
-                        Fecha Planificada
+                    <th 
+                      onClick={() => handleSort('fecha')} 
+                      className="px-6 py-3.5 text-left whitespace-nowrap cursor-pointer hover:text-zinc-950 transition-colors select-none group"
+                      title="Ordenar por fecha planificada"
+                    >
+                      <div className="inline-flex items-center gap-1.5">
+                        <CalendarDays className="w-3.5 h-3.5 text-zinc-500" />
+                        <span>Fecha Planificada</span>
+                        {sortField === 'fecha' ? (
+                          sortOrder === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-red-600 stroke-[2.5]" /> : <ArrowDown className="w-3.5 h-3.5 text-red-600 stroke-[2.5]" />
+                        ) : (
+                          <ArrowUpDown className="w-3.5 h-3.5 text-zinc-400 group-hover:text-zinc-600 transition-colors" />
+                        )}
                       </div>
                     </th>
-                    <th className="text-left px-6 py-4 text-xs font-bold uppercase tracking-wider text-red-600">
-                      <div className="flex items-center gap-2">
-                        <FileText className="w-4 h-4" />
-                        Tipo Revisión
+                    <th 
+                      onClick={() => handleSort('tipo')} 
+                      className="px-6 py-3.5 text-left whitespace-nowrap cursor-pointer hover:text-zinc-950 transition-colors select-none group"
+                      title="Ordenar por tipo de revisión"
+                    >
+                      <div className="inline-flex items-center gap-1.5">
+                        <FileText className="w-3.5 h-3.5 text-zinc-500" />
+                        <span>Tipo Revisión</span>
+                        {sortField === 'tipo' ? (
+                          sortOrder === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-red-600 stroke-[2.5]" /> : <ArrowDown className="w-3.5 h-3.5 text-red-600 stroke-[2.5]" />
+                        ) : (
+                          <ArrowUpDown className="w-3.5 h-3.5 text-zinc-400 group-hover:text-zinc-600 transition-colors" />
+                        )}
                       </div>
                     </th>
-                    <th className="text-right px-4 py-4 text-xs font-bold uppercase tracking-wider text-red-600">
+                    <th className="text-right px-6 py-3.5 text-[11px] font-extrabold uppercase tracking-wider text-zinc-700 whitespace-nowrap">
                       Acciones
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-sky-50">
+                <tbody className="divide-y divide-zinc-200">
                   {partesPlanificados.map(parte => {
                     const centro = getCentro(parte.centroId);
                     const cliente = getCliente(parte.clienteId);
@@ -862,9 +1105,69 @@ export default function Partes() {
                           </p>
                         </td>
                         <td className="px-6 py-4">
-                          <span className={`inline-block px-3 py-1 text-[11px] font-bold rounded-full border ${getRevisionColor(parte.periodicidad)}`}>
-                            {getTipoRevision(parte.periodicidad)}
-                          </span>
+                          <div className="flex flex-col items-start gap-1">
+                            <span className={`inline-block px-3 py-1 text-[11px] font-bold rounded-full border ${getRevisionColor(parte.periodicidad)}`}>
+                              {getTipoRevision(parte.periodicidad)}
+                            </span>
+                            {(() => {
+                              const alertasExt = alertasExtintoresPorCentro[parte.centroId] ||
+                                                 (centro?._docId ? alertasExtintoresPorCentro[centro._docId] : undefined) ||
+                                                 (centro?.id ? alertasExtintoresPorCentro[centro.id] : undefined);
+                              const alertasBie = alertasBiesPorCentro[parte.centroId] ||
+                                                 (centro?._docId ? alertasBiesPorCentro[centro._docId] : undefined) ||
+                                                 (centro?.id ? alertasBiesPorCentro[centro.id] : undefined);
+
+                              const hasExtAlerts = alertasExt && (alertasExt.caducados20 > 0 || alertasExt.retimbres5 > 0);
+                              const hasBieAlerts = alertasBie && (alertasBie.caducados20 > 0 || alertasBie.pruebasHidraulicas5 > 0);
+
+                              if (!hasExtAlerts && !hasBieAlerts) return null;
+
+                              return (
+                                <>
+                                  {hasExtAlerts && (
+                                    <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                                      {alertasExt.caducados20 > 0 && (
+                                        <span 
+                                          className="inline-flex items-center text-[11px] font-extrabold text-red-600 bg-red-50 px-2 py-0.5 rounded-md border border-red-200 shadow-xs"
+                                          title={`${alertasExt.caducados20} extintores caducados de más de 20 años`}
+                                        >
+                                          Ext+20 años: {alertasExt.caducados20} und.
+                                        </span>
+                                      )}
+                                      {alertasExt.retimbres5 > 0 && (
+                                        <span 
+                                          className="inline-flex items-center text-[11px] font-extrabold text-red-600 bg-red-50 px-2 py-0.5 rounded-md border border-red-200 shadow-xs"
+                                          title={`${alertasExt.retimbres5} extintores para retimbrar (más de 5 años)`}
+                                        >
+                                          RT: {alertasExt.retimbres5} und.
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+                                  {hasBieAlerts && (
+                                    <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                                      {alertasBie.caducados20 > 0 && (
+                                        <span 
+                                          className="inline-flex items-center text-[11px] font-extrabold text-red-600 bg-red-50 px-2 py-0.5 rounded-md border border-red-200 shadow-xs"
+                                          title={`${alertasBie.caducados20} BIEs caducados de más de 20 años`}
+                                        >
+                                          Bie+20 años: {alertasBie.caducados20} und.
+                                        </span>
+                                      )}
+                                      {alertasBie.pruebasHidraulicas5 > 0 && (
+                                        <span 
+                                          className="inline-flex items-center text-[11px] font-extrabold text-red-600 bg-red-50 px-2 py-0.5 rounded-md border border-red-200 shadow-xs"
+                                          title={`${alertasBie.pruebasHidraulicas5} BIEs para prueba hidráulica (más de 5 años)`}
+                                        >
+                                          PH: {alertasBie.pruebasHidraulicas5} und.
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+                                </>
+                              );
+                            })()}
+                          </div>
                         </td>
                         <td className="px-4 py-4">
                           <div className="flex items-center justify-end gap-2">

@@ -520,11 +520,6 @@ export default function RevisionChecklist() {
     // Estado para modal de edición de equipo
     const [editEquipo, setEditEquipo] = useState<string | null>(null);
 
-    // Estado para modal de añadir equipo
-    const [addEquipo, setAddEquipo] = useState<{ isOpen: boolean; sistemaId: string | null; codigo: string; nombre: string; ubicacion: string; placa: string; fechaFabricacion: string; ultimoRetimbre: string }>({
-        isOpen: false, sistemaId: null, codigo: '', nombre: '', ubicacion: '', placa: '', fechaFabricacion: '', ultimoRetimbre: ''
-    });
-
     // Estados para pre-cierre y firmas
     const [showEquiposSinRevisarModal, setShowEquiposSinRevisarModal] = useState(false);
     const [pendingEquiposCount, setPendingEquiposCount] = useState(0);
@@ -552,10 +547,10 @@ export default function RevisionChecklist() {
     const pendingEquiposRef = useRef<Map<string, EquipoInstalado>>(new Map());
     const inFlightSyncRef = useRef<Set<string>>(new Set());
     const lastActiveEquipoIdRef = useRef<string | null>(null);
-    const [eqSyncStates, setEqSyncStates] = useState<Record<string, 'saving' | 'saved' | 'offline'>>({});
+    const [eqSyncStates, setEqSyncStates] = useState<Record<string, 'pending' | 'saving' | 'saved' | 'offline'>>({});
 
-    const getEquipoSyncStatus = (eqId: string): 'saving' | 'saved' | 'offline' => {
-        return eqSyncStates[eqId] || 'saved';
+    const getEquipoSyncStatus = (eqId: string): 'pending' | 'saving' | 'saved' | 'offline' => {
+        return eqSyncStates[eqId] || 'pending';
     };
 
     // Sincroniza inmediatamente un equipo específico en Firestore
@@ -564,7 +559,10 @@ export default function RevisionChecklist() {
             clearTimeout(syncTimersRef.current[eqId]);
             delete syncTimersRef.current[eqId];
         }
-        const eqToSync = pendingEquiposRef.current.get(eqId);
+        let eqToSync = pendingEquiposRef.current.get(eqId);
+        if (!eqToSync) {
+            eqToSync = equiposInstalados.find(e => e.id === eqId);
+        }
         if (eqToSync) {
             inFlightSyncRef.current.add(eqId);
             setEqSyncStates(prev => ({ ...prev, [eqId]: 'saving' }));
@@ -593,6 +591,58 @@ export default function RevisionChecklist() {
             if (lastActiveEquipoIdRef.current === eqId) {
                 lastActiveEquipoIdRef.current = null;
             }
+        }
+    };
+
+    // Guardado manual inmediato por equipo (botón "Guardar")
+    const handleGuardarEquipoManual = async (eqId: string, equipoDirecto?: EquipoInstalado) => {
+        if (syncTimersRef.current[eqId]) {
+            clearTimeout(syncTimersRef.current[eqId]);
+            delete syncTimersRef.current[eqId];
+        }
+        if (equipoDirecto) {
+            pendingEquiposRef.current.set(eqId, equipoDirecto);
+        }
+        const currentEq = equipoDirecto || pendingEquiposRef.current.get(eqId) || equiposInstalados.find(e => e.id === eqId);
+        if (!currentEq) return;
+
+        setEqSyncStates(prev => ({ ...prev, [eqId]: 'saving' }));
+        inFlightSyncRef.current.add(eqId);
+
+        // 1. Guardar de forma inmediata en LocalStorage
+        try {
+            const allEquiposStored = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
+            const otros = allEquiposStored.filter((e: any) => e.id !== eqId);
+            safeLocalStorageSet('firecheck_db_equipos_instalados', JSON.stringify([...otros, currentEq]));
+        } catch (e) {}
+
+        // 2. Guardar en IndexedDB offline bundle
+        if (parteId) {
+            const updatedList = equiposInstalados.map(e => e.id === eqId ? currentEq : e);
+            updateParteOfflineData(parteId, { equiposInstalados: updatedList }).catch(() => {});
+            addPendingSyncItem(parteId, 'equipo', eqId, currentEq).catch(() => {});
+        }
+
+        // 3. Sincronizar en Firestore si hay conexión
+        if (navigator.onLine) {
+            try {
+                const targetCentroId = currentEq.centroId || centroId;
+                const targetSistemaId = currentEq.sistemaId;
+                await updateEquipoInstalado(eqId, currentEq as any, targetCentroId, targetSistemaId);
+                pendingEquiposRef.current.delete(eqId);
+                inFlightSyncRef.current.delete(eqId);
+                setEqSyncStates(prev => ({ ...prev, [eqId]: 'saved' }));
+                showToast('✓ Equipo guardado en Firestore');
+            } catch (err) {
+                console.error('Error guardando equipo en Firestore:', err);
+                inFlightSyncRef.current.delete(eqId);
+                setEqSyncStates(prev => ({ ...prev, [eqId]: 'offline' }));
+                showToast('✓ Guardado en local (Sin conexión)');
+            }
+        } else {
+            inFlightSyncRef.current.delete(eqId);
+            setEqSyncStates(prev => ({ ...prev, [eqId]: 'offline' }));
+            showToast('✓ Guardado en local (Modo offline)');
         }
     };
 
@@ -694,7 +744,9 @@ export default function RevisionChecklist() {
                                 }
                             }
                         }
-                        await updateEquipoInstalado(item.blockId, payloadToSync);
+                        const targetCentroId = payloadToSync.centroId || centroId;
+                        const targetSistemaId = payloadToSync.sistemaId;
+                        await updateEquipoInstalado(item.blockId, payloadToSync, targetCentroId, targetSistemaId);
                     } else if (item.blockType === 'parte') {
                         const docId = (parte as any)?._docId || parte?.id;
                         if (docId) {
@@ -914,14 +966,31 @@ export default function RevisionChecklist() {
                         const esEnVuelo = inFlightSyncRef.current.has(itemFromFirestore.id);
                         const equipoLocalActual = actualesEsteSistema.find(e => e.id === itemFromFirestore.id);
 
-                        if ((esPendienteLocal || esEnVuelo) && equipoLocalActual) {
-                            // Preservar estado local solo si hay un cambio en vuelo o guardándose
-                            return equipoLocalActual;
+                        if (equipoLocalActual) {
+                            if (esPendienteLocal || esEnVuelo) {
+                                // Preservar estado local prioritariamente si hay cambios en vuelo o pendientes
+                                return { ...itemFromFirestore, ...equipoLocalActual };
+                            }
+                            // Fusión inteligente no destructiva:
+                            // Preserva cualquier dato que el usuario haya rellenado en esta sesión si en Firestore viene vacío o indefinido
+                            const merged = { ...itemFromFirestore };
+                            for (const key of Object.keys(equipoLocalActual)) {
+                                const localVal = (equipoLocalActual as any)[key];
+                                const remoteVal = (itemFromFirestore as any)[key];
+                                if (localVal !== undefined && localVal !== null && localVal !== '' && (remoteVal === undefined || remoteVal === null || remoteVal === '')) {
+                                    (merged as any)[key] = localVal;
+                                }
+                            }
+                            return merged;
                         }
                         return itemFromFirestore;
                     });
 
-                    const resultEquipos = [...otrosSistemas, ...itemsFusionados];
+                    // Preservar equipos creados localmente que aún no se hayan reflejado en el listener de Firestore
+                    const idsFirestore = new Set(itemsEvaluados.map(i => i.id));
+                    const nuevosLocales = actualesEsteSistema.filter(e => !idsFirestore.has(e.id));
+
+                    const resultEquipos = [...otrosSistemas, ...itemsFusionados, ...nuevosLocales];
                     if (parteId) {
                         updateParteOfflineData(parteId, { equiposInstalados: resultEquipos }).catch(() => {});
                     }
@@ -940,7 +1009,13 @@ export default function RevisionChecklist() {
         safeLocalStorageSet('firecheck_db_equipos_instalados', JSON.stringify(updatedAllEquipos));
         // Sincronizar con Firestore
         for (const eq of currentEquipos) {
-            try { await updateEquipoInstalado(eq.id, eq as any); } catch (err) { console.error('Error sincronizando equipo en Firestore:', err); }
+            try {
+                const cId = eq.centroId || centroId;
+                const sId = eq.sistemaId;
+                await updateEquipoInstalado(eq.id, eq as any, cId, sId);
+            } catch (err) {
+                console.error('Error sincronizando equipo en Firestore:', err);
+            }
         }
         return updatedAllEquipos;
     };
@@ -1088,8 +1163,8 @@ export default function RevisionChecklist() {
             // Sincronización inteligente con debounce por equipo y flush si cambia de equipo
             const equipoModificado = updatedEquipos.find(eq => eq.id === equipoId);
             if (equipoModificado) {
-                // Marcar estado local como guardando/pendiente
-                setEqSyncStates(prev => ({ ...prev, [equipoId]: 'saving' }));
+                // Marcar estado local como pendiente (botón Azul Guardar)
+                setEqSyncStates(prev => ({ ...prev, [equipoId]: 'pending' }));
 
                 // Respaldar inmediatamente todo en localStorage para cero pérdida offline
                 try {
@@ -1098,7 +1173,7 @@ export default function RevisionChecklist() {
                     safeLocalStorageSet('firecheck_db_equipos_instalados', JSON.stringify([...otrosCentros, ...updatedEquipos]));
                 } catch (e) {}
 
-                // Mejora 1: Si cambia de equipo antes de 2.5s, sincronizar el equipo anterior de forma inmediata
+                // Si cambia de equipo, sincronizar el equipo anterior de forma inmediata
                 if (lastActiveEquipoIdRef.current && lastActiveEquipoIdRef.current !== equipoId) {
                     flushEquipoSync(lastActiveEquipoIdRef.current);
                 }
@@ -1112,7 +1187,10 @@ export default function RevisionChecklist() {
                     addPendingSyncItem(parteId, 'equipo', equipoId, equipoModificado).catch(() => {});
                 }
 
-                // Programar sincronización en 600ms tras dejar de teclear
+                // Cancelar timer anterior y programar sincronización en 600ms tras dejar de teclear
+                if (syncTimersRef.current[equipoId]) {
+                    clearTimeout(syncTimersRef.current[equipoId]);
+                }
                 syncTimersRef.current[equipoId] = setTimeout(() => {
                     flushEquipoSync(equipoId);
                 }, 600);
@@ -1547,6 +1625,106 @@ export default function RevisionChecklist() {
         }
     };
 
+    const handleAnadirEquipoDirecto = async (sistemaId: string) => {
+        try {
+            const equiposDelSistema = equiposInstalados.filter(e => e.sistemaId === sistemaId);
+            const itemsToUse = checklistItemsPorSistema[sistemaId] || getItemsToUse(sistemaId) || [];
+
+            // Buscar clave dinámica de "Orden de lista" si existe
+            const itemOrden = itemsToUse.find((it: any) => it.label?.toLowerCase().trim() === 'orden de lista');
+            const ordenKey = itemOrden?.key;
+
+            let siguienteNumero = 1;
+            if (equiposDelSistema.length > 0) {
+                const numeros = equiposDelSistema
+                    .map(e => {
+                        const val = ordenKey ? (e as any)[ordenKey] || e.codigo : e.codigo;
+                        return parseInt(val || '0', 10);
+                    })
+                    .filter(n => !isNaN(n));
+                siguienteNumero = numeros.length > 0 ? Math.max(...numeros) + 1 : equiposDelSistema.length + 1;
+            }
+            const nextCodigo = siguienteNumero.toString().padStart(2, '0');
+
+            let newId = '';
+            try {
+                newId = `EQ-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+            } catch {
+                newId = `EQ-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+            }
+
+            // Defaults para respuestas 'CORRECTO' de la plantilla del sistema
+            const defaultCorrecto: Record<string, string> = {};
+            itemsToUse.forEach((item: ChecklistItem) => {
+                const opciones = (item as any).opciones || [];
+                if (opciones.includes('CORRECTO')) {
+                    defaultCorrecto[item.key] = 'CORRECTO';
+                }
+            });
+
+            const newEq: EquipoInstalado = {
+                ...defaultCorrecto,
+                id: newId,
+                centroId: centroId || parte?.centroId || '',
+                sistemaId: sistemaId,
+                codigo: nextCodigo,
+                nombre: '',
+                tipo: '',
+                ubicacion: '',
+                placa: '',
+                fechaFabricacion: '',
+                ultimoRetimbre: '',
+                anomalias: '',
+                observaciones: '',
+                revisado: false
+            };
+
+            if (ordenKey) {
+                (newEq as any)[ordenKey] = nextCodigo;
+            }
+
+            const updatedEquipos = [...equiposInstalados, newEq];
+            setEquiposInstalados(updatedEquipos);
+            saveEquiposProgress(updatedEquipos);
+
+            if (parteId) {
+                await updateParteOfflineData(parteId, { equiposInstalados: updatedEquipos });
+                if (newEq.id) {
+                    await addPendingSyncItem(parteId, 'equipo', newEq.id, newEq);
+                }
+            }
+
+            try {
+                if (navigator.onLine) {
+                    await addEquipoInstalado(newEq as any);
+                    showToast('Equipo añadido');
+                } else {
+                    showToast('Equipo añadido en local (Offline)');
+                }
+            } catch (err) {
+                console.warn('Guardado offline para equipo nuevo:', err);
+                showToast('Equipo añadido en local (Offline)');
+            }
+
+            // Desplazar suavemente hacia el nuevo equipo con offset reglamentario de 160px
+            setTimeout(() => {
+                const el = document.getElementById(`equipo-${newId}`);
+                if (el) {
+                    const rect = el.getBoundingClientRect();
+                    const elementPosition = rect.top;
+                    const offsetPosition = elementPosition + window.pageYOffset - 160;
+                    window.scrollTo({
+                        top: offsetPosition,
+                        behavior: 'smooth'
+                    });
+                }
+            }, 100);
+        } catch (err) {
+            console.error('Error al añadir equipo directo:', err);
+            showToast('Error al añadir equipo');
+        }
+    };
+
     const handleConfirmarRevisarTodo = async () => {
         const sistId = revisarTodoConfirm.sistemaId;
         if (!sistId) return;
@@ -1593,7 +1771,10 @@ export default function RevisionChecklist() {
             // Guardar individualmente en Firestore para asegurar sincronía
             updatedEquipos.filter(eq => eq.sistemaId === sistId).forEach(async (equipoModificado) => {
                 try {
-                    await updateEquipoInstalado(equipoModificado.id, equipoModificado as any);
+                    const cId = equipoModificado.centroId || centroId;
+                    const sId = equipoModificado.sistemaId || sistId;
+                    await updateEquipoInstalado(equipoModificado.id, equipoModificado as any, cId, sId);
+                    setEqSyncStates(prev => ({ ...prev, [equipoModificado.id]: 'saved' }));
                 } catch (err) {
                     console.error('Error guardando en Firestore desde Revisar Todo:', err);
                 }
@@ -2124,7 +2305,7 @@ export default function RevisionChecklist() {
                                                     type="button"
                                                     onClick={(e) => {
                                                         e.stopPropagation();
-                                                        setAddEquipo(prev => ({ ...prev, isOpen: true, sistemaId: sist.id }));
+                                                        handleAnadirEquipoDirecto(sist.id);
                                                     }}
                                                     className="inline-flex items-center gap-2 px-4 py-2.5 bg-black hover:bg-slate-800 text-white rounded-xl text-sm font-semibold transition-all shadow-sm"
                                                 >
@@ -2182,6 +2363,7 @@ export default function RevisionChecklist() {
                                                             handleCheckChange,
                                                             getCheckStats,
                                                             getEquipoSyncStatus,
+                                                            handleGuardarEquipoManual,
                                                             handleCopiarEquipo
                                                         };
 
@@ -2216,7 +2398,7 @@ export default function RevisionChecklist() {
                                                     type="button"
                                                     onClick={(e) => {
                                                         e.stopPropagation();
-                                                        setAddEquipo(prev => ({ ...prev, isOpen: true, sistemaId: sist.id }));
+                                                        handleAnadirEquipoDirecto(sist.id);
                                                     }}
                                                     className="inline-flex items-center gap-2 px-4 py-2.5 bg-black hover:bg-slate-800 text-white rounded-xl text-sm font-semibold transition-all shadow-sm"
                                                 >
@@ -2339,7 +2521,9 @@ export default function RevisionChecklist() {
 
                         try {
                             if (updatedEq.id && !updatedEq.id.startsWith('temp_') && navigator.onLine) {
-                                await updateEquipoInstalado(updatedEq.id, updatedEq);
+                                const targetCentroId = updatedEq.centroId || centroId;
+                                const targetSistemaId = updatedEq.sistemaId;
+                                await updateEquipoInstalado(updatedEq.id, updatedEq, targetCentroId, targetSistemaId);
                                 showToast('Equipo actualizado');
                             } else {
                                 showToast('Equipo guardado en local (Offline)');
@@ -2368,62 +2552,7 @@ export default function RevisionChecklist() {
                 />
             )}
 
-            {/* MODAL AÑADIR EQUIPO */}
-            {addEquipo.isOpen && addEquipo.sistemaId && centroId && (
-                <EquipoFormulario
-                    equipo={null}
-                    sistemaId={addEquipo.sistemaId}
-                    sistemaNombre={sistemasDelCentro.find(s => s.id === addEquipo.sistemaId)?.tipo || sistemasDelCentro.find(s => s.id === addEquipo.sistemaId)?.familia || ''}
-                    centroId={centroId}
-                    parteId={parteId}
-                    plantillaId={sistemasDelCentro.find(s => s.id === addEquipo.sistemaId)?.tipo || sistemasDelCentro.find(s => s.id === addEquipo.sistemaId)?.familia || ''}
-                    equiposExistentes={equiposInstalados.filter(e => e.sistemaId === addEquipo.sistemaId)}
-                    onSave={async (equipo) => {
-                        const itemsToUse = addEquipo.sistemaId ? (checklistItemsPorSistema[addEquipo.sistemaId] || []) : [];
-                        const defaultCorrecto: Record<string, string> = {};
-                        itemsToUse.forEach((item: ChecklistItem) => {
-                            const opciones = (item as any).opciones || [];
-                            if (opciones.includes('CORRECTO')) {
-                                defaultCorrecto[item.key] = 'CORRECTO';
-                            }
-                        });
-                        const equipoConCodigo = {
-                            ...defaultCorrecto,
-                            ...equipo,
-                            codigo: equipo.codigo || '',
-                            revisado: false
-                        };
-                        const updatedEquipos = [...equiposInstalados, equipoConCodigo as any];
-                        setEquiposInstalados(updatedEquipos);
-                        saveEquiposProgress(updatedEquipos);
-                        
-                        if (parteId) {
-                            await updateParteOfflineData(parteId, { equiposInstalados: updatedEquipos });
-                            if (equipoConCodigo.id) {
-                                await addPendingSyncItem(parteId, 'equipo', equipoConCodigo.id, equipoConCodigo);
-                            }
-                        }
 
-                        try {
-                            if (navigator.onLine) {
-                                await addEquipoInstalado(equipoConCodigo as any);
-                                showToast('Equipo añadido');
-                            } else {
-                                showToast('Equipo añadido en local (Offline)');
-                            }
-                        } catch (err) {
-                            console.warn('Guardado offline para equipo nuevo:', err);
-                            showToast('Equipo añadido en local (Offline)');
-                        }
-                        
-                        setAddEquipo(prev => ({ ...prev, isOpen: false }));
-                    }}
-                    onCancel={() => {
-                        setAddEquipo(prev => ({ ...prev, isOpen: false }));
-                    }}
-                    isNew={true}
-                />
-            )}
 
             {revisarTodoConfirm.isOpen && revisarTodoConfirm.sistemaId && (
                 <ConfirmationModal

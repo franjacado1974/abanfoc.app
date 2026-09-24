@@ -3,6 +3,7 @@ import { CheckCircle2, XCircle, X, Pencil, Trash2 } from 'lucide-react';
 import type { CentroSistema, EquipoInstalado, Parte } from '../../Centros';
 import { updateEquipoInstalado, updateParte as updateParteFirestore, uploadFile, type ChecklistItem } from '../../firebase';
 import TableInput from '../TableInput';
+import BotonGuardarEquipo from '../BotonGuardarEquipo';
 
 interface Props {
     sist: CentroSistema;
@@ -20,6 +21,7 @@ interface Props {
     handleCheckChange: (equipoId: string, itemKey: string, value: any, itemName?: string) => void;
     getCheckStats: (eq: EquipoInstalado) => { ok: number; fail: number; pending: number };
     getEquipoSyncStatus?: (equipoId: string) => string;
+    handleGuardarEquipoManual?: (equipoId: string, equipoDirecto?: any) => void | Promise<void>;
     handleCopiarEquipo?: (eqToCopy: EquipoInstalado) => void | Promise<void>;
 }
 
@@ -53,6 +55,7 @@ export default function SistemaCasetas({
     handleCheckChange,
     getCheckStats,
     getEquipoSyncStatus,
+    handleGuardarEquipoManual,
     handleCopiarEquipo
 }: Props) {
     return (
@@ -744,47 +747,11 @@ export default function SistemaCasetas({
                                                                    <div className={`px-4 pb-4 ${algunCheckRojo ? 'border-t border-red-200 pt-3' : 'border-t border-slate-200 pt-3'}`}>
                                                                       <div className="flex flex-wrap items-center justify-between gap-2">
                                                                           <div className="flex items-center gap-2">
-                                                                             <button
-                                                                                 type="button"
-                                                                                 onClick={async () => {
-                                                                                     const itemsToUse = getItemsToUse(eq.sistemaId);
-                                                                                     const updatedEquipos = equiposInstalados.map(currEq => {
-                                                                                         if (currEq.id === eq.id) {
-                                                                                             const allChecked: Record<string, any> = {};
-                                                                                             itemsToUse.forEach(item => {
-                                                                                                 if (item.tipoRespuesta === 'check') {
-                                                                                                     allChecked[item.key] = true;
-                                                                                                 }
-                                                                                             });
-                                                                                             return {
-                                                                                                 ...currEq,
-                                                                                                 revisado: true,
-                                                                                                 ...allChecked
-                                                                                             };
-                                                                                         }
-                                                                                         return currEq;
-                                                                                     });
-                                                                                     setEquiposInstalados(updatedEquipos);
-                                                                                     saveEquiposProgress(updatedEquipos);
-                                                                                     const equipoModificado = updatedEquipos.find(currEq => currEq.id === eq.id);
-                                                                                     if (equipoModificado) {
-                                                                                         try { await updateEquipoInstalado(eq.id, equipoModificado as any); } catch (err) { console.error('Error guardando en Firestore:', err); }
-                                                                                     }
-                                                                                     showToast('Guardado');
-                                                                                     // Cambiar estado del parte a "Abierto" si estaba en "Planificado"
-                                                                                     if (parte?.estado === 'Planificado') {
-                                                                                         updateParte({ estado: 'Abierto' });
-                                                                                         const storedPartes = JSON.parse(localStorage.getItem('firecheck_db_partes') || '[]');
-                                                                                         const parteActual = storedPartes.find((p: any) => p.id === parteId);
-                                                                                         const docId = parteActual?._docId || parteId;
-                                                                                         try { await updateParteFirestore(docId, { estado: 'Abierto' }); } catch (err) { console.error('Error actualizando estado en Firestore:', err); }
-                                                                                     }
-                                                                                 }}
-                                                                                 className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-semibold transition-all shadow-sm"
-                                                                             >
-                                                                                 Revisado OK
-                                                                             </button>
-                                                                             
+                                                                             <BotonGuardarEquipo
+                                                                                  eqId={eq.id}
+                                                                                  getEquipoSyncStatus={getEquipoSyncStatus}
+                                                                                  handleGuardarEquipoManual={handleGuardarEquipoManual}
+                                                                              />
                                                                              <button
                                                                                  type="button"
                                                                                  onClick={async () => {
@@ -817,10 +784,14 @@ export default function SistemaCasetas({
                                                                                      setEquiposInstalados(updatedEquipos);
                                                                                      saveEquiposProgress(updatedEquipos);
                                                                                      const equipoModificado = updatedEquipos.find(currEq => currEq.id === eq.id);
-                                                                                     if (equipoModificado) {
-                                                                                         try { await updateEquipoInstalado(eq.id, equipoModificado as any); } catch (err) { console.error('Error guardando en Firestore:', err); }
-                                                                                     }
-                                                                                     showToast('Guardado');
+                                                                                      if (equipoModificado) {
+                                                                                          if (handleGuardarEquipoManual) {
+                                                                                              await handleGuardarEquipoManual(eq.id, equipoModificado);
+                                                                                          } else {
+                                                                                              try { await updateEquipoInstalado(eq.id, equipoModificado as any, (equipoModificado as any).centroId, (equipoModificado as any).sistemaId); } catch (err) { console.error('Error guardando en Firestore:', err); }
+                                                                                          }
+                                                                                      }
+                                                                                      showToast('Guardado');
                                                                                      // Cambiar estado del parte a "Abierto" si estaba en "Planificado"
                                                                                      if (parte?.estado === 'Planificado') {
                                                                                          updateParte({ estado: 'Abierto' });
@@ -833,6 +804,50 @@ export default function SistemaCasetas({
                                                                                  className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-semibold transition-all shadow-sm"
                                                                              >
                                                                                  Equipo no encontrado
+                                                                             </button>
+                                                                             <button
+                                                                                 type="button"
+                                                                                 onClick={async () => {
+                                                                                     const itemsToUse = getItemsToUse(eq.sistemaId);
+                                                                                     const updatedEquipos = equiposInstalados.map(currEq => {
+                                                                                         if (currEq.id === eq.id) {
+                                                                                             const allChecked: Record<string, any> = {};
+                                                                                             itemsToUse.forEach(item => {
+                                                                                                 if (item.tipoRespuesta === 'check') {
+                                                                                                     allChecked[item.key] = true;
+                                                                                                 }
+                                                                                             });
+                                                                                             return {
+                                                                                                 ...currEq,
+                                                                                                 revisado: true,
+                                                                                                 ...allChecked
+                                                                                             };
+                                                                                         }
+                                                                                         return currEq;
+                                                                                     });
+                                                                                     setEquiposInstalados(updatedEquipos);
+                                                                                     saveEquiposProgress(updatedEquipos);
+                                                                                     const equipoModificado = updatedEquipos.find(currEq => currEq.id === eq.id);
+                                                                                      if (equipoModificado) {
+                                                                                          if (handleGuardarEquipoManual) {
+                                                                                              await handleGuardarEquipoManual(eq.id, equipoModificado);
+                                                                                          } else {
+                                                                                              try { await updateEquipoInstalado(eq.id, equipoModificado as any, (equipoModificado as any).centroId, (equipoModificado as any).sistemaId); } catch (err) { console.error('Error guardando en Firestore:', err); }
+                                                                                          }
+                                                                                      }
+                                                                                      showToast('Guardado');
+                                                                                     // Cambiar estado del parte a "Abierto" si estaba en "Planificado"
+                                                                                     if (parte?.estado === 'Planificado') {
+                                                                                         updateParte({ estado: 'Abierto' });
+                                                                                         const storedPartes = JSON.parse(localStorage.getItem('firecheck_db_partes') || '[]');
+                                                                                         const parteActual = storedPartes.find((p: any) => p.id === parteId);
+                                                                                         const docId = parteActual?._docId || parteId;
+                                                                                         try { await updateParteFirestore(docId, { estado: 'Abierto' }); } catch (err) { console.error('Error actualizando estado en Firestore:', err); }
+                                                                                     }
+                                                                                 }}
+                                                                                 className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-xs font-semibold transition-all shadow-sm"
+                                                                             >
+                                                                                 Checks ok
                                                                              </button>
                                                                              <button
                                                                                  type="button"
@@ -860,12 +875,21 @@ export default function SistemaCasetas({
                                                                                      });
                                                                                      setEquiposInstalados(updatedEquipos);
                                                                                      saveEquiposProgress(updatedEquipos);
+                                                                                      const equipoModificado = updatedEquipos.find(currEq => currEq.id === eq.id);
+                                                                                      if (equipoModificado) {
+                                                                                          if (handleGuardarEquipoManual) {
+                                                                                              await handleGuardarEquipoManual(eq.id, equipoModificado);
+                                                                                          } else {
+                                                                                              try { await updateEquipoInstalado(eq.id, equipoModificado as any, (equipoModificado as any).centroId, (equipoModificado as any).sistemaId); } catch (err) { console.error('Error guardando en Firestore:', err); }
+                                                                                          }
+                                                                                      }
+                                                                                      showToast('Guardado');
                                                                                  }}
                                                                                  className="px-4 py-2 bg-slate-400 hover:bg-slate-500 text-white rounded-lg text-xs font-semibold transition-all shadow-sm"
                                                                              >
                                                                                  Limpiar Checks
                                                                              </button>
-                                                                              <button
+                                                                             <button
                                                                                   type="button"
                                                                                   onClick={() => {
                                                                                       if (handleCopiarEquipo) {

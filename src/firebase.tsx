@@ -2340,8 +2340,20 @@ export async function addEquipoInstalado(equipo: EquipoInstaladoFirestore) {
 
 export async function updateEquipoInstalado(id: string, equipo: Partial<EquipoInstaladoFirestore>, fallbackCentroId?: string, fallbackSistemaId?: string) {
   try {
-    const cId = equipo.centroId || fallbackCentroId;
-    const sId = equipo.sistemaId || fallbackSistemaId;
+    let cId = equipo.centroId || fallbackCentroId;
+    let sId = equipo.sistemaId || fallbackSistemaId;
+    if (!cId || !sId) {
+      try {
+        const stored = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]') : [];
+        const found = stored.find((e: any) => e.id === id);
+        if (found) {
+          if (!cId) cId = found.centroId;
+          if (!sId) sId = found.sistemaId;
+        }
+      } catch (storageErr) {
+        // ignore storage parse error
+      }
+    }
     if (!cId || !sId) {
       console.warn('updateEquipoInstalado: faltan centroId o sistemaId', { id, equipo, cId, sId });
       return { _docId: id, ...equipo };

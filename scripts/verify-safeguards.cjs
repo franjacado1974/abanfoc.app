@@ -629,6 +629,48 @@ if (fs.existsSync(urgenciasPath)) {
   }
 }
 
+// 33. Verificación del Botón de Guardado por Equipo, Orden de Acciones y Sincronización Firestore (AGENTS.md REGLA 48)
+const botonGuardarPath = path.join(__dirname, '../src/components/BotonGuardarEquipo.tsx');
+if (!fs.existsSync(botonGuardarPath)) {
+  errors.push('CRÍTICO: No se encontró src/components/BotonGuardarEquipo.tsx (AGENTS.md REGLA 48).');
+} else {
+  const bgContent = fs.readFileSync(botonGuardarPath, 'utf8');
+  if (!bgContent.includes('✓ Guardado') || !bgContent.includes('Guardado en local') || !bgContent.includes('Guardar')) {
+    errors.push('CRÍTICO: BotonGuardarEquipo.tsx carece de los 3 estados reactivos (Guardar / ✓ Guardado / Guardado en local) (AGENTS.md REGLA 48).');
+  }
+}
+
+if (fs.existsSync(revChecklistPath)) {
+  const rcContent = fs.readFileSync(revChecklistPath, 'utf8');
+  if (!rcContent.includes('handleGuardarEquipoManual') || !rcContent.includes('eqSyncStates') || !rcContent.includes('getEquipoSyncStatus')) {
+    errors.push('CRÍTICO: RevisionChecklist.tsx carece de handleGuardarEquipoManual o del control de estado eqSyncStates (AGENTS.md REGLA 48).');
+  }
+}
+
+if (fs.existsSync(firebasePath)) {
+  const fbContent = fs.readFileSync(firebasePath, 'utf8');
+  if (!fbContent.includes('firecheck_db_equipos_instalados')) {
+    errors.push('CRÍTICO: firebase.tsx carece de la resolución de respaldo de centroId/sistemaId en updateEquipoInstalado (AGENTS.md REGLA 48).');
+  }
+}
+
+if (fs.existsSync(sistemasDir)) {
+  const sisFiles = fs.readdirSync(sistemasDir).filter(f => f.endsWith('.tsx'));
+  sisFiles.forEach(file => {
+    const sPath = path.join(sistemasDir, file);
+    const sCont = fs.readFileSync(sPath, 'utf8');
+    if (!sCont.includes('BotonGuardarEquipo')) {
+      errors.push(`CRÍTICO: ${file} no incorpora BotonGuardarEquipo (AGENTS.md REGLA 48).`);
+    }
+    if (!sCont.includes('Checks ok')) {
+      errors.push(`CRÍTICO: ${file} carece de la nomenclatura reglamentaria "Checks ok" (AGENTS.md REGLA 48).`);
+    }
+    if (!sCont.includes('handleGuardarEquipoManual(eq.id, equipoModificado)')) {
+      errors.push(`CRÍTICO: ${file} no delega la persistencia de Checks ok y Equipo no encontrado a handleGuardarEquipoManual (AGENTS.md REGLA 48).`);
+    }
+  });
+}
+
 // Resultado de la verificación
 if (errors.length > 0) {
   console.error('\n❌ ERROR CRÍTICO DE BLINDAJE INTEGRAL (AGENTS.md):');

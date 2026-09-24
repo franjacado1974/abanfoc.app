@@ -702,4 +702,33 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
   - Al seleccionar un cliente, el selector de centros se filtra dinámicamente para ofrecer únicamente los centros de dicho cliente.
   - Si se selecciona un centro sin haber indicado cliente previamente, el sistema autocompleta automáticamente el cliente asociado.
 
+---
+
+## 48. Blindaje Inviolable del Botón de Guardado por Equipo, Orden de Acciones y Sincronización Firestore en Revisiones (`BotonGuardarEquipo.tsx`, `RevisionChecklist.tsx`, `RevisionSistemas/*.tsx` y `firebase.tsx`)
+- **Añadir Equipo Inmediato sin Formulario Previo**:
+  - Al pulsar `+ Añadir equipo` en la cabecera de cualquier sistema en `RevisionChecklist.tsx`, queda prohibido desplegar ventanas modales intermedias de captura de datos vacíos.
+  - El sistema crea e inserta de forma instantánea el nuevo equipo directamente en el inventario/sistema del centro con sus identificadores y valores por defecto, agregándolo al final de la lista del sistema para que el técnico trabaje directamente sobre su tarjeta en el parte.
+- **Botón `BotonGuardarEquipo.tsx` con 3 Estados Reactivos y Feedback Visual**:
+  - Cada tarjeta de equipo en los 20 componentes de sistemas (`src/components/RevisionSistemas/*.tsx`) DEBE incorporar el botón individual `BotonGuardarEquipo`.
+  - Estados obligatorios:
+    1. **Azul (`Guardar`)**: Indica que existen cambios en edición pendientes de confirmar (`eqSyncStates[eqId] === 'pending'`).
+    2. **Verde (`✓ Guardado`)**: Aparece cuando la escritura se ha confirmado con éxito en Cloud Firestore (`eqSyncStates[eqId] === 'saved'`).
+    3. **Ámbar (`✓ Guardado en local`)**: Se activa de forma segura e inmediata cuando el dispositivo opera sin conexión a Internet o en modo offline (`eqSyncStates[eqId] === 'offline'`).
+    - Durante la sincronización remota debe desplegarse el icono de carga animado (*spinner*).
+- **Orden Reglamentario Estricto de los 5 Botones de Acción**:
+  - En la parte inferior de cada tarjeta de equipo, los botones de acción DEBEN mantener estrictamente la siguiente secuencia de izquierda a derecha:
+    1.º **`Guardar`** (`BotonGuardarEquipo`).
+    2.º **`Equipo no encontrado`** (Fondo ámbar `bg-amber-500 hover:bg-amber-600 text-white`).
+    3.º **`Checks ok`** (Texto con primera letra 'C' mayúscula `"Checks ok"`, fondo verde suave `bg-emerald-500 hover:bg-emerald-600 text-white`).
+    4.º **`Limpiar Checks`** (Fondo gris `bg-slate-400 hover:bg-slate-500 text-white`).
+    5.º **`Copiar nuevo equipo`** (Fondo negro `bg-black hover:bg-zinc-800 text-white`).
+- **Persistencia Inmediata y Resiliencia en Firestore**:
+  - Las acciones `Checks ok`, `Equipo no encontrado` y `Limpiar Checks` DEBEN invocar incondicionalmente a `handleGuardarEquipoManual(eq.id, equipoModificado)` para asegurar la persistencia local y remota simultánea y cambiar al instante el botón `Guardar` a verde (`✓ Guardado`).
+  - La función `handleGuardarEquipoManual` en `RevisionChecklist.tsx` debe actualizar de forma atómica:
+    1. `localStorage` (`firecheck_db_equipos_instalados`).
+    2. La cola y paquete offline de IndexedDB (`updateParteOfflineData` y `addPendingSyncItem`).
+    3. El documento exacto en Cloud Firestore con `targetCentroId` y `targetSistemaId`.
+  - En `src/firebase.tsx` (`updateEquipoInstalado`), si `centroId` o `sistemaId` estuvieran ausentes en los argumentos, el sistema DEBE recuperarlos reactivamente desde `firecheck_db_equipos_instalados` en `localStorage` antes de intentar el guardado para evitar descartes silenciosos de datos.
+
+
 
