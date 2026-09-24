@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import {
   ArrowLeft, Calendar, Search, X,
   ChevronRight, Layers, Clock, Filter,
-  DownloadCloud, CheckCircle2, RefreshCw, HardDrive, Database
+  DownloadCloud, CheckCircle2, RefreshCw, HardDrive, Database,
+  Zap, AlertTriangle, SlidersHorizontal
 } from 'lucide-react';
 import { db, subscribePartes, subscribeCentroSistemas, subscribeClientes, subscribeCentros, updateParte, getEquiposInstalados } from './firebase';
 import { collection, getDocs } from 'firebase/firestore';
@@ -98,6 +99,8 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
   const [downloadedPartesMap, setDownloadedPartesMap] = useState<Record<string, boolean>>({});
   const [showDiagModal, setShowDiagModal] = useState(false);
   const [diagInfo, setDiagInfo] = useState<any>(null);
+  const [showModoModal, setShowModoModal] = useState(true);
+  const [loadingAlertas, setLoadingAlertas] = useState(false);
 
   // Cargar mapa de partes descargados en IndexedDB
   useEffect(() => {
@@ -226,109 +229,6 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
     return () => unsubs.forEach(u => u());
   }, [partes.length]);
 
-  // Cargar equipos de extintores y BIEs para alertas preventivas (+20 años, RT 5 años, PH 5 años)
-  useEffect(() => {
-    const centroIds = [...new Set(partes.map(p => p.centroId).filter(Boolean))];
-    if (centroIds.length === 0) return;
-
-    let isMounted = true;
-
-    const cargarEquiposAlertas = async () => {
-      const nuevosMap: Record<string, any[]> = {};
-
-      try {
-        const stored = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
-        for (const eq of stored) {
-          if (eq.centroId) {
-            if (!nuevosMap[eq.centroId]) nuevosMap[eq.centroId] = [];
-            nuevosMap[eq.centroId].push(eq);
-          }
-        }
-      } catch { /* ignore */ }
-
-      await Promise.all(centroIds.map(async (cId) => {
-        try {
-          const centro = centros.find(c => c._docId === cId || c.id === cId);
-          const targetDocId = centro?._docId || centro?.id || cId;
-
-          const [snapInv, snapSis] = await Promise.all([
-            getDocs(collection(db, 'centros', targetDocId, 'inventario')),
-            getDocs(collection(db, 'centros', targetDocId, 'sistemas'))
-          ]);
-
-          const seenSist = new Set<string>();
-          const allDocs = [...snapInv.docs, ...snapSis.docs].filter(d => {
-            if (seenSist.has(d.id)) return false;
-            seenSist.add(d.id);
-            return true;
-          });
-
-          const sistemasInteres = allDocs.filter(d => {
-            const data = d.data();
-            const nombre = ((data.tipo || '') + ' ' + (data.familia || '') + ' ' + (data.nombre || '') + ' ' + d.id).toLowerCase();
-            return nombre.includes('extintor') || nombre.includes('bie') || nombre.includes('boca');
-          });
-
-          await Promise.all(sistemasInteres.map(async (sDoc) => {
-            let list = await getEquiposInstalados(targetDocId, sDoc.id);
-            if ((!list || list.length === 0) && centro?.id && targetDocId !== centro.id) {
-              list = await getEquiposInstalados(centro.id, sDoc.id);
-            }
-            if (list && list.length > 0) {
-              const sData = sDoc.data() || {};
-              const sNombre = sData.tipo || sData.familia || sData.nombre || sDoc.id || '';
-              const sTipo = sData.tipo || sDoc.id || '';
-              const taggedList = list.map(e => ({
-                ...e,
-                sistemaNombre: e.sistemaNombre || sNombre,
-                sistemaTipo: e.sistemaTipo || sTipo,
-                sistemaId: e.sistemaId || sDoc.id
-              }));
-              const keysToPopulate = [cId, targetDocId, centro?._docId, centro?.id].filter(Boolean) as string[];
-              for (const key of keysToPopulate) {
-                if (!nuevosMap[key]) nuevosMap[key] = [];
-                const otros = (nuevosMap[key] || []).filter(e => e.sistemaId !== sDoc.id);
-                nuevosMap[key] = [...otros, ...taggedList];
-              }
-            }
-          }));
-        } catch { /* ignore */ }
-      }));
-
-      if (!isMounted) return;
-
-      const resultMapExt: Record<string, ExtintorAlertas> = {};
-      const resultMapBie: Record<string, BieAlertas> = {};
-      for (const cId of Object.keys(nuevosMap)) {
-        const centro = centros.find(c => c._docId === cId || c.id === cId);
-        const alertExt = calcularAlertasExtintores(nuevosMap[cId]);
-        const alertBie = calcularAlertasBies(nuevosMap[cId]);
-        resultMapExt[cId] = alertExt;
-        resultMapBie[cId] = alertBie;
-        if (centro?._docId) {
-          resultMapExt[centro._docId] = alertExt;
-          resultMapBie[centro._docId] = alertBie;
-        }
-        if (centro?.id) {
-          resultMapExt[centro.id] = alertExt;
-          resultMapBie[centro.id] = alertBie;
-        }
-      }
-      setAlertasExtintoresPorCentro(resultMapExt);
-      setAlertasBiesPorCentro(resultMapBie);
-      try {
-        localStorage.setItem('firecheck_db_alertas_ext', JSON.stringify(resultMapExt));
-        localStorage.setItem('firecheck_db_alertas_bie', JSON.stringify(resultMapBie));
-      } catch { /* ignore quota */ }
-    };
-
-    cargarEquiposAlertas();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [partes, centros]);
-
   // Buscar el técnico que corresponde al usuario logueado (por nombre)
   const tecnicoLogueado = tecnicos.find(t =>
     t.nombre?.toLowerCase() === loggedUser?.nombre?.toLowerCase()
@@ -398,6 +298,112 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
     return true;
   });
 
+  // Cargar equipos de extintores y BIEs para alertas preventivas (+20 años, RT 5 años, PH 5 años)
+  // Solo lee los partes planificados o en curso que se muestran en pantalla
+  const ejecutarCargaAlertas = async (mostrarLoading: boolean) => {
+    if (mostrarLoading) setLoadingAlertas(true);
+
+    try {
+      // Filtrar únicamente los partes que se muestran en pantalla con estado planificado o en curso
+      const partesObjetivo = partesFiltrados.filter(p => {
+        const st = (p.estado || '').toLowerCase().trim();
+        return st === 'planificado' || st === 'en curso' || st === 'abierto' || st === 'en revisión';
+      });
+
+      const centroIds = [...new Set(partesObjetivo.map(p => p.centroId).filter(Boolean))];
+      if (centroIds.length === 0) {
+        return;
+      }
+
+      const nuevosMap: Record<string, any[]> = {};
+      try {
+        const stored = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
+        for (const eq of stored) {
+          if (eq.centroId) {
+            if (!nuevosMap[eq.centroId]) nuevosMap[eq.centroId] = [];
+            nuevosMap[eq.centroId].push(eq);
+          }
+        }
+      } catch { /* ignore */ }
+
+      await Promise.all(centroIds.map(async (cId) => {
+        try {
+          const centro = centros.find(c => c._docId === cId || c.id === cId);
+          const targetDocId = centro?._docId || centro?.id || cId;
+
+          const [snapInv, snapSis] = await Promise.all([
+            getDocs(collection(db, 'centros', targetDocId, 'inventario')),
+            getDocs(collection(db, 'centros', targetDocId, 'sistemas'))
+          ]);
+
+          const seenSist = new Set<string>();
+          const allDocs = [...snapInv.docs, ...snapSis.docs].filter(d => {
+            if (seenSist.has(d.id)) return false;
+            seenSist.add(d.id);
+            return true;
+          });
+
+          const sistemasInteres = allDocs.filter(d => {
+            const data = d.data();
+            const nombre = ((data.tipo || '') + ' ' + (data.familia || '') + ' ' + (data.nombre || '') + ' ' + d.id).toLowerCase();
+            return nombre.includes('extintor') || nombre.includes('bie') || nombre.includes('boca');
+          });
+
+          await Promise.all(sistemasInteres.map(async (sDoc) => {
+            let list = await getEquiposInstalados(targetDocId, sDoc.id);
+            if ((!list || list.length === 0) && centro?.id && targetDocId !== centro.id) {
+              list = await getEquiposInstalados(centro.id, sDoc.id);
+            }
+            if (list && list.length > 0) {
+              const sData = sDoc.data() || {};
+              const sNombre = sData.tipo || sData.familia || sData.nombre || sDoc.id || '';
+              const sTipo = sData.tipo || sDoc.id || '';
+              const taggedList = list.map(e => ({
+                ...e,
+                sistemaNombre: e.sistemaNombre || sNombre,
+                sistemaTipo: e.sistemaTipo || sTipo,
+                sistemaId: e.sistemaId || sDoc.id
+              }));
+              const keysToPopulate = [cId, targetDocId, centro?._docId, centro?.id].filter(Boolean) as string[];
+              for (const key of keysToPopulate) {
+                if (!nuevosMap[key]) nuevosMap[key] = [];
+                const otros = (nuevosMap[key] || []).filter(e => e.sistemaId !== sDoc.id);
+                nuevosMap[key] = [...otros, ...taggedList];
+              }
+            }
+          }));
+        } catch { /* ignore */ }
+      }));
+
+      const resultMapExt: Record<string, ExtintorAlertas> = { ...alertasExtintoresPorCentro };
+      const resultMapBie: Record<string, BieAlertas> = { ...alertasBiesPorCentro };
+      for (const cId of Object.keys(nuevosMap)) {
+        const centro = centros.find(c => c._docId === cId || c.id === cId);
+        const alertExt = calcularAlertasExtintores(nuevosMap[cId]);
+        const alertBie = calcularAlertasBies(nuevosMap[cId]);
+        resultMapExt[cId] = alertExt;
+        resultMapBie[cId] = alertBie;
+        if (centro?._docId) {
+          resultMapExt[centro._docId] = alertExt;
+          resultMapBie[centro._docId] = alertBie;
+        }
+        if (centro?.id) {
+          resultMapExt[centro.id] = alertExt;
+          resultMapBie[centro.id] = alertBie;
+        }
+      }
+      setAlertasExtintoresPorCentro(resultMapExt);
+      setAlertasBiesPorCentro(resultMapBie);
+      try {
+        localStorage.setItem('firecheck_db_alertas_ext', JSON.stringify(resultMapExt));
+        localStorage.setItem('firecheck_db_alertas_bie', JSON.stringify(resultMapBie));
+      } catch { /* ignore quota */ }
+    } finally {
+      if (mostrarLoading) setLoadingAlertas(false);
+      setShowModoModal(false);
+    }
+  };
+
   const getEstadoBadge = (estado: string) => {
     switch (estado) {
       case 'Planificado':
@@ -460,6 +466,14 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
               {' · '}{partesFiltrados.length} parte{partesFiltrados.length !== 1 ? 's' : ''}
             </p>
           </div>
+          <button
+            onClick={() => setShowModoModal(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 text-xs font-bold transition-all shadow-xs shrink-0 cursor-pointer active:scale-95"
+            title="Opciones de visualización y alertas"
+          >
+            <AlertTriangle className="w-3.5 h-3.5 text-red-600" />
+            <span>Alertas</span>
+          </button>
         </div>
 
         {/* Buscador, Filtro de Estado y Rango de fechas */}
@@ -853,6 +867,97 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
             >
               Cerrar Diagnóstico
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal flotante de selección de modo de visualización */}
+      {showModoModal && !loadingAlertas && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-zinc-200 text-left relative">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-2xl bg-zinc-900 flex items-center justify-center text-white shrink-0">
+                <SlidersHorizontal className="w-5 h-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base font-black text-zinc-900 leading-tight">
+                  Visualización de Partes
+                </h3>
+                <p className="text-xs text-zinc-500 font-medium mt-0.5">
+                  Selecciona cómo deseas consultar tus partes de trabajo
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3 mt-5">
+              {/* Opción 1: Vista rápida */}
+              <button
+                onClick={() => {
+                  setShowModoModal(false);
+                  ejecutarCargaAlertas(false);
+                }}
+                className="w-full text-left p-4 rounded-2xl border-2 border-zinc-200 hover:border-blue-500 hover:bg-blue-50/40 transition-all flex items-start gap-3.5 group cursor-pointer active:scale-[0.98]"
+              >
+                <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-200 group-hover:bg-blue-600 text-blue-600 group-hover:text-white flex items-center justify-center shrink-0 transition-colors">
+                  <Zap className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-black text-zinc-900 group-hover:text-blue-600 transition-colors">
+                      1º Vista rápida de los partes
+                    </span>
+                    <span className="text-[10px] font-bold uppercase tracking-wider bg-zinc-100 text-zinc-600 px-2 py-0.5 rounded-full">
+                      Sin esperas
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-500 mt-1 leading-relaxed">
+                    Muestra los partes sin leer las alertas o que las muestre cuando pueda en segundo plano.
+                  </p>
+                </div>
+              </button>
+
+              {/* Opción 2: Mostrar alertas */}
+              <button
+                onClick={() => {
+                  ejecutarCargaAlertas(true);
+                }}
+                className="w-full text-left p-4 rounded-2xl border-2 border-zinc-200 hover:border-red-500 hover:bg-red-50/40 transition-all flex items-start gap-3.5 group cursor-pointer active:scale-[0.98]"
+              >
+                <div className="w-10 h-10 rounded-xl bg-red-50 border border-red-200 group-hover:bg-red-600 text-red-600 group-hover:text-white flex items-center justify-center shrink-0 transition-colors">
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-black text-zinc-900 group-hover:text-red-600 transition-colors">
+                      2º Mostrar alertas en partes
+                    </span>
+                    <span className="text-[10px] font-bold uppercase tracking-wider bg-red-100 text-red-700 px-2 py-0.5 rounded-full">
+                      Con alertas
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-500 mt-1 leading-relaxed">
+                    Lee fechas y muestra alertas preventivas (+20 años, retimbres y PH) en partes planificados o en curso.
+                  </p>
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal flotante de lectura de alertas en curso */}
+      {loadingAlertas && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-sm w-full text-center shadow-2xl border border-zinc-200 flex flex-col items-center">
+            <div className="w-14 h-14 rounded-2xl bg-red-50 border border-red-200 flex items-center justify-center mb-4 shadow-sm">
+              <RefreshCw className="w-7 h-7 text-red-600 animate-spin" />
+            </div>
+            <h3 className="text-base font-black text-zinc-900 mb-1">
+              leyendo fechas y alertas en los partes,...
+            </h3>
+            <p className="text-xs text-zinc-500 font-medium">
+              Analizando partes planificados y en curso en pantalla
+            </p>
           </div>
         </div>
       )}
