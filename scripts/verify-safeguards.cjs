@@ -671,6 +671,49 @@ if (fs.existsSync(sistemasDir)) {
   });
 }
 
+// 34. Verificación de Alertas Preventivas de Extintores y BIEs (AGENTS.md REGLA 49)
+const sisUtilsPath = path.join(__dirname, '../src/recursos-compartidos/services/sistemasUtils.ts');
+if (!fs.existsSync(sisUtilsPath)) {
+  errors.push('CRÍTICO: No se encontró src/recursos-compartidos/services/sistemasUtils.ts (AGENTS.md REGLA 49).');
+} else {
+  const suContent = fs.readFileSync(sisUtilsPath, 'utf8');
+  if (!suContent.includes('esEquipoBie') || !suContent.includes('calcularAlertasBies')) {
+    errors.push('CRÍTICO: sistemasUtils.ts carece de las funciones esEquipoBie o calcularAlertasBies (AGENTS.md REGLA 49).');
+  }
+  if (!suContent.includes('BIE_FAB_KEYS') || !suContent.includes('BIE_RET_KEYS')) {
+    errors.push('CRÍTICO: sistemasUtils.ts carece de las claves de plantilla para BIEs (BIE_FAB_KEYS / BIE_RET_KEYS) (AGENTS.md REGLA 49).');
+  }
+  if (!suContent.includes('bie caducado') || !suContent.includes('prueba hidráulica obligatoria')) {
+    errors.push('CRÍTICO: sistemasUtils.ts carece del respaldo por anomalías de BIE (AGENTS.md REGLA 49).');
+  }
+}
+
+if (fs.existsSync(partesPath)) {
+  const pContent = fs.readFileSync(partesPath, 'utf8');
+  if (!pContent.includes('Ext+20 años:') || !pContent.includes('Bie+20 años:') || !pContent.includes('PH:')) {
+    errors.push('CRÍTICO: Partes.tsx carece del formato exacto de alertas (Ext+20 años:, Bie+20 años:, PH:) (AGENTS.md REGLA 49).');
+  }
+  if (!pContent.includes("getDocs(collection(db, 'centros', targetDocId, 'inventario'))") || !pContent.includes("getDocs(collection(db, 'centros', targetDocId, 'sistemas'))")) {
+    errors.push('CRÍTICO: Partes.tsx carece de la consulta dual de inventario y sistemas para alertas (AGENTS.md REGLA 49).');
+  }
+}
+
+const partesTecPath = path.join(__dirname, '../src/PartesTecnico.tsx');
+if (fs.existsSync(partesTecPath)) {
+  const ptContent = fs.readFileSync(partesTecPath, 'utf8');
+  if (!ptContent.includes('Ext+20 años:') || !ptContent.includes('Bie+20 años:') || !ptContent.includes('PH:')) {
+    errors.push('CRÍTICO: PartesTecnico.tsx carece del formato exacto de alertas (Ext+20 años:, Bie+20 años:, PH:) (AGENTS.md REGLA 49).');
+  }
+}
+
+const revisionesPath = path.join(__dirname, '../src/Revisiones.tsx');
+if (fs.existsSync(revisionesPath)) {
+  const revContent = fs.readFileSync(revisionesPath, 'utf8');
+  if (!revContent.includes('Ext+20 años:') || !revContent.includes('Bie+20 años:') || !revContent.includes('PH:')) {
+    errors.push('CRÍTICO: Revisiones.tsx carece del formato exacto de alertas (Ext+20 años:, Bie+20 años:, PH:) (AGENTS.md REGLA 49).');
+  }
+}
+
 // Resultado de la verificación
 if (errors.length > 0) {
   console.error('\n❌ ERROR CRÍTICO DE BLINDAJE INTEGRAL (AGENTS.md):');

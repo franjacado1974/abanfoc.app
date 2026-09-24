@@ -730,5 +730,31 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
     3. El documento exacto en Cloud Firestore con `targetCentroId` y `targetSistemaId`.
   - En `src/firebase.tsx` (`updateEquipoInstalado`), si `centroId` o `sistemaId` estuvieran ausentes en los argumentos, el sistema DEBE recuperarlos reactivamente desde `firecheck_db_equipos_instalados` en `localStorage` antes de intentar el guardado para evitar descartes silenciosos de datos.
 
+---
+
+## 49. Blindaje Inviolable de Alertas Preventivas de Extintores y BIEs en los Partes (`sistemasUtils.ts`, `Partes.tsx`, `PartesTecnico.tsx` y `Revisiones.tsx`)
+- **Detección Exhaustiva de BIEs (`esEquipoBie`)**:
+  - `esEquipoBie(eq, sist)` DEBE comprobar de forma acumulativa y estricta:
+    1. Identificador y tipo de sistema (`sist.tipo`, `sist.familia`, `sist.nombre`, `sist.id`, `eq.sistemaId`, `eq.sistema`, `eq.familia`, `eq.sistemaNombre`, `eq.sistemaTipo`, `eq.categoria`).
+    2. Términos `'bie'` y `'boca'` (excluyendo `'extintor'` e `'hidrante'`).
+    3. Claves de campos de formulario que identifiquen una BIE (`manguera`, `pruebahidraulica`, `lanza`, `devanadera`).
+    4. Valores de tipo texto dentro del equipo que contengan `'bie'` o `'boca de incendio'`.
+- **Cálculo de Fechas y Claves Dinámicas de Plantilla (`calcularAlertasBies` y `calcularAlertasExtintores`)**:
+  - En BIEs, las fechas de fabricación y prueba hidráulica DEBEN evaluarse contra las claves de plantilla conocidas:
+    - Fabricación: `BIE_FAB_KEYS = ['zBErDpaiUREiF2grWzCb', 'item_1781948908692', 'fechaFabricacion', 'fabricacion', 'fechafab', 'añofab', 'anofab', 'año', 'ano']`.
+    - Prueba Hidráulica: `BIE_RET_KEYS = ['4I3N5St3fpkUuIrTuvOI', 'item_1781948939436', 'pruebaHidraulica', 'ultimoRetimbre', 'retimbre', 'pruebahidraulica', 'ph']`.
+  - Respaldo obligatorio por anomalías registradas: Si el texto de `anomalias` u `observaciones` contiene mención a caducidad de BIE o necesidad de prueba hidráulica obligatoria, debe contabilizarse directamente como alerta preventiva.
+- **Consulta Dual Obligatoria de `inventario` y `sistemas` en Centros**:
+  - En la carga de alertas preventivas (`cargarAlertasCentros` / `cargarEquiposAlertas`), DEBEN consultarse simultáneamente las subcolecciones `inventario` y `sistemas` de cada centro (`[...snapInv.docs, ...snapSis.docs]`), evitando omitir BIEs o extintores cuando se encuentren en subcolecciones diferentes.
+  - Los equipos recuperados deben enriquecerse incondicionalmente con `sistemaNombre`, `sistemaTipo` y `sistemaId` antes de su procesamiento.
+- **Formato Visual Exacto de las Insignias de Alerta Preventiva**:
+  - Extintores con antigüedad $\ge 20$ años: **`Ext+20 años: {alertasExt.caducados20} und.`** (sin punto tras `Ext`).
+  - Extintores con retimbre $\ge 5$ años: **`RT: {alertasExt.retimbres5} und.`**
+  - BIEs con antigüedad $\ge 20$ años: **`Bie+20 años: {alertasBie.caducados20} und.`**
+  - BIEs con prueba hidráulica $\ge 5$ años: **`PH: {alertasBie.pruebasHidraulicas5} und.`**
+  - Estilo visual reglamentario: fondo rojo suave con borde rojo e insignia tipográfica destacada (`text-[10px]` o `text-[11px] font-extrabold text-red-600 bg-red-50 border border-red-200 shadow-xs`).
+  - Ubicación jerárquica: Los avisos de BIEs (`Bie+20 años` y `PH`) DEBEN situarse siempre inmediatamente debajo de los avisos de extintores en las vistas de Partes de Escritorio (`Partes.tsx`), Panel Móvil y Escritorio del Técnico (`PartesTecnico.tsx`) y Listado de Revisiones (`Revisiones.tsx`).
+
+
 
 
