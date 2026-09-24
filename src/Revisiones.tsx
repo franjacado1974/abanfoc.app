@@ -114,6 +114,8 @@ export default function Revisiones() {
   const [loading, setLoading] = useState(true);
   const [alertasExtintoresPorCentro, setAlertasExtintoresPorCentro] = useState<Record<string, ExtintorAlertas>>(() => {
     try {
+      const cached = localStorage.getItem('firecheck_db_alertas_ext');
+      if (cached) return JSON.parse(cached);
       const allEquipos: any[] = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
       const storedCentros: any[] = JSON.parse(localStorage.getItem('firecheck_db_centros') || '[]');
       const map: Record<string, ExtintorAlertas> = {};
@@ -139,6 +141,8 @@ export default function Revisiones() {
 
   const [alertasBiesPorCentro, setAlertasBiesPorCentro] = useState<Record<string, BieAlertas>>(() => {
     try {
+      const cached = localStorage.getItem('firecheck_db_alertas_bie');
+      if (cached) return JSON.parse(cached);
       const allEquipos: any[] = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
       const storedCentros: any[] = JSON.parse(localStorage.getItem('firecheck_db_centros') || '[]');
       const map: Record<string, BieAlertas> = {};
@@ -246,9 +250,9 @@ export default function Revisiones() {
         }
       } catch { /* ignore */ }
 
-      for (const centro of centros) {
+      await Promise.all(centros.map(async (centro) => {
         const targetDocId = centro._docId || centro.id;
-        if (!targetDocId) continue;
+        if (!targetDocId) return;
 
         try {
           let snapInv = await getDocs(collection(db, 'centros', targetDocId, 'inventario'));
@@ -273,7 +277,7 @@ export default function Revisiones() {
             return nombre.includes('extintor') || nombre.includes('bie') || nombre.includes('boca');
           });
 
-          for (const sDoc of sistemasInteres) {
+          await Promise.all(sistemasInteres.map(async (sDoc) => {
             let list = await getEquiposInstalados(targetDocId, sDoc.id);
             if ((!list || list.length === 0) && centro.id && targetDocId !== centro.id) {
               list = await getEquiposInstalados(centro.id, sDoc.id);
@@ -295,9 +299,9 @@ export default function Revisiones() {
                 nuevosMap[k] = [...otros, ...taggedList];
               }
             }
-          }
+          }));
         } catch { /* ignore */ }
-      }
+      }));
 
       if (!isMounted) return;
 
@@ -320,6 +324,10 @@ export default function Revisiones() {
       }
       setAlertasExtintoresPorCentro(resultMapExt);
       setAlertasBiesPorCentro(resultMapBie);
+      try {
+        localStorage.setItem('firecheck_db_alertas_ext', JSON.stringify(resultMapExt));
+        localStorage.setItem('firecheck_db_alertas_bie', JSON.stringify(resultMapBie));
+      } catch { /* ignore quota */ }
     };
 
     cargarAlertasCentros();
@@ -888,48 +896,40 @@ export default function Revisiones() {
                           const hasBie = alertasBie && (alertasBie.caducados20 > 0 || alertasBie.pruebasHidraulicas5 > 0);
                           if (!hasExt && !hasBie) return null;
                           return (
-                            <>
-                              {hasExt && (
-                                <div className="flex flex-wrap items-center justify-center gap-1 mt-0.5">
-                                  {alertasExt.caducados20 > 0 && (
-                                    <span 
-                                      className="inline-flex items-center text-[10px] font-extrabold text-red-600 bg-red-50 px-1.5 py-0.5 rounded-md border border-red-200 shadow-xs"
-                                      title={`${alertasExt.caducados20} extintores caducados de más de 20 años`}
-                                    >
-                                      Ext+20 años: {alertasExt.caducados20} und.
-                                    </span>
-                                  )}
-                                  {alertasExt.retimbres5 > 0 && (
-                                    <span 
-                                      className="inline-flex items-center text-[10px] font-extrabold text-red-600 bg-red-50 px-1.5 py-0.5 rounded-md border border-red-200 shadow-xs"
-                                      title={`${alertasExt.retimbres5} extintores para retimbrar (más de 5 años)`}
-                                    >
-                                      RT: {alertasExt.retimbres5} und.
-                                    </span>
-                                  )}
-                                </div>
+                            <div className="flex flex-wrap items-center justify-center gap-1 mt-0.5">
+                              {alertasExt && alertasExt.caducados20 > 0 && (
+                                <span 
+                                  className="inline-flex items-center text-[10px] font-extrabold text-red-600 bg-red-50 px-1.5 py-0.5 rounded-md border border-red-200 shadow-xs"
+                                  title={`${alertasExt.caducados20} extintores caducados de más de 20 años`}
+                                >
+                                  Ext+20 años: {alertasExt.caducados20} und.
+                                </span>
                               )}
-                              {hasBie && (
-                                <div className="flex flex-wrap items-center justify-center gap-1 mt-0.5">
-                                  {alertasBie.caducados20 > 0 && (
-                                    <span 
-                                      className="inline-flex items-center text-[10px] font-extrabold text-red-600 bg-red-50 px-1.5 py-0.5 rounded-md border border-red-200 shadow-xs"
-                                      title={`${alertasBie.caducados20} BIEs caducados de más de 20 años`}
-                                    >
-                                      Bie+20 años: {alertasBie.caducados20} und.
-                                    </span>
-                                  )}
-                                  {alertasBie.pruebasHidraulicas5 > 0 && (
-                                    <span 
-                                      className="inline-flex items-center text-[10px] font-extrabold text-red-600 bg-red-50 px-1.5 py-0.5 rounded-md border border-red-200 shadow-xs"
-                                      title={`${alertasBie.pruebasHidraulicas5} BIEs para prueba hidráulica (más de 5 años)`}
-                                    >
-                                      PH: {alertasBie.pruebasHidraulicas5} und.
-                                    </span>
-                                  )}
-                                </div>
+                              {alertasExt && alertasExt.retimbres5 > 0 && (
+                                <span 
+                                  className="inline-flex items-center text-[10px] font-extrabold text-red-600 bg-red-50 px-1.5 py-0.5 rounded-md border border-red-200 shadow-xs"
+                                  title={`${alertasExt.retimbres5} extintores para retimbrar (más de 5 años)`}
+                                >
+                                  RT: {alertasExt.retimbres5} und.
+                                </span>
                               )}
-                            </>
+                              {alertasBie && alertasBie.caducados20 > 0 && (
+                                <span 
+                                  className="inline-flex items-center text-[10px] font-extrabold text-red-600 bg-red-50 px-1.5 py-0.5 rounded-md border border-red-200 shadow-xs"
+                                  title={`${alertasBie.caducados20} BIEs caducados de más de 20 años`}
+                                >
+                                  Bie+20 años: {alertasBie.caducados20} und.
+                                </span>
+                              )}
+                              {alertasBie && alertasBie.pruebasHidraulicas5 > 0 && (
+                                <span 
+                                  className="inline-flex items-center text-[10px] font-extrabold text-red-600 bg-red-50 px-1.5 py-0.5 rounded-md border border-red-200 shadow-xs"
+                                  title={`${alertasBie.pruebasHidraulicas5} BIEs para prueba hidráulica (más de 5 años)`}
+                                >
+                                  PH: {alertasBie.pruebasHidraulicas5} und.
+                                </span>
+                              )}
+                            </div>
                           );
                         })()}
                       </div>
