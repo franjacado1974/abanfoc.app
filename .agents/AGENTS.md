@@ -752,9 +752,28 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
   - Extintores con retimbre $\ge 5$ años: **`RT: {alertasExt.retimbres5} und.`**
   - BIEs con antigüedad $\ge 20$ años: **`Bie+20 años: {alertasBie.caducados20} und.`**
   - BIEs con prueba hidráulica $\ge 5$ años: **`PH: {alertasBie.pruebasHidraulicas5} und.`**
-  - Estilo visual reglamentario: fondo rojo suave con borde rojo e insignia tipográfica destacada (`text-[10px]` o `text-[11px] font-extrabold text-red-600 bg-red-50 border border-red-200 shadow-xs`).
-  - Ubicación jerárquica: Los avisos de BIEs (`Bie+20 años` y `PH`) DEBEN situarse siempre inmediatamente debajo de los avisos de extintores en las vistas de Partes de Escritorio (`Partes.tsx`), Panel Móvil y Escritorio del Técnico (`PartesTecnico.tsx`) y Listado de Revisiones (`Revisiones.tsx`).
-  - **Ubicación en Tarjeta del Técnico (Dispositivos Móviles)**: En las tarjetas de la vista técnico (`PartesTecnico.tsx`), TODAS las alertas preventivas (tanto extintores como BIEs) DEBEN situarse exclusivamente en la **parte inferior** de la tarjeta, en un contenedor independiente por debajo de la fila de fecha programada, periodicidad, recuento de sistemas y botón de descarga offline, separadas por una línea divisoria (`pt-2 border-t border-zinc-100`).
+  - **Alineación Horizontal de Alertas Preventivas**: En `PartesTecnico.tsx`, `Partes.tsx` y `Revisiones.tsx`, todas las insignias de alertas preventivas (`Ext+20 años:`, `RT:`, `Bie+20 años:`, `PH:`) DEBEN mostrarse en un único contenedor horizontal continuo (`flex flex-wrap items-center gap-1.5`) para maximizar el aprovechamiento de espacio y orden visual.
+  - **Ubicación en Tarjeta del Técnico (Dispositivos Móviles)**: En las tarjetas de la vista técnico (`PartesTecnico.tsx`), TODAS las alertas preventivas DEBEN situarse exclusivamente en la **parte inferior** de la tarjeta, en un contenedor independiente por debajo de la fila de fecha programada, periodicidad, recuento de sistemas y botón de descarga offline, separadas por una línea divisoria (`pt-2 border-t border-zinc-100`).
+
+---
+
+## 50. Blindaje Inviolable del Modal de Selección de Vista, Carga Selectiva y Fondo Corporativo en Partes del Técnico (`PartesTecnico.tsx`)
+- **Fondo Azul Corporativo (`bg-[#1d3557]`)**:
+  - El fondo de la pantalla de listado de partes del técnico (`PartesTecnico.tsx`) DEBE utilizar incondicionalmente el color azul profundo **`bg-[#1d3557]`**, coincidiendo con la estética del panel principal de los técnicos (`DashboardTecnico.tsx`).
+  - Las tarjetas de los partes se mantienen en fondo blanco (`bg-white rounded-3xl`) para garantizar un contraste limpio y lectura clara.
+- **Modal de Selección de Modo de Visualización (`showModoModal`)**:
+  - Al acceder a la vista de partes, se presenta una ventana modal flotante (`showModoModal`) con dos opciones claramente diferenciadas:
+    1. **`1º Vista rápida de los partes`**: Permite al técnico ver y trabajar inmediatamente sobre sus partes sin esperar la comprobación remota de alertas preventivas (ejecutando en segundo plano la consulta sin bloquear la interfaz).
+    2. **`2º Mostrar alertas en partes`**: Activa la comprobación y muestra la ventana de carga.
+- **Pantalla de Carga y Mensaje Reglamentario**:
+  - Al seleccionar la 2.ª opción, se despliega el modal de carga con spinner animado y el texto literal exacto:
+    **`leyendo fechas y alertas en los partes,...`**
+- **Lectura Selectiva Estricta sobre Partes en Pantalla**:
+  - Queda **ESTRICTAMENTE PROHIBIDO** consultar masivamente o en bucle todos los centros de partes históricos o cerrados.
+  - La función `ejecutarCargaAlertas` DEBE filtrar exclusivamente los partes que se encuentran actualmente visibles en pantalla con estado `Planificado`, `En curso`, `Abierto` o `En revisión` (`partesObjetivo`), leyendo únicamente los centros asociados a dichos partes (`targetCentroIds`).
+  - Al finalizar la lectura, la ventana de carga se cierra automáticamente y se presentan las tarjetas con sus correspondientes alertas ya calculadas.
+- **Botón de Cabecera para Re-apertura o Recarga**:
+  - En la barra superior de `PartesTecnico.tsx`, al lado del título y conteo de partes, DEBE mantenerse de forma permanente el botón **`Alertas`** con el icono `AlertTriangle`, permitiendo volver a abrir el selector o refrescar la lectura en cualquier momento.
 
 
 

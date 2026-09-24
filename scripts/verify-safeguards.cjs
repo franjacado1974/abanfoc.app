@@ -717,6 +717,23 @@ if (fs.existsSync(revisionesPath)) {
   }
 }
 
+// 35. Verificación del Modal de Selección de Vista, Carga Selectiva y Fondo Corporativo (AGENTS.md REGLA 50)
+if (fs.existsSync(partesTecPath)) {
+  const ptContent = fs.readFileSync(partesTecPath, 'utf8');
+  if (!ptContent.includes('1º Vista rápida de los partes') || !ptContent.includes('2º Mostrar alertas en partes')) {
+    errors.push('CRÍTICO: PartesTecnico.tsx carece del modal con las 2 opciones de visualización (1º Vista rápida / 2º Mostrar alertas) (AGENTS.md REGLA 50).');
+  }
+  if (!ptContent.includes('leyendo fechas y alertas en los partes,...')) {
+    errors.push('CRÍTICO: PartesTecnico.tsx carece del texto reglamentario de carga "leyendo fechas y alertas en los partes,..." (AGENTS.md REGLA 50).');
+  }
+  if (!ptContent.includes('bg-[#1d3557]')) {
+    errors.push('CRÍTICO: PartesTecnico.tsx carece del fondo azul corporativo bg-[#1d3557] (AGENTS.md REGLA 50).');
+  }
+  if (!ptContent.includes('partesObjetivo')) {
+    errors.push('CRÍTICO: PartesTecnico.tsx carece del filtrado selectivo de partes objetivo planificados o en curso (AGENTS.md REGLA 50).');
+  }
+}
+
 // Resultado de la verificación
 if (errors.length > 0) {
   console.error('\n❌ ERROR CRÍTICO DE BLINDAJE INTEGRAL (AGENTS.md):');
