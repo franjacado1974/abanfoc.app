@@ -447,7 +447,7 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
 
   // ─── VISTA LISTA DE PARTES ─────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-zinc-50 pb-12">
+    <div className="min-h-screen bg-[#1d3557] pb-12">
       {/* Header Fijo */}
       <header className="sticky top-0 z-20 bg-white/95 backdrop-blur border-b border-zinc-200 shadow-sm">
         <div className="flex items-center gap-3 px-4 py-3">
@@ -543,12 +543,12 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
       {/* Lista de partes */}
       <div className="w-full max-w-5xl mx-auto px-2 sm:px-4 py-4">
         {partesFiltrados.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-zinc-400">
-            <Calendar className="w-16 h-16 mb-4 opacity-20" />
-            <p className="font-bold text-sm text-center text-zinc-500">
+          <div className="flex flex-col items-center justify-center py-20 text-white/60">
+            <Calendar className="w-16 h-16 mb-4 opacity-40 text-white" />
+            <p className="font-bold text-sm text-center text-white">
               {searchTerm ? 'Sin resultados para tu búsqueda' : 'No tienes partes asignados'}
             </p>
-            <p className="text-xs text-center mt-1 text-zinc-400">
+            <p className="text-xs text-center mt-1 text-white/60">
               {searchTerm ? 'Prueba con otro término' : 'Cuando se te asigne un parte aparecerá aquí'}
             </p>
           </div>
