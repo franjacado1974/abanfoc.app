@@ -92,6 +92,8 @@ export interface EquipoInstalado {
   checkAcceso?: boolean | null;
   checkAltura?: boolean | null;
   checkSoporte?: boolean | null;
+  checkPuertaCristal?: boolean | null;
+  item_1790629281657?: boolean | null;
   checkSenalizacion?: boolean | null;
   checkManguera?: boolean | null;
   checkPeso?: boolean | null;
@@ -224,6 +226,26 @@ export interface Articulo {
   precioVenta: number;
   revisable: boolean;
   fotoUrl?: string;
+  tipo?: string;
+  modelo?: string;
+  cantidad?: number;
+  estado?: 'Nuevo' | 'Usado' | 'Reparado' | string;
+  observaciones?: string;
+}
+
+export interface AvisoStock {
+  id: string;
+  articuloId: string;
+  codigo: string;
+  nombre: string;
+  familia?: string;
+  tipo?: string;
+  modelo?: string;
+  fotoUrl?: string;
+  observaciones?: string;
+  fecha: string;
+  timestamp: number;
+  activo: boolean;
 }
 
 export interface Familia {
@@ -271,3 +293,38 @@ export interface SistemaEquipo {
   familia: string;
   revisable: boolean;
 }
+
+export interface NotaBlocItem {
+  id?: string;
+  _docId?: string;
+  categoria: 'Compras' | 'Visitas' | 'Presupuestos' | 'Varias' | 'Completadas' | string;
+  lugar: string;
+  motivo: string;
+  contenido?: string;
+  usuarioNombre: string;
+  usuarioId?: string;
+  prioridad: 'Baja' | 'Media' | 'Alta' | 'Urgente';
+  fechaCreacion: string;
+  fechaActualizacion?: string;
+  completada?: boolean;
+  completadaPor?: string;
+  fechaCompletada?: string;
+  categoriaAnterior?: string;
+}
+
+export interface InventarioItem {
+  id?: string;
+  _docId?: string;
+  articulo: string;
+  tipo: string;
+  modelo: string;
+  familia: string;
+  estado: 'Disponible' | 'Bajo Stock' | 'En Taller' | 'Reservado' | 'Agotado' | string;
+  cantidad: number;
+  observaciones: string;
+  fechaCreacion?: string;
+  fechaActualizacion?: string;
+  creadoPor?: string;
+  updatedAt?: string;
+}
+

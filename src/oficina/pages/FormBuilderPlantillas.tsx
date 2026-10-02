@@ -1,17 +1,17 @@
-/**
- * ─────────────────────────────────────────────────────────────────────────────
+﻿/**
+ * â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
  * FormBuilderPlantillas.tsx
  * Editor visual de formularios (Form Builder) para plantillas de checklist.
- * ─────────────────────────────────────────────────────────────────────────────
+ * â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
  *
- * Características:
+ * CaracterÃ­sticas:
  * - Sidebar con lista de plantillas desde Firestore
  * - Editor visual con vista previa en tiempo real
  * - Cada fila: texto editable, tipo de respuesta (check/texto/numero), orden
  * - Checkbox "Horizontal" para mostrar label a la izquierda y campo a la derecha
- * - Botones: Añadir fila, Eliminar fila, Subir/Bajar
- * - Guardado y sincronización directa con Firestore
- * ─────────────────────────────────────────────────────────────────────────────
+ * - Botones: AÃ±adir fila, Eliminar fila, Subir/Bajar
+ * - Guardado y sincronizaciÃ³n directa con Firestore
+ * â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
  */
 
 import { useState, useEffect } from 'react';
@@ -29,7 +29,7 @@ import {
   type Plantilla, type ItemPlantillaInput, type PlantillaInput, type TipoRespuestaChecklist
 } from '../../recursos-compartidos/types/plantillas';
 
-// ─── TIPOS LOCALES ──────────────────────────────────────────────────────────
+// â”€â”€â”€ TIPOS LOCALES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 interface ItemLocal {
   id: string;           // ID del documento en Firestore (o temporal si es nuevo)
@@ -42,10 +42,11 @@ interface ItemLocal {
   filasInicio?: number; // Filas iniciales para tabla
   filasNombres?: string[]; // Nombres de las filas (cabecera vertical para tablas, opcional)
   horizontal?: boolean; // true = label a la izquierda, campo a la derecha
-  esNuevo?: boolean;    // true si aún no se ha guardado en Firestore
+  valorPredeterminado?: string; // Valor por defecto / predeterminado
+  esNuevo?: boolean;    // true si aÃºn no se ha guardado en Firestore
 }
 
-// ─── COMPONENTE PRINCIPAL ────────────────────────────────────────────────────
+// â”€â”€â”€ COMPONENTE PRINCIPAL â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 // Componente auxiliar para las opciones del desplegable
 const OpcionesInput = ({ opciones, onUpdate }: { opciones: string[], onUpdate: (opts: string[]) => void }) => {
@@ -67,13 +68,13 @@ const OpcionesInput = ({ opciones, onUpdate }: { opciones: string[], onUpdate: (
         setVal(opts.join(', '));
       }}
       className="w-full px-3 py-1.5 bg-white border border-zinc-200 rounded-md text-xs outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500/20"
-      placeholder="Ej: Opción 1, Opción 2, Opción 3"
+      placeholder="Ej: OpciÃ³n 1, OpciÃ³n 2, OpciÃ³n 3"
     />
   );
 };
 
 export default function FormBuilderPlantillas() {
-  // ─── ESTADOS ──────────────────────────────────────────────────────────────
+  // â”€â”€â”€ ESTADOS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [plantillas, setPlantillas] = useState<Plantilla[]>([]);
   const [plantillaSeleccionada, setPlantillaSeleccionada] = useState<string | null>(null);
   const [items, setItems] = useState<ItemLocal[]>([]);
@@ -90,22 +91,22 @@ export default function FormBuilderPlantillas() {
   const [tablaColumnas, setTablaColumnas] = useState(3);
   const [tablaFilas, setTablaFilas] = useState(4);
 
-  // ─── SUSCRIPCIONES ────────────────────────────────────────────────────────
+  // â”€â”€â”€ SUSCRIPCIONES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-  // Suscripción a la lista de plantillas
+  // SuscripciÃ³n a la lista de plantillas
   useEffect(() => {
     const unsub = subscribePlantillas((lista) => {
-      console.log('📋 Plantillas cargadas desde Firestore:', lista.length);
+      console.log('ðŸ“‹ Plantillas cargadas desde Firestore:', lista.length);
       setPlantillas(lista);
       if (lista.length === 0 && !inicializado) {
-        console.log('⚠️ No hay plantillas. Inicializando plantillas por defecto...');
+        console.log('âš ï¸ No hay plantillas. Inicializando plantillas por defecto...');
         inicializarPlantillasPorDefecto()
           .then(() => {
-            console.log('✅ Plantillas por defecto inicializadas correctamente');
+            console.log('âœ… Plantillas por defecto inicializadas correctamente');
             setInicializado(true);
           })
           .catch((err) => {
-            console.error('❌ Error inicializando plantillas por defecto:', err);
+            console.error('âŒ Error inicializando plantillas por defecto:', err);
             mostrarMensaje('error', 'Error al inicializar plantillas: ' + err.message);
           });
       } else if (lista.length > 0) {
@@ -115,7 +116,7 @@ export default function FormBuilderPlantillas() {
     return () => unsub();
   }, [inicializado]);
 
-  // Suscripción a los items de la plantilla seleccionada
+  // SuscripciÃ³n a los items de la plantilla seleccionada
   useEffect(() => {
     if (!plantillaSeleccionada) {
       setItems([]);
@@ -131,7 +132,10 @@ export default function FormBuilderPlantillas() {
         tipoRespuesta: it.tipoRespuesta,
         requerido: it.requerido,
         opciones: it.opciones || [],
+        filasInicio: it.filasInicio,
+        filasNombres: it.filasNombres,
         horizontal: it.horizontal === true,
+        valorPredeterminado: it.valorPredeterminado || '',
         esNuevo: false,
       })));
     });
@@ -148,14 +152,14 @@ export default function FormBuilderPlantillas() {
     }
   }, [plantillaSeleccionada, plantillas]);
 
-  // ─── HELPERS ──────────────────────────────────────────────────────────────
+  // â”€â”€â”€ HELPERS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const mostrarMensaje = (tipo: 'ok' | 'error', texto: string) => {
     setMensaje({ tipo, texto });
     setTimeout(() => setMensaje(null), 3000);
   };
 
-  // ─── MANEJADORES DE PLANTILLA ─────────────────────────────────────────────
+  // â”€â”€â”€ MANEJADORES DE PLANTILLA â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const handleCrearPlantilla = async () => {
     const nombre = prompt('Nombre de la nueva plantilla:');
@@ -174,7 +178,7 @@ export default function FormBuilderPlantillas() {
   };
 
   const handleEliminarPlantilla = async (id: string) => {
-    if (!confirm('¿Eliminar esta plantilla y todos sus items?\nEsta acción no se puede deshacer.')) return;
+    if (!confirm('Â¿Eliminar esta plantilla y todos sus items?\nEsta acciÃ³n no se puede deshacer.')) return;
     try {
       await deletePlantilla(id);
       if (plantillaSeleccionada === id) {
@@ -196,7 +200,7 @@ export default function FormBuilderPlantillas() {
       setPlantillaSeleccionada(nueva.id);
       setNombrePlantilla(nueva.nombre);
       setDescripcionPlantilla(nueva.descripcion || '');
-      mostrarMensaje('ok', '✅ Plantilla duplicada correctamente');
+      mostrarMensaje('ok', 'âœ… Plantilla duplicada correctamente');
     } catch (e) {
       console.error(e);
       mostrarMensaje('error', 'Error al duplicar la plantilla');
@@ -219,7 +223,7 @@ export default function FormBuilderPlantillas() {
     }
   };
 
-  // ─── MANEJADORES DE ITEMS ─────────────────────────────────────────────────
+  // â”€â”€â”€ MANEJADORES DE ITEMS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const handleAddItem = async () => {
     if (!plantillaSeleccionada) return;
@@ -234,10 +238,10 @@ export default function FormBuilderPlantillas() {
     };
     try {
       await addItemAPlantilla(nuevoItem);
-      mostrarMensaje('ok', 'Pregunta añadida');
+      mostrarMensaje('ok', 'Pregunta aÃ±adida');
     } catch (e) {
       console.error(e);
-      mostrarMensaje('error', 'Error al añadir la pregunta');
+      mostrarMensaje('error', 'Error al aÃ±adir la pregunta');
     }
   };
 
@@ -271,7 +275,7 @@ export default function FormBuilderPlantillas() {
     try {
       await addItemAPlantilla(nuevoItem);
       setModalTablaOpen(false);
-      mostrarMensaje('ok', 'Tabla añadida al checklist');
+      mostrarMensaje('ok', 'Tabla aÃ±adida al checklist');
     } catch (e) {
       console.error(e);
       mostrarMensaje('error', 'Error al crear la tabla');
@@ -284,22 +288,22 @@ export default function FormBuilderPlantillas() {
     const nuevoOrden = items.length + 1;
     const nuevoItem = {
       plantillaId: plantillaSeleccionada,
-      label: 'Ensayo de Caudal y Presión (Gráfico Q-H)',
+      label: 'Ensayo de Caudal y PresiÃ³n (GrÃ¡fico Q-H)',
       key: `table_${Date.now()}`,
       orden: nuevoOrden,
       tipoRespuesta: 'grafico',
       requerido: false,
-      opciones: ['Caudal (m³/h)', 'L.P.M.', 'Presión (bar)', 'R.P.M.'],
+      opciones: ['Caudal (mÂ³/h)', 'L.P.M.', 'PresiÃ³n (bar)', 'R.P.M.'],
       filasInicio: 4,
       filasNombres: ['0%', '50%', '100%', '140%'],
     } as any;
     
     try {
       await addItemAPlantilla(nuevoItem);
-      mostrarMensaje('ok', 'Gráfico Q-H añadido al checklist');
+      mostrarMensaje('ok', 'GrÃ¡fico Q-H aÃ±adido al checklist');
     } catch (e) {
       console.error(e);
-      mostrarMensaje('error', 'Error al crear el gráfico');
+      mostrarMensaje('error', 'Error al crear el grÃ¡fico');
     }
   };
 
@@ -327,7 +331,7 @@ export default function FormBuilderPlantillas() {
   const handleCopyItem = async (index: number) => {
     if (!plantillaSeleccionada || index < 0 || index >= items.length) return;
     
-    // Crear la nueva lista con la copia insertada justo después del original
+    // Crear la nueva lista con la copia insertada justo despuÃ©s del original
     const nuevosItems: ItemPlantillaInput[] = [];
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
@@ -340,24 +344,28 @@ export default function FormBuilderPlantillas() {
         requerido: item.requerido,
         opciones: item.opciones || [],
         filasInicio: item.filasInicio,
+        filasNombres: item.filasNombres,
         horizontal: item.horizontal === true,
+        valorPredeterminado: item.valorPredeterminado || '',
       });
-      // Si es el item que estamos copiando, insertamos la copia justo después
+      // Si es el item que estamos copiando, insertamos la copia justo despuÃ©s
       if (i === index) {
         nuevosItems.push({
           plantillaId: plantillaSeleccionada,
           label: item.label + ' (copia)',
           key: `item_${Date.now()}`,
-          orden: i + 2, // Se reasignará al final
+          orden: i + 2, // Se reasignarÃ¡ al final
           tipoRespuesta: item.tipoRespuesta,
           requerido: item.requerido,
           opciones: item.opciones || [],
           filasInicio: item.filasInicio,
+          filasNombres: item.filasNombres,
           horizontal: item.horizontal === true,
+          valorPredeterminado: item.valorPredeterminado || '',
         });
       }
     }
-    // Reasignar órdenes consecutivos
+    // Reasignar Ã³rdenes consecutivos
     const itemsFinal = nuevosItems.map((item, i) => ({
       ...item,
       orden: i + 1,
@@ -377,14 +385,14 @@ export default function FormBuilderPlantillas() {
     const nuevoIndex = direccion === 'up' ? index - 1 : index + 1;
     if (nuevoIndex < 0 || nuevoIndex >= items.length) return;
 
-    // Intercambiar órdenes
+    // Intercambiar Ã³rdenes
     const itemsReordenados = items.map((item, i) => {
       if (i === index) return { ...item, orden: items[nuevoIndex].orden };
       if (i === nuevoIndex) return { ...item, orden: items[index].orden };
       return item;
     }).sort((a, b) => a.orden - b.orden);
 
-    // Reasignar órdenes consecutivos
+    // Reasignar Ã³rdenes consecutivos
     const itemsFinal = itemsReordenados.map((item, i) => ({
       plantillaId: plantillaSeleccionada!,
       label: item.label,
@@ -394,7 +402,9 @@ export default function FormBuilderPlantillas() {
       requerido: item.requerido,
       opciones: item.opciones || [],
       filasInicio: item.filasInicio,
+      filasNombres: item.filasNombres,
       horizontal: item.horizontal === true,
+      valorPredeterminado: item.valorPredeterminado || '',
     }));
 
     try {
@@ -406,30 +416,30 @@ export default function FormBuilderPlantillas() {
     }
   };
 
-  // ─── GUARDADO COMPLETO ────────────────────────────────────────────────────
+  // â”€â”€â”€ GUARDADO COMPLETO â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const handleGuardarTodo = async () => {
     if (!plantillaSeleccionada || !nombrePlantilla.trim()) return;
     setGuardando(true);
     try {
-      // Guardar nombre y descripción de la plantilla
+      // Guardar nombre y descripciÃ³n de la plantilla
       // (los items se guardan individualmente al editar cada campo)
       const datos: any = { nombre: nombrePlantilla.trim() };
       if (descripcionPlantilla.trim()) {
         datos.descripcion = descripcionPlantilla.trim();
       }
       await updatePlantilla(plantillaSeleccionada, datos);
-      mostrarMensaje('ok', '✅ Plantilla guardada correctamente');
+      mostrarMensaje('ok', 'âœ… Plantilla guardada correctamente');
     } catch (e: any) {
       console.error('Error detallado al guardar plantilla:', e);
       const msgError = e?.message || e?.code || 'Error desconocido';
-      mostrarMensaje('error', `❌ Error: ${msgError}`);
+      mostrarMensaje('error', `âŒ Error: ${msgError}`);
     } finally {
       setGuardando(false);
     }
   };
 
-  // ─── RENDER: BADGE DE TIPO ────────────────────────────────────────────────
+  // â”€â”€â”€ RENDER: BADGE DE TIPO â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const TipoBadge = ({ tipo }: { tipo: TipoRespuestaChecklist }) => {
     const estilos: Record<string, string> = {
@@ -449,14 +459,14 @@ export default function FormBuilderPlantillas() {
       check: 'Check',
       texto: 'Texto',
       'texto-largo': 'Texto Largo',
-      numero: 'Número',
+      numero: 'NÃºmero',
       fecha: 'Fecha',
       imagen: 'Imagen',
       desplegable: 'Desplegable',
-      seccion: 'Sección',
+      seccion: 'SecciÃ³n',
       tabla: 'Tabla',
-      seleccion: 'Selección',
-      grafico: 'Gráfico Q-H',
+      seleccion: 'SelecciÃ³n',
+      grafico: 'GrÃ¡fico Q-H',
     };
     return (
       <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${estilos[tipo] || 'bg-zinc-100 text-zinc-600 border-zinc-200'}`}>
@@ -465,14 +475,19 @@ export default function FormBuilderPlantillas() {
     );
   };
 
-  // ─── RENDER: VISTA PREVIA DEL CAMPO ───────────────────────────────────────
+  // â”€â”€â”€ RENDER: VISTA PREVIA DEL CAMPO â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const renderInputPreview = (item: ItemLocal) => {
     switch (item.tipoRespuesta) {
       case 'check':
         return (
           <label className="flex items-center gap-2 cursor-pointer text-xs px-3 py-2 rounded-lg bg-white border border-zinc-200 hover:border-zinc-300 transition-all select-none text-zinc-700 font-medium">
-            <input type="checkbox" className="w-4 h-4 rounded cursor-pointer text-teal-600 border-zinc-300 focus:ring-teal-500" disabled />
+            <input
+              type="checkbox"
+              className="w-4 h-4 rounded cursor-pointer text-teal-600 border-zinc-300 focus:ring-teal-500"
+              checked={item.valorPredeterminado === 'true'}
+              disabled
+            />
             {item.label}
           </label>
         );
@@ -482,8 +497,9 @@ export default function FormBuilderPlantillas() {
             <label className="text-[10px] font-semibold text-zinc-500">{item.label}</label>
             <input
               type="number"
+              value={item.valorPredeterminado || ''}
+              placeholder={item.valorPredeterminado ? '' : '0'}
               className="w-28 px-3 py-2 bg-white border border-zinc-200 rounded-lg text-xs outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20"
-              placeholder="0"
               disabled
             />
           </div>
@@ -494,8 +510,9 @@ export default function FormBuilderPlantillas() {
             <label className="text-[10px] font-semibold text-zinc-500">{item.label}</label>
             <input
               type="text"
+              value={item.valorPredeterminado || ''}
+              placeholder={item.valorPredeterminado ? '' : '...'}
               className="w-full px-3 py-2 bg-white border border-zinc-200 rounded-lg text-xs outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20"
-              placeholder="..."
               disabled
             />
           </div>
@@ -506,6 +523,7 @@ export default function FormBuilderPlantillas() {
             <label className="text-[10px] font-semibold text-zinc-500">{item.label}</label>
             <input
               type="date"
+              value={item.valorPredeterminado === 'hoy' ? new Date().toISOString().split('T')[0] : (item.valorPredeterminado || '')}
               className="w-full px-3 py-2 bg-white border border-zinc-200 rounded-lg text-xs outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20"
               disabled
             />
@@ -518,7 +536,8 @@ export default function FormBuilderPlantillas() {
             <textarea
               className="w-full px-3 py-2 bg-white border border-zinc-200 rounded-lg text-xs outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 resize-none"
               rows={3}
-              placeholder="..."
+              value={item.valorPredeterminado || ''}
+              placeholder={item.valorPredeterminado ? '' : '...'}
               disabled
             />
           </div>
@@ -529,7 +548,7 @@ export default function FormBuilderPlantillas() {
             <label className="text-[10px] font-semibold text-zinc-500">{item.label}</label>
             <div className="flex items-center gap-2 p-3 bg-white border border-dashed border-zinc-300 rounded-lg">
               <Image className="w-5 h-5 text-zinc-400" />
-              <span className="text-[10px] text-zinc-400">Añadir foto</span>
+              <span className="text-[10px] text-zinc-400">AÃ±adir foto</span>
             </div>
           </div>
         );
@@ -538,7 +557,8 @@ export default function FormBuilderPlantillas() {
           <div className="flex flex-col gap-1">
             <label className="text-[10px] font-semibold text-zinc-500">{item.label}</label>
             <select
-              className="w-full px-3 py-2 bg-white border border-zinc-200 rounded-lg text-xs outline-none text-zinc-500"
+              className="w-full px-3 py-2 bg-white border border-zinc-200 rounded-lg text-xs outline-none text-zinc-700 font-medium"
+              value={item.valorPredeterminado || ''}
               disabled
             >
               <option value="">Selecciona...</option>
@@ -549,13 +569,13 @@ export default function FormBuilderPlantillas() {
           </div>
         );
       case 'seleccion':
-        const opcionesSel = item.opciones && item.opciones.length > 0 ? item.opciones : ['Sí', 'No', 'N/A'];
+        const opcionesSel = item.opciones && item.opciones.length > 0 ? item.opciones : ['SÃ­', 'No', 'N/A'];
         return (
           <div className="flex flex-col gap-1">
             <label className="text-[10px] font-semibold text-zinc-500">{item.label}</label>
             <div className="flex flex-wrap items-center gap-4 mt-1">
               {opcionesSel.map((opt, i) => {
-                const isSelected = i === 0;
+                const isSelected = item.valorPredeterminado ? opt === item.valorPredeterminado : (i === 0);
                 return (
                   <div
                     key={i}
@@ -582,7 +602,7 @@ export default function FormBuilderPlantillas() {
       case 'seccion':
         return (
           <div className="border-b border-zinc-200 pb-1 pt-1 mb-1">
-            <span className="text-xs font-bold text-zinc-700 uppercase tracking-wide">{item.label || 'Separador de Sección'}</span>
+            <span className="text-xs font-bold text-zinc-700 uppercase tracking-wide">{item.label || 'Separador de SecciÃ³n'}</span>
           </div>
         );
       case 'tabla':
@@ -623,13 +643,13 @@ export default function FormBuilderPlantillas() {
               </table>
               {!hasVert && (
                 <div className="px-2 py-1 bg-zinc-50 border-t border-zinc-100 flex justify-end">
-                  <span className="text-[8px] bg-white border border-zinc-200 text-indigo-600 px-1.5 py-0.5 rounded font-bold shadow-sm">+ Añadir fila</span>
+                  <span className="text-[8px] bg-white border border-zinc-200 text-indigo-600 px-1.5 py-0.5 rounded font-bold shadow-sm">+ AÃ±adir fila</span>
                 </div>
               )}
             </div>
             {isGrafico && (
               <div className="border border-dashed border-rose-300 rounded-lg p-3 bg-rose-50/20 text-center flex flex-col items-center justify-center min-h-[60px] mt-1">
-                <span className="text-[10px] font-bold text-rose-600 uppercase tracking-wide">📈 [Curva de Caudal y Presión (Q-H) se graficará automáticamente en el acta PDF]</span>
+                <span className="text-[10px] font-bold text-rose-600 uppercase tracking-wide">ðŸ“ˆ [Curva de Caudal y PresiÃ³n (Q-H) se graficarÃ¡ automÃ¡ticamente en el acta PDF]</span>
               </div>
             )}
           </div>
@@ -638,11 +658,11 @@ export default function FormBuilderPlantillas() {
   };
 
   const VistaPreviaCampo = ({ item }: { item: ItemLocal }) => {
-    // Si es sección, siempre se renderiza igual
+    // Si es secciÃ³n, siempre se renderiza igual
     if (item.tipoRespuesta === 'seccion') {
       return (
         <div className="border-b border-zinc-200 pb-1 pt-1 mb-1">
-          <span className="text-xs font-bold text-zinc-700 uppercase tracking-wide">{item.label || 'Separador de Sección'}</span>
+          <span className="text-xs font-bold text-zinc-700 uppercase tracking-wide">{item.label || 'Separador de SecciÃ³n'}</span>
         </div>
       );
     }
@@ -651,7 +671,7 @@ export default function FormBuilderPlantillas() {
       return renderInputPreview(item);
     }
 
-    // Si tiene horizontal activado, se renderiza en línea horizontal
+    // Si tiene horizontal activado, se renderiza en lÃ­nea horizontal
     if (item.horizontal) {
       const innerType = item.tipoRespuesta;
       return (
@@ -660,29 +680,37 @@ export default function FormBuilderPlantillas() {
           <div className="w-48 shrink-0">
             {innerType === 'check' && (
               <label className="flex items-center gap-2 cursor-pointer text-xs px-3 py-1.5 rounded-lg bg-white border border-zinc-200 hover:border-zinc-300 transition-all select-none text-zinc-700 font-medium">
-                <input type="checkbox" className="w-4 h-4 rounded cursor-pointer text-teal-600 border-zinc-300 focus:ring-teal-500" disabled />
+                <input
+                  type="checkbox"
+                  className="w-4 h-4 rounded cursor-pointer text-teal-600 border-zinc-300 focus:ring-teal-500"
+                  checked={item.valorPredeterminado === 'true'}
+                  disabled
+                />
                 OK
               </label>
             )}
             {innerType === 'texto' && (
               <input
                 type="text"
+                value={item.valorPredeterminado || ''}
+                placeholder={item.valorPredeterminado ? '' : '...'}
                 className="w-full px-3 py-1.5 bg-white border border-zinc-200 rounded-lg text-xs outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20"
-                placeholder="..."
                 disabled
               />
             )}
             {innerType === 'numero' && (
               <input
                 type="number"
+                value={item.valorPredeterminado || ''}
+                placeholder={item.valorPredeterminado ? '' : '0'}
                 className="w-28 px-3 py-1.5 bg-white border border-zinc-200 rounded-lg text-xs outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20"
-                placeholder="0"
                 disabled
               />
             )}
             {innerType === 'fecha' && (
               <input
                 type="date"
+                value={item.valorPredeterminado === 'hoy' ? new Date().toISOString().split('T')[0] : (item.valorPredeterminado || '')}
                 className="w-full px-3 py-1.5 bg-white border border-zinc-200 rounded-lg text-xs outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20"
                 disabled
               />
@@ -691,19 +719,21 @@ export default function FormBuilderPlantillas() {
               <textarea
                 className="w-full px-3 py-1.5 bg-white border border-zinc-200 rounded-lg text-xs outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 resize-none"
                 rows={2}
-                placeholder="..."
+                value={item.valorPredeterminado || ''}
+                placeholder={item.valorPredeterminado ? '' : '...'}
                 disabled
               />
             )}
             {innerType === 'imagen' && (
               <div className="flex items-center gap-2 p-2 bg-white border border-dashed border-zinc-300 rounded-lg">
                 <Image className="w-4 h-4 text-zinc-400" />
-                <span className="text-[9px] text-zinc-400">Añadir foto</span>
+                <span className="text-[9px] text-zinc-400">AÃ±adir foto</span>
               </div>
             )}
             {innerType === 'desplegable' && (
               <select
-                className="w-full px-3 py-1.5 bg-white border border-zinc-200 rounded-lg text-xs outline-none text-zinc-500"
+                className="w-full px-3 py-1.5 bg-white border border-zinc-200 rounded-lg text-xs outline-none text-zinc-700 font-medium"
+                value={item.valorPredeterminado || ''}
                 disabled
               >
                 <option value="">Selecciona...</option>
@@ -714,18 +744,21 @@ export default function FormBuilderPlantillas() {
             )}
             {innerType === 'seleccion' && (
               <div className="flex gap-1 flex-wrap justify-end">
-                {(item.opciones && item.opciones.length > 0 ? item.opciones : ['Sí', 'No', 'N/A']).map((opt, i) => (
-                  <span
-                    key={i}
-                    className={`px-2.5 py-1 text-[10px] rounded-lg border text-center font-semibold shadow-sm transition-all select-none ${
-                      i === 0 
-                        ? 'bg-indigo-600 text-white border-indigo-600 font-bold' 
-                        : 'bg-white text-zinc-600 border-zinc-200'
-                    }`}
-                  >
-                    {opt}
-                  </span>
-                ))}
+                {(item.opciones && item.opciones.length > 0 ? item.opciones : ['SÃ­', 'No', 'N/A']).map((opt, i) => {
+                  const isSelected = item.valorPredeterminado ? opt === item.valorPredeterminado : (i === 0);
+                  return (
+                    <span
+                      key={i}
+                      className={`px-2.5 py-1 text-[10px] rounded-lg border text-center font-semibold shadow-sm transition-all select-none ${
+                        isSelected 
+                          ? 'bg-indigo-600 text-white border-indigo-600 font-bold' 
+                          : 'bg-white text-zinc-600 border-zinc-200'
+                      }`}
+                    >
+                      {opt}
+                    </span>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -737,16 +770,16 @@ export default function FormBuilderPlantillas() {
     return <>{renderInputPreview(item)}</>;
   };
 
-  // ─── RENDER PRINCIPAL ─────────────────────────────────────────────────────
+  // â”€â”€â”€ RENDER PRINCIPAL â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   return (
     <div className="min-h-screen bg-[#DCE1E5] flex flex-col">
-      {/* ── CUERPO: DOS COLUMNAS ───────────────────────────────────────────── */}
+      {/* â”€â”€ CUERPO: DOS COLUMNAS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
-        {/* ── SIDEBAR: Lista de plantillas ─────────────────────────────────── */}
+        {/* â”€â”€ SIDEBAR: Lista de plantillas â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
         <aside className="w-full lg:w-96 xl:w-[26rem] bg-white border-b lg:border-b-0 lg:border-r border-zinc-200 overflow-y-auto shrink-0">
           <div className="p-4 space-y-3">
-            {/* Botón nueva plantilla */}
+            {/* BotÃ³n nueva plantilla */}
             <button
               onClick={handleCrearPlantilla}
               className="w-full flex items-center justify-center gap-2 bg-teal-600 hover:bg-teal-700 text-white px-4 py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm"
@@ -805,23 +838,23 @@ export default function FormBuilderPlantillas() {
           </div>
         </aside>
 
-        {/* ── EDITOR PRINCIPAL ─────────────────────────────────────────────── */}
+        {/* â”€â”€ EDITOR PRINCIPAL â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
           {!plantillaSeleccionada ? (
-            /* ── Estado vacío ─────────────────────────────────────────────── */
+            /* â”€â”€ Estado vacÃ­o â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
             <div className="flex flex-col items-center justify-center h-full text-center py-20">
               <div className="w-20 h-20 bg-teal-100 rounded-3xl flex items-center justify-center mb-6">
                 <ClipboardList className="w-10 h-10 text-teal-600" />
               </div>
               <h2 className="text-xl font-bold text-zinc-800 mb-2">Selecciona una plantilla</h2>
               <p className="text-sm text-zinc-500 max-w-sm">
-                Elige una plantilla de la lista lateral o crea una nueva para empezar a diseñar tu formulario.
+                Elige una plantilla de la lista lateral o crea una nueva para empezar a diseÃ±ar tu formulario.
               </p>
             </div>
           ) : (
-            /* ── Editor activo ────────────────────────────────────────────── */
+            /* â”€â”€ Editor activo â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
             <div className="max-w-3xl mx-auto space-y-6">
-              {/* ── CABECERA DE LA PLANTILLA ──────────────────────────────── */}
+              {/* â”€â”€ CABECERA DE LA PLANTILLA â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
               <div className="bg-white rounded-2xl border border-zinc-200 p-5 shadow-sm">
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
@@ -840,7 +873,7 @@ export default function FormBuilderPlantillas() {
                           value={descripcionPlantilla}
                           onChange={e => setDescripcionPlantilla(e.target.value)}
                           className="w-full px-3 py-1.5 border border-zinc-200 rounded-lg text-xs text-zinc-600 outline-none focus:border-teal-500"
-                          placeholder="Descripción (opcional)"
+                          placeholder="DescripciÃ³n (opcional)"
                         />
                         <div className="flex gap-2">
                           <button
@@ -881,13 +914,13 @@ export default function FormBuilderPlantillas() {
                 </div>
               </div>
 
-              {/* ── BARRA DE ACCIONES ──────────────────────────────────────── */}
+              {/* â”€â”€ BARRA DE ACCIONES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   onClick={handleAddItem}
                   className="flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm"
                 >
-                  <Plus className="w-3.5 h-3.5" /> Añadir pregunta
+                  <Plus className="w-3.5 h-3.5" /> AÃ±adir pregunta
                 </button>
 
                 <button
@@ -901,7 +934,7 @@ export default function FormBuilderPlantillas() {
                   onClick={handleCrearGrafico}
                   className="flex items-center gap-1.5 bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm"
                 >
-                  <TrendingUp className="w-3.5 h-3.5" /> Crear Gráfico Q-H
+                  <TrendingUp className="w-3.5 h-3.5" /> Crear GrÃ¡fico Q-H
                 </button>
 
                 <div className="flex-1" />
@@ -929,7 +962,7 @@ export default function FormBuilderPlantillas() {
                 )}
               </div>
 
-              {/* ── LISTA DE ITEMS (EDITOR) ────────────────────────────────── */}
+              {/* â”€â”€ LISTA DE ITEMS (EDITOR) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
               <div className="bg-white rounded-2xl border border-zinc-200 overflow-hidden shadow-sm">
                 {/* Cabecera del editor */}
                 <div className="px-5 py-3 bg-gradient-to-r from-teal-600 to-teal-700 flex items-center justify-between">
@@ -948,7 +981,7 @@ export default function FormBuilderPlantillas() {
                     <div className="text-center py-12 bg-zinc-50 rounded-xl border border-dashed border-zinc-200">
                       <ClipboardList className="w-10 h-10 text-zinc-300 mx-auto mb-3" />
                       <p className="text-sm text-zinc-400 font-medium mb-1">No hay preguntas en esta plantilla</p>
-                      <p className="text-xs text-zinc-300 mb-4">Añade tu primera pregunta para empezar</p>
+                      <p className="text-xs text-zinc-300 mb-4">AÃ±ade tu primera pregunta para empezar</p>
                       <button
                         onClick={handleAddItem}
                         className="inline-flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 text-white px-5 py-2.5 rounded-xl text-xs font-bold transition-all shadow-sm"
@@ -961,7 +994,7 @@ export default function FormBuilderPlantillas() {
                       {items.map((item, idx) => (
                         <div key={item.id} className="flex flex-col gap-2 p-3 bg-zinc-50 rounded-xl border border-zinc-200 hover:border-teal-200 hover:bg-teal-50/30 transition-all group">
                           <div className="flex items-center gap-2">
-                            {/* ── Controles de orden ─────────────────────────── */}
+                            {/* â”€â”€ Controles de orden â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
                           <div className="flex flex-col gap-0.5 shrink-0">
                             <button
                               onClick={() => handleMoverItem(idx, 'up')}
@@ -981,15 +1014,15 @@ export default function FormBuilderPlantillas() {
                             </button>
                           </div>
 
-                          {/* ── Número de orden ────────────────────────────── */}
+                          {/* â”€â”€ NÃºmero de orden â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
                           <span className="text-[10px] font-bold text-zinc-400 w-5 text-center shrink-0">
                             {idx + 1}
                           </span>
 
-                          {/* ── Grip (indicador visual de arrastre) ────────── */}
+                          {/* â”€â”€ Grip (indicador visual de arrastre) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
                           <GripVertical className="w-3 h-3 text-zinc-300 shrink-0" />
 
-                          {/* ── Campo de texto editable ────────────────────── */}
+                          {/* â”€â”€ Campo de texto editable â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
                           <input
                             type="text"
                             value={item.label}
@@ -998,36 +1031,47 @@ export default function FormBuilderPlantillas() {
                             placeholder="Escribe la pregunta..."
                           />
 
-                          {/* ── Selector de tipo de respuesta ──────────────── */}
+                          {/* â”€â”€ Selector de tipo de respuesta â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
                           <select
                             value={item.tipoRespuesta}
                             onChange={e => {
                               const nuevoTipo = e.target.value as TipoRespuestaChecklist;
                               const cambios: any = { tipoRespuesta: nuevoTipo };
                               if (nuevoTipo === 'seleccion' && (!item.opciones || item.opciones.length === 0)) {
-                                cambios.opciones = ['Sí', 'No', 'N/A'];
+                                cambios.opciones = ['SÃ­', 'No', 'N/A'];
                               }
                               handleUpdateItem(item.id, cambios);
                             }}
                             className="text-[10px] bg-white border border-zinc-200 rounded-lg px-2 py-2 outline-none focus:border-teal-500 text-zinc-600 font-medium cursor-pointer hover:border-zinc-300 transition-colors"
                           >
-                            <option value="check">✓ Check</option>
+                            <option value="check">âœ“ Check</option>
                             <option value="texto">Aa Texto</option>
-                            <option value="texto-largo">📄 Texto Largo</option>
-                            <option value="numero"># Número</option>
-                            <option value="fecha">📅 Fecha</option>
-                            <option value="imagen">🖼️ Imagen</option>
-                            <option value="desplegable">🔽 Desplegable</option>
-                            <option value="seleccion">🔘 Selección (Botones)</option>
-                            <option value="tabla">📊 Tabla</option>
-                            <option value="grafico">📈 Gráfico Q-H</option>
-                            <option value="seccion">📁 Sección / Separador</option>
+                            <option value="texto-largo">ðŸ“„ Texto Largo</option>
+                            <option value="numero"># NÃºmero</option>
+                            <option value="fecha">ðŸ“… Fecha</option>
+                            <option value="imagen">ðŸ–¼ï¸ Imagen</option>
+                            <option value="desplegable">ðŸ”½ Desplegable</option>
+                            <option value="seleccion">ðŸ”˜ SelecciÃ³n (Botones)</option>
+                            <option value="tabla">ðŸ“Š Tabla</option>
+                            <option value="grafico">ðŸ“ˆ GrÃ¡fico Q-H</option>
+                            <option value="seccion">ðŸ“ SecciÃ³n / Separador</option>
                           </select>
 
-                          {/* ── Badge del tipo ─────────────────────────────── */}
+                          {/* â”€â”€ Badge del tipo â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
                           <TipoBadge tipo={item.tipoRespuesta} />
 
-                          {/* ── Checkbox horizontal ──────────────────────────── */}
+                          {/* â”€â”€ Badge de valor predeterminado si existe â”€â”€â”€â”€â”€ */}
+                          {item.valorPredeterminado && (
+                            <span 
+                              className="hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0 max-w-[140px] truncate" 
+                              title={`Valor por defecto: ${item.valorPredeterminado}`}
+                            >
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
+                              <span className="truncate">Def: {item.valorPredeterminado}</span>
+                            </span>
+                          )}
+
+                          {/* â”€â”€ Checkbox horizontal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
                           <label className="flex items-center gap-1 text-[9px] text-zinc-500 cursor-pointer shrink-0 hover:text-zinc-700 transition-colors" title="Horizontal: pregunta a la izquierda, campo a la derecha">
                             <input
                               type="checkbox"
@@ -1035,10 +1079,10 @@ export default function FormBuilderPlantillas() {
                               onChange={e => handleUpdateItem(item.id, { horizontal: e.target.checked })}
                               className="w-3.5 h-3.5 rounded cursor-pointer text-indigo-600 border-zinc-300 focus:ring-indigo-500"
                             />
-                            <span className="hidden sm:inline">↔️</span>
+                            <span className="hidden sm:inline">â†”ï¸</span>
                           </label>
 
-                          {/* ── Checkbox requerido ──────────────────────────── */}
+                          {/* â”€â”€ Checkbox requerido â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
                           <label className="flex items-center gap-1 text-[9px] text-zinc-500 cursor-pointer shrink-0 hover:text-zinc-700 transition-colors" title="Requerido">
                             <input
                               type="checkbox"
@@ -1049,7 +1093,7 @@ export default function FormBuilderPlantillas() {
                             <span className="hidden sm:inline">Req</span>
                           </label>
 
-                          {/* ── Botón copiar ───────────────────────────────── */}
+                          {/* â”€â”€ BotÃ³n copiar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
                           <button
                             onClick={() => handleCopyItem(idx)}
                             className="p-1.5 text-zinc-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-all shrink-0"
@@ -1058,7 +1102,7 @@ export default function FormBuilderPlantillas() {
                             <Copy className="w-3.5 h-3.5" />
                           </button>
 
-                          {/* ── Botón eliminar ─────────────────────────────── */}
+                          {/* â”€â”€ BotÃ³n eliminar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
                           <button
                             onClick={() => handleDeleteItem(item.id)}
                             className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all shrink-0"
@@ -1068,16 +1112,133 @@ export default function FormBuilderPlantillas() {
                           </button>
                           </div>
                           
-                          {/* ── Editor de opciones para desplegable y selección ── */}
+                          {/* â”€â”€ Editor de opciones para desplegable y selecciÃ³n â”€â”€ */}
                           {(item.tipoRespuesta === 'desplegable' || item.tipoRespuesta === 'seleccion') && (
-                            <div className="pl-14 pr-2">
-                              <label className="text-[10px] font-semibold text-zinc-500 mb-1 block">
-                                {item.tipoRespuesta === 'seleccion' ? 'Opciones de selección (separadas por comas)' : 'Opciones del desplegable (separadas por comas)'}
-                              </label>
-                              <OpcionesInput 
-                                opciones={item.opciones || []} 
-                                onUpdate={(opts) => handleUpdateItem(item.id, { opciones: opts })} 
+                            <div className="pl-14 pr-2 space-y-2">
+                              <div>
+                                <label className="text-[10px] font-semibold text-zinc-500 mb-1 block">
+                                  {item.tipoRespuesta === 'seleccion' ? 'Opciones de selecciÃ³n (separadas por comas)' : 'Opciones del desplegable (separadas por comas)'}
+                                </label>
+                                <OpcionesInput 
+                                  opciones={item.opciones || []} 
+                                  onUpdate={(opts) => handleUpdateItem(item.id, { opciones: opts })} 
+                                />
+                              </div>
+                              <div className="flex items-center gap-2 pt-1">
+                                <span className="text-[10px] font-bold text-zinc-600">â­ Valor predeterminado:</span>
+                                <select
+                                  value={item.valorPredeterminado || ''}
+                                  onChange={(e) => handleUpdateItem(item.id, { valorPredeterminado: e.target.value })}
+                                  className="text-xs bg-white border border-zinc-200 rounded-md px-2.5 py-1 outline-none focus:border-teal-500 text-zinc-700 font-medium cursor-pointer hover:border-zinc-300 transition-colors shadow-sm"
+                                >
+                                  <option value="">-- Sin predeterminado (en blanco) --</option>
+                                  {(item.opciones || []).map((op, oIdx) => (
+                                    <option key={oIdx} value={op}>{op}</option>
+                                  ))}
+                                </select>
+                                {item.valorPredeterminado && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateItem(item.id, { valorPredeterminado: '' })}
+                                    className="text-[10px] text-zinc-400 hover:text-red-500 underline transition-colors"
+                                    title="Quitar valor predeterminado"
+                                  >
+                                    Quitar
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {item.tipoRespuesta === 'check' && (
+                            <div className="pl-14 pr-2 pt-1 flex items-center gap-2">
+                              <span className="text-[10px] font-bold text-zinc-600">â­ Valor predeterminado:</span>
+                              <select
+                                value={item.valorPredeterminado || ''}
+                                onChange={(e) => handleUpdateItem(item.id, { valorPredeterminado: e.target.value })}
+                                className="text-xs bg-white border border-zinc-200 rounded-md px-2.5 py-1 outline-none focus:border-teal-500 text-zinc-700 font-medium cursor-pointer hover:border-zinc-300 transition-colors shadow-sm"
+                              >
+                                <option value="">-- Sin predeterminado (VacÃ­o) --</option>
+                                <option value="CORRECTO">âœ“ Marcado (CORRECTO)</option>
+                                <option value="NO CORRECTO">âœ— Desmarcado / Incorrecto</option>
+                              </select>
+                              {item.valorPredeterminado && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateItem(item.id, { valorPredeterminado: '' })}
+                                  className="text-[10px] text-zinc-400 hover:text-red-500 underline transition-colors"
+                                  title="Quitar valor predeterminado"
+                                >
+                                  Quitar
+                                </button>
+                              )}
+                            </div>
+                          )}
+
+                          {(item.tipoRespuesta === 'texto' || item.tipoRespuesta === 'texto-largo') && (
+                            <div className="pl-14 pr-2 pt-1 flex items-center gap-2">
+                              <span className="text-[10px] font-bold text-zinc-600">â­ Texto predeterminado:</span>
+                              <input
+                                type="text"
+                                value={item.valorPredeterminado || ''}
+                                onChange={(e) => handleUpdateItem(item.id, { valorPredeterminado: e.target.value })}
+                                placeholder="Escribe el texto por defecto (ej. N/A)..."
+                                className="flex-1 max-w-sm px-2.5 py-1 bg-white border border-zinc-200 rounded-md text-xs outline-none focus:border-teal-500 shadow-sm"
                               />
+                              {item.valorPredeterminado && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateItem(item.id, { valorPredeterminado: '' })}
+                                  className="text-[10px] text-zinc-400 hover:text-red-500 underline transition-colors"
+                                >
+                                  Quitar
+                                </button>
+                              )}
+                            </div>
+                          )}
+
+                          {item.tipoRespuesta === 'numero' && (
+                            <div className="pl-14 pr-2 pt-1 flex items-center gap-2">
+                              <span className="text-[10px] font-bold text-zinc-600">â­ NÃºmero predeterminado:</span>
+                              <input
+                                type="number"
+                                value={item.valorPredeterminado || ''}
+                                onChange={(e) => handleUpdateItem(item.id, { valorPredeterminado: e.target.value })}
+                                placeholder="Ej: 0"
+                                className="w-28 px-2.5 py-1 bg-white border border-zinc-200 rounded-md text-xs outline-none focus:border-teal-500 shadow-sm"
+                              />
+                              {item.valorPredeterminado && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateItem(item.id, { valorPredeterminado: '' })}
+                                  className="text-[10px] text-zinc-400 hover:text-red-500 underline transition-colors"
+                                >
+                                  Quitar
+                                </button>
+                              )}
+                            </div>
+                          )}
+
+                          {item.tipoRespuesta === 'fecha' && (
+                            <div className="pl-14 pr-2 pt-1 flex items-center gap-2">
+                              <span className="text-[10px] font-bold text-zinc-600">â­ Fecha predeterminada:</span>
+                              <select
+                                value={item.valorPredeterminado || ''}
+                                onChange={(e) => handleUpdateItem(item.id, { valorPredeterminado: e.target.value })}
+                                className="text-xs bg-white border border-zinc-200 rounded-md px-2.5 py-1 outline-none focus:border-teal-500 text-zinc-700 font-medium cursor-pointer hover:border-zinc-300 transition-colors shadow-sm"
+                              >
+                                <option value="">-- Sin predeterminado --</option>
+                                <option value="HOY">ðŸ“… Fecha de la revisiÃ³n (Hoy)</option>
+                              </select>
+                              {item.valorPredeterminado && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateItem(item.id, { valorPredeterminado: '' })}
+                                  className="text-[10px] text-zinc-400 hover:text-red-500 underline transition-colors"
+                                >
+                                  Quitar
+                                </button>
+                              )}
                             </div>
                           )}
 
@@ -1085,7 +1246,7 @@ export default function FormBuilderPlantillas() {
                             <div className="pl-14 pr-2 space-y-2">
                               <div>
                                 <label className="text-[10px] font-semibold text-zinc-500 mb-1 block">
-                                  {item.tipoRespuesta === 'grafico' ? 'Cabeceras de la tabla del Gráfico (ej: Caudal (m³/h), Presión (bar))' : 'Cabeceras de la tabla (separadas por comas)'}
+                                  {item.tipoRespuesta === 'grafico' ? 'Cabeceras de la tabla del GrÃ¡fico (ej: Caudal (mÂ³/h), PresiÃ³n (bar))' : 'Cabeceras de la tabla (separadas por comas)'}
                                 </label>
                                 <OpcionesInput 
                                   opciones={item.opciones || []} 
@@ -1122,22 +1283,22 @@ export default function FormBuilderPlantillas() {
                 {items.length > 0 && (
                   <div className="px-5 py-3 bg-zinc-50 border-t border-zinc-100 flex items-center justify-between">
                     <p className="text-[10px] text-zinc-400">
-                      {items.filter(i => i.tipoRespuesta === 'check').length} check ·
-                      {' '}{items.filter(i => i.tipoRespuesta === 'texto').length} texto ·
-                      {' '}{items.filter(i => i.tipoRespuesta === 'texto-largo').length} texto largo ·
-                      {' '}{items.filter(i => i.tipoRespuesta === 'numero').length} número ·
-                      {' '}{items.filter(i => i.tipoRespuesta === 'fecha').length} fecha ·
-                      {' '}{items.filter(i => i.tipoRespuesta === 'imagen').length} imagen ·
+                      {items.filter(i => i.tipoRespuesta === 'check').length} check Â·
+                      {' '}{items.filter(i => i.tipoRespuesta === 'texto').length} texto Â·
+                      {' '}{items.filter(i => i.tipoRespuesta === 'texto-largo').length} texto largo Â·
+                      {' '}{items.filter(i => i.tipoRespuesta === 'numero').length} nÃºmero Â·
+                      {' '}{items.filter(i => i.tipoRespuesta === 'fecha').length} fecha Â·
+                      {' '}{items.filter(i => i.tipoRespuesta === 'imagen').length} imagen Â·
                       {' '}{items.filter(i => i.horizontal).length} horizontal
                     </p>
                     <p className="text-[10px] text-zinc-400 italic">
-                      {items.filter(i => i.requerido).length} requeridos · Total: {items.length}
+                      {items.filter(i => i.requerido).length} requeridos Â· Total: {items.length}
                     </p>
                   </div>
                 )}
               </div>
 
-              {/* ── BOTÓN GUARDAR INFERIOR (ENTRE EDITOR Y VISTA PREVIA) ── */}
+              {/* â”€â”€ BOTÃ“N GUARDAR INFERIOR (ENTRE EDITOR Y VISTA PREVIA) â”€â”€ */}
               {items.length > 0 && (
                 <div className="flex items-center justify-end gap-3 pr-2">
                   {mensaje && (
@@ -1162,7 +1323,7 @@ export default function FormBuilderPlantillas() {
                 </div>
               )}
 
-              {/* ── VISTA PREVIA EN TIEMPO REAL ────────────────────────────── */}
+              {/* â”€â”€ VISTA PREVIA EN TIEMPO REAL â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
               {items.length > 0 && (
                 <div className="bg-white rounded-2xl border border-zinc-200 overflow-hidden shadow-sm">
                   <div className="px-5 py-3 bg-gradient-to-r from-zinc-700 to-zinc-800 flex items-center justify-between">
@@ -1199,7 +1360,7 @@ export default function FormBuilderPlantillas() {
                   </div>
                   <div className="px-5 py-2.5 bg-zinc-50 border-t border-zinc-100">
                     <p className="text-[9px] text-zinc-400 italic">
-                      Así se verá el formulario durante la revisión. Los cambios se reflejan automáticamente.
+                      AsÃ­ se verÃ¡ el formulario durante la revisiÃ³n. Los cambios se reflejan automÃ¡ticamente.
                     </p>
                   </div>
                 </div>
@@ -1209,7 +1370,7 @@ export default function FormBuilderPlantillas() {
         </main>
       </div>
 
-      {/* ── MODAL: CONFIGURAR TABLA ────────────────────────────────────────── */}
+      {/* â”€â”€ MODAL: CONFIGURAR TABLA â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {modalTablaOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl border border-zinc-200 shadow-xl max-w-sm w-full overflow-hidden animate-in fade-in zoom-in-95 duration-200">

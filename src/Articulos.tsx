@@ -432,22 +432,36 @@ export default function Articulos() {
               filteredArticulos.map(a => {
                 return (
                   <div key={a.id} className="flex flex-col md:flex-row md:items-center px-4 py-3 hover:bg-zinc-50/80 transition-colors group">
-                    <div className="flex md:hidden items-center justify-between mb-1">
-                      <span className="text-[10px] font-mono font-bold text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded">{a.codigo}</span>
+                    <div 
+                      className="flex md:hidden items-center justify-between mb-1 cursor-pointer"
+                      onClick={() => handleOpenModal(a)}
+                    >
+                      <span className="text-[10px] font-mono font-medium text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">{a.codigo}</span>
                     </div>
-                    <div className="flex md:hidden mb-1">
+                    <div 
+                      className="flex md:hidden mb-1 cursor-pointer"
+                      onClick={() => handleOpenModal(a)}
+                    >
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-bold text-zinc-900 truncate">{a.nombre}</p>
-                        <p className="text-xs text-zinc-500">{a.familia}</p>
+                        <p className="text-sm font-medium text-slate-700 truncate">{a.nombre}</p>
+                        <p className="text-xs text-slate-500">{a.familia}</p>
                       </div>
                     </div>
 
                     <div className="hidden md:flex items-center w-full">
-                      <div className="w-24 shrink-0">
-                        <span className="text-[11px] font-mono font-bold text-zinc-500 bg-zinc-100 px-1.5 py-0.5 rounded">{a.codigo}</span>
+                      <div 
+                        onClick={() => handleOpenModal(a)}
+                        className="w-24 shrink-0 cursor-pointer"
+                        title="Clic para editar artículo"
+                      >
+                        <span className="text-[11px] font-mono font-medium text-slate-500 bg-slate-100 hover:bg-fuchsia-50 hover:text-fuchsia-700 px-1.5 py-0.5 rounded transition-colors">{a.codigo}</span>
                       </div>
-                      <div className="flex-1 min-w-0 pr-2">
-                        <p className="text-sm font-bold text-zinc-900 truncate group-hover:text-fuchsia-900 transition-colors">{a.nombre}</p>
+                      <div 
+                        onClick={() => handleOpenModal(a)}
+                        className="flex-1 min-w-0 pr-2 cursor-pointer group/title"
+                        title="Clic para editar artículo"
+                      >
+                        <p className="text-sm font-medium text-slate-700 truncate group-hover/title:text-fuchsia-700 transition-colors">{a.nombre}</p>
                       </div>
                       <div className="w-36 shrink-0 text-sm text-zinc-600 truncate pr-2">{a.familia || '-'}</div>
                       <div className="w-28 shrink-0 text-sm text-zinc-600 text-right pr-2">{formatMoneda(a.precioCompra)}</div>

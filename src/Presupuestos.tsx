@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, X, Download, Edit, Send, Trash2, Save, Package, PackagePlus, Wrench, Type, Calculator, CheckCircle, Clock, Ban, ChevronDown, ChevronUp, GripVertical, FileText, ArrowLeft, Plus, HardHat, Gauge, Check, Mail, Eye, Copy, ExternalLink, Activity, ShieldCheck, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
+import { Search, X, Download, Edit, Send, Trash2, Save, Package, PackagePlus, Wrench, Type, Calculator, CheckCircle, Clock, Ban, ChevronDown, ChevronUp, GripVertical, FileText, ArrowLeft, Plus, HardHat, Gauge, Check, Mail, Eye, Copy, ExternalLink, Activity, ShieldCheck, ArrowUp, ArrowDown, ArrowUpDown, Layers } from 'lucide-react';
 import { 
   subscribePresupuestos, addPresupuesto, updatePresupuesto, deletePresupuesto, 
   subscribeClientes, subscribeArticulos, subscribeCentros, subscribeImpuestos, subscribeEmpresas,
@@ -64,6 +64,16 @@ function formatFecha(fecha: string): string {
   } catch {
     return fecha;
   }
+}
+
+export function getCapituloSubtotal(lineas: PresupuestoLinea[], capIndex: number): number {
+  if (!lineas || capIndex < 0 || capIndex >= lineas.length) return 0;
+  let sum = 0;
+  for (let i = capIndex + 1; i < lineas.length; i++) {
+    if (lineas[i].tipo === 'capitulo') break;
+    sum += (Number(lineas[i].cantidad) || 0) * (Number(lineas[i].precioUnidad) || 0);
+  }
+  return sum;
 }
 
 
@@ -141,6 +151,8 @@ export default function Presupuestos() {
   const [draggedLineIndex, setDraggedLineIndex] = useState<number | null>(null);
   const [dragOverLineIndex, setDragOverLineIndex] = useState<number | null>(null);
   const [formNewLinea, setFormNewLinea] = useState({ familia: '', concepto: '', descripcion: '', cantidad: 1, precioUnidad: 0 });
+  const [targetCapituloId, setTargetCapituloId] = useState<string | null>(null);
+  const [selectedCapituloManual, setSelectedCapituloManual] = useState<string>('');
   const [usuarioActual, setUsuarioActual] = useState<{ nombre: string; apellidos?: string } | null>(null);
 
   // Obtener usuario actual
@@ -247,7 +259,7 @@ export default function Presupuestos() {
 
   // Calcular totales del formulario
   const formSubtotal = useMemo(() =>
-    formLineas.reduce((sum, l) => sum + (l.cantidad * l.precioUnidad), 0),
+    formLineas.filter(l => l.tipo !== 'capitulo').reduce((sum, l) => sum + (l.cantidad * l.precioUnidad), 0),
     [formLineas]
   );
   const formDescuentoImporte = useMemo(() => {
@@ -281,6 +293,8 @@ export default function Presupuestos() {
     setFormIvaExento(false);
     setFormDescuento(0);
     setFormLineas([]); // Reiniciar las líneas
+    setTargetCapituloId(null);
+    setSelectedCapituloManual('');
     setFormNewLinea({ familia: '', concepto: '', descripcion: '', cantidad: 1, precioUnidad: 0 });
     setShowForm(true);
   };
@@ -296,6 +310,8 @@ export default function Presupuestos() {
     setFormIva(p.iva);
     setFormIvaExento(p.iva === 0);
     setFormDescuento(p.descuentoPorcentaje || 0);
+    setTargetCapituloId(null);
+    setSelectedCapituloManual('');
     setFormLineas([...p.lineas.map(line => ({ ...line, familia: line.familia || '', precioUnidadInput: formatDecimalInput(line.precioUnidad) }))]); // Inicializar el input string
     setFormNewLinea({ familia: '', concepto: '', descripcion: '', cantidad: 1, precioUnidad: 0 });
     setShowForm(true);
@@ -325,6 +341,8 @@ export default function Presupuestos() {
     setFormIva(p.iva);
     setFormIvaExento(p.iva === 0);
     setFormDescuento(p.descuentoPorcentaje || 0);
+    setTargetCapituloId(null);
+    setSelectedCapituloManual('');
     setFormLineas(p.lineas.map(line => ({
       ...line,
       id: `L-${generateId()}`,
@@ -334,6 +352,21 @@ export default function Presupuestos() {
     setFormNewLinea({ familia: '', concepto: '', descripcion: '', cantidad: 1, precioUnidad: 0 });
     setShowForm(true);
     setToastExito('Presupuesto duplicado. Puedes editar las partidas y guardar la nueva versión.');
+  };
+
+  // Añadir línea de capítulo
+  const handleAddCapitulo = () => {
+    const numCaps = formLineas.filter(l => l.tipo === 'capitulo').length + 1;
+    const nuevoCap: EditablePresupuestoLinea = {
+      id: `CAP-${generateId()}`,
+      tipo: 'capitulo',
+      concepto: `CAPÍTULO ${numCaps}: `,
+      descripcion: '',
+      cantidad: 1,
+      precioUnidad: 0,
+      subtotal: 0,
+    };
+    setFormLineas(prev => [...prev, nuevoCap]);
   };
 
   // Añadir artículo/servicio desde catálogo
@@ -350,9 +383,26 @@ export default function Presupuestos() {
       precioUnidad: item.precioVenta,
       subtotal: item.precioVenta, // Se recalculará al cambiar cantidad/precio
       precioUnidadInput: formatDecimalInput(item.precioVenta), // Inicializar el input string
+      capituloId: targetCapituloId || undefined,
     };
-    setFormLineas(prev => [...prev, nuevaLinea]);
+
+    if (targetCapituloId) {
+      setFormLineas(prev => {
+        const capIdx = prev.findIndex(l => l.id === targetCapituloId);
+        if (capIdx === -1) return [...prev, nuevaLinea];
+        let insertIdx = capIdx + 1;
+        while (insertIdx < prev.length && prev[insertIdx].tipo !== 'capitulo') {
+          insertIdx++;
+        }
+        const updated = [...prev];
+        updated.splice(insertIdx, 0, nuevaLinea);
+        return updated;
+      });
+    } else {
+      setFormLineas(prev => [...prev, nuevaLinea]);
+    }
     setShowCatalogo(null);
+    setTargetCapituloId(null);
   };
 
   // Añadir línea manual
@@ -368,8 +418,25 @@ export default function Presupuestos() {
       precioUnidad: formNewLinea.precioUnidad,
       subtotal: formNewLinea.cantidad * formNewLinea.precioUnidad, // Se recalculará al cambiar cantidad/precio
       precioUnidadInput: formatDecimalInput(formNewLinea.precioUnidad), // Inicializar el input string
+      capituloId: selectedCapituloManual || undefined,
     };
-    setFormLineas(prev => [...prev, nuevaLinea]);
+
+    if (selectedCapituloManual) {
+      setFormLineas(prev => {
+        const capIdx = prev.findIndex(l => l.id === selectedCapituloManual);
+        if (capIdx === -1) return [...prev, nuevaLinea];
+        let insertIdx = capIdx + 1;
+        while (insertIdx < prev.length && prev[insertIdx].tipo !== 'capitulo') {
+          insertIdx++;
+        }
+        const updated = [...prev];
+        updated.splice(insertIdx, 0, nuevaLinea);
+        return updated;
+      });
+    } else {
+      setFormLineas(prev => [...prev, nuevaLinea]);
+    }
+
     setFormNewLinea({ familia: '', concepto: '', descripcion: '', cantidad: 1, precioUnidad: 0 });
   };
 
@@ -434,7 +501,26 @@ export default function Presupuestos() {
     const total = formTotal;
 
     // Sanitizar líneas excluyendo campos temporales como precioUnidadInput
-    const lineasSanitizadas: PresupuestoLinea[] = formLineas.map(l => {
+    // y vinculando automáticamente las partidas al capítulo que les precede
+    let currentCapId: string | undefined = undefined;
+    let currentCapName: string | undefined = undefined;
+
+    const lineasSanitizadas: PresupuestoLinea[] = formLineas.map((l, idx) => {
+      if (l.tipo === 'capitulo') {
+        currentCapId = l.id;
+        currentCapName = l.concepto;
+        const subtotalCap = getCapituloSubtotal(formLineas, idx);
+        const sanitizedCap: PresupuestoLinea = {
+          id: l.id || `CAP-${generateId()}`,
+          tipo: 'capitulo',
+          concepto: l.concepto || 'CAPÍTULO',
+          cantidad: 1,
+          precioUnidad: 0,
+          subtotal: subtotalCap,
+        };
+        return sanitizedCap;
+      }
+
       const sanitized: PresupuestoLinea = {
         id: l.id || `L-${generateId()}`,
         tipo: l.tipo || 'manual',
@@ -442,6 +528,8 @@ export default function Presupuestos() {
         cantidad: Number(l.cantidad) || 1,
         precioUnidad: Number(l.precioUnidad) || 0,
         subtotal: (Number(l.cantidad) || 1) * (Number(l.precioUnidad) || 0),
+        capituloId: currentCapId,
+        capitulo: currentCapName,
       };
       if (l.familia) sanitized.familia = l.familia;
       if (l.codigo) sanitized.codigo = l.codigo;
@@ -1179,22 +1267,42 @@ export default function Presupuestos() {
                         </tr>
                       </thead>
                       <tbody>
-                        {showDetail.lineas.map((l, i) => (
-                          <tr key={l.id} className={i % 2 === 0 ? 'bg-white' : 'bg-white'}>
-                            <td className="px-3 py-2 text-zinc-800">
-                              {l.familia && (
-                                <p className="font-bold text-zinc-950 uppercase tracking-tight">{l.familia}</p>
-                              )}
-                              <p className={`${l.familia ? 'text-zinc-600 text-[11px] mt-0.5' : 'font-medium text-zinc-800'}`}>
-                                {l.descripcion || l.concepto}
-                                {l.codigo ? <span className="text-zinc-400 font-mono ml-1.5">({l.codigo})</span> : ''}
-                              </p>
-                            </td>
-                            <td className="px-3 py-2 text-center text-zinc-600">{l.cantidad}</td>
-                            <td className="px-3 py-2 text-right text-zinc-600">{formatMoneda(l.precioUnidad)}</td>
-                            <td className="px-3 py-2 text-right font-bold text-zinc-800">{formatMoneda(l.subtotal)}</td>
-                          </tr>
-                        ))}
+                        {showDetail.lineas.map((l, i) => {
+                          if (l.tipo === 'capitulo') {
+                            const subtotalCap = getCapituloSubtotal(showDetail.lineas, i);
+                            return (
+                              <tr key={l.id || i} className="bg-amber-50/80 border-y-2 border-amber-300">
+                                <td colSpan={3} className="px-3.5 py-2">
+                                  <div className="flex items-center gap-2">
+                                    <span className="inline-flex items-center gap-1 bg-amber-200 text-amber-900 text-[10px] font-black uppercase px-2 py-0.5 rounded shadow-xs">
+                                      <Layers className="w-3 h-3 text-amber-800" /> Capítulo
+                                    </span>
+                                    <span className="font-black text-amber-950 uppercase text-xs tracking-wide">{l.concepto}</span>
+                                  </div>
+                                </td>
+                                <td className="px-3 py-2 text-right font-black text-amber-900 text-xs">
+                                  {formatMoneda(subtotalCap)}
+                                </td>
+                              </tr>
+                            );
+                          }
+                          return (
+                            <tr key={l.id || i} className={i % 2 === 0 ? 'bg-white' : 'bg-white'}>
+                              <td className="px-3 py-2 text-zinc-800">
+                                {l.familia && (
+                                  <p className="font-bold text-zinc-950 uppercase tracking-tight">{l.familia}</p>
+                                )}
+                                <p className={`${l.familia ? 'text-zinc-600 text-[11px] mt-0.5' : 'font-medium text-zinc-800'}`}>
+                                  {l.descripcion || l.concepto}
+                                  {l.codigo ? <span className="text-zinc-400 font-mono ml-1.5">({l.codigo})</span> : ''}
+                                </p>
+                              </td>
+                              <td className="px-3 py-2 text-center text-zinc-600">{l.cantidad}</td>
+                              <td className="px-3 py-2 text-right text-zinc-600">{formatMoneda(l.precioUnidad)}</td>
+                              <td className="px-3 py-2 text-right font-bold text-zinc-800">{formatMoneda(l.subtotal)}</td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -1382,10 +1490,18 @@ export default function Presupuestos() {
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-xs font-bold text-zinc-500 uppercase">Líneas del presupuesto</h3>
                   <div className="flex items-center gap-2">
-                    <button onClick={() => setShowCatalogo('articulo')} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-zinc-600 bg-zinc-100 hover:bg-zinc-200 rounded-xl transition-colors">
+                    <button
+                      type="button"
+                      onClick={handleAddCapitulo}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-xl transition-colors cursor-pointer shadow-xs"
+                      title="Añadir un nuevo capítulo para agrupar partidas"
+                    >
+                      <Layers className="w-3.5 h-3.5 text-amber-800" /> Añadir capítulo
+                    </button>
+                    <button onClick={() => { setTargetCapituloId(null); setShowCatalogo('articulo'); }} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-zinc-600 bg-zinc-100 hover:bg-zinc-200 rounded-xl transition-colors">
                       <Package className="w-3.5 h-3.5" /> Añadir artículo
                     </button>
-                    <button onClick={() => setShowCatalogo('servicio')} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-zinc-600 bg-zinc-100 hover:bg-zinc-200 rounded-xl transition-colors">
+                    <button onClick={() => { setTargetCapituloId(null); setShowCatalogo('servicio'); }} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-zinc-600 bg-zinc-100 hover:bg-zinc-200 rounded-xl transition-colors">
                       <Wrench className="w-3.5 h-3.5" /> Añadir servicio
                     </button>
                   </div>
@@ -1408,129 +1524,260 @@ export default function Presupuestos() {
                           </tr>
                         </thead>
                         <tbody>
-                          {formLineas.map((l, i) => (
-                            <tr
-                              key={l.id}
-                              draggable
-                              onDragStart={() => handleDragStart(i)}
-                              onDragOver={(e) => handleDragOver(e, i)}
-                              onDrop={() => handleDrop(i)}
-                              onDragEnd={handleDragEnd}
-                              className={`transition-colors ${
-                                draggedLineIndex === i
-                                  ? 'opacity-40 bg-orange-100/60'
-                                  : dragOverLineIndex === i
-                                  ? 'border-t-2 border-orange-500 bg-orange-50'
-                                  : i % 2 === 0
-                                  ? 'bg-white hover:bg-zinc-50/80'
-                                  : 'bg-zinc-50/40 hover:bg-zinc-50/80'
-                              }`}
-                            >
-                              <td className="px-1.5 py-1 text-center">
-                                <div className="flex items-center justify-center gap-0.5">
-                                  <div
-                                    className="cursor-grab active:cursor-grabbing p-1 text-zinc-400 hover:text-orange-600 rounded transition-colors"
-                                    title="Arrastra para mover de posición"
-                                  >
-                                    <GripVertical className="w-3.5 h-3.5" />
-                                  </div>
-                                  <div className="flex flex-col items-center">
+                          {formLineas.map((l, i) => {
+                            if (l.tipo === 'capitulo') {
+                              const subtotalCap = getCapituloSubtotal(formLineas, i);
+                              return (
+                                <tr
+                                  key={l.id}
+                                  draggable
+                                  onDragStart={() => handleDragStart(i)}
+                                  onDragOver={(e) => handleDragOver(e, i)}
+                                  onDrop={() => handleDrop(i)}
+                                  onDragEnd={handleDragEnd}
+                                  className={`transition-colors border-y-2 border-amber-300 bg-amber-50/90 ${
+                                    draggedLineIndex === i
+                                      ? 'opacity-40 bg-amber-100'
+                                      : dragOverLineIndex === i
+                                      ? 'border-t-2 border-orange-500 bg-amber-100'
+                                      : 'hover:bg-amber-100/70'
+                                  }`}
+                                >
+                                  <td className="px-1.5 py-1.5 text-center">
+                                    <div className="flex items-center justify-center gap-0.5">
+                                      <div
+                                        className="cursor-grab active:cursor-grabbing p-1 text-amber-600 hover:text-amber-800 rounded transition-colors"
+                                        title="Arrastra para mover de posición el capítulo"
+                                      >
+                                        <GripVertical className="w-3.5 h-3.5" />
+                                      </div>
+                                      <div className="flex flex-col items-center">
+                                        <button
+                                          type="button"
+                                          disabled={i === 0}
+                                          onClick={() => handleMoverLinea(i, 'up')}
+                                          className="p-0.5 text-amber-600 hover:text-amber-900 disabled:opacity-20 transition-colors cursor-pointer disabled:cursor-not-allowed"
+                                          title="Subir capítulo"
+                                        >
+                                          <ChevronUp className="w-3 h-3" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          disabled={i === formLineas.length - 1}
+                                          onClick={() => handleMoverLinea(i, 'down')}
+                                          className="p-0.5 text-amber-600 hover:text-amber-900 disabled:opacity-20 transition-colors cursor-pointer disabled:cursor-not-allowed"
+                                          title="Bajar capítulo"
+                                        >
+                                          <ChevronDown className="w-3 h-3" />
+                                        </button>
+                                      </div>
+                                      <span className="text-[10px] font-bold text-amber-700 w-4 text-center select-none">
+                                        {i + 1}
+                                      </span>
+                                    </div>
+                                  </td>
+                                  <td colSpan={4} className="px-3 py-2">
+                                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                                      <div className="flex items-center gap-1.5 shrink-0">
+                                        <span className="inline-flex items-center gap-1 bg-amber-200 text-amber-950 text-[10px] font-black uppercase px-2 py-1 rounded shadow-xs border border-amber-300">
+                                          <Layers className="w-3 h-3 text-amber-800" /> Capítulo
+                                        </span>
+                                      </div>
+                                      <input
+                                        type="text"
+                                        value={l.concepto}
+                                        onChange={(e) => {
+                                          const val = e.target.value;
+                                          setFormLineas(prev => prev.map(li => li.id === l.id ? { ...li, concepto: val } : li));
+                                        }}
+                                        placeholder="Título del capítulo (ej. 1. EXTINCIÓN DE INCENDIOS)..."
+                                        className="flex-1 px-3 py-1 font-bold uppercase tracking-tight bg-white border border-amber-300 rounded-lg text-xs text-amber-950 placeholder:font-normal placeholder:normal-case placeholder:text-amber-700/50 focus:ring-1 focus:ring-amber-500 focus:border-amber-500 outline-none"
+                                      />
+                                      <div className="flex items-center gap-1 shrink-0">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setTargetCapituloId(l.id);
+                                            setShowCatalogo('articulo');
+                                          }}
+                                          className="flex items-center gap-1 px-2 py-1 text-[11px] font-bold text-amber-900 bg-amber-200/70 hover:bg-amber-200 border border-amber-300 rounded-lg transition-colors cursor-pointer"
+                                          title="Añadir artículo a este capítulo"
+                                        >
+                                          <Package className="w-3 h-3 text-amber-700" /> + Art.
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setTargetCapituloId(l.id);
+                                            setShowCatalogo('servicio');
+                                          }}
+                                          className="flex items-center gap-1 px-2 py-1 text-[11px] font-bold text-amber-900 bg-amber-200/70 hover:bg-amber-200 border border-amber-300 rounded-lg transition-colors cursor-pointer"
+                                          title="Añadir servicio a este capítulo"
+                                        >
+                                          <Wrench className="w-3 h-3 text-amber-700" /> + Serv.
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </td>
+                                  <td className="px-3 py-2 text-right">
+                                    <div className="flex flex-col items-end">
+                                      <span className="text-[9px] uppercase font-bold text-amber-700 tracking-wider">Subtotal Cap.</span>
+                                      <span className="text-xs font-black text-amber-950 bg-amber-200/90 px-2 py-0.5 rounded border border-amber-400">
+                                        {formatMoneda(subtotalCap)}
+                                      </span>
+                                    </div>
+                                  </td>
+                                  <td className="px-3 py-2 text-center">
                                     <button
                                       type="button"
-                                      disabled={i === 0}
-                                      onClick={() => handleMoverLinea(i, 'up')}
-                                      className="p-0.5 text-zinc-400 hover:text-zinc-800 disabled:opacity-20 disabled:hover:text-zinc-400 transition-colors cursor-pointer disabled:cursor-not-allowed"
-                                      title="Subir una posición"
+                                      onClick={() => handleRemoveLinea(l.id)}
+                                      className="p-1 text-amber-600 hover:text-red-600 rounded transition-colors cursor-pointer"
+                                      title="Eliminar capítulo"
                                     >
-                                      <ChevronUp className="w-3 h-3" />
+                                      <X className="w-3.5 h-3.5" />
                                     </button>
-                                    <button
-                                      type="button"
-                                      disabled={i === formLineas.length - 1}
-                                      onClick={() => handleMoverLinea(i, 'down')}
-                                      className="p-0.5 text-zinc-400 hover:text-zinc-800 disabled:opacity-20 disabled:hover:text-zinc-400 transition-colors cursor-pointer disabled:cursor-not-allowed"
-                                      title="Bajar una posición"
+                                  </td>
+                                </tr>
+                              );
+                            }
+
+                            // Buscar si la partida está bajo algún capítulo precedente
+                            const parentCap = (() => {
+                              for (let j = i - 1; j >= 0; j--) {
+                                if (formLineas[j].tipo === 'capitulo') return formLineas[j];
+                              }
+                              return null;
+                            })();
+
+                            return (
+                              <tr
+                                key={l.id}
+                                draggable
+                                onDragStart={() => handleDragStart(i)}
+                                onDragOver={(e) => handleDragOver(e, i)}
+                                onDrop={() => handleDrop(i)}
+                                onDragEnd={handleDragEnd}
+                                className={`transition-colors ${
+                                  draggedLineIndex === i
+                                    ? 'opacity-40 bg-orange-100/60'
+                                    : dragOverLineIndex === i
+                                    ? 'border-t-2 border-orange-500 bg-orange-50'
+                                    : i % 2 === 0
+                                    ? 'bg-white hover:bg-zinc-50/80'
+                                    : 'bg-zinc-50/40 hover:bg-zinc-50/80'
+                                }`}
+                              >
+                                <td className="px-1.5 py-1 text-center">
+                                  <div className="flex items-center justify-center gap-0.5">
+                                    <div
+                                      className="cursor-grab active:cursor-grabbing p-1 text-zinc-400 hover:text-orange-600 rounded transition-colors"
+                                      title="Arrastra para mover de posición"
                                     >
-                                      <ChevronDown className="w-3 h-3" />
-                                    </button>
+                                      <GripVertical className="w-3.5 h-3.5" />
+                                    </div>
+                                    <div className="flex flex-col items-center">
+                                      <button
+                                        type="button"
+                                        disabled={i === 0}
+                                        onClick={() => handleMoverLinea(i, 'up')}
+                                        className="p-0.5 text-zinc-400 hover:text-zinc-800 disabled:opacity-20 disabled:hover:text-zinc-400 transition-colors cursor-pointer disabled:cursor-not-allowed"
+                                        title="Subir una posición"
+                                      >
+                                        <ChevronUp className="w-3 h-3" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        disabled={i === formLineas.length - 1}
+                                        onClick={() => handleMoverLinea(i, 'down')}
+                                        className="p-0.5 text-zinc-400 hover:text-zinc-800 disabled:opacity-20 disabled:hover:text-zinc-400 transition-colors cursor-pointer disabled:cursor-not-allowed"
+                                        title="Bajar una posición"
+                                      >
+                                        <ChevronDown className="w-3 h-3" />
+                                      </button>
+                                    </div>
+                                    <span className="text-[10px] font-bold text-zinc-400 w-4 text-center select-none">
+                                      {i + 1}
+                                    </span>
                                   </div>
-                                  <span className="text-[10px] font-bold text-zinc-400 w-4 text-center select-none">
-                                    {i + 1}
-                                  </span>
-                                </div>
-                              </td>
-                              <td className="px-3 py-2">
-                                {l.fotoUrl ? (
-                                  <img src={l.fotoUrl} alt={l.concepto} className="w-8 h-8 rounded-md object-cover border border-zinc-200 shrink-0 bg-white img-no-bg" />
-                                ) : (
-                                  l.tipo === 'articulo' ? <Package className="w-3.5 h-3.5 text-orange-500" /> :
-                                  l.tipo === 'servicio' ? <Wrench className="w-3.5 h-3.5 text-red-600" /> :
-                                  <Type className="w-3.5 h-3.5 text-zinc-400" />
-                                )}
-                              </td>
-                              <td className="px-3 py-2">
-                                <div className="flex flex-col gap-1">
+                                </td>
+                                <td className="px-3 py-2">
+                                  {l.fotoUrl ? (
+                                    <img src={l.fotoUrl} alt={l.concepto} className="w-8 h-8 rounded-md object-cover border border-zinc-200 shrink-0 bg-white img-no-bg" />
+                                  ) : (
+                                    l.tipo === 'articulo' ? <Package className="w-3.5 h-3.5 text-orange-500" /> :
+                                    l.tipo === 'servicio' ? <Wrench className="w-3.5 h-3.5 text-red-600" /> :
+                                    <Type className="w-3.5 h-3.5 text-zinc-400" />
+                                  )}
+                                </td>
+                                <td className="px-3 py-2">
+                                  <div className="flex flex-col gap-1">
+                                    {parentCap && (
+                                      <span className="text-[10px] font-bold text-amber-800 bg-amber-100/70 px-1.5 py-0.5 rounded border border-amber-200/80 w-fit">
+                                        ↳ {parentCap.concepto || 'Capítulo'}
+                                      </span>
+                                    )}
+                                    <input
+                                      type="text"
+                                      value={l.familia || ''}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        setFormLineas(prev => prev.map(li => li.id === l.id ? { ...li, familia: val } : li));
+                                      }}
+                                      placeholder="Familia (ej. EXTINTORES)..."
+                                      className="w-full px-2 py-1 font-bold text-zinc-950 uppercase tracking-tight bg-white border border-zinc-200/90 rounded-lg text-xs placeholder:font-normal placeholder:normal-case placeholder:text-zinc-400 focus:ring-1 focus:ring-orange-500/30 focus:border-orange-500 outline-none"
+                                    />
+                                    <textarea
+                                      value={l.descripcion !== undefined && l.descripcion !== '' ? l.descripcion : l.concepto}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        setFormLineas(prev => prev.map(li => li.id === l.id ? { ...li, concepto: val, descripcion: val } : li));
+                                      }}
+                                      rows={1}
+                                      placeholder="Descripción del artículo..."
+                                      className="w-full px-2 py-1 text-zinc-700 bg-zinc-50 border border-zinc-200/80 rounded-lg text-xs placeholder:text-zinc-400 focus:bg-white focus:ring-1 focus:ring-orange-500/30 focus:border-orange-500 outline-none resize-y min-h-[26px]"
+                                    />
+                                    {l.codigo && <p className="text-[10px] text-zinc-400 font-mono px-0.5">{l.codigo}</p>}
+                                  </div>
+                                </td>
+                                <td className="px-3 py-2 text-center" onMouseDown={(e) => e.stopPropagation()}>
+                                  <input
+                                    type="number"
+                                    value={l.cantidad}
+                                    onChange={(e) => {
+                                      const nuevaCant = Math.max(0, Number(e.target.value));
+                                      setFormLineas(prev => prev.map(li => li.id === l.id ? { ...li, cantidad: nuevaCant, subtotal: nuevaCant * li.precioUnidad } : li));
+                                    }}
+                                    min={0}
+                                    className="w-16 px-2 py-1 text-center text-zinc-800 bg-zinc-50 border border-zinc-200 rounded-xl text-xs focus:ring-1 focus:ring-orange-500/20 focus:border-orange-500 outline-none"
+                                  />
+                                </td>
+                                <td className="px-3 py-2 text-right" onMouseDown={(e) => e.stopPropagation()}>
                                   <input
                                     type="text"
-                                    value={l.familia || ''}
+                                    inputMode="decimal"
+                                    value={l.precioUnidadInput !== undefined ? l.precioUnidadInput : formatDecimalInput(l.precioUnidad)}
                                     onChange={(e) => {
-                                      const val = e.target.value;
-                                      setFormLineas(prev => prev.map(li => li.id === l.id ? { ...li, familia: val } : li));
+                                      const inputValue = e.target.value;
+                                      setFormLineas(prev => prev.map(li => li.id === l.id ? { ...li, precioUnidadInput: inputValue, precioUnidad: parseDecimal(inputValue), subtotal: li.cantidad * parseDecimal(inputValue) } : li));
                                     }}
-                                    placeholder="Familia (ej. EXTINTORES)..."
-                                    className="w-full px-2 py-1 font-bold text-zinc-950 uppercase tracking-tight bg-white border border-zinc-200/90 rounded-lg text-xs placeholder:font-normal placeholder:normal-case placeholder:text-zinc-400 focus:ring-1 focus:ring-orange-500/30 focus:border-orange-500 outline-none"
-                                  />
-                                  <textarea
-                                    value={l.descripcion !== undefined && l.descripcion !== '' ? l.descripcion : l.concepto}
-                                    onChange={(e) => {
-                                      const val = e.target.value;
-                                      setFormLineas(prev => prev.map(li => li.id === l.id ? { ...li, concepto: val, descripcion: val } : li));
+                                    onBlur={(e) => {
+                                      const inputValue = e.target.value;
+                                      const nuevoPrecio = Math.max(0, parseDecimal(inputValue));
+                                      setFormLineas(prev => prev.map(li => li.id === l.id ? { ...li, precioUnidad: nuevoPrecio, precioUnidadInput: undefined, subtotal: li.cantidad * nuevoPrecio } : li));
                                     }}
-                                    rows={1}
-                                    placeholder="Descripción del artículo..."
-                                    className="w-full px-2 py-1 text-zinc-700 bg-zinc-50 border border-zinc-200/80 rounded-lg text-xs placeholder:text-zinc-400 focus:bg-white focus:ring-1 focus:ring-orange-500/30 focus:border-orange-500 outline-none resize-y min-h-[26px]"
+                                    min={0}
+                                    className="w-24 px-2 py-1 text-right text-zinc-800 bg-zinc-50 border border-zinc-200 rounded-xl text-xs focus:ring-1 focus:ring-orange-500/20 focus:border-orange-500 outline-none"
                                   />
-                                  {l.codigo && <p className="text-[10px] text-zinc-400 font-mono px-0.5">{l.codigo}</p>}
-                                </div>
-                              </td>
-                              <td className="px-3 py-2 text-center" onMouseDown={(e) => e.stopPropagation()}>
-                                <input
-                                  type="number"
-                                  value={l.cantidad}
-                                  onChange={(e) => {
-                                    const nuevaCant = Math.max(0, Number(e.target.value));
-                                    setFormLineas(prev => prev.map(li => li.id === l.id ? { ...li, cantidad: nuevaCant, subtotal: nuevaCant * li.precioUnidad } : li));
-                                  }}
-                                  min={0}
-                                  className="w-16 px-2 py-1 text-center text-zinc-800 bg-zinc-50 border border-zinc-200 rounded-xl text-xs focus:ring-1 focus:ring-orange-500/20 focus:border-orange-500 outline-none"
-                                />
-                              </td>
-                              <td className="px-3 py-2 text-right" onMouseDown={(e) => e.stopPropagation()}>
-                                <input
-                                  type="text"
-                                  inputMode="decimal"
-                                  value={l.precioUnidadInput !== undefined ? l.precioUnidadInput : formatDecimalInput(l.precioUnidad)}
-                                  onChange={(e) => {
-                                    const inputValue = e.target.value;
-                                    setFormLineas(prev => prev.map(li => li.id === l.id ? { ...li, precioUnidadInput: inputValue, precioUnidad: parseDecimal(inputValue), subtotal: li.cantidad * parseDecimal(inputValue) } : li));
-                                  }}
-                                  onBlur={(e) => {
-                                    const inputValue = e.target.value;
-                                    const nuevoPrecio = Math.max(0, parseDecimal(inputValue));
-                                    setFormLineas(prev => prev.map(li => li.id === l.id ? { ...li, precioUnidad: nuevoPrecio, precioUnidadInput: undefined, subtotal: li.cantidad * nuevoPrecio } : li));
-                                  }}
-                                  min={0}
-                                  className="w-24 px-2 py-1 text-right text-zinc-800 bg-zinc-50 border border-zinc-200 rounded-xl text-xs focus:ring-1 focus:ring-orange-500/20 focus:border-orange-500 outline-none"
-                                />
-                              </td>
-                              <td className="px-3 py-2 text-right font-bold text-zinc-800">{formatMoneda(l.cantidad * l.precioUnidad)}</td>
-                              <td className="px-3 py-2 text-center">
-                                <button onClick={() => handleRemoveLinea(l.id)} className="p-1 text-zinc-300 hover:text-red-500 rounded transition-colors cursor-pointer">
-                                  <X className="w-3.5 h-3.5" />
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
+                                </td>
+                                <td className="px-3 py-2 text-right font-bold text-zinc-800">{formatMoneda(l.cantidad * l.precioUnidad)}</td>
+                                <td className="px-3 py-2 text-center">
+                                  <button onClick={() => handleRemoveLinea(l.id)} className="p-1 text-zinc-300 hover:text-red-500 rounded transition-colors cursor-pointer">
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
@@ -1546,6 +1793,24 @@ export default function Presupuestos() {
                   <div className="border-y-2 border-zinc-200 py-2 px-3 mb-3 bg-red-50/40 flex items-center justify-between text-xs font-bold text-red-600 rounded-lg">
                     <span>Descuento sobre el subtotal: {formDescuento.toFixed(2).replace('.', ',')} %</span>
                     <span>-{formatMoneda(formDescuentoImporte)}</span>
+                  </div>
+                )}
+
+                {/* Selector de capítulo si existen capítulos */}
+                {formLineas.some(l => l.tipo === 'capitulo') && (
+                  <div className="flex items-center gap-2 mb-2 p-2 bg-amber-50/70 rounded-xl border border-amber-200">
+                    <Layers className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                    <span className="text-xs font-bold text-amber-900 shrink-0">Asignar línea manual a:</span>
+                    <select
+                      value={selectedCapituloManual}
+                      onChange={(e) => setSelectedCapituloManual(e.target.value)}
+                      className="px-2.5 py-1 text-xs font-bold bg-white border border-amber-300 rounded-lg text-amber-950 outline-none focus:ring-1 focus:ring-amber-500 max-w-xs cursor-pointer"
+                    >
+                      <option value="">-- Al final (Línea general) --</option>
+                      {formLineas.filter(l => l.tipo === 'capitulo').map(c => (
+                        <option key={c.id} value={c.id}>{c.concepto || 'Capítulo sin título'}</option>
+                      ))}
+                    </select>
                   </div>
                 )}
 

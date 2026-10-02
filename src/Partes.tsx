@@ -5,7 +5,7 @@ import { subscribePartes, subscribeCentros, subscribeClientes, subscribeTecnicos
 import { collection, getDocs, doc, getDoc, query, where } from 'firebase/firestore';
 import { generarActaExtintoresPDF, generarAlbaranPDF, generarCertificadoPDF } from './pdfGenerator';
 import { generarContratoPDF } from './pdfContratoGenerator';
-import { calcularAlertasExtintores, calcularAlertasBies, type ExtintorAlertas, type BieAlertas } from './recursos-compartidos/services/sistemasUtils';
+import { calcularAlertasExtintores, calcularAlertasBies, esEquipoExtintor, esEquipoBie, esSistemaExtintores, esSistemaBies, type ExtintorAlertas, type BieAlertas } from './recursos-compartidos/services/sistemasUtils';
 
 interface ParteItem {
   id: string;
@@ -83,14 +83,12 @@ export default function Partes() {
   };
   const [alertasExtintoresPorCentro, setAlertasExtintoresPorCentro] = useState<Record<string, ExtintorAlertas>>(() => {
     try {
-      const cached = localStorage.getItem('firecheck_db_alertas_ext');
-      if (cached) return JSON.parse(cached);
       const allEquipos: any[] = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
       const storedCentros: any[] = JSON.parse(localStorage.getItem('firecheck_db_centros') || '[]');
       const map: Record<string, ExtintorAlertas> = {};
       const equiposPorCentro: Record<string, any[]> = {};
       for (const eq of allEquipos) {
-        if (eq.centroId) {
+        if (eq.centroId && esEquipoExtintor(eq)) {
           if (!equiposPorCentro[eq.centroId]) equiposPorCentro[eq.centroId] = [];
           equiposPorCentro[eq.centroId].push(eq);
         }
@@ -110,14 +108,12 @@ export default function Partes() {
 
   const [alertasBiesPorCentro, setAlertasBiesPorCentro] = useState<Record<string, BieAlertas>>(() => {
     try {
-      const cached = localStorage.getItem('firecheck_db_alertas_bie');
-      if (cached) return JSON.parse(cached);
       const allEquipos: any[] = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
       const storedCentros: any[] = JSON.parse(localStorage.getItem('firecheck_db_centros') || '[]');
       const map: Record<string, BieAlertas> = {};
       const equiposPorCentro: Record<string, any[]> = {};
       for (const eq of allEquipos) {
-        if (eq.centroId) {
+        if (eq.centroId && esEquipoBie(eq)) {
           if (!equiposPorCentro[eq.centroId]) equiposPorCentro[eq.centroId] = [];
           equiposPorCentro[eq.centroId].push(eq);
         }
@@ -201,14 +197,21 @@ export default function Partes() {
     let isMounted = true;
 
     const cargarAlertasCentros = async () => {
-      const nuevosMap: Record<string, any[]> = {};
+      const nuevosMapExt: Record<string, any[]> = {};
+      const nuevosMapBie: Record<string, any[]> = {};
 
       try {
         const stored = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
         for (const eq of stored) {
           if (eq.centroId) {
-            if (!nuevosMap[eq.centroId]) nuevosMap[eq.centroId] = [];
-            nuevosMap[eq.centroId].push(eq);
+            if (esEquipoExtintor(eq)) {
+              if (!nuevosMapExt[eq.centroId]) nuevosMapExt[eq.centroId] = [];
+              nuevosMapExt[eq.centroId].push(eq);
+            }
+            if (esEquipoBie(eq)) {
+              if (!nuevosMapBie[eq.centroId]) nuevosMapBie[eq.centroId] = [];
+              nuevosMapBie[eq.centroId].push(eq);
+            }
           }
         }
       } catch { /* ignore */ }
@@ -249,6 +252,8 @@ export default function Partes() {
               const sData = sDoc.data() || {};
               const sNombre = sData.tipo || sData.familia || sData.nombre || sDoc.id || '';
               const sTipo = sData.tipo || sDoc.id || '';
+              const isExtSist = esSistemaExtintores(sDoc.id) || esSistemaExtintores(sNombre);
+              const isBieSist = esSistemaBies(sDoc.id) || esSistemaBies(sNombre);
               const taggedList = list.map(e => ({
                 ...e,
                 sistemaNombre: e.sistemaNombre || sNombre,
@@ -257,9 +262,16 @@ export default function Partes() {
               }));
               const keys = [cId, targetDocId, centro?._docId, centro?.id].filter(Boolean) as string[];
               for (const k of keys) {
-                if (!nuevosMap[k]) nuevosMap[k] = [];
-                const otros = (nuevosMap[k] || []).filter(e => e.sistemaId !== sDoc.id);
-                nuevosMap[k] = [...otros, ...taggedList];
+                if (isExtSist) {
+                  if (!nuevosMapExt[k]) nuevosMapExt[k] = [];
+                  const otros = (nuevosMapExt[k] || []).filter(e => e.sistemaId !== sDoc.id);
+                  nuevosMapExt[k] = [...otros, ...taggedList];
+                }
+                if (isBieSist) {
+                  if (!nuevosMapBie[k]) nuevosMapBie[k] = [];
+                  const otros = (nuevosMapBie[k] || []).filter(e => e.sistemaId !== sDoc.id);
+                  nuevosMapBie[k] = [...otros, ...taggedList];
+                }
               }
             }
           }));
@@ -270,10 +282,11 @@ export default function Partes() {
 
       const resultMapExt: Record<string, ExtintorAlertas> = {};
       const resultMapBie: Record<string, BieAlertas> = {};
-      for (const k of Object.keys(nuevosMap)) {
+      const allTargetKeys = new Set([...Object.keys(nuevosMapExt), ...Object.keys(nuevosMapBie), ...centroIds]);
+      for (const k of allTargetKeys) {
         const centro = centros.find(c => c._docId === k || c.id === k);
-        const alertExt = calcularAlertasExtintores(nuevosMap[k]);
-        const alertBie = calcularAlertasBies(nuevosMap[k]);
+        const alertExt = calcularAlertasExtintores(nuevosMapExt[k] || []);
+        const alertBie = calcularAlertasBies(nuevosMapBie[k] || []);
         resultMapExt[k] = alertExt;
         resultMapBie[k] = alertBie;
         if (centro?._docId) {
@@ -619,33 +632,64 @@ export default function Partes() {
                 .replace(/[óòöô]/g, 'o')
                 .replace(/[úùüû]/g, 'u');
 
+        const cleanNorm = (str: string) => (str || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+
         for (const sist of sistemasDelCentro) {
+            const rawSistNombre = ((sist as any).tipo || (sist as any).familia || (sist as any).descripcion || (sist as any).nombre || '').toLowerCase();
+            const esAspiracion = rawSistNombre.includes('aspiraci') || rawSistNombre.includes('aspirac') || rawSistNombre.includes('asd');
+
             const sistemaCat = categoriasSistema.find((c: any) => {
-                const nombreSist = ((sist as any).tipo || (sist as any).familia || '').toLowerCase().trim();
-                const nombreCat = (c.nombre || '').toLowerCase().trim();
+                const nombreSist = cleanNorm((sist as any).tipo || (sist as any).familia || (sist as any).descripcion || '');
+                const nombreCat = cleanNorm(c.nombre || '');
+                if (nombreCat && nombreSist && nombreCat === nombreSist) return true;
+                const isAspA = nombreSist.includes('aspiraci') || nombreSist.includes('aspirac') || nombreSist.includes('asd');
+                const isAspB = nombreCat.includes('aspiraci') || nombreCat.includes('aspirac') || nombreCat.includes('asd');
+                if (isAspA || isAspB) return isAspA && isAspB;
+                const isMonoxA = nombreSist.includes('monoxido') || nombreSist.includes('monox');
+                const isMonoxB = nombreCat.includes('monoxido') || nombreCat.includes('monox');
+                if (isMonoxA || isMonoxB) return isMonoxA && isMonoxB;
                 const isCocinaA = nombreSist.includes('cocina') || nombreSist.includes('campana');
                 const isCocinaB = nombreCat.includes('cocina') || nombreCat.includes('campana');
                 if (isCocinaA || isCocinaB) return isCocinaA && isCocinaB;
-                const isGasA = (nombreSist.includes('gas') || (nombreSist.includes('extinci') && !nombreSist.includes('extintor'))) && !isCocinaA;
-                const isGasB = (nombreCat.includes('gas') || (nombreCat.includes('extinci') && !nombreCat.includes('extintor'))) && !isCocinaB;
+                const isEspumaA = nombreSist.includes('espuma');
+                const isEspumaB = nombreCat.includes('espuma');
+                if (isEspumaA || isEspumaB) return isEspumaA && isEspumaB;
+                const isAguaA = nombreSist.includes('agua') && !isEspumaA;
+                const isAguaB = nombreCat.includes('agua') && !isEspumaB;
+                if (isAguaA || isAguaB) return isAguaA && isAguaB;
+                const isGasA = (nombreSist.includes('gas') || (nombreSist.includes('extinci') && !nombreSist.includes('extintor'))) && !isCocinaA && !isEspumaA && !isAguaA;
+                const isGasB = (nombreCat.includes('gas') || (nombreCat.includes('extinci') && !nombreCat.includes('extintor'))) && !isCocinaB && !isEspumaB && !isAguaB;
                 if (isGasA || isGasB) return isGasA && isGasB;
-                return nombreCat === nombreSist || nombreCat.includes(nombreSist) || nombreSist.includes(nombreCat);
+                return nombreCat.includes(nombreSist) || nombreSist.includes(nombreCat);
             });
             const sistemaNombre = sistemaCat?.nombre || (sist as any).tipo || (sist as any).familia || '';
             if (!sistemaNombre) continue;
 
             const nombreSistemaNorm = normalizarNombre(sistemaNombre);
             // Buscar la plantilla que coincida con el nombre del sistema con orden de prioridad
+            let plantilla: any = null;
+
+            // Prioridad absoluta para Detección por Aspiración (ASD)
+            if (esAspiracion || nombreSistemaNorm.includes('aspirac') || nombreSistemaNorm.includes('asd')) {
+                plantilla = plantillas.find((p: any) => {
+                    const np = normalizarNombre(p.nombre || '');
+                    return np.includes('aspirac') || np.includes('asd');
+                });
+            }
+
             // 1. Coincidencia exacta
-            let plantilla = plantillas.find((p: any) => {
-                const nombrePlantillaNorm = normalizarNombre(p.nombre || '');
-                return nombrePlantillaNorm === nombreSistemaNorm;
-            });
+            if (!plantilla) {
+                plantilla = plantillas.find((p: any) => {
+                    const nombrePlantillaNorm = normalizarNombre(p.nombre || '');
+                    return nombrePlantillaNorm === nombreSistemaNorm;
+                });
+            }
 
             // 2. Coincidencia por inclusión (si una contiene a la otra)
             if (!plantilla) {
                 plantilla = plantillas.find((p: any) => {
                     const nombrePlantillaNorm = normalizarNombre(p.nombre || '');
+                    if (nombrePlantillaNorm.includes('aspirac') || nombrePlantillaNorm.includes('asd') || nombrePlantillaNorm.includes('monox')) return false;
                     return nombrePlantillaNorm.includes(nombreSistemaNorm) || nombreSistemaNorm.includes(nombrePlantillaNorm);
                 });
             }
@@ -654,6 +698,7 @@ export default function Partes() {
             if (!plantilla) {
                 plantilla = plantillas.find((p: any) => {
                     const nombrePlantillaNorm = normalizarNombre(p.nombre || '');
+                    if (nombrePlantillaNorm.includes('aspirac') || nombrePlantillaNorm.includes('asd') || nombrePlantillaNorm.includes('monox')) return false;
                     const palabrasSistema = nombreSistemaNorm.split(' ').filter((w: string) => w.length > 3);
                     const palabrasPlantilla = nombrePlantillaNorm.split(' ').filter((w: string) => w.length > 3);
                     return palabrasSistema.some((ps: string) => palabrasPlantilla.some((pp: string) => ps === pp || pp.includes(ps) || ps.includes(pp)));
@@ -779,7 +824,7 @@ export default function Partes() {
       } else if (estadoFilter === 'En revisión') {
         if (st !== 'En revisión' && st !== 'En curso') return false;
       } else if (estadoFilter === 'Finalizado') {
-        if (st !== 'Finalizado' || esRetimbrando) return false;
+        if (st !== 'Finalizado') return false;
       } else if (estadoFilter === 'Pre-Cerrado') {
         if (st !== 'Pre-Cerrado') return false;
       } else if (estadoFilter === 'Cerrado') {
@@ -859,7 +904,6 @@ export default function Partes() {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] px-8 py-6">
-      <div className="max-w-[1600px] mx-auto">
         {/* Header */}
         <div className="mb-6 flex flex-col items-center sm:items-start text-center sm:text-left">
           <button 
@@ -1248,7 +1292,6 @@ export default function Partes() {
         <div className="mt-4 flex items-center justify-between text-xs text-zinc-400">
           <span>Total: {partesPlanificados.length} parte{partesPlanificados.length !== 1 ? 's' : ''} planificado{partesPlanificados.length !== 1 ? 's' : ''}</span>
         </div>
-      </div>
 
       {/* Modal de Opciones de Descarga PDF */}
       {showDownloadModal && (

@@ -6,7 +6,7 @@ import {
   Settings, Power, ChevronLeft, ChevronRight, LayoutDashboard,
   Menu, X, Inbox, Clock, Gauge, Trash2,
   ChevronDown, Building2, FolderKanban, ClipboardCheck, Files, GraduationCap,
-  AlertTriangle, BarChart3
+  AlertTriangle, BarChart3, StickyNote
 } from 'lucide-react';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -60,11 +60,11 @@ const CATEGORIAS_MENU: NavCategory[] = [
     id: 'gestion',
     title: 'Gestión',
     Icon: FolderKanban,
-    allowedRoles: ['super-administrador', 'administrador', 'editor'],
+    allowedRoles: ['super-administrador', 'administrador', 'editor', 'tecnico'],
     subItems: [
       { id: 'clientes', path: '/clientes', title: 'Clientes', Icon: Users, allowedRoles: ['super-administrador', 'administrador', 'editor'] },
       { id: 'centros', path: '/centros', title: 'Centros', Icon: Building2, allowedRoles: ['super-administrador', 'administrador'] },
-      { id: 'catalogo', path: '/catalogo', title: 'Catálogo', Icon: Package, allowedRoles: ['super-administrador', 'administrador', 'editor'] }
+      { id: 'catalogo', path: '/catalogo', title: 'Catálogo', Icon: Package, allowedRoles: ['super-administrador', 'administrador', 'editor', 'tecnico'] }
     ]
   },
 
@@ -103,17 +103,18 @@ const CATEGORIAS_MENU: NavCategory[] = [
     allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador', 'tecnico']
   },
 
-  // 5. Documentos (Certificados, Presupuestos, Albaranes, Facturas)
+  // 5. Documentos (Certificados, Presupuestos, Albaranes, Facturas, Notas)
   {
     id: 'documentos',
     title: 'Documentos',
     Icon: Files,
-    allowedRoles: ['super-administrador', 'administrador', 'visualizador'],
+    allowedRoles: ['super-administrador', 'administrador', 'visualizador', 'editor', 'tecnico'],
     subItems: [
       { id: 'certificados', path: '/certificados', title: 'Certificados', Icon: FileCheck, allowedRoles: ['super-administrador', 'administrador'] },
       { id: 'presupuestos', path: '/presupuestos', title: 'Presupuestos', Icon: Calculator, allowedRoles: ['super-administrador', 'administrador'] },
       { id: 'albaranes', path: '/albaranes', title: 'Albaranes', Icon: FileDigit, allowedRoles: ['super-administrador', 'administrador', 'visualizador'] },
-      { id: 'facturas', path: '/facturas', title: 'Facturas', Icon: Receipt, allowedRoles: ['super-administrador', 'administrador'] }
+      { id: 'facturas', path: '/facturas', title: 'Facturas', Icon: Receipt, allowedRoles: ['super-administrador', 'administrador'] },
+      { id: 'notas', path: '/notas', title: 'Notas', Icon: StickyNote, allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador', 'tecnico'] }
     ]
   },
 

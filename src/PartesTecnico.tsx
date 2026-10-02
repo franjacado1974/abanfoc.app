@@ -3,16 +3,18 @@ import {
   ArrowLeft, Calendar, Search, X,
   ChevronRight, Layers, Clock, Filter,
   DownloadCloud, CheckCircle2, RefreshCw, HardDrive, Database,
-  Zap, AlertTriangle, SlidersHorizontal
+  Zap, AlertTriangle, SlidersHorizontal,
+  FileText, Check, Download
 } from 'lucide-react';
 import { db, subscribePartes, subscribeCentroSistemas, subscribeClientes, subscribeCentros, updateParte, getEquiposInstalados } from './firebase';
 import { collection, getDocs } from 'firebase/firestore';
 import { getPlantillas } from './plantillas';
 import { saveParteOfflineBundle, getParteOfflineBundle, getOfflineDiagnostics, type OfflineParteBundle } from './offlineDB';
+import { generarActaExtintoresPDF, generarCertificadoPDF } from './pdfGenerator';
 import { useNavigate } from 'react-router-dom';
 import type { Parte, Centro, Cliente, CentroSistema } from './Centros';
 import type { Tecnico } from './firebase';
-import { calcularAlertasExtintores, calcularAlertasBies, type ExtintorAlertas, type BieAlertas } from './recursos-compartidos/services/sistemasUtils';
+import { calcularAlertasExtintores, calcularAlertasBies, esEquipoExtintor, esEquipoBie, esSistemaExtintores, esSistemaBies, type ExtintorAlertas, type BieAlertas } from './recursos-compartidos/services/sistemasUtils';
 
 interface PartesTecnicoProps {
   loggedUser: { id: string; nombre: string; apellidos: string; rol: string };
@@ -39,14 +41,12 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
   });
   const [alertasExtintoresPorCentro, setAlertasExtintoresPorCentro] = useState<Record<string, ExtintorAlertas>>(() => {
     try {
-      const cached = localStorage.getItem('firecheck_db_alertas_ext');
-      if (cached) return JSON.parse(cached);
       const allEquipos: any[] = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
       const storedCentros: any[] = JSON.parse(localStorage.getItem('firecheck_db_centros') || '[]');
       const map: Record<string, ExtintorAlertas> = {};
       const equiposPorCentro: Record<string, any[]> = {};
       for (const eq of allEquipos) {
-        if (eq.centroId) {
+        if (eq.centroId && esEquipoExtintor(eq)) {
           if (!equiposPorCentro[eq.centroId]) equiposPorCentro[eq.centroId] = [];
           equiposPorCentro[eq.centroId].push(eq);
         }
@@ -66,14 +66,12 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
 
   const [alertasBiesPorCentro, setAlertasBiesPorCentro] = useState<Record<string, BieAlertas>>(() => {
     try {
-      const cached = localStorage.getItem('firecheck_db_alertas_bie');
-      if (cached) return JSON.parse(cached);
       const allEquipos: any[] = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
       const storedCentros: any[] = JSON.parse(localStorage.getItem('firecheck_db_centros') || '[]');
       const map: Record<string, BieAlertas> = {};
       const equiposPorCentro: Record<string, any[]> = {};
       for (const eq of allEquipos) {
-        if (eq.centroId) {
+        if (eq.centroId && esEquipoBie(eq)) {
           if (!equiposPorCentro[eq.centroId]) equiposPorCentro[eq.centroId] = [];
           equiposPorCentro[eq.centroId].push(eq);
         }
@@ -101,6 +99,259 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
   const [diagInfo, setDiagInfo] = useState<any>(null);
   const [showModoModal, setShowModoModal] = useState(true);
   const [loadingAlertas, setLoadingAlertas] = useState(false);
+  const [showPdfModal, setShowPdfModal] = useState(false);
+  const [parteSeleccionadoPdf, setParteSeleccionadoPdf] = useState<{ target: Parte; esAnterior: boolean } | null>(null);
+  const [pdfOptions, setPdfOptions] = useState({ acta: true, certificado: true });
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+
+  // Comprobar si una revisión ha sido realizada
+  const estaRealizado = (p: Parte) => {
+    return p.estado === 'Pre-Cerrado' ||
+           p.estado === 'Finalizado' ||
+           p.estado === 'Cerrado' ||
+           Boolean((p as any).firmaCliente) ||
+           Boolean((p as any).firmaTecnico) ||
+           Boolean((p as any).firmado);
+  };
+
+  // Obtener el parte correspondiente para mostrar el PDF:
+  // Si este parte ya está realizado, devuelve este parte.
+  // Si aún está planificado/abierto, busca el último parte completado del mismo centro para que el técnico lo consulte en las próximas revisiones.
+  const getParteConPdf = (p: Parte): { target: Parte; esAnterior: boolean } | null => {
+    if (estaRealizado(p)) {
+      return { target: p, esAnterior: false };
+    }
+    const centroObj = centros.find(c => c._docId === p.centroId || c.id === p.centroId);
+    const cId = p.centroId;
+    const cDocId = centroObj?._docId;
+
+    const partesMismoCentro = partes.filter(item =>
+      (item.centroId === cId || (cDocId && item.centroId === cDocId)) &&
+      item.id !== p.id &&
+      estaRealizado(item)
+    ).sort((a, b) => {
+      const fa = a.fechaProgramada || a.fechaCreacion || '';
+      const fb = b.fechaProgramada || b.fechaCreacion || '';
+      return fb.localeCompare(fa);
+    });
+
+    if (partesMismoCentro.length > 0) {
+      return { target: partesMismoCentro[0], esAnterior: true };
+    }
+    return null;
+  };
+
+  const handleAbrirPdfModal = (p: Parte, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const info = getParteConPdf(p);
+    if (!info) {
+      alert('Aún no se ha realizado ninguna revisión con PDF disponible para este centro.');
+      return;
+    }
+    setParteSeleccionadoPdf(info);
+    setPdfOptions({ acta: true, certificado: true });
+    setShowPdfModal(true);
+  };
+
+  const confirmarDescargaPdf = async () => {
+    if (!parteSeleccionadoPdf) return;
+    const { target: parte } = parteSeleccionadoPdf;
+    setIsGeneratingPdf(true);
+
+    try {
+      const centro = centros.find(c => c._docId === parte.centroId || c.id === parte.centroId);
+      const cliente = clientes.find(cl => cl.id === parte.clienteId);
+      if (!centro || !cliente) {
+        alert('Falta información del centro o cliente para generar el PDF.');
+        setIsGeneratingPdf(false);
+        return;
+      }
+
+      // Intentar obtener datos del bundle offline primero si está descargado
+      let offlineBundle = await getParteOfflineBundle(parte.id);
+      let sistemasDelCentro: any[] = offlineBundle?.sistemasDelCentro || [];
+      let equiposTodos: any[] = offlineBundle?.equiposInstalados || [];
+      let checklistItemsPorSistema: Record<string, any[]> = offlineBundle?.checklistItemsPorSistema || {};
+
+      // Si no hay bundle offline o faltan sistemas/equipos, cargar desde Firestore
+      if (sistemasDelCentro.length === 0) {
+        try {
+          const targetCentroId = centro._docId || centro.id || parte.centroId;
+          const [sistemasInvSnap, sistemasSisSnap] = await Promise.all([
+            getDocs(collection(db, 'centros', targetCentroId, 'inventario')),
+            getDocs(collection(db, 'centros', targetCentroId, 'sistemas'))
+          ]);
+          const seen = new Set<string>();
+          sistemasDelCentro = [...sistemasInvSnap.docs, ...sistemasSisSnap.docs]
+            .filter(d => { if (seen.has(d.id)) return false; seen.add(d.id); return true; })
+            .map(d => ({ id: d.id, ...d.data() }));
+        } catch (e) {
+          console.warn('Error fetching sistemas from Firestore, fallback to local', e);
+          sistemasDelCentro = centroSistemas.filter(s => s.centroId === centro._docId || s.centroId === centro.id);
+        }
+      }
+
+      if (equiposTodos.length === 0) {
+        try {
+          const targetCentroId = centro._docId || centro.id || parte.centroId;
+          let tempEquipos: any[] = [];
+          for (const sist of sistemasDelCentro) {
+            const eqSnap = await getDocs(collection(db, 'centros', targetCentroId, 'inventario', sist.id, 'equipos'));
+            tempEquipos = tempEquipos.concat(eqSnap.docs.map(d => ({ id: d.id, sistemaId: sist.id, ...d.data() })));
+          }
+          equiposTodos = tempEquipos;
+        } catch (e) {
+          console.warn('Error fetching equipos from Firestore, fallback to local', e);
+          const allStored = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
+          equiposTodos = allStored.filter((eq: any) => eq.centroId === centro._docId || eq.centroId === centro.id || eq.centroId === parte.centroId);
+        }
+      }
+
+      equiposTodos.sort((a, b) => (a.codigo || '').localeCompare(b.codigo || '', undefined, { numeric: true }));
+
+      // Cargar plantillas si no están en el bundle
+      if (Object.keys(checklistItemsPorSistema).length === 0) {
+        try {
+          const categoriasSistema = JSON.parse(localStorage.getItem('firecheck_db_sistemas_categorias') || '[]');
+          const plantillasSnap = await getDocs(collection(db, 'plantillas'));
+          const plantillas = plantillasSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+          const normalizarNombre = (nombre: string) =>
+            nombre
+              .toLowerCase()
+              .trim()
+              .replace(/^sistema\s+/i, '')
+              .replace(/^check\s*list\s+/i, '')
+              .replace(/^checklist\s+/i, '')
+              .replace(/\s+/g, ' ')
+              .replace(/[áàäâ]/g, 'a')
+              .replace(/[éèëê]/g, 'e')
+              .replace(/[íìïî]/g, 'i')
+              .replace(/[óòöô]/g, 'o')
+              .replace(/[úùüû]/g, 'u');
+
+          const cleanNorm = (str: string) => (str || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+
+          for (const sist of sistemasDelCentro) {
+            const rawSistNombre = ((sist as any).tipo || (sist as any).familia || (sist as any).descripcion || (sist as any).nombre || '').toLowerCase();
+            const esAspiracion = rawSistNombre.includes('aspiraci') || rawSistNombre.includes('aspirac') || rawSistNombre.includes('asd');
+
+            const sistemaCat = categoriasSistema.find((c: any) => {
+              const nombreSist = cleanNorm((sist as any).tipo || (sist as any).familia || (sist as any).descripcion || '');
+              const nombreCat = cleanNorm(c.nombre || '');
+              if (nombreCat && nombreSist && nombreCat === nombreSist) return true;
+              const isAspA = nombreSist.includes('aspiraci') || nombreSist.includes('aspirac') || nombreSist.includes('asd');
+              const isAspB = nombreCat.includes('aspiraci') || nombreCat.includes('aspirac') || nombreCat.includes('asd');
+              if (isAspA || isAspB) return isAspA && isAspB;
+              const isMonoxA = nombreSist.includes('monoxido') || nombreSist.includes('monox');
+              const isMonoxB = nombreCat.includes('monoxido') || nombreCat.includes('monox');
+              if (isMonoxA || isMonoxB) return isMonoxA && isMonoxB;
+              const isCocinaA = nombreSist.includes('cocina') || nombreSist.includes('campana');
+              const isCocinaB = nombreCat.includes('cocina') || nombreCat.includes('campana');
+              if (isCocinaA || isCocinaB) return isCocinaA && isCocinaB;
+              const isEspumaA = nombreSist.includes('espuma');
+              const isEspumaB = nombreCat.includes('espuma');
+              if (isEspumaA || isEspumaB) return isEspumaA && isEspumaB;
+              const isAguaA = nombreSist.includes('agua') && !isEspumaA;
+              const isAguaB = nombreCat.includes('agua') && !isEspumaB;
+              if (isAguaA || isAguaB) return isAguaA && isAguaB;
+              const isGasA = (nombreSist.includes('gas') || (nombreSist.includes('extinci') && !nombreSist.includes('extintor'))) && !isCocinaA && !isEspumaA && !isAguaA;
+              const isGasB = (nombreCat.includes('gas') || (nombreCat.includes('extinci') && !nombreCat.includes('extintor'))) && !isCocinaB && !isEspumaB && !isAguaB;
+              if (isGasA || isGasB) return isGasA && isGasB;
+              return nombreCat.includes(nombreSist) || nombreSist.includes(nombreCat);
+            });
+            const sistemaNombre = sistemaCat?.nombre || (sist as any).tipo || (sist as any).familia || '';
+            if (!sistemaNombre) continue;
+
+            const nombreSistemaNorm = normalizarNombre(sistemaNombre);
+            let plantilla: any = null;
+
+            if (esAspiracion || nombreSistemaNorm.includes('aspirac') || nombreSistemaNorm.includes('asd')) {
+              plantilla = plantillas.find((p: any) => {
+                const np = normalizarNombre(p.nombre || '');
+                return np.includes('aspirac') || np.includes('asd');
+              });
+            }
+            if (!plantilla) {
+              plantilla = plantillas.find((p: any) => normalizarNombre(p.nombre || '') === nombreSistemaNorm);
+            }
+            if (!plantilla) {
+              plantilla = plantillas.find((p: any) => {
+                const np = normalizarNombre(p.nombre || '');
+                if (np.includes('aspirac') || np.includes('asd') || np.includes('monox')) return false;
+                return np.includes(nombreSistemaNorm) || nombreSistemaNorm.includes(np);
+              });
+            }
+            if (!plantilla) {
+              plantilla = plantillas.find((p: any) => {
+                const np = normalizarNombre(p.nombre || '');
+                if (np.includes('aspirac') || np.includes('asd') || np.includes('monox')) return false;
+                const ps = nombreSistemaNorm.split(' ').filter((w: string) => w.length > 3);
+                const pp = np.split(' ').filter((w: string) => w.length > 3);
+                return ps.some((x: string) => pp.some((y: string) => x === y || y.includes(x) || x.includes(y)));
+              });
+            }
+
+            if (plantilla) {
+              const itemsCol = collection(db, 'plantillas', plantilla.id, 'items');
+              const itemsSnap = await getDocs(itemsCol);
+              let items = itemsSnap.docs.map(d => ({ key: d.id, ...d.data() }));
+              items.sort((a: any, b: any) => (a.orden || a.order || 0) - (b.orden || b.order || 0));
+              checklistItemsPorSistema[sist.id] = items;
+            }
+          }
+        } catch (e) {
+          console.warn('Error fetching plantillas for PDF:', e);
+        }
+      }
+
+      // Nombre del técnico
+      const storedTecnicos = tecnicos.length ? tecnicos : JSON.parse(localStorage.getItem('firecheck_db_tecnicos') || '[]');
+      const tecnico = storedTecnicos.find((t: any) => t.id === parte.tecnicoId);
+      const tecnicoNombre = tecnico ? `${tecnico.nombre} ${tecnico.apellidos}` : `${loggedUser.nombre} ${loggedUser.apellidos || ''}`.trim() || 'Técnico';
+
+      const firmaCliente = (parte as any).firmaCliente || '';
+      const firmaTecnico = (parte as any).firmaTecnico || '';
+      const nombreFirmante = (parte as any).nombreFirmante || '';
+      const numeroMantenimiento = (parte as any).numeroMantenimiento || parte.id;
+
+      // Empresa
+      let empresaSeleccionada: any = undefined;
+      const empId = parte.empresaId || centro?.empresaId;
+      if (empId) {
+        const empresas = JSON.parse(localStorage.getItem('firecheck_db_empresas') || '[]');
+        empresaSeleccionada = empresas.find((e: any) => e._docId === empId || e.id === empId || (e.nombre && typeof e.nombre === 'string' && e.nombre.trim().toLowerCase() === empId.trim().toLowerCase()));
+      }
+      if (!empresaSeleccionada) {
+        const empSingle = JSON.parse(localStorage.getItem('firecheck_db_empresa') || 'null');
+        if (empSingle) empresaSeleccionada = empSingle;
+      }
+
+      // 1. Generar Acta si está seleccionada
+      if (pdfOptions.acta) {
+        await generarActaExtintoresPDF(
+          cliente, centro, sistemasDelCentro, equiposTodos, numeroMantenimiento,
+          tecnicoNombre, undefined, firmaCliente, firmaTecnico, nombreFirmante, checklistItemsPorSistema, empresaSeleccionada,
+          false, parte.observacionesTecnico
+        );
+      }
+
+      // 2. Generar Certificado si está seleccionado
+      if (pdfOptions.certificado) {
+        await generarCertificadoPDF(
+          cliente, centro, parte, tecnicoNombre, (parte as any).estadoCertificado || undefined, sistemasDelCentro, equiposTodos,
+          firmaCliente, firmaTecnico, nombreFirmante, false, empresaSeleccionada
+        );
+      }
+
+      setShowPdfModal(false);
+    } catch (err) {
+      console.error('Error al generar PDF en el dispositivo:', err);
+      alert('Error al generar el PDF: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
 
   // Cargar mapa de partes descargados en IndexedDB
   useEffect(() => {
@@ -315,13 +566,21 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
         return;
       }
 
-      const nuevosMap: Record<string, any[]> = {};
+      const nuevosMapExt: Record<string, any[]> = {};
+      const nuevosMapBie: Record<string, any[]> = {};
+
       try {
         const stored = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
         for (const eq of stored) {
           if (eq.centroId) {
-            if (!nuevosMap[eq.centroId]) nuevosMap[eq.centroId] = [];
-            nuevosMap[eq.centroId].push(eq);
+            if (esEquipoExtintor(eq)) {
+              if (!nuevosMapExt[eq.centroId]) nuevosMapExt[eq.centroId] = [];
+              nuevosMapExt[eq.centroId].push(eq);
+            }
+            if (esEquipoBie(eq)) {
+              if (!nuevosMapBie[eq.centroId]) nuevosMapBie[eq.centroId] = [];
+              nuevosMapBie[eq.centroId].push(eq);
+            }
           }
         }
       } catch { /* ignore */ }
@@ -358,6 +617,8 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
               const sData = sDoc.data() || {};
               const sNombre = sData.tipo || sData.familia || sData.nombre || sDoc.id || '';
               const sTipo = sData.tipo || sDoc.id || '';
+              const isExtSist = esSistemaExtintores(sDoc.id) || esSistemaExtintores(sNombre);
+              const isBieSist = esSistemaBies(sDoc.id) || esSistemaBies(sNombre);
               const taggedList = list.map(e => ({
                 ...e,
                 sistemaNombre: e.sistemaNombre || sNombre,
@@ -366,21 +627,29 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
               }));
               const keysToPopulate = [cId, targetDocId, centro?._docId, centro?.id].filter(Boolean) as string[];
               for (const key of keysToPopulate) {
-                if (!nuevosMap[key]) nuevosMap[key] = [];
-                const otros = (nuevosMap[key] || []).filter(e => e.sistemaId !== sDoc.id);
-                nuevosMap[key] = [...otros, ...taggedList];
+                if (isExtSist) {
+                  if (!nuevosMapExt[key]) nuevosMapExt[key] = [];
+                  const otros = (nuevosMapExt[key] || []).filter(e => e.sistemaId !== sDoc.id);
+                  nuevosMapExt[key] = [...otros, ...taggedList];
+                }
+                if (isBieSist) {
+                  if (!nuevosMapBie[key]) nuevosMapBie[key] = [];
+                  const otros = (nuevosMapBie[key] || []).filter(e => e.sistemaId !== sDoc.id);
+                  nuevosMapBie[key] = [...otros, ...taggedList];
+                }
               }
             }
           }));
         } catch { /* ignore */ }
       }));
 
-      const resultMapExt: Record<string, ExtintorAlertas> = { ...alertasExtintoresPorCentro };
-      const resultMapBie: Record<string, BieAlertas> = { ...alertasBiesPorCentro };
-      for (const cId of Object.keys(nuevosMap)) {
+      const resultMapExt: Record<string, ExtintorAlertas> = {};
+      const resultMapBie: Record<string, BieAlertas> = {};
+      const allTargetKeys = new Set([...Object.keys(nuevosMapExt), ...Object.keys(nuevosMapBie), ...centroIds]);
+      for (const cId of allTargetKeys) {
         const centro = centros.find(c => c._docId === cId || c.id === cId);
-        const alertExt = calcularAlertasExtintores(nuevosMap[cId]);
-        const alertBie = calcularAlertasBies(nuevosMap[cId]);
+        const alertExt = calcularAlertasExtintores(nuevosMapExt[cId] || []);
+        const alertBie = calcularAlertasBies(nuevosMapBie[cId] || []);
         resultMapExt[cId] = alertExt;
         resultMapBie[cId] = alertBie;
         if (centro?._docId) {
@@ -623,6 +892,33 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
                             <Layers className="w-3.5 h-3.5 text-zinc-400" />
                             {sistCount} sist.
                           </span>
+
+                          {/* Botón Icono PDF con letra roja */}
+                          {(() => {
+                            const infoPdf = getParteConPdf(parte);
+                            const tienePdf = Boolean(infoPdf);
+                            return (
+                              <button
+                                type="button"
+                                onClick={(e) => handleAbrirPdfModal(parte, e)}
+                                className={`flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-md transition-all shadow-xs ${
+                                  tienePdf
+                                    ? 'bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 hover:border-red-300 active:scale-95 cursor-pointer'
+                                    : 'bg-zinc-50 text-zinc-400 border border-zinc-200 hover:bg-zinc-100 cursor-pointer'
+                                }`}
+                                title={
+                                  tienePdf
+                                    ? (infoPdf?.esAnterior
+                                        ? `Ver PDF de la última revisión realizada (${infoPdf.target.fechaProgramada ? infoPdf.target.fechaProgramada.replace(/-/g, '/') : 'anterior'})`
+                                        : 'Ver PDF de esta revisión')
+                                    : 'Aún no se ha realizado ninguna revisión para este centro'
+                                }
+                              >
+                                <FileText className={`w-3.5 h-3.5 ${tienePdf ? 'text-red-600' : 'text-zinc-400'}`} />
+                                <span className={`text-[11px] font-bold ${tienePdf ? 'text-red-600' : 'text-zinc-400'}`}>PDF</span>
+                              </button>
+                            );
+                          })()}
                         </div>
 
                         {/* Botón Descargar Parte Completo Offline */}
@@ -708,7 +1004,7 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
                   </div>
 
                   {/* Vista desktop */}
-                  <div className="hidden sm:grid grid-cols-[1fr_auto_auto_auto_auto_auto] gap-4 items-center px-5 py-4">
+                  <div className="hidden sm:grid grid-cols-[1fr_auto_auto_auto_auto_auto_auto] gap-4 items-center px-5 py-4">
                     <div className="min-w-0">
                       <p className="text-xs font-semibold text-zinc-500 truncate">{cliente?.nombre || '—'}</p>
                       <p className="text-sm font-bold text-zinc-900 truncate">{centro?.nombre || 'Centro desconocido'}</p>
@@ -767,6 +1063,33 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
                         <Layers className="w-3 h-3 text-zinc-400" />
                         {sistCount} sist.
                       </span>
+                    </div>
+                    <div className="w-16 text-center">
+                      {(() => {
+                        const infoPdf = getParteConPdf(parte);
+                        const tienePdf = Boolean(infoPdf);
+                        return (
+                          <button
+                            type="button"
+                            onClick={(e) => handleAbrirPdfModal(parte, e)}
+                            className={`inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-md transition-all shadow-xs ${
+                              tienePdf
+                                ? 'bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 hover:border-red-300 active:scale-95 cursor-pointer'
+                                : 'bg-zinc-50 text-zinc-400 border border-zinc-200 hover:bg-zinc-100 cursor-pointer'
+                            }`}
+                            title={
+                              tienePdf
+                                ? (infoPdf?.esAnterior
+                                    ? `Ver PDF de la última revisión realizada (${infoPdf.target.fechaProgramada ? infoPdf.target.fechaProgramada.replace(/-/g, '/') : 'anterior'})`
+                                    : 'Ver PDF de esta revisión')
+                                : 'Aún no se ha realizado ninguna revisión para este centro'
+                            }
+                          >
+                            <FileText className={`w-3.5 h-3.5 ${tienePdf ? 'text-red-600' : 'text-zinc-400'}`} />
+                            <span className={`text-[11px] font-bold ${tienePdf ? 'text-red-600' : 'text-zinc-400'}`}>PDF</span>
+                          </button>
+                        );
+                      })()}
                     </div>
                     <div>
                       <button
@@ -958,6 +1281,111 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
             <p className="text-xs text-zinc-500 font-medium">
               Analizando partes planificados y en curso en pantalla
             </p>
+          </div>
+        </div>
+      )}
+      {/* Modal flotante de selección y descarga PDF para el técnico */}
+      {showPdfModal && parteSeleccionadoPdf && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden border border-zinc-200">
+            <div className="flex items-center justify-between p-5 border-b border-zinc-100 bg-white">
+              <h3 className="font-bold text-zinc-900 text-base sm:text-lg flex items-center gap-2">
+                <FileText className="w-5 h-5 text-red-600" />
+                Documentos de Revisión (PDF)
+              </h3>
+              <button 
+                type="button"
+                onClick={() => setShowPdfModal(false)}
+                className="p-1.5 -mr-1.5 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 rounded-full transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-6">
+              {/* Información del centro y parte */}
+              <div className="mb-4 p-3 bg-zinc-50 border border-zinc-200 rounded-xl">
+                <div className="text-xs font-bold text-zinc-900 truncate">
+                  {centros.find(c => c._docId === parteSeleccionadoPdf.target.centroId || c.id === parteSeleccionadoPdf.target.centroId)?.nombre || 'Centro'}
+                </div>
+                <div className="text-[11px] text-zinc-500 mt-1">
+                  {parteSeleccionadoPdf.esAnterior ? (
+                    <span className="inline-flex items-center gap-1 font-semibold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                      ℹ️ Última revisión finalizada ({parteSeleccionadoPdf.target.fechaProgramada ? parteSeleccionadoPdf.target.fechaProgramada.replace(/-/g, '/') : 'Completada'})
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                      ✓ Revisión realizada ({parteSeleccionadoPdf.target.fechaProgramada ? parteSeleccionadoPdf.target.fechaProgramada.replace(/-/g, '/') : 'Completada'})
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <p className="text-xs text-zinc-600 mb-3.5 font-medium">Selecciona los documentos que deseas generar:</p>
+              
+              <div className="space-y-2.5">
+                <label className="flex items-center p-3 rounded-xl border border-zinc-200 hover:bg-zinc-50 cursor-pointer transition-colors">
+                  <div className={`w-5 h-5 rounded flex items-center justify-center mr-3 transition-colors ${pdfOptions.acta ? 'bg-red-600 border-red-600' : 'border-2 border-zinc-300'}`}>
+                    {pdfOptions.acta && <Check className="w-3.5 h-3.5 text-white" />}
+                  </div>
+                  <input 
+                    type="checkbox" 
+                    className="hidden"
+                    checked={pdfOptions.acta}
+                    onChange={(e) => setPdfOptions(prev => ({ ...prev, acta: e.target.checked }))}
+                  />
+                  <div>
+                    <span className="font-semibold text-xs sm:text-sm text-zinc-800 block">Acta de Revisión</span>
+                    <span className="text-[10px] sm:text-[11px] text-zinc-400">Detalle de equipos, checklist, anomalías y firmas</span>
+                  </div>
+                </label>
+                
+                <label className="flex items-center p-3 rounded-xl border border-zinc-200 hover:bg-zinc-50 cursor-pointer transition-colors">
+                  <div className={`w-5 h-5 rounded flex items-center justify-center mr-3 transition-colors ${pdfOptions.certificado ? 'bg-red-600 border-red-600' : 'border-2 border-zinc-300'}`}>
+                    {pdfOptions.certificado && <Check className="w-3.5 h-3.5 text-white" />}
+                  </div>
+                  <input 
+                    type="checkbox" 
+                    className="hidden"
+                    checked={pdfOptions.certificado}
+                    onChange={(e) => setPdfOptions(prev => ({ ...prev, certificado: e.target.checked }))}
+                  />
+                  <div>
+                    <span className="font-semibold text-xs sm:text-sm text-zinc-800 block">Certificado</span>
+                    <span className="text-[10px] sm:text-[11px] text-zinc-400">Certificado oficial de mantenimiento reglamentario</span>
+                  </div>
+                </label>
+              </div>
+
+              <div className="mt-6 pt-4 border-t border-zinc-100 flex gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setShowPdfModal(false)}
+                  disabled={isGeneratingPdf}
+                  className="flex-1 py-2.5 px-3 rounded-xl font-medium text-xs text-zinc-600 hover:bg-zinc-100 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmarDescargaPdf}
+                  disabled={isGeneratingPdf || (!pdfOptions.acta && !pdfOptions.certificado)}
+                  className="flex-1 py-2.5 px-3 rounded-xl font-bold text-xs bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 shadow-sm shadow-red-200 active:scale-95"
+                >
+                  {isGeneratingPdf ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Generando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Ver / Descargar</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

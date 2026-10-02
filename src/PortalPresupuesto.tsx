@@ -433,18 +433,38 @@ export default function PortalPresupuesto({ token }: PortalPresupuestoProps) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {(presupuesto.lineas || []).map((linea, idx) => (
-                    <tr key={idx} className="hover:bg-slate-50/70 transition-colors">
-                      <td className="py-3.5 px-4 font-medium text-slate-900">
-                        <div className="font-semibold text-slate-900">{linea.concepto}</div>
-                        {linea.codigo && <span className="text-[10px] font-mono text-slate-400 mr-2">Cód: {linea.codigo}</span>}
-                        {linea.descripcion && <p className="text-[11px] text-slate-500 mt-0.5 font-normal">{linea.descripcion}</p>}
-                      </td>
-                      <td className="py-3.5 px-3 text-center text-slate-700 font-bold">{linea.cantidad}</td>
-                      <td className="py-3.5 px-4 text-right text-slate-600">{formatMoneda(linea.precioUnidad)}</td>
-                      <td className="py-3.5 px-4 text-right font-bold text-slate-900">{formatMoneda(linea.subtotal)}</td>
-                    </tr>
-                  ))}
+                  {(presupuesto.lineas || []).map((linea, idx) => {
+                    if (linea.tipo === 'capitulo') {
+                      let subtotalCap = 0;
+                      for (let k = idx + 1; k < (presupuesto.lineas || []).length; k++) {
+                        if (presupuesto.lineas[k].tipo === 'capitulo') break;
+                        subtotalCap += (Number(presupuesto.lineas[k].cantidad) || 0) * (Number(presupuesto.lineas[k].precioUnidad) || 0);
+                      }
+                      return (
+                        <tr key={idx} className="bg-amber-50/80 border-y-2 border-amber-200">
+                          <td colSpan={3} className="py-2.5 px-4 font-bold text-amber-950">
+                            <span className="inline-block bg-amber-200 text-amber-900 text-[10px] font-black uppercase px-2 py-0.5 rounded mr-2">Capítulo</span>
+                            <span className="uppercase text-xs tracking-wide">{linea.concepto}</span>
+                          </td>
+                          <td className="py-2.5 px-4 text-right font-black text-amber-900 text-xs">
+                            {formatMoneda(subtotalCap)}
+                          </td>
+                        </tr>
+                      );
+                    }
+                    return (
+                      <tr key={idx} className="hover:bg-slate-50/70 transition-colors">
+                        <td className="py-3.5 px-4 font-medium text-slate-900">
+                          <div className="font-semibold text-slate-900">{linea.concepto}</div>
+                          {linea.codigo && <span className="text-[10px] font-mono text-slate-400 mr-2">Cód: {linea.codigo}</span>}
+                          {linea.descripcion && <p className="text-[11px] text-slate-500 mt-0.5 font-normal">{linea.descripcion}</p>}
+                        </td>
+                        <td className="py-3.5 px-3 text-center text-slate-700 font-bold">{linea.cantidad}</td>
+                        <td className="py-3.5 px-4 text-right text-slate-600">{formatMoneda(linea.precioUnidad)}</td>
+                        <td className="py-3.5 px-4 text-right font-bold text-slate-900">{formatMoneda(linea.subtotal)}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

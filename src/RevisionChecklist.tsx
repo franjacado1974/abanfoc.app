@@ -15,6 +15,7 @@ import SistemaHidrantes from './components/RevisionSistemas/SistemaHidrantes';
 import SistemaPuertasRF from './components/RevisionSistemas/SistemaPuertasRF';
 import SistemaSprinklers from './components/RevisionSistemas/SistemaSprinklers';
 import SistemaExtincionGas from './components/RevisionSistemas/SistemaExtincionGas';
+import SistemaExtincionAguaEspuma from './components/RevisionSistemas/SistemaExtincionAguaEspuma';
 import SistemaExtincionCampanaCocina from './components/RevisionSistemas/SistemaExtincionCampanaCocina';
 import SistemaFuenteAlimentacionAuxiliar from './components/RevisionSistemas/SistemaFuenteAlimentacionAuxiliar';
 import SistemaAlumbradoEmergencia from './components/RevisionSistemas/SistemaAlumbradoEmergencia';
@@ -57,12 +58,17 @@ export function tieneFechaInvalida(eq: any): boolean {
     const nombreEq = (eq.nombre || '').toLowerCase();
     const claseEq = (eq.clase || '').toLowerCase();
     const tipoEq = (eq.tipo || '').toLowerCase();
+    const sistEq = ((eq.sistemaNombre || eq.sistemaTipo || eq.familia || '') + '').toLowerCase();
+
+    // Las bombas jamás son extintores ni BIEs (no tienen retimbre)
+    const esBomba = nombreEq.includes('bomba') || claseEq.includes('bomba') || tipoEq.includes('bomba') || sistEq.includes('bomba') || sistEq.includes('abastecimiento');
+    if (esBomba) return false;
 
     const tieneRetimbreKey = Object.keys(eq).some(k => k.toLowerCase().includes('retimbre'));
     const tieneHidraKey = Object.keys(eq).some(k => k.toLowerCase().includes('hidra') || k.toLowerCase().includes('pruebahidra'));
 
-    const esExtintor = nombreEq.includes('extintor') || claseEq.includes('extintor') || tipoEq.includes('extintor') || tieneRetimbreKey;
-    const esBie = nombreEq.includes('bie') || nombreEq.includes('boca') || claseEq.includes('bie') || claseEq.includes('boca') || tipoEq.includes('bie') || tipoEq.includes('boca') || (tieneHidraKey && !tieneRetimbreKey);
+    const esExtintor = !esBomba && (nombreEq.includes('extintor') || claseEq.includes('extintor') || tipoEq.includes('extintor') || tieneRetimbreKey);
+    const esBie = !esBomba && (nombreEq.includes('bie') || nombreEq.includes('boca') || claseEq.includes('bie') || claseEq.includes('boca') || tipoEq.includes('bie') || tipoEq.includes('boca') || (tieneHidraKey && !tieneRetimbreKey));
 
     // Si no es ninguno de los dos, no hay regla de fecha inválida estándar
     if (!esExtintor && !esBie) {
@@ -253,9 +259,10 @@ export function evaluarAnomaliasPorFecha(eq: any, sistema?: any): string {
 
     let lineas = rawAnom.split(/\r?\n/);
 
-    const sistTipo = ((sistema?.tipo || sistema?.familia || '') + ' ' + (eq?.nombre || '') + ' ' + (eq?.tipo || '')).toLowerCase();
-    const isExtintor = sistTipo.includes('extintor');
-    const isBie = sistTipo.includes('bie') || sistTipo.includes('boca');
+    const sistTipo = ((sistema?.tipo || sistema?.familia || sistema?.nombre || '') + ' ' + (eq?.nombre || '') + ' ' + (eq?.tipo || '')).toLowerCase();
+    const esBomba = sistTipo.includes('bomba') || sistTipo.includes('abastecimiento');
+    const isExtintor = !esBomba && sistTipo.includes('extintor');
+    const isBie = !esBomba && (sistTipo.includes('bie') || sistTipo.includes('boca'));
 
     const today = new Date();
 
@@ -295,7 +302,9 @@ export function evaluarAnomaliasPorFecha(eq: any, sistema?: any): string {
             !trimmed.includes("Se aproxima caducidad") &&
             !trimmed.includes("Equipo caducado") &&
             !trimmed.includes("BIE caducado") &&
-            !trimmed.includes("BIE necesita realizar prueba")
+            !trimmed.includes("BIE necesita realizar prueba") &&
+            !trimmed.includes("retimbrado obligatorio") &&
+            !trimmed.includes("Equipo necesita retimbr")
         );
     });
 
@@ -305,9 +314,6 @@ export function evaluarAnomaliasPorFecha(eq: any, sistema?: any): string {
     } else if (isBie) {
         if (caducado20 && !lineas.some((l: string) => l.includes("caducado + de 20 años"))) lineas.push("- BIE caducado + de 20 años, se debe sustituir tramo de manguera según normativa.");
         if (retimbre5 && !lineas.some((l: string) => l.includes("prueba hidráulica")))  lineas.push("- BIE necesita realizar prueba hidráulica obligatoria cada 5 años.");
-    } else {
-        if (caducado20 && !lineas.some((l: string) => l.includes("caducado + de 20 años"))) lineas.push("- Equipo caducado + de 20 años, se debe sustituir por equipo nuevo.");
-        if (retimbre5 && !lineas.some((l: string) => l.includes("retimbrado obligatorio")))  lineas.push("- Equipo necesita retimbrado obligatorio de los 5 años.");
     }
 
     const resultadoBase = lineas.join('\n');
@@ -410,7 +416,7 @@ export default function RevisionChecklist() {
 
     // Cuando cambian los sistemas del centro o las plantillas, cargar los items de cada sistema
     useEffect(() => {
-        if (sistemasDelCentro.length === 0 || plantillas.length === 0 || categoriasSistema.length === 0) return;
+        if (sistemasDelCentro.length === 0 || plantillas.length === 0) return;
 
         console.log("=== RevisionChecklist: loading templates ===");
         console.log("sistemasDelCentro:", sistemasDelCentro);
@@ -434,15 +440,32 @@ export default function RevisionChecklist() {
         const unsubs: (() => void)[] = [];
 
         sistemasDelCentro.forEach(sist => {
+            const rawSistNombre = (sist.tipo || sist.familia || sist.descripcion || '').toLowerCase();
+            const cleanNorm = (str: string) => (str || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+            const esAspiracion = rawSistNombre.includes('aspiraci') || rawSistNombre.includes('aspirac') || rawSistNombre.includes('asd');
+
             // Obtener el nombre del sistema desde categoriasSistema
             const sistemaCat = categoriasSistema.find(c => {
-                const nombreSist = (sist.tipo || sist.familia || '').toLowerCase().trim();
-                const nombreCat = (c.nombre || '').toLowerCase().trim();
+                const nombreSist = cleanNorm(sist.tipo || sist.familia || '');
+                const nombreCat = cleanNorm(c.nombre || '');
+                if (nombreCat && nombreSist && nombreCat === nombreSist) return true;
+                const isAspA = nombreSist.includes('aspiraci') || nombreSist.includes('aspirac') || nombreSist.includes('asd');
+                const isAspB = nombreCat.includes('aspiraci') || nombreCat.includes('aspirac') || nombreCat.includes('asd');
+                if (isAspA || isAspB) return isAspA && isAspB;
+                const isMonoxA = nombreSist.includes('monoxido') || nombreSist.includes('monox');
+                const isMonoxB = nombreCat.includes('monoxido') || nombreCat.includes('monox');
+                if (isMonoxA || isMonoxB) return isMonoxA && isMonoxB;
                 const isCocinaA = nombreSist.includes('cocina') || nombreSist.includes('campana');
                 const isCocinaB = nombreCat.includes('cocina') || nombreCat.includes('campana');
                 if (isCocinaA || isCocinaB) return isCocinaA && isCocinaB;
-                const isGasA = (nombreSist.includes('gas') || (nombreSist.includes('extinci') && !nombreSist.includes('extintor'))) && !isCocinaA;
-                const isGasB = (nombreCat.includes('gas') || (nombreCat.includes('extinci') && !nombreCat.includes('extintor'))) && !isCocinaB;
+                const isEspumaA = nombreSist.includes('espuma');
+                const isEspumaB = nombreCat.includes('espuma');
+                if (isEspumaA || isEspumaB) return isEspumaA && isEspumaB;
+                const isAguaA = nombreSist.includes('agua') && !isEspumaA;
+                const isAguaB = nombreCat.includes('agua') && !isEspumaB;
+                if (isAguaA || isAguaB) return isAguaA && isAguaB;
+                const isGasA = (nombreSist.includes('gas') || (nombreSist.includes('extinci') && !nombreSist.includes('extintor'))) && !isCocinaA && !isEspumaA && !isAguaA;
+                const isGasB = (nombreCat.includes('gas') || (nombreCat.includes('extinci') && !nombreCat.includes('extintor'))) && !isCocinaB && !isEspumaB && !isAguaB;
                 if (isGasA || isGasB) return isGasA && isGasB;
                 return nombreCat === nombreSist || nombreCat.includes(nombreSist) || nombreSist.includes(nombreCat);
             });
@@ -455,16 +478,29 @@ export default function RevisionChecklist() {
             const nombreSistemaNorm = normalizarNombre(sistemaNombre);
 
             // Buscar la plantilla que coincida con el nombre del sistema con orden de prioridad
+            let plantilla: any = null;
+
+            // Prioridad absoluta para Detección por Aspiración (ASD)
+            if (esAspiracion || nombreSistemaNorm.includes('aspirac') || nombreSistemaNorm.includes('asd')) {
+                plantilla = plantillas.find(p => {
+                    const np = normalizarNombre(p.nombre || '');
+                    return np.includes('aspirac') || np.includes('asd');
+                });
+            }
+
             // 1. Coincidencia exacta
-            let plantilla = plantillas.find(p => {
-                const nombrePlantillaNorm = normalizarNombre(p.nombre || '');
-                return nombrePlantillaNorm === nombreSistemaNorm;
-            });
+            if (!plantilla) {
+                plantilla = plantillas.find(p => {
+                    const nombrePlantillaNorm = normalizarNombre(p.nombre || '');
+                    return nombrePlantillaNorm === nombreSistemaNorm;
+                });
+            }
 
             // 2. Coincidencia por inclusión (si una contiene a la otra)
             if (!plantilla) {
                 plantilla = plantillas.find(p => {
                     const nombrePlantillaNorm = normalizarNombre(p.nombre || '');
+                    if (nombrePlantillaNorm.includes('aspirac') || nombrePlantillaNorm.includes('asd') || nombrePlantillaNorm.includes('monox')) return false;
                     return nombrePlantillaNorm.includes(nombreSistemaNorm) || nombreSistemaNorm.includes(nombrePlantillaNorm);
                 });
             }
@@ -473,6 +509,7 @@ export default function RevisionChecklist() {
             if (!plantilla) {
                 plantilla = plantillas.find(p => {
                     const nombrePlantillaNorm = normalizarNombre(p.nombre || '');
+                    if (nombrePlantillaNorm.includes('aspirac') || nombrePlantillaNorm.includes('asd') || nombrePlantillaNorm.includes('monox')) return false;
                     const palabrasSistema = nombreSistemaNorm.split(' ').filter(w => w.length > 3);
                     const palabrasPlantilla = nombrePlantillaNorm.split(' ').filter(w => w.length > 3);
                     return palabrasSistema.some(ps => palabrasPlantilla.some(pp => ps === pp || pp.includes(ps) || ps.includes(pp)));
@@ -495,10 +532,12 @@ export default function RevisionChecklist() {
                     tipoRespuesta: item.tipoRespuesta,
                     opciones: item.opciones || [],
                     filasInicio: item.filasInicio,
+                    filasNombres: item.filasNombres || [],
                     sistemaId: sist.id,
                     sistemaNombre: sistemaNombre,
                     orden: item.orden,
                     horizontal: item.horizontal === true,
+                    valorPredeterminado: item.valorPredeterminado || '',
                 }));
                 setChecklistItemsPorSistema(prev => {
                     console.log(`💾 Actualizando checklistItemsPorSistema para ${sist.id}:`, checklistItems);
@@ -542,23 +581,20 @@ export default function RevisionChecklist() {
     const [nombreClienteFirma, setNombreClienteFirma] = useState('');
     const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-    // ── GESTOR DE SINCRONIZACIÓN INTELIGENTE CON DEBOUNCE POR EQUIPO Y LOCAL-FIRST ─────────
-    const syncTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+    // ── GESTOR DE SINCRONIZACIÓN LOCAL-FIRST CON GUARDADO MANUAL POR EQUIPO ─────────
     const pendingEquiposRef = useRef<Map<string, EquipoInstalado>>(new Map());
     const inFlightSyncRef = useRef<Set<string>>(new Set());
-    const lastActiveEquipoIdRef = useRef<string | null>(null);
     const [eqSyncStates, setEqSyncStates] = useState<Record<string, 'pending' | 'saving' | 'saved' | 'offline'>>({});
 
     const getEquipoSyncStatus = (eqId: string): 'pending' | 'saving' | 'saved' | 'offline' => {
-        return eqSyncStates[eqId] || 'pending';
+        if (eqSyncStates[eqId]) return eqSyncStates[eqId];
+        const eq = equiposInstalados.find(e => e.id === eqId);
+        if (eq && eq.revisado) return 'saved';
+        return 'pending';
     };
 
     // Sincroniza inmediatamente un equipo específico en Firestore
     const flushEquipoSync = async (eqId: string) => {
-        if (syncTimersRef.current[eqId]) {
-            clearTimeout(syncTimersRef.current[eqId]);
-            delete syncTimersRef.current[eqId];
-        }
         let eqToSync = pendingEquiposRef.current.get(eqId);
         if (!eqToSync) {
             eqToSync = equiposInstalados.find(e => e.id === eqId);
@@ -570,41 +606,33 @@ export default function RevisionChecklist() {
                 const targetCentroId = eqToSync.centroId || centroId;
                 const targetSistemaId = eqToSync.sistemaId;
                 await updateEquipoInstalado(eqId, eqToSync as any, targetCentroId, targetSistemaId);
-                // Solo después de que Firestore confirme la escritura, limpiamos si no se introdujeron nuevos cambios
                 if (pendingEquiposRef.current.get(eqId) === eqToSync) {
                     pendingEquiposRef.current.delete(eqId);
                 }
                 inFlightSyncRef.current.delete(eqId);
-                if (lastActiveEquipoIdRef.current === eqId) {
-                    lastActiveEquipoIdRef.current = null;
-                }
                 setEqSyncStates(prev => ({ ...prev, [eqId]: 'saved' }));
             } catch (err) {
                 console.error('Error sincronizando equipo en Firestore:', err);
                 inFlightSyncRef.current.delete(eqId);
-                if (lastActiveEquipoIdRef.current === eqId) {
-                    lastActiveEquipoIdRef.current = null;
-                }
                 setEqSyncStates(prev => ({ ...prev, [eqId]: 'offline' }));
-            }
-        } else {
-            if (lastActiveEquipoIdRef.current === eqId) {
-                lastActiveEquipoIdRef.current = null;
             }
         }
     };
 
-    // Guardado manual inmediato por equipo (botón "Guardar")
+    // Guardado manual inmediato por equipo (botón "Equipo revisado")
     const handleGuardarEquipoManual = async (eqId: string, equipoDirecto?: EquipoInstalado) => {
-        if (syncTimersRef.current[eqId]) {
-            clearTimeout(syncTimersRef.current[eqId]);
-            delete syncTimersRef.current[eqId];
-        }
         if (equipoDirecto) {
             pendingEquiposRef.current.set(eqId, equipoDirecto);
         }
-        const currentEq = equipoDirecto || pendingEquiposRef.current.get(eqId) || equiposInstalados.find(e => e.id === eqId);
+        let currentEq = equipoDirecto || pendingEquiposRef.current.get(eqId) || equiposInstalados.find(e => e.id === eqId);
         if (!currentEq) return;
+
+        // Asegurar que al pulsar "Equipo revisado", el equipo quede marcado como revisado: true
+        if (!currentEq.revisado) {
+            currentEq = { ...currentEq, revisado: true };
+            pendingEquiposRef.current.set(eqId, currentEq);
+            setEquiposInstalados(prev => prev.map(e => e.id === eqId ? currentEq! : e));
+        }
 
         setEqSyncStates(prev => ({ ...prev, [eqId]: 'saving' }));
         inFlightSyncRef.current.add(eqId);
@@ -618,9 +646,18 @@ export default function RevisionChecklist() {
 
         // 2. Guardar en IndexedDB offline bundle
         if (parteId) {
-            const updatedList = equiposInstalados.map(e => e.id === eqId ? currentEq : e);
+            const updatedList = equiposInstalados.map(e => e.id === eqId ? currentEq! : e);
             updateParteOfflineData(parteId, { equiposInstalados: updatedList }).catch(() => {});
             addPendingSyncItem(parteId, 'equipo', eqId, currentEq).catch(() => {});
+        }
+
+        // Si el parte estaba en "Planificado", cambiar a "Abierto"
+        if (parte?.estado === 'Planificado') {
+            updateParte({ estado: 'Abierto' });
+            const storedPartes = JSON.parse(localStorage.getItem('firecheck_db_partes') || '[]');
+            const parteActual = storedPartes.find((p: any) => p.id === parteId);
+            const docId = parteActual?._docId || parteId;
+            try { await updateParteFirestore(docId, { estado: 'Abierto' }); } catch (err) {}
         }
 
         // 3. Sincronizar en Firestore si hay conexión
@@ -632,7 +669,7 @@ export default function RevisionChecklist() {
                 pendingEquiposRef.current.delete(eqId);
                 inFlightSyncRef.current.delete(eqId);
                 setEqSyncStates(prev => ({ ...prev, [eqId]: 'saved' }));
-                showToast('✓ Equipo guardado en Firestore');
+                showToast('✓ Equipo revisado y guardado');
             } catch (err) {
                 console.error('Error guardando equipo en Firestore:', err);
                 inFlightSyncRef.current.delete(eqId);
@@ -962,26 +999,12 @@ export default function RevisionChecklist() {
                     const actualesEsteSistema = prev.filter(e => e.sistemaId === sist.id);
 
                     const itemsFusionados = itemsEvaluados.map(itemFromFirestore => {
-                        const esPendienteLocal = pendingEquiposRef.current.has(itemFromFirestore.id);
-                        const esEnVuelo = inFlightSyncRef.current.has(itemFromFirestore.id);
                         const equipoLocalActual = actualesEsteSistema.find(e => e.id === itemFromFirestore.id);
 
                         if (equipoLocalActual) {
-                            if (esPendienteLocal || esEnVuelo) {
-                                // Preservar estado local prioritariamente si hay cambios en vuelo o pendientes
-                                return { ...itemFromFirestore, ...equipoLocalActual };
-                            }
-                            // Fusión inteligente no destructiva:
-                            // Preserva cualquier dato que el usuario haya rellenado en esta sesión si en Firestore viene vacío o indefinido
-                            const merged = { ...itemFromFirestore };
-                            for (const key of Object.keys(equipoLocalActual)) {
-                                const localVal = (equipoLocalActual as any)[key];
-                                const remoteVal = (itemFromFirestore as any)[key];
-                                if (localVal !== undefined && localVal !== null && localVal !== '' && (remoteVal === undefined || remoteVal === null || remoteVal === '')) {
-                                    (merged as any)[key] = localVal;
-                                }
-                            }
-                            return merged;
+                            // Preservar SIEMPRE el estado local del técnico durante la revisión activa:
+                            // fusionamos tomando las claves nuevas de Firestore pero dando prioridad absoluta a todo lo que el técnico tenga en pantalla (equipoLocalActual)
+                            return { ...itemFromFirestore, ...equipoLocalActual };
                         }
                         return itemFromFirestore;
                     });
@@ -1160,10 +1183,10 @@ export default function RevisionChecklist() {
                 return updated;
             });
 
-            // Sincronización inteligente con debounce por equipo y flush si cambia de equipo
+            // Sincronización local-first por equipo (sin autoguardado a Firestore en segundo plano)
             const equipoModificado = updatedEquipos.find(eq => eq.id === equipoId);
             if (equipoModificado) {
-                // Marcar estado local como pendiente (botón Azul Guardar)
+                // Marcar estado local como pendiente (botón Azul "Equipo revisado")
                 setEqSyncStates(prev => ({ ...prev, [equipoId]: 'pending' }));
 
                 // Respaldar inmediatamente todo en localStorage para cero pérdida offline
@@ -1173,27 +1196,13 @@ export default function RevisionChecklist() {
                     safeLocalStorageSet('firecheck_db_equipos_instalados', JSON.stringify([...otrosCentros, ...updatedEquipos]));
                 } catch (e) {}
 
-                // Si cambia de equipo, sincronizar el equipo anterior de forma inmediata
-                if (lastActiveEquipoIdRef.current && lastActiveEquipoIdRef.current !== equipoId) {
-                    flushEquipoSync(lastActiveEquipoIdRef.current);
-                }
-                lastActiveEquipoIdRef.current = equipoId;
-
-                // Guardar última versión en cola
+                // Guardar última versión en cola local
                 pendingEquiposRef.current.set(equipoId, equipoModificado);
 
                 if (parteId) {
                     updateParteOfflineData(parteId, { equiposInstalados: updatedEquipos }).catch(() => {});
                     addPendingSyncItem(parteId, 'equipo', equipoId, equipoModificado).catch(() => {});
                 }
-
-                // Cancelar timer anterior y programar sincronización en 600ms tras dejar de teclear
-                if (syncTimersRef.current[equipoId]) {
-                    clearTimeout(syncTimersRef.current[equipoId]);
-                }
-                syncTimersRef.current[equipoId] = setTimeout(() => {
-                    flushEquipoSync(equipoId);
-                }, 600);
             }
 
             return updatedEquipos;
@@ -1580,7 +1589,8 @@ export default function RevisionChecklist() {
                 ...eqToCopy,
                 id: newId,
                 codigo: nextCodigo,
-                placa: ''
+                placa: '',
+                revisado: false
             };
             delete (newEq as any)._docId;
 
@@ -1597,9 +1607,19 @@ export default function RevisionChecklist() {
                 }
             });
 
+            // Blindar en memoria local como pendiente (botón azul "Equipo revisado")
+            pendingEquiposRef.current.set(newId, newEq);
+            setEqSyncStates(prev => ({ ...prev, [newId]: 'pending' }));
+
             const updatedEquipos = [...equiposInstalados, newEq];
             setEquiposInstalados(updatedEquipos);
-            saveEquiposProgress(updatedEquipos);
+
+            // Guardar en almacenamiento local
+            try {
+                const allEquipos = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
+                const equiposOtrosCentros = allEquipos.filter((eq: EquipoInstalado) => eq.centroId !== centroId);
+                safeLocalStorageSet('firecheck_db_equipos_instalados', JSON.stringify([...equiposOtrosCentros, ...updatedEquipos]));
+            } catch (e) {}
 
             if (parteId) {
                 await updateParteOfflineData(parteId, { equiposInstalados: updatedEquipos });
@@ -1653,12 +1673,16 @@ export default function RevisionChecklist() {
                 newId = `EQ-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
             }
 
-            // Defaults para respuestas 'CORRECTO' de la plantilla del sistema
+            // Defaults para respuestas de la plantilla del sistema
             const defaultCorrecto: Record<string, string> = {};
             itemsToUse.forEach((item: ChecklistItem) => {
-                const opciones = (item as any).opciones || [];
-                if (opciones.includes('CORRECTO')) {
-                    defaultCorrecto[item.key] = 'CORRECTO';
+                if ((item as any).valorPredeterminado) {
+                    defaultCorrecto[item.key] = (item as any).valorPredeterminado;
+                } else {
+                    const opciones = (item as any).opciones || [];
+                    if (opciones.includes('CORRECTO')) {
+                        defaultCorrecto[item.key] = 'CORRECTO';
+                    }
                 }
             });
 
@@ -1683,9 +1707,19 @@ export default function RevisionChecklist() {
                 (newEq as any)[ordenKey] = nextCodigo;
             }
 
+            // Blindar en memoria local como pendiente (botón azul "Equipo revisado")
+            pendingEquiposRef.current.set(newId, newEq);
+            setEqSyncStates(prev => ({ ...prev, [newId]: 'pending' }));
+
             const updatedEquipos = [...equiposInstalados, newEq];
             setEquiposInstalados(updatedEquipos);
-            saveEquiposProgress(updatedEquipos);
+
+            // Guardar en almacenamiento local
+            try {
+                const allEquipos = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
+                const equiposOtrosCentros = allEquipos.filter((eq: EquipoInstalado) => eq.centroId !== centroId);
+                safeLocalStorageSet('firecheck_db_equipos_instalados', JSON.stringify([...equiposOtrosCentros, ...updatedEquipos]));
+            } catch (e) {}
 
             if (parteId) {
                 await updateParteOfflineData(parteId, { equiposInstalados: updatedEquipos });
@@ -1857,7 +1891,7 @@ export default function RevisionChecklist() {
         let pending = 0;
         const items = getItemsToUse(eq.sistemaId);
         items.forEach(item => {
-            if ((item.tipoRespuesta as any) === 'seccion' || (item.tipoRespuesta as any) === 'titulo' || item.tipoRespuesta === 'tabla') return;
+            if ((item.tipoRespuesta as any) === 'seccion' || (item.tipoRespuesta as any) === 'titulo' || item.tipoRespuesta === 'tabla' || item.tipoRespuesta === 'grafico') return;
             const val = eq[item.key as keyof EquipoInstalado];
             if (val === true || val === 'true' || (typeof val === 'string' && val.toUpperCase().trim() === 'CORRECTO')) {
                 ok++;
@@ -2092,20 +2126,28 @@ export default function RevisionChecklist() {
                             return idxA - idxB;
                         }).map((sist, index, arr) => {
                             // Buscar la imagen del sistema en categoriasSistema (cargado desde Firestore)
+                            const cleanNorm = (str: string) => (str || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
                             const sistemaCat = categoriasSistema.find(c => {
-                                const nombreSist = (sist.tipo || sist.familia || '').toLowerCase().trim();
-                                const nombreCat = (c.nombre || '').toLowerCase().trim();
+                                const nombreSist = cleanNorm(sist.tipo || sist.familia || '');
+                                const nombreCat = cleanNorm(c.nombre || '');
+                                if (nombreCat && nombreSist && nombreCat === nombreSist) return true;
                                 const isMonoxA = nombreSist.includes('monoxido') || nombreSist.includes('monox');
                                 const isMonoxB = nombreCat.includes('monoxido') || nombreCat.includes('monox');
                                 if (isMonoxA || isMonoxB) return isMonoxA && isMonoxB;
-                                const isAspA = nombreSist.includes('aspiraci') || nombreSist.includes('aspirac');
-                                const isAspB = nombreCat.includes('aspiraci') || nombreCat.includes('aspirac');
+                                const isAspA = nombreSist.includes('aspiraci') || nombreSist.includes('aspirac') || nombreSist.includes('asd');
+                                const isAspB = nombreCat.includes('aspiraci') || nombreCat.includes('aspirac') || nombreCat.includes('asd');
                                 if (isAspA || isAspB) return isAspA && isAspB;
                                 const isCocinaA = nombreSist.includes('cocina') || nombreSist.includes('campana');
                                 const isCocinaB = nombreCat.includes('cocina') || nombreCat.includes('campana');
                                 if (isCocinaA || isCocinaB) return isCocinaA && isCocinaB;
-                                const isGasA = (nombreSist.includes('gas') || (nombreSist.includes('extinci') && !nombreSist.includes('extintor'))) && !isCocinaA;
-                                const isGasB = (nombreCat.includes('gas') || (nombreCat.includes('extinci') && !nombreCat.includes('extintor'))) && !isCocinaB;
+                                const isEspumaA = nombreSist.includes('espuma');
+                                const isEspumaB = nombreCat.includes('espuma');
+                                if (isEspumaA || isEspumaB) return isEspumaA && isEspumaB;
+                                const isAguaA = nombreSist.includes('agua') && !isEspumaA;
+                                const isAguaB = nombreCat.includes('agua') && !isEspumaB;
+                                if (isAguaA || isAguaB) return isAguaA && isAguaB;
+                                const isGasA = (nombreSist.includes('gas') || (nombreSist.includes('extinci') && !nombreSist.includes('extintor'))) && !isCocinaA && !isEspumaA && !isAguaA;
+                                const isGasB = (nombreCat.includes('gas') || (nombreCat.includes('extinci') && !nombreCat.includes('extintor'))) && !isCocinaB && !isEspumaB && !isAguaB;
                                 if (isGasA || isGasB) return isGasA && isGasB;
                                 return nombreCat.includes(nombreSist) || nombreSist.includes(nombreCat);
                             });
@@ -2326,14 +2368,14 @@ export default function RevisionChecklist() {
                                                     </div>
                                                 ) : (
                                                     (() => {
-                                                        const sistLower = (sist.tipo || sist.familia || '').toLowerCase();
+                                                        const sistLower = (sist.tipo || sist.familia || sist.descripcion || (sist as any).nombre || '').toLowerCase();
                                                         const isExtintor = sistLower.includes('extintor');
                                                         const isBie = sistLower.includes('bie') || sistLower.includes('boca');
                                                         const isDeteccionMonoxido = sistLower.includes('monoxido') || sistLower.includes('monóxido') || sistLower.includes('monox');
-                                                        const isDeteccionAspiracion = sistLower.includes('aspiraci') || sistLower.includes('aspirac');
+                                                        const isDeteccionAspiracion = sistLower.includes('aspiraci') || sistLower.includes('aspirac') || sistLower.includes('asd');
                                                         const isDeteccion = sistLower.includes('detecci') && !isDeteccionMonoxido && !isDeteccionAspiracion;
                                                         const isSobrepresion = sistLower.includes('sobrepresi') || sistLower.includes('presuriza');
-                                                        const isBombaElectrica = sistLower.includes('bomba electrica') || sistLower.includes('bomba eléctrica');
+                                                        const isBombaElectrica = (sistLower.includes('bomba electrica') || sistLower.includes('bomba eléctrica') || sistLower.includes('electrobomba') || (sistLower.includes('bomba') && (sistLower.includes('electr') || sistLower.includes('eléctr')))) && !sistLower.includes('jockey');
                                                         const isBombaJockey = sistLower.includes('bomba jockey') || sistLower.includes('jockey');
                                                         const isBombaDiesel = sistLower.includes('bomba diesel') || sistLower.includes('diesel');
                                                         const isAbastecimiento = sistLower.includes('abastecimiento') || sistLower.includes('sala de bombas');
@@ -2343,7 +2385,8 @@ export default function RevisionChecklist() {
                                                         const isPuertasRF = sistLower.includes('puerta rf') || sistLower.includes('puertas rf') || sistLower.includes('cortafuego');
                                                         const isSprinklers = sistLower.includes('sprinkler') || sistLower.includes('rociador');
                                                         const isExtincionCampanaCocina = sistLower.includes('campana') || sistLower.includes('cocina');
-                                                        const isExtincionGas = (sistLower.includes('gas') || (sistLower.includes('extinci') && !isExtintor)) && !isExtincionCampanaCocina;
+                                                        const isExtincionAguaEspuma = sistLower.includes('agua') || sistLower.includes('espuma');
+                                                        const isExtincionGas = (sistLower.includes('gas') || (sistLower.includes('extinci') && !isExtintor)) && !isExtincionCampanaCocina && !isExtincionAguaEspuma;
                                                         const isFuenteAlimentacionAuxiliar = sistLower.includes('fuente') || (sistLower.includes('alimentaci') && sistLower.includes('auxiliar')) || (sistLower.includes('alimentac') && sistLower.includes('auxiliar'));
                                                         const isAlumbradoEmergencia = sistLower.includes('alumbrado') || sistLower.includes('emergencia');
 
@@ -2383,6 +2426,7 @@ export default function RevisionChecklist() {
                                                         if (isPuertasRF) return <SistemaPuertasRF {...commonProps} />;
                                                         if (isSprinklers) return <SistemaSprinklers {...commonProps} />;
                                                         if (isExtincionCampanaCocina) return <SistemaExtincionCampanaCocina {...commonProps} />;
+                                                        if (isExtincionAguaEspuma) return <SistemaExtincionAguaEspuma {...commonProps} />;
                                                         if (isExtincionGas) return <SistemaExtincionGas {...commonProps} />;
                                                         if (isFuenteAlimentacionAuxiliar) return <SistemaFuenteAlimentacionAuxiliar {...commonProps} />;
                                                         if (isAlumbradoEmergencia) return <SistemaAlumbradoEmergencia {...commonProps} />;

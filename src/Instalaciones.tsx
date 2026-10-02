@@ -155,17 +155,6 @@ export default function Instalaciones() {
       .sort((a, b) => a.label.localeCompare(b.label, 'es', { sensitivity: 'base' }));
   }, [clientes]);
 
-  const centroOptions = useMemo(() => {
-    return centros
-      .filter((c: any) => !formData.clienteId || c.clienteId === formData.clienteId || c.cliente === formData.clienteId || c.cliente === formData.clienteNombre)
-      .map((c: any) => ({
-        value: c.id || c._docId,
-        label: c.nombre || c.id || '',
-        sublabel: c.direccion || c.poblacion || ''
-      }))
-      .filter(opt => opt.value && opt.label)
-      .sort((a, b) => a.label.localeCompare(b.label, 'es', { sensitivity: 'base' }));
-  }, [centros, formData.clienteId, formData.clienteNombre]);
 
   // Funciones auxiliares para fechas y meses
   const getItemMonth = (item: { fecha?: string; mes?: string; fechaCreacion?: string }): string => {
@@ -274,11 +263,11 @@ export default function Instalaciones() {
   const handleOpenEditModal = (item: InstalacionItem) => {
     setEditingItem(item);
     setFormData({
-      titulo: item.titulo || '',
+      titulo: item.titulo || item.instalacion || '',
       clienteId: item.clienteId || '',
       clienteNombre: item.clienteNombre || '',
       centroId: item.centroId || '',
-      instalacion: item.instalacion || '',
+      instalacion: item.instalacion || item.titulo || '',
       lugar: item.lugar || '',
       tecnicoAsignado: item.tecnicoAsignado || '',
       comercial: item.comercial || '',
@@ -519,7 +508,8 @@ export default function Instalaciones() {
   // Guardar (Crear o Modificar completo)
   const handleSubmitForm = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.instalacion.trim()) {
+    const nombreInstalacion = (formData.titulo || formData.instalacion || '').trim();
+    if (!nombreInstalacion) {
       alert('Por favor, introduce el nombre o descripción de la instalación.');
       return;
     }
@@ -530,11 +520,11 @@ export default function Instalaciones() {
       // Editar
       const docId = editingItem._docId || editingItem.id;
       const updatedItem: Partial<InstalacionItem> = {
-        titulo: formData.titulo?.trim() || '',
+        titulo: nombreInstalacion,
         clienteId: formData.clienteId?.trim() || '',
         clienteNombre: formData.clienteNombre?.trim() || '',
         centroId: formData.centroId?.trim() || '',
-        instalacion: formData.titulo?.trim() || '',
+        instalacion: nombreInstalacion,
         lugar: formData.lugar.trim(),
         tecnicoAsignado: formData.tecnicoAsignado.trim(),
         comercial: formData.comercial.trim(),
@@ -560,11 +550,11 @@ export default function Instalaciones() {
       const newId = `INS-${Date.now().toString().slice(-6)}`;
       const newItem: InstalacionItem = {
         id: newId,
-        titulo: formData.titulo?.trim() || '',
+        titulo: nombreInstalacion,
         clienteId: formData.clienteId?.trim() || '',
         clienteNombre: formData.clienteNombre?.trim() || '',
         centroId: formData.centroId?.trim() || '',
-        instalacion: formData.titulo?.trim() || '',
+        instalacion: nombreInstalacion,
         lugar: formData.lugar.trim(),
         tecnicoAsignado: formData.tecnicoAsignado.trim(),
         comercial: formData.comercial.trim(),
@@ -1102,7 +1092,7 @@ export default function Instalaciones() {
                   type="text"
                   required
                   value={formData.titulo}
-                  onChange={(e) => setFormData({ ...formData, titulo: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, titulo: e.target.value, instalacion: e.target.value })}
                   placeholder="Ej: Montaje sistema detección nave B"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
                 />
@@ -1129,33 +1119,6 @@ export default function Instalaciones() {
                 />
               </div>
 
-              {/* CENTRO */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Centro
-                </label>
-                <SearchableSelect
-                  options={centroOptions}
-                  value={formData.centroId}
-                  onChange={(val, opt) => {
-                    const sel = centros.find((c: any) => (c.id || c._docId) === val);
-                    const patch: any = {
-                      centroId: val,
-                      lugar: sel?.nombre || opt?.label || formData.lugar
-                    };
-                    if (sel?.clienteId && !formData.clienteId) {
-                      patch.clienteId = sel.clienteId;
-                      const cMatch: any = clientes.find((c: any) => (c.id || c._docId) === sel.clienteId);
-                      patch.clienteNombre = cMatch?.nombre || cMatch?.razonSocial || '';
-                    }
-                    setFormData({
-                      ...formData,
-                      ...patch
-                    });
-                  }}
-                  placeholder="-- Buscar o seleccionar centro --"
-                />
-              </div>
 
               {/* LUGAR */}
               <div>

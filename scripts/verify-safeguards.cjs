@@ -612,20 +612,20 @@ if (!fs.existsSync(searchableSelectPath)) {
 }
 if (fs.existsSync(reparacionesPath)) {
   const repContent = fs.readFileSync(reparacionesPath, 'utf8');
-  if (!repContent.includes('SearchableSelect') || !repContent.includes('clienteOptions') || !repContent.includes('centroOptions')) {
-    errors.push('CRÍTICO: Reparaciones.tsx carece de SearchableSelect o de opciones ordenadas de cliente y centro (AGENTS.md REGLA 47).');
+  if (!repContent.includes('SearchableSelect') || !repContent.includes('clienteOptions')) {
+    errors.push('CRÍTICO: Reparaciones.tsx carece de SearchableSelect o de opciones ordenadas de cliente (AGENTS.md REGLA 47).');
   }
 }
 if (fs.existsSync(instalacionesPath)) {
   const insContent = fs.readFileSync(instalacionesPath, 'utf8');
-  if (!insContent.includes('SearchableSelect') || !insContent.includes('clienteOptions') || !insContent.includes('centroOptions')) {
-    errors.push('CRÍTICO: Instalaciones.tsx carece de SearchableSelect o de opciones ordenadas de cliente y centro (AGENTS.md REGLA 47).');
+  if (!insContent.includes('SearchableSelect') || !insContent.includes('clienteOptions')) {
+    errors.push('CRÍTICO: Instalaciones.tsx carece de SearchableSelect o de opciones ordenadas de cliente (AGENTS.md REGLA 47).');
   }
 }
 if (fs.existsSync(urgenciasPath)) {
   const urgContent = fs.readFileSync(urgenciasPath, 'utf8');
-  if (!urgContent.includes('SearchableSelect') || !urgContent.includes('clienteOptions') || !urgContent.includes('centroOptions')) {
-    errors.push('CRÍTICO: Urgencias.tsx carece de SearchableSelect o de opciones ordenadas de cliente y centro (AGENTS.md REGLA 47).');
+  if (!urgContent.includes('SearchableSelect') || !urgContent.includes('clienteOptions')) {
+    errors.push('CRÍTICO: Urgencias.tsx carece de SearchableSelect o de opciones ordenadas de cliente (AGENTS.md REGLA 47).');
   }
 }
 
@@ -635,8 +635,11 @@ if (!fs.existsSync(botonGuardarPath)) {
   errors.push('CRÍTICO: No se encontró src/components/BotonGuardarEquipo.tsx (AGENTS.md REGLA 48).');
 } else {
   const bgContent = fs.readFileSync(botonGuardarPath, 'utf8');
-  if (!bgContent.includes('✓ Guardado') || !bgContent.includes('Guardado en local') || !bgContent.includes('Guardar')) {
-    errors.push('CRÍTICO: BotonGuardarEquipo.tsx carece de los 3 estados reactivos (Guardar / ✓ Guardado / Guardado en local) (AGENTS.md REGLA 48).');
+  const hasGuardarText = bgContent.includes('Guardar') || bgContent.includes('Equipo revisado');
+  const hasSavedText = bgContent.includes('✓ Guardado') || bgContent.includes('✓ Equipo revisado');
+  const hasLocalText = bgContent.includes('Guardado en local') || bgContent.includes('Equipo revisado (Local)');
+  if (!hasGuardarText || !hasSavedText || !hasLocalText) {
+    errors.push('CRÍTICO: BotonGuardarEquipo.tsx carece de los 3 estados reactivos (AGENTS.md REGLA 48 y 62).');
   }
 }
 
@@ -734,6 +737,86 @@ if (fs.existsSync(partesTecPath)) {
   }
 }
 
+// 36. Verificación de Tablas de Inventario y Cabeceras en 2 Filas (AGENTS.md REGLA 52)
+const tableInputPath = path.join(__dirname, '../src/components/TableInput.tsx');
+if (fs.existsSync(tableInputPath)) {
+  const tiContent = fs.readFileSync(tableInputPath, 'utf8');
+  if (!tiContent.includes('formatTableHeader') || !tiContent.includes('min-w-[110px]')) {
+    errors.push('CRÍTICO: TableInput.tsx carece del formateo de cabeceras en 2 líneas o ancho mínimo de 110px (AGENTS.md REGLA 52).');
+  }
+}
+
+// 37. Verificación de Filtrado Estricto de Alertas Preventivas por Sistema (AGENTS.md REGLA 53)
+if (fs.existsSync(sisUtilsPath)) {
+  const suContent = fs.readFileSync(sisUtilsPath, 'utf8');
+  if (!suContent.includes('esSistemaExtintores') || !suContent.includes('esSistemaBies')) {
+    errors.push('CRÍTICO: sistemasUtils.ts carece de las funciones esSistemaExtintores o esSistemaBies (AGENTS.md REGLA 53).');
+  }
+}
+
+// 38. Verificación del Check «Puerta y/o cristal» en Sistemas de BIEs (AGENTS.md REGLA 54)
+if (fs.existsSync(pdfGenPath)) {
+  const pdfContent = fs.readFileSync(pdfGenPath, 'utf8');
+  if (!pdfContent.includes('Puerta y/o cristal') || !pdfContent.includes('checkPuertaCristal')) {
+    errors.push('CRÍTICO: pdfGenerator.ts carece del check "Puerta y/o cristal" en BIEs (AGENTS.md REGLA 54).');
+  }
+}
+const plantillasPath = path.join(__dirname, '../src/plantillas.ts');
+if (fs.existsSync(plantillasPath)) {
+  const plContent = fs.readFileSync(plantillasPath, 'utf8');
+  if (!plContent.includes('item_1790629281657')) {
+    errors.push('CRÍTICO: plantillas.ts carece del check "Puerta y/o cristal" en SISTEMA BIES (AGENTS.md REGLA 54).');
+  }
+}
+
+// 39. Verificación de Campo Multilínea y Extensible en Versiones (AGENTS.md REGLA 55)
+buzonFiles.forEach(({ path: bPath, name }) => {
+  if (fs.existsSync(bPath)) {
+    const content = fs.readFileSync(bPath, 'utf8');
+    if (!content.includes('<textarea') || !content.includes('resize-y') || !content.includes('min-h-[90px]')) {
+      errors.push(`CRÍTICO: ${name} carece del campo textarea multilínea y extensible para la descripción de versiones (AGENTS.md REGLA 55).`);
+    }
+  }
+});
+
+// 40. Verificación del Catálogo/Inventario: Estados Físicos de Material y Aviso de Stock 0 (AGENTS.md REGLA 56)
+const catalogoPath = path.join(__dirname, '../src/Catalogo.tsx');
+if (fs.existsSync(catalogoPath)) {
+  const catContent = fs.readFileSync(catalogoPath, 'utf8');
+  if (!catContent.includes("'Nuevo'") || !catContent.includes("'Usado'") || !catContent.includes("'Reparado'")) {
+    errors.push('CRÍTICO: Catalogo.tsx carece de los estados físicos de material (Nuevo, Usado, Reparado) (AGENTS.md REGLA 56).');
+  }
+  if (!catContent.includes("estado: 'Nuevo'") && !catContent.includes("estado: formData.estado || 'Nuevo'")) {
+    errors.push('CRÍTICO: Catalogo.tsx carece del estado por defecto "Nuevo" (AGENTS.md REGLA 56).');
+  }
+  if (!catContent.includes('registrarAvisoStock') || !catContent.includes('desactivarAvisoStock')) {
+    errors.push('CRÍTICO: Catalogo.tsx carece de las funciones para registrar y desactivar avisos de stock 0 (AGENTS.md REGLA 56).');
+  }
+}
+const avisoStockModalPath = path.join(__dirname, '../src/components/AvisoStockModal.tsx');
+if (!fs.existsSync(avisoStockModalPath)) {
+  errors.push('CRÍTICO: No se encontró src/components/AvisoStockModal.tsx para el modal de stock 0 (AGENTS.md REGLA 56).');
+} else {
+  const asmContent = fs.readFileSync(avisoStockModalPath, 'utf8');
+  if (!asmContent.includes('fotoUrl') || !asmContent.includes('AudioContext') || !asmContent.includes('navigator.vibrate')) {
+    errors.push('CRÍTICO: AvisoStockModal.tsx carece de la foto del artículo, sonido o vibración háptica (AGENTS.md REGLA 56).');
+  }
+}
+
+// 41. Verificación de la Tabla 2.18 Puesto de Control en Extinción con Espuma y Secciones en Actas PDF (AGENTS.md REGLA 57)
+if (fs.existsSync(pdfGenPath)) {
+  const pdfContent = fs.readFileSync(pdfGenPath, 'utf8');
+  if (!pdfContent.includes('isSecPuestoControl') || !pdfContent.includes('previousSecWas218')) {
+    errors.push('CRÍTICO: pdfGenerator.ts carece del control de salto de página para la tabla 2.18 Puesto de Control y Sección 3 (AGENTS.md REGLA 57).');
+  }
+  if (!pdfContent.includes('isPuestosControl') || !pdfContent.includes('colStyles[ubicIdx].cellWidth = 34')) {
+    errors.push('CRÍTICO: pdfGenerator.ts carece del equilibrio de columnas para la tabla 2.18 Puesto de Control (AGENTS.md REGLA 57).');
+  }
+  if (!pdfContent.includes('Sin anomalías ni observaciones. Los equipos se encuentran en correcto estado de funcionamiento.')) {
+    errors.push('CRÍTICO: pdfGenerator.ts carece del mensaje de conformidad oficial en verde al finalizar el sistema (AGENTS.md REGLA 57).');
+  }
+}
+
 // Resultado de la verificación
 if (errors.length > 0) {
   console.error('\n❌ ERROR CRÍTICO DE BLINDAJE INTEGRAL (AGENTS.md):');
@@ -743,5 +826,6 @@ if (errors.length > 0) {
 } else {
   console.log('✅ BLINDAJE INTEGRAL VERIFICADO CON ÉXITO: 100% de reglas y salvaguardas validadas.\n');
 }
+
 
 

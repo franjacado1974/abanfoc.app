@@ -1,8 +1,6 @@
 import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
 import { 
-  Users, Building2, Calculator, FileText,
-  FileCheck, HardHat,
-  SearchCheck, Wrench, Receipt, FileDigit, Package, CalendarDays,
+  Building2, HardHat, Wrench, ClipboardCheck,
   ShieldCheck, ArrowLeft,
   Clock, ArrowRightCircle, ArrowLeftCircle, CheckCircle2, AlertTriangle, KeyRound
 } from 'lucide-react';
@@ -36,6 +34,8 @@ import Papelera from './Papelera';
 import Metodos from './Metodos';
 import Analisis from './Analisis';
 import Calendario from './Calendario';
+import Notas from './Notas';
+import AvisoStockModal from './components/AvisoStockModal';
 import Sidebar from './components/Sidebar';
 import { 
   verifyUser,
@@ -52,7 +52,14 @@ import {
   subscribeTrabajos,
   subscribeSistemasCategorias,
   subscribeUsuarios,
-  registrarFichaje
+  registrarFichaje,
+  subscribeUrgencias,
+  subscribeReparaciones,
+  subscribeInstalaciones,
+  type UrgenciaItem,
+  type ReparacionItem,
+  type InstalacionItem,
+  type ParteFirestore
 } from './firebase';
 import { APP_VERSION } from './constants';
 import { useRegisterSW } from 'virtual:pwa-register/react';
@@ -531,70 +538,68 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
     }
   });
 
-  const getStats = () => {
-    let clientes = 0;
-    let centros = 0;
-    let catalogo = 0;
-    let albaranes = 0;
-    let certificados = 0;
-    let pedidos = 0;
-    let partes = 0;
-    let pendientes = 0;
+  const [urgencias, setUrgencias] = useState<UrgenciaItem[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('firecheck_db_urgencias') || '[]');
+    } catch { return []; }
+  });
+  const [reparaciones, setReparaciones] = useState<ReparacionItem[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('firecheck_db_reparaciones') || '[]');
+    } catch { return []; }
+  });
+  const [instalaciones, setInstalaciones] = useState<InstalacionItem[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('firecheck_db_instalaciones') || '[]');
+    } catch { return []; }
+  });
+  const [partesList, setPartesList] = useState<ParteFirestore[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('firecheck_db_partes') || '[]');
+    } catch { return []; }
+  });
+
+  const [clientesMap, setClientesMap] = useState<Record<string, string>>(() => {
     try {
       const savedClientes = localStorage.getItem('firecheck_db_clientes');
       if (savedClientes) {
         const parsed = JSON.parse(savedClientes);
-        clientes = Array.isArray(parsed) ? parsed.length : 0;
-      }
-      const savedCentros = localStorage.getItem('firecheck_db_centros');
-      if (savedCentros) {
-        const parsed = JSON.parse(savedCentros);
-        centros = Array.isArray(parsed) ? parsed.length : 0;
-      }
-
-      const savedArticulos = localStorage.getItem('firecheck_db_articulos');
-      const articulosCount = savedArticulos
-        ? (Array.isArray(JSON.parse(savedArticulos)) ? JSON.parse(savedArticulos).length : 0)
-        : 0;
-
-      const savedServicios = localStorage.getItem('firecheck_db_servicios');
-      const serviciosCount = savedServicios
-        ? (Array.isArray(JSON.parse(savedServicios)) ? JSON.parse(savedServicios).length : 0)
-        : 0;
-
-      catalogo = articulosCount + serviciosCount;
-
-      const savedAlbaranes = localStorage.getItem('firecheck_db_albaranes');
-      if (savedAlbaranes) {
-        const parsed = JSON.parse(savedAlbaranes);
-        albaranes = Array.isArray(parsed) ? parsed.length : 0;
-      }
-
-      const savedCertificados = localStorage.getItem('firecheck_db_certificados');
-      if (savedCertificados) {
-        const parsed = JSON.parse(savedCertificados);
-        certificados = Array.isArray(parsed) ? parsed.length : 0;
-      }
-
-      const savedPedidos = localStorage.getItem('firecheck_db_pedidos');
-      if (savedPedidos) {
-        const parsed = JSON.parse(savedPedidos);
-        pedidos = Array.isArray(parsed) ? parsed.length : 0;
-      }
-
-      const savedPartes = localStorage.getItem('firecheck_db_partes');
-      if (savedPartes) {
-        const parsed = JSON.parse(savedPartes);
         if (Array.isArray(parsed)) {
-          partes = parsed.length;
-          pendientes = parsed.filter((p: any) => p.estado !== 'Cerrado' && p.estado !== 'Finalizado').length;
+          const map: Record<string, string> = {};
+          parsed.forEach((c: any) => {
+            map[c.id] = c.nombreFiscal || c.nombre || 'Cliente Desconocido';
+          });
+          return map;
         }
       }
     } catch { /* ignore */ }
-    return { clientes, centros, catalogo, albaranes, certificados, pedidos, partes, pendientes };
-  };
+    return {};
+  });
 
-  const [stats, setStats] = useState(() => getStats());
+  const [centrosMap, setCentrosMap] = useState<Record<string, string>>(() => {
+    try {
+      const savedCentros = localStorage.getItem('firecheck_db_centros');
+      if (savedCentros) {
+        const parsed = JSON.parse(savedCentros);
+        if (Array.isArray(parsed)) {
+          const map: Record<string, string> = {};
+          parsed.forEach((c: any) => {
+            map[c.id] = c.nombre || 'Centro Desconocido';
+          });
+          return map;
+        }
+      }
+    } catch { /* ignore */ }
+    return {};
+  });
+
+  const [formattedDate, setFormattedDate] = useState('');
+
+  useEffect(() => {
+    const options: Intl.DateTimeFormatOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+    const dateStr = new Date().toLocaleDateString('es-ES', options);
+    setFormattedDate(dateStr.charAt(0).toUpperCase() + dateStr.slice(1));
+  }, []);
 
   useEffect(() => {
     const unsubs: (() => void)[] = [];
@@ -607,49 +612,53 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
       }
     };
 
-    const updateStats = () => {
-      setStats(getStats());
-    };
-
     try {
       unsubs.push(subscribeClientes((items) => {
         safeLocalSet('firecheck_db_clientes', JSON.stringify(items));
-        updateStats();
+        if (Array.isArray(items)) {
+          const map: Record<string, string> = {};
+          items.forEach((c: any) => {
+            map[c.id] = c.nombreFiscal || c.nombre || 'Cliente Desconocido';
+          });
+          setClientesMap(map);
+        }
       }));
     } catch (e) { console.error('subscribeClientes failed', e); }
 
     try {
       unsubs.push(subscribeCentros((items) => {
         safeLocalSet('firecheck_db_centros', JSON.stringify(items));
-        updateStats();
+        if (Array.isArray(items)) {
+          const map: Record<string, string> = {};
+          items.forEach((c: any) => {
+            map[c.id] = c.nombre || 'Centro Desconocido';
+          });
+          setCentrosMap(map);
+        }
       }));
     } catch (e) { console.error('subscribeCentros failed', e); }
 
     try {
       unsubs.push(subscribeArticulos((items) => {
         safeLocalSet('firecheck_db_articulos', JSON.stringify(items));
-        updateStats();
       }));
     } catch (e) { console.error('subscribeArticulos failed', e); }
 
     try {
       unsubs.push(subscribeAlbaranes((items) => {
         safeLocalSet('firecheck_db_albaranes', JSON.stringify(items));
-        updateStats();
       }));
     } catch (e) { console.error('subscribeAlbaranes failed', e); }
 
     try {
       unsubs.push(subscribeCertificados((items) => {
         safeLocalSet('firecheck_db_certificados', JSON.stringify(items));
-        updateStats();
       }));
     } catch (e) { console.error('subscribeCertificados failed', e); }
 
     try {
       unsubs.push(subscribePedidos((items) => {
         safeLocalSet('firecheck_db_pedidos', JSON.stringify(items));
-        updateStats();
       }));
     } catch (e) { console.error('subscribePedidos failed', e); }
 
@@ -678,18 +687,38 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
     } catch (e) { console.error('subscribeSistemasCategorias failed', e); }
 
     try {
-      unsubs.push(subscribePartes((items) => {
-        safeLocalSet('firecheck_db_partes', JSON.stringify(items));
-        updateStats();
-      }));
-    } catch (e) { console.error('subscribePartes failed', e); }
-
-    try {
       unsubs.push(subscribePresupuestos((items) => {
         safeLocalSet('firecheck_db_presupuestos', JSON.stringify(items));
-        updateStats();
       }));
     } catch (e) { console.error('subscribePresupuestos failed', e); }
+
+    try {
+      unsubs.push(subscribeUrgencias((items) => {
+        safeLocalSet('firecheck_db_urgencias', JSON.stringify(items));
+        setUrgencias(items || []);
+      }));
+    } catch (e) { console.error('subscribeUrgencias failed', e); }
+
+    try {
+      unsubs.push(subscribeReparaciones((items) => {
+        safeLocalSet('firecheck_db_reparaciones', JSON.stringify(items));
+        setReparaciones(items || []);
+      }));
+    } catch (e) { console.error('subscribeReparaciones failed', e); }
+
+    try {
+      unsubs.push(subscribeInstalaciones((items) => {
+        safeLocalSet('firecheck_db_instalaciones', JSON.stringify(items));
+        setInstalaciones(items || []);
+      }));
+    } catch (e) { console.error('subscribeInstalaciones failed', e); }
+
+    try {
+      unsubs.push(subscribePartes((items) => {
+        safeLocalSet('firecheck_db_partes', JSON.stringify(items));
+        setPartesList(items || []);
+      }));
+    } catch (e) { console.error('subscribePartes failed', e); }
 
     return () => {
       unsubs.forEach(unsub => {
@@ -698,72 +727,53 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
     };
   }, []);
 
-  const [formattedDate, setFormattedDate] = useState('');
-  const [recentPartes, setRecentPartes] = useState<any[]>([]);
-  const [clientesMap, setClientesMap] = useState<Record<string, string>>({});
-  const [centrosMap, setCentrosMap] = useState<Record<string, string>>({});
+  // 1. AVISOS PENDIENTES (Negro)
+  const avisosPendientes = useMemo(() => {
+    return urgencias
+      .filter(u => u.estado !== 'Finalizado' && !u.facturado)
+      .map(u => ({
+        id: u.id || u._docId,
+        lugar: u.lugar || (u.centroId && centrosMap[u.centroId]) || u.clienteNombre || 'Sin ubicación',
+        tarea: u.urgencia || u.titulo || 'Aviso de urgencia',
+      }));
+  }, [urgencias, centrosMap]);
 
-  useEffect(() => {
-    const options: Intl.DateTimeFormatOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-    const dateStr = new Date().toLocaleDateString('es-ES', options);
-    setFormattedDate(dateStr.charAt(0).toUpperCase() + dateStr.slice(1));
+  // 2. REPARACIONES PENDIENTES (Azul)
+  const reparacionesPendientes = useMemo(() => {
+    return reparaciones
+      .filter(r => r.estado !== 'Finalizado' && !r.facturado)
+      .map(r => ({
+        id: r.id || r._docId,
+        lugar: r.lugar || (r.centroId && centrosMap[r.centroId]) || r.clienteNombre || 'Sin ubicación',
+        tarea: r.reparacion || r.titulo || 'Reparación / Avería',
+      }));
+  }, [reparaciones, centrosMap]);
 
-    try {
-      const savedClientes = localStorage.getItem('firecheck_db_clientes');
-      if (savedClientes) {
-        const parsed = JSON.parse(savedClientes);
-        if (Array.isArray(parsed)) {
-          const map: Record<string, string> = {};
-          parsed.forEach((c: any) => {
-            map[c.id] = c.nombreFiscal || c.nombre || 'Cliente Desconocido';
-          });
-          setClientesMap(map);
-        }
-      }
-    } catch (e) { console.error(e); }
+  // 3. REVISIONES PENDIENTES (Amarillo)
+  const revisionesPendientes = useMemo(() => {
+    return partesList
+      .filter(p => p.estado !== 'Cerrado' && p.estado !== 'Finalizado')
+      .map(p => {
+        const centerName = centrosMap[p.centroId] || p.nombreCentro || clientesMap[p.clienteId] || 'Centro sin especificar';
+        const tareaDesc = p.tipoTrabajo || (p.periodicidad ? `Revisión ${p.periodicidad}` : 'Revisión de mantenimiento') + (p.numeroMantenimiento ? ` (${p.numeroMantenimiento})` : '');
+        return {
+          id: p.id || p._docId,
+          lugar: centerName,
+          tarea: tareaDesc,
+        };
+      });
+  }, [partesList, centrosMap, clientesMap]);
 
-    try {
-      const savedCentros = localStorage.getItem('firecheck_db_centros');
-      if (savedCentros) {
-        const parsed = JSON.parse(savedCentros);
-        if (Array.isArray(parsed)) {
-          const map: Record<string, string> = {};
-          parsed.forEach((c: any) => {
-            map[c.id] = c.nombre || 'Centro Desconocido';
-          });
-          setCentrosMap(map);
-        }
-      }
-    } catch (e) { console.error(e); }
-
-    try {
-      const savedPartes = localStorage.getItem('firecheck_db_partes');
-      if (savedPartes) {
-        const parsed = JSON.parse(savedPartes);
-        if (Array.isArray(parsed)) {
-          const sorted = [...parsed].sort((a: any, b: any) => {
-            const dateA = a.fechaCreacion || '';
-            const dateB = b.fechaCreacion || '';
-            return dateB.localeCompare(dateA);
-          });
-          setRecentPartes(sorted.slice(0, 4));
-        }
-      }
-    } catch (e) { console.error(e); }
-  }, [stats]);
-
-  const getStatusBadge = (estado: string) => {
-    const styles: Record<string, string> = {
-      'Planificado': 'bg-zinc-100 text-zinc-700 border border-zinc-300',
-      'Abierto': 'bg-emerald-50 text-emerald-700 border border-emerald-200',
-      'En revisión': 'bg-amber-50 text-amber-700 border border-amber-200',
-      'Descargado (Offline)': 'bg-zinc-100 text-zinc-700 border border-zinc-200',
-      'Finalizado': 'bg-blue-50 text-blue-700 border border-blue-200',
-      'Cerrado': 'bg-slate-100 text-slate-700 border border-slate-200',
-      'Pre-Cerrado': 'bg-emerald-50 text-emerald-700 border border-emerald-200',
-    };
-    return styles[estado] || 'bg-zinc-50 text-zinc-600 border border-zinc-200';
-  };
+  // 4. INSTALACIONES PENDIENTES (Rojo)
+  const instalacionesPendientes = useMemo(() => {
+    return instalaciones
+      .filter(i => i.estado !== 'Finalizado' && !i.facturado)
+      .map(i => ({
+        id: i.id || i._docId,
+        lugar: i.lugar || (i.centroId && centrosMap[i.centroId]) || i.clienteNombre || 'Sin ubicación',
+        tarea: i.instalacion || i.titulo || 'Instalación / Montaje',
+      }));
+  }, [instalaciones, centrosMap]);
 
   return (
     <div className="flex h-screen bg-[#F8FAFC]">
@@ -785,273 +795,188 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
           </div>
         </div>
 
-        <div className="p-8 max-w-[1600px] mx-auto animate-in">
-          {/* Primary Metric Cards Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
-            {/* Clientes */}
-            <div 
-              className="bg-white border border-zinc-200/80 shadow-sm rounded-2xl p-4 flex flex-col justify-between hover:shadow-md hover:-translate-y-0.5 hover:border-zinc-300 transition-all duration-300 group cursor-pointer"
-              onClick={() => navigate('/clientes')}
-            >
-              <div className="flex items-center justify-between mb-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-500/10">
-                  <Users className="w-5 h-5" />
-                </div>
-                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider group-hover:text-blue-600 transition-colors">Ver todos</span>
-              </div>
-              <div>
-                <p className="text-2xl font-black text-zinc-950 tracking-tight leading-none">{stats.clientes}</p>
-                <p className="text-xs font-bold text-zinc-500 mt-1.5">Clientes</p>
-              </div>
-            </div>
-
-            {/* Centros */}
-            <div 
-              className="bg-white border border-zinc-200/80 shadow-sm rounded-2xl p-4 flex flex-col justify-between hover:shadow-md hover:-translate-y-0.5 hover:border-zinc-300 transition-all duration-300 group cursor-pointer"
-              onClick={() => navigate('/centros')}
-            >
-              <div className="flex items-center justify-between mb-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white shadow-md shadow-emerald-500/10">
-                  <Building2 className="w-5 h-5" />
-                </div>
-                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider group-hover:text-emerald-600 transition-colors">Ver todos</span>
-              </div>
-              <div>
-                <p className="text-2xl font-black text-zinc-950 tracking-tight leading-none">{stats.centros}</p>
-                <p className="text-xs font-bold text-zinc-500 mt-1.5">Centros</p>
-              </div>
-            </div>
-
-            {/* Pedidos */}
-            <div 
-              className="bg-white border border-zinc-200/80 shadow-sm rounded-2xl p-4 flex flex-col justify-between hover:shadow-md hover:-translate-y-0.5 hover:border-zinc-300 transition-all duration-300 group cursor-pointer"
-              onClick={() => navigate('/pedidos')}
-            >
-              <div className="flex items-center justify-between mb-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-sky-500 to-blue-600 flex items-center justify-center text-white shadow-md shadow-sky-500/10">
-                  <FileText className="w-5 h-5" />
-                </div>
-                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider group-hover:text-sky-600 transition-colors">Ver todos</span>
-              </div>
-              <div>
-                <p className="text-2xl font-black text-zinc-950 tracking-tight leading-none">{stats.pedidos}</p>
-                <p className="text-xs font-bold text-zinc-500 mt-1.5">Pedidos</p>
-              </div>
-            </div>
-
-            {/* Pendientes */}
-            <div 
-              className="bg-white border border-zinc-200/80 shadow-sm rounded-2xl p-4 flex flex-col justify-between hover:shadow-md hover:-translate-y-0.5 hover:border-zinc-300 transition-all duration-300 group cursor-pointer"
-              onClick={() => navigate('/partes_trabajo')}
-            >
-              <div className="flex items-center justify-between mb-3">
-                <div className={`w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-white shadow-md shadow-amber-500/10 ${stats.pendientes > 0 ? 'animate-pulse' : ''}`}>
-                  <Clock className="w-5 h-5" />
-                </div>
-                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider group-hover:text-amber-600 transition-colors">Revisar</span>
-              </div>
-              <div>
-                <p className="text-2xl font-black text-zinc-950 tracking-tight leading-none">{stats.pendientes}</p>
-                <p className="text-xs font-bold text-zinc-500 mt-1.5">Partes Pendientes</p>
-              </div>
-            </div>
-
-            {/* Total Partes */}
-            <div 
-              className="bg-white border border-zinc-200/80 shadow-sm rounded-2xl p-4 flex flex-col justify-between hover:shadow-md hover:-translate-y-0.5 hover:border-zinc-300 transition-all duration-300 group cursor-pointer"
-              onClick={() => navigate('/partes')}
-            >
-              <div className="flex items-center justify-between mb-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white shadow-md shadow-violet-500/10">
-                  <FileText className="w-5 h-5" />
-                </div>
-                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider group-hover:text-violet-600 transition-colors">Historial</span>
-              </div>
-              <div>
-                <p className="text-2xl font-black text-zinc-950 tracking-tight leading-none">{stats.partes}</p>
-                <p className="text-xs font-bold text-zinc-500 mt-1.5">Total Partes</p>
-              </div>
-            </div>
+        <div className="p-4 sm:p-6 lg:p-8 max-w-[1600px] mx-auto animate-in">
+          {/* Título de sección */}
+          <div className="mb-4 sm:mb-5">
+            <h2 className="text-sm sm:text-base font-extrabold text-slate-800 tracking-tight uppercase">
+              RESUMEN DE TAREAS pendientes
+            </h2>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Estado en tiempo real de los trabajos y servicios activos pendientes de finalizar.
+            </p>
           </div>
 
-          {/* Secondary Metrics Row */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-            {/* Catálogo */}
-            <div 
-              className="bg-[#FFFDF9] border border-orange-200/60 shadow-sm rounded-2xl p-4 flex items-center gap-4 hover:border-orange-300 hover:shadow-sm transition-all duration-200 cursor-pointer"
-              onClick={() => navigate('/catalogo')}
-            >
-              <div className="w-10 h-10 rounded-xl bg-orange-100/70 flex items-center justify-center text-orange-600 shrink-0">
-                <Package className="w-5 h-5" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-lg font-extrabold text-zinc-900 leading-none">{stats.catalogo}</p>
-                <p className="text-[11px] font-bold text-zinc-500 mt-1.5">Artículos en Catálogo</p>
-              </div>
-            </div>
-
-            {/* Certificados */}
-            <div 
-              className="bg-[#F6FCFE] border border-cyan-200/60 shadow-sm rounded-2xl p-4 flex items-center gap-4 hover:border-cyan-300 hover:shadow-sm transition-all duration-200 cursor-pointer"
-              onClick={() => navigate('/certificados')}
-            >
-              <div className="w-10 h-10 rounded-xl bg-cyan-100/70 flex items-center justify-center text-cyan-600 shrink-0">
-                <FileCheck className="w-5 h-5" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-lg font-extrabold text-zinc-900 leading-none">{stats.certificados}</p>
-                <p className="text-[11px] font-bold text-zinc-500 mt-1.5">Certificados Emitidos</p>
-              </div>
-            </div>
-
-            {/* Albaranes */}
-            <div 
-              className="bg-[#FAFAFE] border border-violet-200/60 shadow-sm rounded-2xl p-4 flex items-center gap-4 hover:border-violet-300 hover:shadow-sm transition-all duration-200 cursor-pointer"
-              onClick={() => navigate('/albaranes')}
-            >
-              <div className="w-10 h-10 rounded-xl bg-violet-100/70 flex items-center justify-center text-violet-600 shrink-0">
-                <FileDigit className="w-5 h-5" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-lg font-extrabold text-zinc-900 leading-none">{stats.albaranes}</p>
-                <p className="text-[11px] font-bold text-zinc-500 mt-1.5">Albaranes de Entrega</p>
-              </div>
-            </div>
-
-            {/* Pendiente Facturación */}
-            <div 
-              className="bg-[#FFF9FA] border border-rose-200/60 shadow-sm rounded-2xl p-4 flex items-center gap-4 hover:border-rose-300 hover:shadow-sm transition-all duration-200 cursor-pointer"
-              onClick={() => navigate('/facturas')}
-            >
-              <div className="w-10 h-10 rounded-xl bg-rose-100/70 flex items-center justify-center text-rose-600 shrink-0">
-                <Receipt className="w-5 h-5" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-lg font-extrabold text-zinc-900 leading-none">{stats.albaranes - Math.floor(stats.albaranes * 0.4)}</p>
-                <p className="text-[11px] font-bold text-zinc-500 mt-1.5">Pendiente Facturación</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Quick Access and Activity Grid */}
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 mb-8">
-            {/* Quick Access List */}
-            <div className="xl:col-span-1 bg-white border border-zinc-200/80 shadow-sm rounded-3xl p-6 flex flex-col justify-between">
-              <div>
-                <h3 className="text-sm font-black uppercase tracking-wider text-zinc-400 mb-4">
-                  Accesos Rápidos Directos
-                </h3>
-                <div className="grid grid-cols-2 gap-3">
-                  {[
-                    { label: 'Planificación', icon: CalendarDays, path: '/partes_trabajo', color: 'amber' },
-                    { label: 'Partes', icon: FileText, path: '/partes', color: 'sky' },
-                    { label: 'Revisiones', icon: SearchCheck, path: '/revisiones', color: 'indigo' },
-                    { label: 'Reparaciones', icon: Wrench, path: '/reparaciones', color: 'red' },
-                    { label: 'Instalaciones', icon: HardHat, path: '/instalaciones', color: 'teal' },
-                    { label: 'Presupuestos', icon: Calculator, path: '/presupuestos', color: 'orange' },
-                  ].map((item) => {
-                    const colorStyles: Record<string, string> = {
-                      amber: 'hover:border-amber-300 hover:bg-amber-50/30 text-amber-950',
-                      sky: 'hover:border-sky-300 hover:bg-sky-50/30 text-sky-950',
-                      indigo: 'hover:border-indigo-300 hover:bg-indigo-50/30 text-indigo-950',
-                      red: 'hover:border-red-300 hover:bg-red-50/30 text-red-950',
-                      teal: 'hover:border-teal-300 hover:bg-teal-50/30 text-teal-950',
-                      orange: 'hover:border-orange-300 hover:bg-orange-50/30 text-orange-950',
-                    };
-                    const iconColorStyles: Record<string, string> = {
-                      amber: 'text-amber-600 bg-amber-50',
-                      sky: 'text-sky-600 bg-sky-50',
-                      indigo: 'text-indigo-600 bg-indigo-50',
-                      red: 'text-red-600 bg-red-50',
-                      teal: 'text-teal-600 bg-teal-50',
-                      orange: 'text-orange-600 bg-orange-50',
-                    };
-                    return (
-                      <button
-                        key={item.path}
-                        onClick={() => navigate(item.path)}
-                        className={`flex flex-col items-start gap-2.5 p-4 rounded-2xl border border-zinc-200/80 bg-white transition-all text-left group hover:-translate-y-0.5 hover:shadow-sm ${colorStyles[item.color] || ''}`}
-                      >
-                        <div className={`p-2 rounded-xl shrink-0 ${iconColorStyles[item.color] || 'text-zinc-600 bg-zinc-50'}`}>
-                          <item.icon className="w-5 h-5" />
-                        </div>
-                        <span className="text-xs font-extrabold tracking-tight">{item.label}</span>
-                      </button>
-                    );
-                  })}
+          {/* Cuadrícula de 4 tablas pequeñas: Desktop (4 cols en paralelo), Tablet (2 y 2 debajo) */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+            
+            {/* 1. TABLA AVISOS (NEGRO) */}
+            <div className="bg-white border border-slate-200/80 rounded-2xl shadow-xs flex flex-col overflow-hidden">
+              <div 
+                onClick={() => navigate('/urgencias')}
+                className="px-4 py-3 border-b border-slate-200/80 bg-slate-50/50 flex items-center justify-between cursor-pointer hover:bg-slate-100/60 transition-colors"
+                title="Ir al módulo Avisos"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-extrabold px-3 py-1 rounded-xl bg-zinc-950 text-white border border-black flex items-center gap-1.5 shadow-xs tracking-wider">
+                    <span className="w-2 h-2 rounded-full bg-white animate-pulse"></span>
+                    <AlertTriangle className="w-3.5 h-3.5 text-white" />
+                    AVISOS
+                  </span>
                 </div>
+                <span className="text-[11px] font-bold text-slate-500 bg-white border border-slate-200 px-2.5 py-0.5 rounded-full shadow-2xs">
+                  {avisosPendientes.length} pendientes
+                </span>
               </div>
-              <div className="mt-6 pt-5 border-t border-zinc-100 flex items-center justify-between text-xs text-zinc-400">
-                <span>Versión del Software</span>
-                <span className="font-bold bg-zinc-100 text-zinc-600 px-2 py-0.5 rounded-md">{APP_VERSION}</span>
-              </div>
-            </div>
-
-            {/* Recent Work Orders Feed */}
-            <div className="xl:col-span-2 bg-white border border-zinc-200/80 shadow-sm rounded-3xl p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-black uppercase tracking-wider text-zinc-400">
-                  Últimos Partes de Trabajo Creados
-                </h3>
-                <button 
-                  onClick={() => navigate('/partes')}
-                  className="text-xs font-bold text-red-600 hover:text-red-700 transition-colors flex items-center gap-1"
-                >
-                  Ver todos los partes →
-                </button>
-              </div>
-
-              {recentPartes.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <div className="w-12 h-12 rounded-full bg-zinc-50 border border-zinc-100 flex items-center justify-center text-zinc-300 mb-3">
-                    <FileText className="w-6 h-6" />
+              <div className="flex-1 overflow-y-auto divide-y divide-slate-200 max-h-[520px] scrollbar-thin">
+                {avisosPendientes.length === 0 ? (
+                  <div className="py-16 text-center text-xs font-semibold text-slate-400">
+                    No hay avisos pendientes
                   </div>
-                  <h4 className="text-xs font-bold text-zinc-700">Sin partes de trabajo</h4>
-                  <p className="text-[11px] text-zinc-450 mt-1 max-w-xs">No se han encontrado partes de trabajo registrados recientemente en el sistema.</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {recentPartes.map((parte) => {
-                    const clientName = clientesMap[parte.clienteId] || 'Cliente cargando...';
-                    const centerName = centrosMap[parte.centroId] || 'Centro cargando...';
-                    const dateFormatted = parte.fechaCreacion 
-                      ? new Date(parte.fechaCreacion).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' })
-                      : parte.fechaProgramada || 'S/D';
-
-                    return (
-                      <div 
-                        key={parte.id}
-                        onClick={() => navigate('/partes')}
-                        className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-2xl border border-zinc-100 hover:border-zinc-200 hover:bg-zinc-50/55 transition-all cursor-pointer group"
-                      >
-                        <div className="flex items-start gap-3 min-w-0">
-                          <div className="w-9 h-9 rounded-xl bg-zinc-50 border border-zinc-100 flex items-center justify-center text-zinc-500 shrink-0 group-hover:bg-red-50 group-hover:text-red-600 transition-colors">
-                            <FileText className="w-4 h-4" />
-                          </div>
-                          <div className="min-w-0">
-                            <h4 className="text-xs font-black text-zinc-950 truncate leading-tight">
-                              {clientName}
-                            </h4>
-                            <p className="text-[11px] text-zinc-500 truncate mt-1">
-                              📍 {centerName}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center justify-between sm:justify-end gap-4 shrink-0 border-t sm:border-t-0 pt-2 sm:pt-0 border-zinc-50">
-                          <div className="text-left sm:text-right">
-                            <span className="text-[10px] font-bold text-zinc-450 uppercase block">Creado</span>
-                            <span className="text-[11px] font-extrabold text-zinc-700 mt-0.5 block">{dateFormatted}</span>
-                          </div>
-                          <span className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-full ${getStatusBadge(parte.estado)}`}>
-                            {parte.estado}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+                ) : (
+                  avisosPendientes.map((item, idx) => (
+                    <div 
+                      key={item.id || idx}
+                      onClick={() => navigate('/urgencias')}
+                      className="px-4 py-2.5 hover:bg-slate-50/80 transition-colors cursor-pointer group"
+                    >
+                      <p className="text-xs font-semibold text-slate-700 truncate tracking-normal group-hover:text-black transition-colors">
+                        {item.lugar}
+                      </p>
+                      <p className="text-[11px] font-normal text-slate-400 truncate mt-0.5">
+                        {item.tarea}
+                      </p>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
+
+            {/* 2. TABLA REPARACIONES (AZUL) */}
+            <div className="bg-white border border-slate-200/80 rounded-2xl shadow-xs flex flex-col overflow-hidden">
+              <div 
+                onClick={() => navigate('/reparaciones')}
+                className="px-4 py-3 border-b border-slate-200/80 bg-sky-50/30 flex items-center justify-between cursor-pointer hover:bg-sky-50/60 transition-colors"
+                title="Ir al módulo Reparaciones"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-extrabold px-3 py-1 rounded-xl bg-sky-50 text-sky-800 border border-sky-200 flex items-center gap-1.5 shadow-xs tracking-wider">
+                    <span className="w-2 h-2 rounded-full bg-sky-600"></span>
+                    <Wrench className="w-3.5 h-3.5 text-sky-600" />
+                    REPARACIONES
+                  </span>
+                </div>
+                <span className="text-[11px] font-bold text-sky-800 bg-white border border-sky-200 px-2.5 py-0.5 rounded-full shadow-2xs">
+                  {reparacionesPendientes.length} pendientes
+                </span>
+              </div>
+              <div className="flex-1 overflow-y-auto divide-y divide-slate-200 max-h-[520px] scrollbar-thin">
+                {reparacionesPendientes.length === 0 ? (
+                  <div className="py-16 text-center text-xs font-semibold text-slate-400">
+                    No hay reparaciones pendientes
+                  </div>
+                ) : (
+                  reparacionesPendientes.map((item, idx) => (
+                    <div 
+                      key={item.id || idx}
+                      onClick={() => navigate('/reparaciones')}
+                      className="px-4 py-2.5 hover:bg-sky-50/30 transition-colors cursor-pointer group"
+                    >
+                      <p className="text-xs font-semibold text-slate-700 truncate tracking-normal group-hover:text-sky-900 transition-colors">
+                        {item.lugar}
+                      </p>
+                      <p className="text-[11px] font-normal text-slate-400 truncate mt-0.5">
+                        {item.tarea}
+                      </p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* 3. TABLA REVISIONES (AMARILLO) */}
+            <div className="bg-white border border-slate-200/80 rounded-2xl shadow-xs flex flex-col overflow-hidden">
+              <div 
+                onClick={() => navigate('/partes_trabajo')}
+                className="px-4 py-3 border-b border-slate-200/80 bg-amber-50/30 flex items-center justify-between cursor-pointer hover:bg-amber-50/60 transition-colors"
+                title="Ir al módulo Planificación de Revisiones"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-extrabold px-3 py-1 rounded-xl bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1.5 shadow-xs tracking-wider">
+                    <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                    <ClipboardCheck className="w-3.5 h-3.5 text-amber-600" />
+                    REVISIONES
+                  </span>
+                </div>
+                <span className="text-[11px] font-bold text-amber-800 bg-white border border-amber-200 px-2.5 py-0.5 rounded-full shadow-2xs">
+                  {revisionesPendientes.length} pendientes
+                </span>
+              </div>
+              <div className="flex-1 overflow-y-auto divide-y divide-slate-200 max-h-[520px] scrollbar-thin">
+                {revisionesPendientes.length === 0 ? (
+                  <div className="py-16 text-center text-xs font-semibold text-slate-400">
+                    No hay revisiones pendientes
+                  </div>
+                ) : (
+                  revisionesPendientes.map((item, idx) => (
+                    <div 
+                      key={item.id || idx}
+                      onClick={() => navigate('/partes_trabajo')}
+                      className="px-4 py-2.5 hover:bg-amber-50/30 transition-colors cursor-pointer group"
+                    >
+                      <p className="text-xs font-semibold text-slate-700 truncate tracking-normal group-hover:text-amber-950 transition-colors">
+                        {item.lugar}
+                      </p>
+                      <p className="text-[11px] font-normal text-slate-400 truncate mt-0.5">
+                        {item.tarea}
+                      </p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* 4. TABLA INSTALACIONES (ROJO) */}
+            <div className="bg-white border border-slate-200/80 rounded-2xl shadow-xs flex flex-col overflow-hidden">
+              <div 
+                onClick={() => navigate('/instalaciones')}
+                className="px-4 py-3 border-b border-slate-200/80 bg-red-50/30 flex items-center justify-between cursor-pointer hover:bg-red-50/60 transition-colors"
+                title="Ir al módulo Instalaciones"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-extrabold px-3 py-1 rounded-xl bg-red-50 text-red-700 border border-red-200 flex items-center gap-1.5 shadow-xs tracking-wider">
+                    <span className="w-2 h-2 rounded-full bg-red-600"></span>
+                    <HardHat className="w-3.5 h-3.5 text-red-600" />
+                    INSTALACIONES
+                  </span>
+                </div>
+                <span className="text-[11px] font-bold text-red-700 bg-white border border-red-200 px-2.5 py-0.5 rounded-full shadow-2xs">
+                  {instalacionesPendientes.length} pendientes
+                </span>
+              </div>
+              <div className="flex-1 overflow-y-auto divide-y divide-slate-200 max-h-[520px] scrollbar-thin">
+                {instalacionesPendientes.length === 0 ? (
+                  <div className="py-16 text-center text-xs font-semibold text-slate-400">
+                    No hay instalaciones pendientes
+                  </div>
+                ) : (
+                  instalacionesPendientes.map((item, idx) => (
+                    <div 
+                      key={item.id || idx}
+                      onClick={() => navigate('/instalaciones')}
+                      className="px-4 py-2.5 hover:bg-red-50/30 transition-colors cursor-pointer group"
+                    >
+                      <p className="text-xs font-semibold text-slate-700 truncate tracking-normal group-hover:text-red-950 transition-colors">
+                        {item.lugar}
+                      </p>
+                      <p className="text-[11px] font-normal text-slate-400 truncate mt-0.5">
+                        {item.tarea}
+                      </p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
           </div>
         </div>
       </main>
@@ -1357,6 +1282,7 @@ export default function App() {
     return (
       <>
         <DashboardTecnico loggedUser={loggedUser} onLogout={handleLogout} />
+        <AvisoStockModal user={loggedUser} />
         {renderUpdatePrompt()}
         {renderInstallPrompt()}
       </>
@@ -1435,8 +1361,8 @@ export default function App() {
           </ProtectedRoute>
         } />
         <Route path="/catalogo" element={
-          <ProtectedRoute allowedRoles={['super-administrador', 'administrador', 'editor']} user={loggedUser}>
-            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Catalogo /></PageLayout>
+          <ProtectedRoute allowedRoles={['super-administrador', 'administrador', 'editor', 'tecnico']} user={loggedUser}>
+            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Catalogo user={loggedUser} isTecnicoMode={loggedUser?.rol === 'tecnico'} /></PageLayout>
           </ProtectedRoute>
         } />
         <Route path="/articulos" element={
@@ -1504,9 +1430,15 @@ export default function App() {
             <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Analisis /></PageLayout>
           </ProtectedRoute>
         } />
+        <Route path="/notas" element={
+          <ProtectedRoute allowedRoles={['super-administrador', 'administrador', 'editor', 'visualizador', 'tecnico']} user={loggedUser}>
+            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Notas user={loggedUser} /></PageLayout>
+          </ProtectedRoute>
+        } />
       </Routes>
       {renderUpdatePrompt()}
       {renderInstallPrompt()}
+      <AvisoStockModal user={loggedUser} />
     </BrowserRouter>
   );
 }

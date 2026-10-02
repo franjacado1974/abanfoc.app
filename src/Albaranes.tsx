@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, FileDigit, Download, Search, CheckCircle2, Circle, Clock, Trash2, Plus, Building2, MapPin, Save, Trash, Edit, Copy, Maximize2, X, Signature, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
-import { addAlbaran, updateAlbaran, deleteAlbaran, subscribeAlbaranes, subscribeEmpresas, subscribeTecnicos, subscribeCentros, subscribeClientes, subscribeTrabajos, db, type Albaran, type Cliente, type Centro, type Equipo, type Tecnico, type Empresa, type TrabajoConfig, updateParte, updateReparacion, updateInstalacion, obtenerSiguienteNumeroAlbaran } from './firebase';
+import { addAlbaran, updateAlbaran, deleteAlbaran, subscribeAlbaranes, subscribeEmpresas, subscribeTecnicos, subscribeCentros, subscribeClientes, subscribeTrabajos, db, type Albaran, type Cliente, type Centro, type Equipo, type Tecnico, type Empresa, type TrabajoConfig, updateParte, updateReparacion, updateInstalacion, updateUrgencia, obtenerSiguienteNumeroAlbaran } from './firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { generarAlbaranPDF } from './pdfGenerator';
 import ConfirmationModal from './ConfirmationModal';
@@ -96,7 +96,10 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
     nombreFirmante: '',
     tecnicoId: '',
     facturado: false,
-    numeroPedido: ''
+    numeroPedido: '',
+    reparacionId: '',
+    instalacionId: '',
+    urgenciaId: ''
   });
 
   const canvasClienteRef = useRef<HTMLCanvasElement>(null);
@@ -195,6 +198,7 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
           titulo: prefill.titulo || '',
           reparacionId: prefill.reparacionId || '',
           instalacionId: prefill.instalacionId || '',
+          urgenciaId: prefill.urgenciaId || '',
         });
         setEditingId(null);
         setView('form');
@@ -259,6 +263,22 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
           localStorage.setItem('firecheck_db_instalaciones', JSON.stringify(updatedInsts));
         } catch (error) {
           console.error("Error al actualizar estado facturado en la instalación asociada:", error);
+        }
+      }
+
+      // Si el albarán tiene un urgenciaId asociado, actualizar facturado en la urgencia
+      if (albaranToUpdate.urgenciaId) {
+        try {
+          await updateUrgencia(albaranToUpdate.urgenciaId, { facturado: nextFacturado });
+          const storedUrgs = JSON.parse(localStorage.getItem('firecheck_db_urgencias') || '[]');
+          const updatedUrgs = storedUrgs.map((u: any) =>
+            (u.id === albaranToUpdate.urgenciaId || u._docId === albaranToUpdate.urgenciaId)
+              ? { ...u, facturado: nextFacturado }
+              : u
+          );
+          localStorage.setItem('firecheck_db_urgencias', JSON.stringify(updatedUrgs));
+        } catch (error) {
+          console.error("Error al actualizar estado facturado en la urgencia asociada:", error);
         }
       }
     }
@@ -480,14 +500,14 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
 
         setSendProgress(75);
 
-        // Si proviene de una reparación, vincular el albaranId a la tarea
+        // Si proviene de una reparación, vincular el albaranId a la tarea y pasar estado a Finalizado
         if (albaranToSave.reparacionId) {
           try {
-            await updateReparacion(albaranToSave.reparacionId, { albaranId: finalId });
+            await updateReparacion(albaranToSave.reparacionId, { albaranId: finalId, estado: 'Finalizado' });
             const storedReps = JSON.parse(localStorage.getItem('firecheck_db_reparaciones') || '[]');
             const updatedReps = storedReps.map((r: any) =>
               (r.id === albaranToSave.reparacionId || r._docId === albaranToSave.reparacionId)
-                ? { ...r, albaranId: finalId }
+                ? { ...r, albaranId: finalId, estado: 'Finalizado' }
                 : r
             );
             localStorage.setItem('firecheck_db_reparaciones', JSON.stringify(updatedReps));
@@ -496,19 +516,35 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
           }
         }
 
-        // Si proviene de una instalación, vincular el albaranId a la tarea
+        // Si proviene de una instalación, vincular el albaranId a la tarea y pasar estado a Finalizado
         if (albaranToSave.instalacionId) {
           try {
-            await updateInstalacion(albaranToSave.instalacionId, { albaranId: finalId });
+            await updateInstalacion(albaranToSave.instalacionId, { albaranId: finalId, estado: 'Finalizado' });
             const storedInsts = JSON.parse(localStorage.getItem('firecheck_db_instalaciones') || '[]');
             const updatedInsts = storedInsts.map((i: any) =>
               (i.id === albaranToSave.instalacionId || i._docId === albaranToSave.instalacionId)
-                ? { ...i, albaranId: finalId }
+                ? { ...i, albaranId: finalId, estado: 'Finalizado' }
                 : i
             );
             localStorage.setItem('firecheck_db_instalaciones', JSON.stringify(updatedInsts));
           } catch (error) {
             console.error("Error al vincular albarán a la instalación:", error);
+          }
+        }
+
+        // Si proviene de un aviso o urgencia, vincular el albaranId a la tarea y pasar estado a Finalizado
+        if (albaranToSave.urgenciaId) {
+          try {
+            await updateUrgencia(albaranToSave.urgenciaId, { albaranId: finalId, estado: 'Finalizado' });
+            const storedUrgs = JSON.parse(localStorage.getItem('firecheck_db_urgencias') || '[]');
+            const updatedUrgs = storedUrgs.map((u: any) =>
+              (u.id === albaranToSave.urgenciaId || u._docId === albaranToSave.urgenciaId)
+                ? { ...u, albaranId: finalId, estado: 'Finalizado' }
+                : u
+            );
+            localStorage.setItem('firecheck_db_urgencias', JSON.stringify(updatedUrgs));
+          } catch (error) {
+            console.error("Error al vincular albarán a la urgencia:", error);
           }
         }
       }
@@ -531,7 +567,10 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
           nombreFirmante: '',
           tecnicoId: '',
           facturado: false,
-          numeroPedido: ''
+          numeroPedido: '',
+          reparacionId: '',
+          instalacionId: '',
+          urgenciaId: ''
         });
       }, 2000);
     } catch (error) {

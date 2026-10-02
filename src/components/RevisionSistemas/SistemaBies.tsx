@@ -181,9 +181,9 @@ export default function SistemaBies({
                                                                         }).map(item => {
                                                                              const rawVal = eq[item.key as keyof EquipoInstalado];
                                                                              const itemOpciones = (item as any).opciones || [];
-                                                                             const val = (rawVal === undefined || rawVal === '') && itemOpciones.includes('CORRECTO')
-                                                                                 ? 'CORRECTO'
-                                                                                 : rawVal;
+                                                                             const val = (rawVal === undefined || rawVal === '')
+                                                ? ((item as any).valorPredeterminado || (itemOpciones.includes('CORRECTO') ? 'CORRECTO' : rawVal))
+                                                : rawVal;
                                                                              const tipo = (item as ChecklistItem).tipoRespuesta as string || 'check';
                                                                              const lbl = (item.label || '').toLowerCase();
                                                                              const esCampoNotas = lbl.includes('notas') || lbl.includes('observaciones') || lbl.includes('anomal');

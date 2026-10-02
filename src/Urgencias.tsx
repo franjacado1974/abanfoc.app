@@ -152,17 +152,6 @@ export default function Urgencias() {
       .sort((a, b) => a.label.localeCompare(b.label, 'es', { sensitivity: 'base' }));
   }, [clientes]);
 
-  const centroOptions = useMemo(() => {
-    return centros
-      .filter((c: any) => !formData.clienteId || c.clienteId === formData.clienteId || c.cliente === formData.clienteId || c.cliente === formData.clienteNombre)
-      .map((c: any) => ({
-        value: c.id || c._docId,
-        label: c.nombre || c.id || '',
-        sublabel: c.direccion || c.poblacion || ''
-      }))
-      .filter(opt => opt.value && opt.label)
-      .sort((a, b) => a.label.localeCompare(b.label, 'es', { sensitivity: 'base' }));
-  }, [centros, formData.clienteId, formData.clienteNombre]);
 
   // Funciones auxiliares para fechas y meses
   const getItemMonth = (item: { fecha?: string; mes?: string; fechaCreacion?: string }): string => {
@@ -335,7 +324,7 @@ export default function Urgencias() {
           tecnicoId: matchTecnico?.id || (tecnicos.length > 0 ? tecnicos[0].id : ''),
           numeroPedido: '',
           titulo: `Urgencia: ${item.urgencia || 'Atención urgente'}`,
-          reparacionId: urgDocId,
+          urgenciaId: urgDocId,
           fechaCreacion: item.fecha ? `${item.fecha}T10:00:00.000Z` : new Date().toISOString(),
           items: [
             {
@@ -991,33 +980,6 @@ export default function Urgencias() {
                 />
               </div>
 
-              {/* CENTRO */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Centro
-                </label>
-                <SearchableSelect
-                  options={centroOptions}
-                  value={formData.centroId}
-                  onChange={(val, opt) => {
-                    const sel = centros.find((c: any) => (c.id || c._docId) === val);
-                    const patch: any = {
-                      centroId: val,
-                      lugar: sel?.nombre || opt?.label || formData.lugar
-                    };
-                    if (sel?.clienteId && !formData.clienteId) {
-                      patch.clienteId = sel.clienteId;
-                      const cMatch: any = clientes.find((c: any) => (c.id || c._docId) === sel.clienteId);
-                      patch.clienteNombre = cMatch?.nombre || cMatch?.razonSocial || '';
-                    }
-                    setFormData({
-                      ...formData,
-                      ...patch
-                    });
-                  }}
-                  placeholder="-- Buscar o seleccionar centro --"
-                />
-              </div>
 
               {/* LUGAR */}
               <div>

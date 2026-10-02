@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { FileText, Package, Power, LogOut, FileCheck, Inbox, Gauge, Calendar, AlertTriangle, Building2 } from 'lucide-react';
+import { FileText, Package, Power, LogOut, FileCheck, Inbox, Gauge, Calendar, AlertTriangle, Building2, StickyNote } from 'lucide-react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { 
@@ -8,7 +8,8 @@ import {
   subscribeCentros, 
   subscribeAlbaranes, 
   subscribeArticulos, 
-  subscribeClientes 
+  subscribeClientes,
+  subscribeNotasBloc
 } from './firebase';
 import PartesTecnico from './PartesTecnico';
 import RevisionChecklist from './RevisionChecklist';
@@ -20,6 +21,7 @@ import Buzon from './Buzon';
 import PruebasTecnicas from './PruebasTecnicas';
 import Calendario from './Calendario';
 import Urgencias from './Urgencias';
+import Notas from './Notas';
 import { APP_VERSION } from './constants';
 
 interface Usuario {
@@ -34,7 +36,7 @@ interface DashboardTecnicoProps {
   onLogout: () => void;
 }
 
-type TecnicoView = 'dashboard' | 'partes' | 'albaranes' | 'clientes' | 'centros' | 'catalogo' | 'buzon' | 'pruebas-tecnicas' | 'calendario' | 'urgencias';
+type TecnicoView = 'dashboard' | 'partes' | 'albaranes' | 'clientes' | 'centros' | 'catalogo' | 'buzon' | 'pruebas-tecnicas' | 'calendario' | 'urgencias' | 'notas';
 
 // ─── PANTALLA PRINCIPAL DEL TÉCNICO ──────────────────────────────────────────
 function DashboardHome({ loggedUser, onLogout, onNavigate }: DashboardTecnicoProps & { onNavigate: (view: TecnicoView) => void }) {
@@ -59,6 +61,7 @@ function DashboardHome({ loggedUser, onLogout, onNavigate }: DashboardTecnicoPro
     let albaranes = 0;
     let urgencias = 0;
     let urgenciasPendientes = 0;
+    let notas = 0;
 
     try {
       const savedPartes = localStorage.getItem('firecheck_db_partes');
@@ -106,9 +109,15 @@ function DashboardHome({ loggedUser, onLogout, onNavigate }: DashboardTecnicoPro
           ? parsed.filter((u: any) => u.estado !== 'Solucionado' && u.estado !== 'Finalizado').length
           : 0;
       }
+
+      const savedNotas = localStorage.getItem('firecheck_db_notas_bloc');
+      if (savedNotas) {
+        const parsed = JSON.parse(savedNotas);
+        notas = Array.isArray(parsed) ? parsed.length : 0;
+      }
     } catch { /* ignore */ }
 
-    return { partes, partesPendientes, catalogo, clientes, centros, albaranes, urgencias, urgenciasPendientes };
+    return { partes, partesPendientes, catalogo, clientes, centros, albaranes, urgencias, urgenciasPendientes, notas };
   };
 
   const [stats, setStats] = useState(calculateLocalStats);
@@ -194,6 +203,14 @@ function DashboardHome({ loggedUser, onLogout, onNavigate }: DashboardTecnicoPro
         setStats(prev => ({ ...prev, urgencias: urgs.length, urgenciasPendientes: pends }));
       });
       unsubs.push(unsubUrg);
+    } catch (e) { console.warn(e); }
+
+    try {
+      // 8. Notas Bloc
+      unsubs.push(subscribeNotasBloc((items) => {
+        try { localStorage.setItem('firecheck_db_notas_bloc', JSON.stringify(items)); } catch {}
+        setStats(prev => ({ ...prev, notas: items.length }));
+      }));
     } catch (e) { console.warn(e); }
 
     return () => {
@@ -354,6 +371,24 @@ function DashboardHome({ loggedUser, onLogout, onNavigate }: DashboardTecnicoPro
       ],
     },
     {
+      id: 'notas' as TecnicoView,
+      title: 'Notas',
+      description: 'Bloc de notas compartido (Compras, Visitas...)',
+      icon: StickyNote,
+      bgColor: 'bg-amber-500/10 text-amber-600',
+      iconColor: 'text-amber-600',
+      borderColor: 'border-amber-200/80',
+      hoverBorder: 'hover:border-amber-400 hover:shadow-amber-100',
+      textColor: 'text-amber-700',
+      badgeBg: 'bg-amber-100/80',
+      badgeText: 'text-amber-700',
+      badgeLabel: 'Documentos',
+      clickable: true,
+      stats: [
+        { label: 'Total notas', value: stats.notas },
+      ],
+    },
+    {
       id: 'centros' as TecnicoView,
       title: 'Centros',
       description: 'Ubicaciones de centros de trabajo',
@@ -454,9 +489,9 @@ function DashboardHome({ loggedUser, onLogout, onNavigate }: DashboardTecnicoPro
         <div className="h-0.5 bg-red-600 w-full" />
       </header>
 
-      {/* Cuadrícula de 8 Tarjetas en una sola pantalla: 4x2 en tablet/PC o 2x4 en móvil */}
-      <main className="flex-1 w-full max-w-6xl mx-auto px-3 sm:px-6 pt-8 sm:pt-12 pb-6 flex flex-col justify-start">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-3.5">
+      {/* Cuadrícula de 9 Tarjetas: 3x3 en tablet/PC o 2 cols en móvil */}
+      <main className="flex-1 w-full max-w-6xl mx-auto px-3 sm:px-6 pt-6 sm:pt-10 pb-6 flex flex-col justify-start">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5 sm:gap-3.5">
           {cards.map((card) => {
             const Icon = card.icon;
             const isBuzonUnread = card.id === 'buzon' && hasUnreadBuzon;
@@ -719,6 +754,26 @@ function TecnicoApp({ loggedUser, onLogout }: DashboardTecnicoProps) {
     );
   }
 
+  if (currentView === 'notas') {
+    return (
+      <div className="min-h-screen bg-slate-100 relative">
+        <div className="sticky top-0 z-50 bg-white border-b border-zinc-200 px-4 py-3 flex items-center justify-between shadow-xs">
+          <button
+            onClick={() => setCurrentView('dashboard')}
+            className="flex items-center gap-2 text-zinc-600 font-semibold cursor-pointer hover:text-zinc-900 transition-colors"
+          >
+            <span className="w-8 h-8 rounded-full bg-zinc-100 flex items-center justify-center font-bold">←</span>
+            <span>Volver al panel</span>
+          </button>
+          <h1 className="text-sm font-bold text-zinc-900">Bloc de Notas</h1>
+        </div>
+        <div className="pb-20">
+          <Notas user={loggedUser} />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <DashboardHome
       loggedUser={loggedUser}
@@ -737,6 +792,7 @@ export default function DashboardTecnico({ loggedUser, onLogout }: DashboardTecn
         <Route path="/buzon" element={<Buzon isTecnicoMode={true} />} />
         <Route path="/pruebas-tecnicas" element={<PruebasTecnicas />} />
         <Route path="/urgencias" element={<Urgencias />} />
+        <Route path="/notas" element={<Notas user={loggedUser} />} />
         <Route path="/revision-checklist" element={<RevisionChecklist />} />
       </Routes>
     </BrowserRouter>

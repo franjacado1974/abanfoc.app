@@ -12,7 +12,7 @@ import {
   type RevisionItem 
 } from './firebase';
 import { collection, getDocs } from 'firebase/firestore';
-import { calcularAlertasExtintores, calcularAlertasBies, type ExtintorAlertas, type BieAlertas } from './recursos-compartidos/services/sistemasUtils';
+import { calcularAlertasExtintores, calcularAlertasBies, esEquipoExtintor, esEquipoBie, esSistemaExtintores, esSistemaBies, type ExtintorAlertas, type BieAlertas } from './recursos-compartidos/services/sistemasUtils';
 
 const MESES = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 
@@ -121,7 +121,7 @@ export default function Revisiones() {
       const map: Record<string, ExtintorAlertas> = {};
       const equiposPorCentro: Record<string, any[]> = {};
       for (const eq of allEquipos) {
-        if (eq.centroId) {
+        if (eq.centroId && esEquipoExtintor(eq)) {
           if (!equiposPorCentro[eq.centroId]) equiposPorCentro[eq.centroId] = [];
           equiposPorCentro[eq.centroId].push(eq);
         }
@@ -148,7 +148,7 @@ export default function Revisiones() {
       const map: Record<string, BieAlertas> = {};
       const equiposPorCentro: Record<string, any[]> = {};
       for (const eq of allEquipos) {
-        if (eq.centroId) {
+        if (eq.centroId && esEquipoBie(eq)) {
           if (!equiposPorCentro[eq.centroId]) equiposPorCentro[eq.centroId] = [];
           equiposPorCentro[eq.centroId].push(eq);
         }
@@ -238,14 +238,21 @@ export default function Revisiones() {
     let isMounted = true;
 
     const cargarAlertasCentros = async () => {
-      const nuevosMap: Record<string, any[]> = {};
+      const nuevosMapExt: Record<string, any[]> = {};
+      const nuevosMapBie: Record<string, any[]> = {};
 
       try {
         const stored = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
         for (const eq of stored) {
           if (eq.centroId) {
-            if (!nuevosMap[eq.centroId]) nuevosMap[eq.centroId] = [];
-            nuevosMap[eq.centroId].push(eq);
+            if (esEquipoExtintor(eq)) {
+              if (!nuevosMapExt[eq.centroId]) nuevosMapExt[eq.centroId] = [];
+              nuevosMapExt[eq.centroId].push(eq);
+            }
+            if (esEquipoBie(eq)) {
+              if (!nuevosMapBie[eq.centroId]) nuevosMapBie[eq.centroId] = [];
+              nuevosMapBie[eq.centroId].push(eq);
+            }
           }
         }
       } catch { /* ignore */ }
@@ -294,9 +301,18 @@ export default function Revisiones() {
               }));
               const keys = [targetDocId, centro._docId, centro.id].filter(Boolean) as string[];
               for (const k of keys) {
-                if (!nuevosMap[k]) nuevosMap[k] = [];
-                const otros = (nuevosMap[k] || []).filter(e => e.sistemaId !== sDoc.id);
-                nuevosMap[k] = [...otros, ...taggedList];
+                if (esSistemaExtintores(sDoc.id) || esSistemaExtintores(sNombre)) {
+                  if (!nuevosMapExt[k]) nuevosMapExt[k] = [];
+                  const otros = (nuevosMapExt[k] || []).filter(e => e.sistemaId !== sDoc.id);
+                  const soloExt = taggedList.filter(e => esEquipoExtintor(e));
+                  nuevosMapExt[k] = [...otros, ...soloExt];
+                }
+                if (esSistemaBies(sDoc.id) || esSistemaBies(sNombre)) {
+                  if (!nuevosMapBie[k]) nuevosMapBie[k] = [];
+                  const otros = (nuevosMapBie[k] || []).filter(e => e.sistemaId !== sDoc.id);
+                  const soloBie = taggedList.filter(e => esEquipoBie(e));
+                  nuevosMapBie[k] = [...otros, ...soloBie];
+                }
               }
             }
           }));
@@ -307,10 +323,11 @@ export default function Revisiones() {
 
       const resultMapExt: Record<string, ExtintorAlertas> = {};
       const resultMapBie: Record<string, BieAlertas> = {};
-      for (const k of Object.keys(nuevosMap)) {
+      const allKeys = Array.from(new Set([...Object.keys(nuevosMapExt), ...Object.keys(nuevosMapBie)]));
+      for (const k of allKeys) {
         const centro = centros.find(c => c._docId === k || c.id === k);
-        const alertExt = calcularAlertasExtintores(nuevosMap[k]);
-        const alertBie = calcularAlertasBies(nuevosMap[k]);
+        const alertExt = calcularAlertasExtintores(nuevosMapExt[k] || []);
+        const alertBie = calcularAlertasBies(nuevosMapBie[k] || []);
         resultMapExt[k] = alertExt;
         resultMapBie[k] = alertBie;
         if (centro?._docId) {

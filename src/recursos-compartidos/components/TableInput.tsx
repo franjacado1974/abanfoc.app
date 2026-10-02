@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, TrendingUp } from 'lucide-react';
+import { Plus, Trash2, TrendingUp, Copy } from 'lucide-react';
 
 interface TableInputProps {
   label: string;
   opciones: string[]; // Cabeceras de las columnas (horizontal)
   filasNombres?: string[]; // Cabeceras de las filas (vertical, opcional)
   filasInicio?: number; // Filas por defecto
+  tipoRespuesta?: string;
   value: string; // Valor JSON serializado del 2D array string[][]
   onChange: (newValue: string) => void;
   disabled?: boolean;
@@ -18,6 +19,7 @@ export default function TableInput({
   opciones = [],
   filasNombres = [],
   filasInicio = 1,
+  tipoRespuesta = '',
   value,
   onChange,
   disabled = false,
@@ -101,13 +103,15 @@ export default function TableInput({
     }
   }
 
-  const isGrafico = opciones.some(h => {
-    const norm = h.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    return norm.includes('caudal') || norm.includes('flow') || norm.includes('m3') || norm.trim() === 'q' || norm.includes('(q)');
-  }) && opciones.some(h => {
-    const norm = h.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    return norm.includes('presion') || norm.includes('pressure') || norm.includes('bar') || norm.trim() === 'p' || norm.trim() === 'h' || norm.includes('(p)') || norm.includes('(h)');
-  });
+  const isGrafico = tipoRespuesta === 'grafico' || (
+    opciones.some(h => {
+      const norm = h.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      return norm.includes('caudal') || norm.includes('flow') || norm.includes('m3') || norm.trim() === 'q' || norm.includes('(q)');
+    }) && opciones.some(h => {
+      const norm = h.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      return norm.includes('presion') || norm.includes('pressure') || norm.includes('bar') || norm.trim() === 'p' || norm.trim() === 'h' || norm.includes('(p)') || norm.includes('(h)');
+    })
+  ) || Boolean(label && label.toLowerCase().includes('caudal') && (label.toLowerCase().includes('presi') || label.toLowerCase().includes('q-h')));
 
   const effectiveOpciones = isGrafico ? ['Caudal (m³/h)', 'L.P.M.', 'Presión (bar)', 'R.P.M.'] : opciones;
   const effectiveFilasNombres = isGrafico ? ['0%', '50%', '100%', '140%'] : filasNombres;
@@ -187,25 +191,6 @@ export default function TableInput({
             }
             const totalCols = hasVerticalHeaders ? numCols + 1 : numCols;
             while (newRow.length < totalCols) newRow.push('');
-
-            // Autocompletar Caudal y LPM en base a caudal nominal y presión nominal del equipo
-            if (isGrafico) {
-              if (rIdx === 0) {
-                newRow[rowCaudalIdx] = '0';
-                newRow[rowLpmIdx] = '0';
-              } else if (rIdx === 1) {
-                newRow[rowCaudalIdx] = currentNominalCaudal ? String(Math.round((currentNominalCaudal / 2) * 1000) / 1000).replace('.', ',') : '';
-                newRow[rowLpmIdx] = currentNominalCaudal ? String(Math.round(((currentNominalCaudal / 2) / 0.06) * 10) / 10).replace('.', ',') : '';
-              } else if (rIdx === 2) {
-                newRow[rowCaudalIdx] = currentNominalCaudal ? String(Math.round(currentNominalCaudal * 1000) / 1000).replace('.', ',') : '';
-                newRow[rowLpmIdx] = currentNominalCaudal ? String(Math.round((currentNominalCaudal / 0.06) * 10) / 10).replace('.', ',') : '';
-                newRow[rowPresionIdx] = currentNominalPresion ? String(Math.round(currentNominalPresion * 1000) / 1000).replace('.', ',') : '';
-              } else if (rIdx === 3) {
-                newRow[rowCaudalIdx] = currentNominalCaudal ? String(Math.round((currentNominalCaudal * 1.4) * 1000) / 1000).replace('.', ',') : '';
-                newRow[rowLpmIdx] = currentNominalCaudal ? String(Math.round(((currentNominalCaudal * 1.4) / 0.06) * 10) / 10).replace('.', ',') : '';
-              }
-            }
-
             return newRow.slice(0, totalCols);
           });
         }
@@ -282,31 +267,12 @@ export default function TableInput({
       const totalCols = hasVerticalHeaders ? numCols + 1 : numCols;
       while (newRow.length < totalCols) newRow.push('');
 
-      // Autocompletar Caudal y LPM en base a caudal nominal y presión nominal del equipo
-      if (isGrafico) {
-        if (rIdx === 0) {
-          newRow[rowCaudalIdx] = '0';
-          newRow[rowLpmIdx] = '0';
-        } else if (rIdx === 1) {
-          newRow[rowCaudalIdx] = currentNominalCaudal ? String(Math.round((currentNominalCaudal / 2) * 1000) / 1000).replace('.', ',') : '';
-          newRow[rowLpmIdx] = currentNominalCaudal ? String(Math.round(((currentNominalCaudal / 2) / 0.06) * 10) / 10).replace('.', ',') : '';
-        } else if (rIdx === 2) {
-          newRow[rowCaudalIdx] = currentNominalCaudal ? String(Math.round(currentNominalCaudal * 1000) / 1000).replace('.', ',') : '';
-          newRow[rowLpmIdx] = currentNominalCaudal ? String(Math.round((currentNominalCaudal / 0.06) * 10) / 10).replace('.', ',') : '';
-          newRow[rowPresionIdx] = currentNominalPresion ? String(Math.round(currentNominalPresion * 1000) / 1000).replace('.', ',') : '';
-        } else if (rIdx === 3) {
-          newRow[rowCaudalIdx] = currentNominalCaudal ? String(Math.round((currentNominalCaudal * 1.4) * 1000) / 1000).replace('.', ',') : '';
-          newRow[rowLpmIdx] = currentNominalCaudal ? String(Math.round(((currentNominalCaudal * 1.4) / 0.06) * 10) / 10).replace('.', ',') : '';
-        }
-      }
-
       return newRow.slice(0, totalCols);
     });
 
     const isDifferent = JSON.stringify(mapped) !== JSON.stringify(data);
     if (isDifferent) {
       setData(mapped);
-      onChange(JSON.stringify(mapped));
     }
   }, [
     value,
@@ -366,6 +332,16 @@ export default function TableInput({
     onChange(JSON.stringify(newData));
   };
 
+  const handleDuplicateRow = (rIdx: number) => {
+    if (hasVerticalHeaders) return; // No permitir duplicar en tablas de cabecera fija
+    const rowToCopy = data[rIdx];
+    if (!rowToCopy) return;
+    const newData = [...data];
+    newData.splice(rIdx + 1, 0, [...rowToCopy]);
+    setData(newData);
+    onChange(JSON.stringify(newData));
+  };
+
   const handleRemoveRow = (rIdx: number) => {
     if (hasVerticalHeaders) return; // No permitir eliminar en tablas de cabecera fija
     if (data.length <= 1) {
@@ -378,6 +354,96 @@ export default function TableInput({
     setData(newData);
     onChange(JSON.stringify(newData));
   };
+
+const formatTableHeader = (col: string) => {
+  const norm = String(col || '').trim();
+  const lower = norm.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  
+  if (lower.includes('detector') && lower.includes('humo')) {
+    return (
+      <div className="flex flex-col items-center justify-center leading-tight">
+        <span>DETECTOR</span>
+        <span>HUMO</span>
+      </div>
+    );
+  }
+  if (lower.includes('detector') && lower.includes('termico')) {
+    return (
+      <div className="flex flex-col items-center justify-center leading-tight">
+        <span>DETECTOR</span>
+        <span>TÉRMICO</span>
+      </div>
+    );
+  }
+  if (lower.includes('detector') && lower.includes('llama')) {
+    return (
+      <div className="flex flex-col items-center justify-center leading-tight">
+        <span>DETECTOR</span>
+        <span>LLAMA</span>
+      </div>
+    );
+  }
+  if (lower.includes('detector') && lower.includes('calor')) {
+    return (
+      <div className="flex flex-col items-center justify-center leading-tight">
+        <span>DETECTOR</span>
+        <span>CALOR</span>
+      </div>
+    );
+  }
+  if (lower.includes('detector') && lower.includes('gas')) {
+    return (
+      <div className="flex flex-col items-center justify-center leading-tight">
+        <span>DETECTOR</span>
+        <span>GAS</span>
+      </div>
+    );
+  }
+  if (lower.includes('pulsador') && lower.includes('paro')) {
+    return (
+      <div className="flex flex-col items-center justify-center leading-tight">
+        <span>PULSADOR</span>
+        <span>PARO</span>
+      </div>
+    );
+  }
+  if (lower.includes('pulsador') && lower.includes('disparo')) {
+    return (
+      <div className="flex flex-col items-center justify-center leading-tight">
+        <span>PULSADOR</span>
+        <span>DISPARO</span>
+      </div>
+    );
+  }
+  if (lower.includes('pulsador') && lower.includes('alarma')) {
+    return (
+      <div className="flex flex-col items-center justify-center leading-tight">
+        <span>PULSADOR</span>
+        <span>ALARMA</span>
+      </div>
+    );
+  }
+  if (lower.includes('retenedor') && lower.includes('puerta')) {
+    return (
+      <div className="flex flex-col items-center justify-center leading-tight">
+        <span>RETENEDOR</span>
+        <span>PUERTA</span>
+      </div>
+    );
+  }
+
+  const cleanWords = norm.replace(/\s+de\s+/gi, ' ').split(/\s+/).filter(Boolean);
+  if (cleanWords.length === 2) {
+    return (
+      <div className="flex flex-col items-center justify-center leading-tight">
+        <span>{cleanWords[0].toUpperCase()}</span>
+        <span>{cleanWords[1].toUpperCase()}</span>
+      </div>
+    );
+  }
+
+  return <span className="leading-tight text-center">{norm.toUpperCase()}</span>;
+};
 
   return (
     <div className="col-span-full border border-slate-200 rounded-xl overflow-hidden my-3 bg-white shadow-sm">
@@ -398,12 +464,12 @@ export default function TableInput({
                 </th>
               )}
               {effectiveOpciones.map((col, idx) => (
-                <th key={idx} className="px-3 py-2 font-bold uppercase text-[9px] tracking-wider border-r border-zinc-800 last:border-r-0">
-                  {col}
+                <th key={idx} className="px-3 py-2 font-bold uppercase text-[9px] tracking-wider border-r border-zinc-800 last:border-r-0 text-center min-w-[110px]">
+                  {formatTableHeader(col)}
                 </th>
               ))}
               {!disabled && !hasVerticalHeaders && (
-                <th className="px-3 py-2 text-center w-12 font-bold uppercase text-[9px] tracking-wider">
+                <th className="px-2 py-2 text-center w-16 min-w-[64px] font-bold uppercase text-[9px] tracking-wider">
                   Acción
                 </th>
               )}
@@ -414,32 +480,39 @@ export default function TableInput({
               <tr key={rIdx} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
                 {row.map((cell, cIdx) => {
                   const isPredefinedHeaderCell = hasVerticalHeaders && cIdx === 0;
-                  const isAutoCalculatedFlowCell = isGrafico && (cIdx === rowCaudalIdx || cIdx === rowLpmIdx);
-                  const isAutoCalculatedPresionCell = isGrafico && rIdx === 2 && cIdx === rowPresionIdx;
-                  const isAutoCalculatedCell = isAutoCalculatedFlowCell || isAutoCalculatedPresionCell;
                   return (
-                    <td key={cIdx} className={`p-1 border-r border-slate-100 last:border-r-0 ${isPredefinedHeaderCell ? 'bg-slate-50 font-bold text-slate-700 w-44 min-w-[150px]' : ''} ${isAutoCalculatedCell ? 'bg-zinc-50/70' : ''}`}>
+                    <td key={cIdx} className={`p-1 border-r border-slate-100 last:border-r-0 ${isPredefinedHeaderCell ? 'bg-slate-50 font-bold text-slate-700 w-44 min-w-[150px]' : 'text-center min-w-[110px]'}`}>
                       <input
                         type="text"
                         value={cell}
                         onChange={(e) => handleCellChange(rIdx, cIdx, e.target.value)}
-                        disabled={disabled || isPredefinedHeaderCell || isAutoCalculatedCell}
-                        className={`w-full px-2 py-1 bg-transparent border-0 rounded text-xs outline-none focus:bg-white focus:ring-1 focus:ring-indigo-500/30 ${isPredefinedHeaderCell ? 'font-bold text-slate-800' : 'font-medium'} ${isAutoCalculatedCell ? 'text-zinc-500 font-semibold cursor-not-allowed select-none' : ''}`}
+                        disabled={disabled || isPredefinedHeaderCell}
+                        className={`w-full px-2 py-1 bg-transparent border-0 rounded text-xs outline-none focus:bg-white focus:ring-1 focus:ring-indigo-500/30 ${isPredefinedHeaderCell ? 'font-bold text-slate-800 text-left' : 'font-medium text-center'}`}
                         placeholder={isPredefinedHeaderCell ? '' : '...'}
                       />
                     </td>
                   );
                 })}
                 {!disabled && !hasVerticalHeaders && (
-                  <td className="p-1 text-center">
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveRow(rIdx)}
-                      className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                      title="Eliminar fila"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                  <td className="p-1 text-center align-middle w-16 min-w-[64px]">
+                    <div className="flex items-center justify-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveRow(rIdx)}
+                        className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                        title="Eliminar fila"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDuplicateRow(rIdx)}
+                        className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                        title="Copiar fila"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </td>
                 )}
               </tr>

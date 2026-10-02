@@ -151,18 +151,32 @@ function EquipoFormulario({
                         .replace(/[úùüû]/g, 'u');
 
                 const nombreSistemaNorm = normalizarNombre(sistemaNombre);
+                const esAspiracion = nombreSistemaNorm.includes('aspirac') || nombreSistemaNorm.includes('asd');
 
                 // Buscar la plantilla que coincida con el nombre del sistema con orden de prioridad
+                let plantillaEncontrada: any = null;
+
+                // Prioridad absoluta para Detección por Aspiración (ASD)
+                if (esAspiracion) {
+                    plantillaEncontrada = plantillas.find((p: any) => {
+                        const np = normalizarNombre(p.nombre || '');
+                        return np.includes('aspirac') || np.includes('asd');
+                    });
+                }
+
                 // 1. Coincidencia exacta
-                let plantillaEncontrada = plantillas.find((p: any) => {
-                    const nombrePlantillaNorm = normalizarNombre(p.nombre || '');
-                    return nombrePlantillaNorm === nombreSistemaNorm;
-                });
+                if (!plantillaEncontrada) {
+                    plantillaEncontrada = plantillas.find((p: any) => {
+                        const nombrePlantillaNorm = normalizarNombre(p.nombre || '');
+                        return nombrePlantillaNorm === nombreSistemaNorm;
+                    });
+                }
 
                 // 2. Coincidencia por inclusión (si una contiene a la otra)
                 if (!plantillaEncontrada) {
                     plantillaEncontrada = plantillas.find((p: any) => {
                         const nombrePlantillaNorm = normalizarNombre(p.nombre || '');
+                        if (nombrePlantillaNorm.includes('aspirac') || nombrePlantillaNorm.includes('asd') || nombrePlantillaNorm.includes('monox')) return false;
                         return nombrePlantillaNorm.includes(nombreSistemaNorm) || nombreSistemaNorm.includes(nombrePlantillaNorm);
                     });
                 }
@@ -171,6 +185,7 @@ function EquipoFormulario({
                 if (!plantillaEncontrada) {
                     plantillaEncontrada = plantillas.find((p: any) => {
                         const nombrePlantillaNorm = normalizarNombre(p.nombre || '');
+                        if (nombrePlantillaNorm.includes('aspirac') || nombrePlantillaNorm.includes('asd') || nombrePlantillaNorm.includes('monox')) return false;
                         const palabrasSistema = nombreSistemaNorm.split(' ').filter(w => w.length > 3);
                         const palabrasPlantilla = nombrePlantillaNorm.split(' ').filter(w => w.length > 3);
                         return palabrasSistema.some(ps => palabrasPlantilla.some(pp => ps === pp || pp.includes(ps) || ps.includes(pp)));
@@ -183,7 +198,7 @@ function EquipoFormulario({
                     unsub = subscribeItemsDePlantilla(plantillaEncontrada.id, (items: any[]) => {
                         const ordenados = [...items].sort((a, b) => a.orden - b.orden);
                         const nameLower = sistemaNombre.toLowerCase();
-                        const esAreaCobertura = nameLower.includes('detecci') || nameLower.includes('rociador') || nameLower.includes('sprinkler') || (nameLower.includes('puesto') && nameLower.includes('control'));
+                        const esAreaCobertura = ((nameLower.includes('detecci') && !nameLower.includes('aspirac') && !nameLower.includes('asd')) || nameLower.includes('rociador') || nameLower.includes('sprinkler') || (nameLower.includes('puesto') && nameLower.includes('control')));
                         const itemsModificados = ordenados.map(it => {
                             const lbl = (it.label || '').toLowerCase();
                             if (esAreaCobertura && (lbl.includes('ubicacion') || lbl.includes('ubicación') || lbl.includes('cobertura'))) {
@@ -248,6 +263,24 @@ function EquipoFormulario({
             });
         }
     }, [isNew, equipo?.id, equiposExistentes, plantillaItems]);
+
+    // Inicializar valores predeterminados de la plantilla si los campos están vacíos
+    useEffect(() => {
+        if (plantillaItems.length > 0) {
+            setFormData(prev => {
+                let changed = false;
+                const updated = { ...prev };
+                plantillaItems.forEach(it => {
+                    const itDef = it.valorPredeterminado;
+                    if (itDef && (updated[it.key] === undefined || updated[it.key] === null || updated[it.key] === '')) {
+                        updated[it.key] = itDef;
+                        changed = true;
+                    }
+                });
+                return changed ? updated : prev;
+            });
+        }
+    }, [plantillaItems]);
 
     // Inicializar formData con el equipo existente
     useEffect(() => {

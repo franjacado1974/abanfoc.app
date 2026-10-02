@@ -688,19 +688,20 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
 
 ---
 
-## 47. Blindaje Inviolable de Selectores con Búsqueda Predictiva en Tiempo Real y Orden Alfabético para Cliente y Centro (`SearchableSelect.tsx`, `Reparaciones.tsx`, `Instalaciones.tsx` y `Urgencias.tsx`)
+## 47. Blindaje Inviolable de Selectores con Búsqueda Predictiva en Tiempo Real y Orden Alfabético para Cliente (`SearchableSelect.tsx`, `Reparaciones.tsx`, `Instalaciones.tsx` y `Urgencias.tsx`)
 - **Componente Reutilizable `SearchableSelect.tsx`**:
-  - Reemplaza de forma permanente los `<select>` estáticos de Cliente y Centro en los formularios modales de **Reparaciones**, **Instalaciones** y **Avisos (Urgencias)**.
+  - Utilizado para el selector de Cliente en los formularios modales de **Reparaciones**, **Instalaciones** y **Avisos (Urgencias)**.
   - Permite escribir directamente en el campo para filtrar los resultados en tiempo real mientras el usuario teclea.
   - Búsqueda insensible a mayúsculas, minúsculas y tildes/acentos mediante normalización NFD.
   - Botón de limpieza rápida (`X`) y chevron indicador.
+- **Supresión del Campo "Centro" y Preservación de "Lugar / Centro / Ubicación"**:
+  - En los formularios modales de nueva tarea en Reparaciones, Instalaciones y Urgencias se ha suprimido el campo desplegable independiente "Centro".
+  - Se mantiene de forma permanente e inviolable el campo **"Lugar / Centro / Ubicación"** con texto libre y sugerencias `datalist` de centros para registrar el centro o emplazamiento del trabajo.
 - **Compatibilidad Táctil Completa en Dispositivos Móviles**:
   - El componente DEBE gestionar eventos táctiles (`onTouchEnd` y `onMouseDown`) con `e.preventDefault()` en las opciones del menú para evitar que el blur del input o el teclado virtual de smartphones/tablets impidan la selección.
   - Los formularios modales contenedores DEBEN contar con scroll táctil (`max-h-[80vh] overflow-y-auto` o `max-h-[82vh] overflow-y-auto`) para garantizar acceso a todos los campos en pantallas móviles.
-- **Orden Alfabético y Reactividad Cruzada Cliente-Centro**:
-  - Tanto los clientes como los centros deben presentarse siempre ordenados alfabéticamente (`localeCompare` con sensibilidad base).
-  - Al seleccionar un cliente, el selector de centros se filtra dinámicamente para ofrecer únicamente los centros de dicho cliente.
-  - Si se selecciona un centro sin haber indicado cliente previamente, el sistema autocompleta automáticamente el cliente asociado.
+- **Orden Alfabético**:
+  - Los clientes deben presentarse siempre ordenados alfabéticamente (`localeCompare` con sensibilidad base).
 
 ---
 
@@ -775,6 +776,199 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
 - **Botón de Cabecera para Re-apertura o Recarga**:
   - En la barra superior de `PartesTecnico.tsx`, al lado del título y conteo de partes, DEBE mantenerse de forma permanente el botón **`Alertas`** con el icono `AlertTriangle`, permitiendo volver a abrir el selector o refrescar la lectura en cualquier momento.
 
+---
 
+## 51. Blindaje Inviolable de Carpeta Única en el Escritorio (Prohibición de Carpetas Espejo Duplicadas)
+- **Carpeta Única y Definitiva en el Escritorio**:
+  - La única carpeta de trabajo autorizada en el Escritorio es: **`Salamandra`** (`C:\Users\canci\OneDrive\Escritorio\Salamandra`).
+- **Prohibición Estricta de Creación de Múltiples Carpetas o Copias Espejo**:
+  - Queda **ESTRICTAMENTE PROHIBIDO** crear nuevas carpetas de copia, carpetas espejo o carpetas con nombres duplicados o fechas en el Escritorio del usuario.
+  - Cuando se realicen modificaciones o actualizaciones conjuntas, se actualizará **única y exclusivamente la carpeta `Salamandra` existente**, manteniendo siempre un solo directorio de trabajo limpio en el Escritorio sin duplicidades.
+
+---
+
+## 52. Blindaje Inviolable de Tablas de Inventario en Sistemas Especiales y Auto-adaptación de Cabeceras en 2 Filas (`TableInput.tsx` y `pdfGenerator.ts`)
+- **Cabeceras Adaptables en 2 Filas en Entrada de Tablas (`TableInput.tsx`)**:
+  - En componentes de entrada de tabla matriz (`TableInput.tsx` y `recursos-compartidos/components/TableInput.tsx`), las columnas dinámicas DEBEN procesarse mediante `formatTableHeader(col)`.
+  - Los términos comunes como *"Detector humo"*, *"Detector térmico"*, *"Detector llama"*, *"Detector calor"*, *"Detector gas"*, *"Pulsador paro"*, *"Pulsador disparo"*, *"Pulsador alarma"*, *"Retenedor puerta"* o frases compuestas de dos palabras DEBEN dividirse y centrarse en dos líneas compactas (`flex flex-col items-center justify-center leading-tight`).
+  - Ancho mínimo de columnas: Las celdas de cabecera y datos de las columnas dinámicas DEBEN mantener un ancho mínimo holgado de al menos 110px (`min-w-[110px]`) con texto centrado para evitar que los nombres queden amontonados o ilegibles.
+- **Formateo y Ajuste en el Acta PDF (`pdfGenerator.ts`)**:
+  - En tablas de sistemas especiales como Puestos de Control y Extinción con agua, los textos de cabecera se parten de forma balanceada (`words.slice(0, bestSplitIndex)...`) para ocupar dos filas equilibradas sin desbordar el ancho reglamentario de 269 mm.
+
+---
+
+## 53. Blindaje Inviolable de Filtrado Estricto de Alertas Preventivas por Sistema (`sistemasUtils.ts`)
+- **Aislamiento Absoluto de Sistemas de Extintores (`esSistemaExtintores`)**:
+  - `esSistemaExtintores(sistOrId)` DEBE validar que el sistema corresponde a extintores excluyendo taxativamente cualquier otro sistema (BIE, hidrante, rociador, detección, gas, cocina, puertas, bombas, abastecimiento, etc.).
+  - En `esEquipoExtintor(eq, sist)`: Si se proporciona el argumento `sist`, la pertenencia queda gobernada de forma estricta e inviolable por `esSistemaExtintores(sist)`. Si el sistema es BIE o ajeno, NUNCA debe contabilizarse como extintor.
+- **Aislamiento Absoluto de Sistemas de BIEs (`esSistemaBies`)**:
+  - `esSistemaBies(sistOrId)` DEBE validar que el sistema corresponde a BIEs excluyendo taxativamente sistemas de extintores y el resto de sistemas ajenos.
+  - En `esEquipoBie(eq, sist)`: Si se proporciona `sist`, queda gobernado estrictamente por `esSistemaBies(sist)`.
+- **Prevención de Falsas Alertas en Clientes sin Equipos**:
+  - Queda **ESTRICTAMENTE PROHIBIDO** evaluar fechas de extintores en sistemas que no sean de extintores, o fechas de BIEs en sistemas que no sean de BIEs.
+  - Si un centro no dispone de sistemas de extintores, bajo ninguna circunstancia se mostrarán alertas de `Ext+20 años` ni `RT:`. Si no dispone de BIEs, bajo ninguna circunstancia se mostrarán alertas de `Bie+20 años` ni `PH:`.
+
+---
+
+## 54. Blindaje Inviolable del Check «Puerta y/o cristal» en Sistemas de BIEs (`pdfGenerator.ts`, `plantillas.ts`, `Centros.tsx`, `models.ts` y `firebase.tsx`)
+- **Check Oficial de 15 Preguntas en BIEs**:
+  - En el sistema de Bocas de Incendio Equipadas (BIE), la comprobación **`Puerta y/o cristal`** (identificador dinámico de plantilla `item_1790629281657` y alias `checkPuertaCristal`) está integrada de forma oficial en la secuencia de comprobaciones del checklist de revisión.
+- **Cabeceras y Columnas en Tablas de Actas PDF (`pdfGenerator.ts` y `recursos-compartidos/services/pdfGenerator.ts`)**:
+  - En `checkLabels` para `isBie`, DEBE incluirse permanentemente `'Puerta y/o cristal'`.
+  - En `checkHeaders` de respaldo, se mantiene la numeración del 1 al 15 (`['1', '2', ..., '15']`).
+  - En `checkKeys` de respaldo para `isBie`, se incluye `'checkPuertaCristal'`.
+  - En el mapeo de `tableData`, DEBE resolverse el acceso bidireccional entre `checkPuertaCristal` e `item_1790629281657` (`if (k === 'checkPuertaCristal') val = eq['item_1790629281657']...`).
+- **Modelos y Plantillas por Defecto**:
+  - En `EquipoInstalado` (`Centros.tsx`, `firebase.tsx`, `models.ts`), se declaran opcionalmente `checkPuertaCristal?: boolean | null;` e `item_1790629281657?: boolean | null;`.
+  - En `PLANTILLAS_POR_DEFECTO` (`plantillas.ts` y `recursos-compartidos/types/plantillas.ts`), `SISTEMA BIES` incorpora `{ label: 'Puerta y/o cristal', key: 'item_1790629281657', tipoRespuesta: 'check', requerido: true }`.
+
+---
+
+## 55. Blindaje Inviolable del Campo Multilínea y Extensible de Descripción en Versiones (`Buzon.tsx`)
+- **Área de Texto Multilínea (`<textarea>`)**:
+  - En el formulario de registro y edición de versiones (`src/Buzon.tsx` y `src/oficina/pages/Buzon.tsx`), el campo **"Descripción de la actualización"** DEBE ser obligatoriamente un elemento `<textarea>` con `rows={4}` y altura mínima `min-h-[90px]`.
+- **Tirador de Redimensionamiento Vertical (`resize-y`)**:
+  - El campo DEBE incorporar incondicionalmente la clase CSS `resize-y`, permitiendo al usuario estirar y expandir verticalmente el área de edición con el ratón según la extensión del texto a redactar.
+- **Soporte de Saltos de Línea y Visualización en Tabla**:
+  - Permite escribir textos multilínea pulsando <kbd>Enter</kbd> (líneas una debajo de otra).
+  - En la tabla de historial de versiones, la celda de descripción conserva permanentemente `whitespace-pre-wrap` para reflejar con total fidelidad los saltos de línea introducidos.
+
+---
+
+## 56. Blindaje Inviolable del Catálogo/Inventario: Estados Físicos de Material y Aviso de Stock 0 (`Catalogo.tsx`, `AvisoStockModal.tsx`, `firebase.tsx`, `models.ts`)
+- **Columna y Campo ESTADO**:
+  - Representa exclusivamente la condición física del material: **`Nuevo`**, **`Usado`**, o **`Reparado`**.
+  - Por defecto, el valor inicial y de respaldo DEBE ser **`Nuevo`** (`formData.estado = 'Nuevo'`, `getEstadoCfg(estado)` retorna `Nuevo`).
+  - Queda **ESTRICTAMENTE PROHIBIDO** sobreescribir o mutar el campo `estado` en función del stock numérico (las cantidades 0 o positivas NO deben cambiar el estado a "Agotado" o "Disponible").
+- **Aviso Modal en Tiempo Real de Rotura de Stock (`AvisoStockModal.tsx` y `avisos_stock`)**:
+  - Cuando un artículo tiene cantidad numérica `0` (`cantNum === 0`), se publica un documento activo en la colección de Firestore `avisos_stock` conteniendo sus datos y su foto (`fotoUrl`).
+  - En todos los dispositivos conectados (móviles y PC), se despliega de inmediato la ventana modal `AvisoStockModal` con fondo desenfocado, sonido de alerta, vibración háptica, tarjeta con foto ampliada del material (`img-no-bg`), código, nombre, familia, tipo y botón para silenciar/entendido.
+  - Al reponer stock (`cantNum > 0` o al quedar en blanco), se desactiva automáticamente el aviso en Firestore y se oculta la alerta modal en todos los dispositivos.
+- **Tipografía Suave y Modal de Clic en Artículos**:
+  - En la tabla de artículos de `Catalogo.tsx`, los nombres y descripciones deben mostrarse con tipografía estilizada y suave (`font-medium text-slate-700`).
+  - Al hacer clic sobre cualquier artículo o código en la tabla de escritorio, se abre de inmediato la ventana modal de edición/gestión del artículo (`handleOpenModal(a)`).
+
+---
+
+## 57. Blindaje Inviolable de la Tabla 2.18 Puesto de Control en Extinción con Espuma y Secciones de Checklist en Actas PDF (`pdfGenerator.ts`)
+- **Maquetación y Pegado de la Tabla 2.18 a la 2.17**:
+  - En el sistema de Extinción Automática con Espuma (y sistemas análogos con puestos de control), la tabla **`2.18 PUESTO DE CONTROL`** debe maquetarse inmediatamente pegada a la sección previa `2.17` con una separación mínima (`currentY += 2`), evitando saltos de página prematuros (`estimatedSectionHeight: 22`, `maxAllowedY: 275`) para que ambas queden juntas en la misma página siempre que haya espacio disponible.
+- **Salto Obligatorio de la Sección 3 a la Siguiente Hoja**:
+  - La sección posterior (`3. COMPROBACIONES DE FUNCIONAMIENTO` o cualquier sección de nivel `3.`) DEBE forzar obligatoriamente un salto de página limpio (`doc.addPage()`, `currentY = 34`) para iniciarse siempre en una nueva hoja.
+- **Mensaje Oficial de Conformidad en Verde al Finalizar el Sistema**:
+  - Si al concluir la revisión del sistema ningún equipo presenta anomalías ni observaciones pendientes, DEBE imprimirse obligatoriamente en verde el mensaje reglamentario:
+    **`"Sin anomalías ni observaciones. Los equipos se encuentran en correcto estado de funcionamiento."`**
+- **Equilibrio de Columnas y Ancho 100% de Página (269 mm)**:
+  - En la tabla `2.18 PUESTO DE CONTROL`, la columna de **Ubicación** DEBE fijarse en un ancho moderado y equilibrado (**`34 mm`**), prohibiéndose terminantemente que absorba todo el ancho restante disponible.
+  - El resto de columnas funcionales (Tipo, Marca/Modelo, Año, Diámetro, Presión de entrada, Presión de red, Cantidad de Sprinklers, Comprobación de válvulas, Actuación de válvula de pruebas, Accionamiento de presostatos, Actuación GONG, etc.) DEBEN disponer de anchos base generosos (20 a 28 mm) y absorber de forma proporcional el ancho restante hasta completar exactamente los **`269 mm`** de margen a margen del documento según la Regla 20.
+- **Tipografía y Relleno Idénticos a las Tablas de Inventario (`7 pt`)**:
+  - Los estilos de cabecera (`headStyles`) y cuerpo (`bodyStyles`) de la tabla 2.18 DEBEN utilizar exactamente el mismo tamaño de letra que la tabla "4. INVENTARIO DE EQUIPOS" y demás tablas de checklist: **`fontSize: 7`** y **`cellPadding: 2`**.
+  - En `didParseCell`, se implementa Auto-fit dinámico (`doc.getTextWidth`) que escala el tamaño de fuente suavemente si un texto excede el ancho de su celda, garantizando el cumplimiento estricto de la Regla 20 (1 sola fila plana sin saltos ni desbordamientos).
+
+---
+
+## 58. Blindaje Inviolable de Tablas Horizontales y Orden de Aspiración (ASD) y Fuentes Auxiliares en PDFs (`pdfGenerator.ts`)
+- **Formato Horizontal de Tablas para ASD y Fuentes de Alimentación**:
+  - En la generación de PDFs del Acta de Mantenimiento (`pdfGenerator.ts` y réplicas), las tablas de **Detección por Aspiración (ASD)** y de **Fuentes de Alimentación Auxiliares** deben maquetarse en orientación horizontal y ancho completo de 269 mm, garantizando legibilidad total de sus parámetros técnicos y columnas de comprobación.
+- **Jerarquía y Secuencia Obligatoria de Aparición**:
+  - Siempre que en una instalación exista sistema de Detección por Aspiración (`isDeteccionAspiracion` o similar), las **Fuentes de Alimentación Auxiliares** DEBEN imprimirse **incondicionalmente después** de los sistemas de aspiración, tanto en el Acta PDF como en el PDF Certificado de Mantenimiento.
+  - Queda terminantemente prohibido invertir este orden o intercalar otros sistemas entre la aspiración y su fuente asociada.
+
+---
+
+## 59. Blindaje Inviolable del Botón de Copiar Línea en Puestos de Control de Rociadores (`TableInput.tsx`)
+- **Disposición de Iconos en la Tabla 4 de Puestos de Control**:
+  - En el sistema "RED DE ROCIADORES Y PUESTOS DE CONTROL", concretamente en la tabla "4. INVENTARIO Y PRUEBAS EN LOS PUESTOS DE CONTROL" (y tablas análogas gestionadas con `TableInput.tsx`), DEBE figurar el botón de **Copiar Línea** (`Copy`).
+  - El botón `Copy` DEBE ubicarse **al lado** del botón de eliminar fila (`Trash2`), permitiendo duplicar de forma inmediata la línea con sus datos seleccionados y acelerar la toma de datos del técnico.
+- **Sincronización Dual Obligatoria**:
+  - Esta funcionalidad DEBE mantenerse reflejada y sincronizada idénticamente en `src/components/TableInput.tsx` y en `src/recursos-compartidos/components/TableInput.tsx`.
+
+---
+
+## 60. Blindaje Inviolable de Visibilidad Permanente del Botón de Eliminar Fotos en los 21 Sistemas (`RevisionSistemas/*.tsx`)
+- **Visibilidad Permanente en Pantallas Táctiles y Móviles**:
+  - En las tarjetas de equipos de los 21 sistemas de revisión (`src/components/RevisionSistemas/*.tsx`), el botón de papelera (`Trash2`) para eliminar fotos adjuntas de los equipos DEBE ser **permanentemente visible** sobre la esquina superior de la miniatura fotográfica (`bg-black/60 hover:bg-red-600 text-white p-1 rounded-full shadow`).
+  - Queda terminantemente prohibido ocultar este botón tras pseudoclases `opacity-0 group-hover:opacity-100`, ya que en dispositivos móviles y tablets el cursor no existe y los técnicos quedaban impedidos para eliminar fotos erróneas.
+
+---
+
+## 61. Blindaje Inviolable del Acceso a PDF en Listado de Partes para Técnicos (`PartesTecnico.tsx`)
+- **Insignia y Botón de PDF con Letra Roja**:
+  - En la lista de partes de trabajo (`src/PartesTecnico.tsx`), en la fila/tarjeta de cada parte donde se detallan la fecha, periodicidad y sistemas, DEBE incluirse de forma permanente un botón de acceso directo al PDF con icono `FileText` y texto en **rojo** (`text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 border border-red-200`).
+- **Consulta de Revisiones Realizadas**:
+  - Si el parte ya ha sido realizado o pre-cerrado, este botón abre de inmediato el visor del PDF oficial, permitiendo al técnico consultar en cualquier momento los datos registrados de revisiones pasadas o del parte en curso directamente desde su tablet o móvil.
+
+---
+
+## 62. Blindaje Inviolable de Persistencia Local-First, Supresión de Autoguardado Destructivo y Botón "Equipo revisado" (`RevisionChecklist.tsx` y `BotonGuardarEquipo.tsx`)
+- **Supresión Total de Autoguardado Destructivo en Segundo Plano**:
+  - Queda **TERMINANTEMENTE PROHIBIDO** reactivar temporizadores automáticos de guardado (como `setTimeout` de 600 ms tras teclear o flush al cambiar de equipo en `handleCheckChange`) que envíen datos a Firestore a cada pausa o que muten automáticamente el estado a verde (`'saved'`).
+- **Persistencia Local Inmediata (Local-First)**:
+  - Todo cambio manual de campos, checks, notas o anomalías en un equipo se guarda al instante en la memoria local del dispositivo (`localStorage` e IndexedDB mediante `updateParteOfflineData` y `addPendingSyncItem`). Esto garantiza **cero pérdida de datos** ante apagones, bloqueos de pantalla o pérdidas de cobertura, manteniendo el estado visual del equipo en pendiente (`'pending'`, botón azul).
+- **Botón Reglamentario "Equipo revisado" (`BotonGuardarEquipo.tsx`)**:
+  - En cada tarjeta de equipo, el botón de guardado se denomina obligatoriamente **`"Equipo revisado"`** y cuenta con la misma escala y tamaño que los botones vecinos:
+    - **Azul (`Equipo revisado`)**: Cambios locales pendientes de sincronizar con la nube.
+    - **Verde (`✓ Equipo revisado`)**: Al pulsar, guarda en Firestore, actualiza incondicionalmente `revisado: true` en el equipo y en el parte (`updateParte({ estado: 'Abierto' })` si estaba planificado), confirmando con éxito visual.
+    - **Ámbar (`✓ Equipo revisado (Local)`)**: Confirmación de guardado seguro en memoria local si no hay conexión a internet en ese momento.
+    - **Azul parpadeante con spinner (`Guardando...`)**: Estado transitorio mientras viaja la petición.
+- **Blindaje Inviolable contra el "Efecto Rebote" de Firestore**:
+  - En la suscripción en tiempo real (`subscribeEquiposInstalados`), los datos del equipo que el técnico tiene en pantalla (`equipoLocalActual`) tienen **prioridad absoluta e inviolable** sobre los datos que provengan de la red:
+    ```typescript
+    if (equipoLocalActual) {
+        return { ...itemFromFirestore, ...equipoLocalActual };
+    }
+    ```
+  - Queda estrictamente prohibido que un snapshot de Firestore sobreescriba, revierta o borre campos de texto, ubicaciones, anomalías o checks modificados o vaciados por el técnico en su pantalla.
+- **Clonado Seguro en `handleCopiarEquipo` y `handleAnadirEquipoDirecto`**:
+  - Al pulsar "Copiar nuevo equipo", el nuevo equipo se instancia de inmediato con nuevo ID (`EQ-...`), código correlativo y `revisado: false`.
+  - Se registra de inmediato en `pendingEquiposRef` y en `setEqSyncStates` con estado `'pending'` (botón azul "Equipo revisado").
+  - Queda **ESTRICTAMENTE PROHIBIDO** invocar `saveEquiposProgress(updatedEquipos)` masivo al copiar o añadir un equipo individual. El nuevo equipo se guarda localmente y se añade a Firestore en segundo plano sin bloquear la UI ni provocar rebotes que alteren los datos que el técnico comience a escribir.
+
+---
+
+## 63. Blindaje Inviolable de Preguntas de Prueba de Caudal y Presión en Bombas (`RevisionChecklist.tsx`, `TableInput.tsx` y `FormBuilderPlantillas.tsx`)
+- **Visibilidad Permanente en Formulario Checklist**:
+  - En los sistemas de "Bomba Diesel" (pregunta 12) y "Bomba Eléctrica" (pregunta 7.2 o análoga), la tabla gráfica interactiva de caudal y presión (`tipoRespuesta: 'grafico'`) DEBE mostrarse obligatoria y plenamente funcional en el formulario checklist del parte.
+  - La edición de las filas y columnas de la tabla debe persistir de forma atómica sin borrar valores entre filas al cambiar de celda o escribir datos en los campos numéricos.
+
+---
+
+## 64. Blindaje Inviolable de Maquetación y Distribución de Páginas en Bombas Diesel (`pdfGenerator.ts`)
+- **Distribución de Secciones 11, 12 y 13**:
+  - En el sistema Bomba Diesel del Acta PDF, la pregunta 11 "CURVA DE CAUDAL Y PRESIÓN" debe ubicarse en la página anterior para que la tabla y gráfico de la pregunta 12 "PRUEBA DE CAUDAL Y PRESIÓN" suban de posición y permitan que la sección/pregunta 13 "CONCLUSIONES" quede maquetada en la misma hoja que la tabla 12, evitando que Conclusiones quede suelta en una hoja individual desierta.
+
+---
+
+## 65. Blindaje Inviolable de Valor Predeterminado en el Editor de Plantillas (`FormBuilderPlantillas.tsx` y `RevisionChecklist.tsx`)
+- **Configuración de Valor por Defecto**:
+  - En el creador/editor de plantillas de checklist, cada pregunta debe admitir la configuración de un campo de **Valor Predeterminado** (`valorPredeterminado` / `defaultValue`), permitiendo preestablecer opciones habituales como `N/A`, `CORRECTO`, etc.
+  - Al instanciar o cargar una revisión para un equipo en checklist, los campos no rellenados deben inicializarse automáticamente con su valor predeterminado configurado.
+
+---
+
+## 66. Blindaje Inviolable de Marcado Rápido de Notas Completadas y Categoría 'Completadas' (`Notas.tsx` y `src/oficina/pages/Notas.tsx`)
+- **Acción Rápida de Completado desde la Vista Principal**:
+  - En la vista principal del módulo de Notas, junto al botón de edición con icono de lápiz, DEBE figurar un botón con icono de check apagado.
+  - Al pulsarlo, el icono pasa inmediatamente a verde y tras 1 segundo exacto (1000 ms) la nota se traslada automáticamente a la categoría `"Completadas"`, guardando el usuario que la completó (`completadaPor`) y la fecha exacta.
+  - Al abrir la nota en la categoría Completadas, se muestra de forma destacada la autoría con el texto *"Completada por: [Nombre del Usuario]"*.
+
+---
+
+## 67. Blindaje Inviolable del Acceso al Catálogo y Modificación Exclusiva de Stock para Rol Técnico (`Catalogo.tsx`, `App.tsx`, `Sidebar.tsx`)
+- **Acceso Autorizado para el Rol Técnico**:
+  - El rol `'tecnico'` tiene acceso garantizado al menú Catálogo (`/catalogo`) tanto desde la barra lateral de escritorio como desde el panel móvil del técnico (`DashboardTecnico.tsx`).
+- **Permiso Exclusivo de Modificación de Stock / Inventario**:
+  - El técnico ÚNICAMENTE tiene autorización para consultar los artículos y modificar el campo de **Stock / Unidades en inventario** (`cantidad`), mediante el panel de ajuste rápido (`[-]`, entrada numérica directa, `[+]` y botón destacado "Guardar Stock").
+  - Al guardar, se actualiza inmediatamente en Firestore y LocalStorage, activando o desactivando automáticamente los avisos de rotura de stock.
+- **Blindaje Estricto de Solo Lectura para los Demás Campos**:
+  - Queda estrictamente prohibido permitir al técnico editar el nombre, código, familia, precios de venta/compra, modelos, estado, fotos u observaciones.
+  - Los botones de *"Nuevo Artículo / Servicio"*, *"Importar"* y *"Exportar"*, así como las acciones de duplicar y eliminar artículos, quedan totalmente ocultos e inaccesibles para el rol técnico.
+
+---
+
+## 68. Blindaje Inviolable de Alineación Centrada de la Columna "RENDIMIENTO" en PDFs de Bombas (`pdfGenerator.ts` y réplicas)
+- **Alineación Centrada Obligatoria**:
+  - En el Acta PDF, tanto en la cabecera (`RENDIMIENTO`) como en todas las celdas del cuerpo de la columna 0 (`0%`, `50%`, `100%`, `140%`) de la tabla "PRUEBA DE CAUDAL Y PRESIÓN", la alineación de texto DEBE ser incondicionalmente **CENTRADA** (`halign: 'center'`).
+  - Queda terminantemente prohibido alinear esta columna a la izquierda (`halign: 'left'`).
 
 

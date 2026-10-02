@@ -1,5 +1,5 @@
-import React from 'react';
-import { CheckCircle2, XCircle, X, Pencil, Trash2 } from 'lucide-react';
+﻿import React from 'react';
+import { CheckCircle2, XCircle, Pencil, Trash2 } from 'lucide-react';
 import type { CentroSistema, EquipoInstalado, Parte } from '../../Centros';
 import { updateEquipoInstalado, updateParte as updateParteFirestore, uploadFile, type ChecklistItem } from '../../firebase';
 import TableInput from '../TableInput';
@@ -39,7 +39,7 @@ const esUbicacionMarcaModelo = (label?: string, key?: string) => {
            k.includes('ubicacion') || k.includes('marca') || k.includes('modelo');
 };
 
-export default function SistemaBombaElectrica({
+export default function SistemaExtincionAguaEspuma({
     sist,
     filteredEqs,
     equiposInstalados,
@@ -122,12 +122,12 @@ export default function SistemaBombaElectrica({
                                                                         {getEquipoSyncStatus && (() => {
                                                                             const status = getEquipoSyncStatus(eq.id);
                                                                             if (status === 'saving') {
-                                                                                return <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-full animate-pulse shadow-xs">🟡 Guardando...</span>;
+                                                                                return <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-full animate-pulse shadow-xs">ðŸŸ¡ Guardando...</span>;
                                                                             }
                                                                             if (status === 'offline') {
-                                                                                return <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-700 bg-red-50 border border-red-200/80 px-2 py-0.5 rounded-full shadow-xs">🔴 Sin conexión</span>;
+                                                                                return <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-700 bg-red-50 border border-red-200/80 px-2 py-0.5 rounded-full shadow-xs">ðŸ”´ Sin conexiÃ³n</span>;
                                                                             }
-                                                                            return <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-full shadow-xs">🟢 Sincronizado</span>;
+                                                                            return <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-full shadow-xs">ðŸŸ¢ Sincronizado</span>;
                                                                         })()}
                                                                     </div>
                                                                     <div className="flex items-center gap-1.5">
@@ -136,7 +136,7 @@ export default function SistemaBombaElectrica({
 
                                                                 <div className="px-4 pb-3">
                                                                     <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 gap-x-3 gap-y-1.5">
-                                                                        {/* SOLO los items del checklist dinámico (exactamente como en el editor de plantillas) */}
+                                                                        {/* SOLO los items del checklist dinÃ¡mico (exactamente como en el editor de plantillas) */}
                                                                         {getItemsToUse(sist.id).filter((item: ChecklistItem) => {
                                                                             const lbl = (item.label || '').toLowerCase();
                                                                             // Solo filtrar campo de notas para ponerlo debajo del grid
@@ -146,7 +146,7 @@ export default function SistemaBombaElectrica({
                                                                             const rawVal = eq[item.key as keyof EquipoInstalado];
                                                                             const itemOpciones = (item as any).opciones || [];
                                                                             const val = (rawVal === undefined || rawVal === '')
-                                                                                ? ((item as any).valorPredeterminado || (itemOpciones.includes('CORRECTO') ? 'CORRECTO' : (itemOpciones.includes('CONFORME') ? 'CONFORME' : rawVal)))
+                                                                                ? ((item as any).valorPredeterminado || ((item as any).valorPredeterminado || (itemOpciones.includes('CORRECTO') ? 'CORRECTO' : (itemOpciones.includes('CONFORME') ? 'CONFORME' : rawVal))))
                                                                                 : rawVal;
                                                                              const tipo = (item as ChecklistItem).tipoRespuesta as string || 'check';
                                                                              const lbl = (item.label || '').toLowerCase();
@@ -231,7 +231,7 @@ export default function SistemaBombaElectrica({
                                                                                               ) : isFecha ? (
                                                                                                   (() => {
                                                                                                       const labelLower = (item.label || '').toLowerCase();
-                                                                                                      const isFechaRevision = labelLower.includes('fecha de revision') || labelLower.includes('fecha de revisión');
+                                                                                                      const isFechaRevision = labelLower.includes('fecha de revision') || labelLower.includes('fecha de revisiÃ³n');
                                                                                                       const fechaVal = typeof val === 'string' && val 
                                                                                                           ? (isFechaRevision ? val.substring(0, 10) : val.substring(0, 7)) 
                                                                                                           : '';
@@ -274,7 +274,7 @@ export default function SistemaBombaElectrica({
                                                                                                                                    const valUpper = typeof val === 'string' ? val.toUpperCase().trim() : '';
                                                                                                     const hasSinAnomalias = valUpper.includes('SIN ANOMAL');
                                                                                                     const isRed = !hasSinAnomalias && (valUpper.includes('NO CORRECTO') || valUpper.includes('NO CONFORME') || valUpper === 'INCORRECTO' || valUpper.includes('ANOMAL') || valUpper.includes('PENDIENTE') || valUpper.includes('DEFECTO') || valUpper.includes('FALLO') || valUpper.includes('INOPERAT'));
-                                                                                                    const isGreen = !isRed && (valUpper.includes('CORRECTO') || valUpper.includes('CONFORME') || valUpper.includes('OPERAT') || valUpper.includes('EN SERVICIO') || valUpper.includes('FUNCIONAMIENTO') || hasSinAnomalias || valUpper === 'SI' || valUpper === 'SÍ');
+                                                                                                    const isGreen = !isRed && (valUpper.includes('CORRECTO') || valUpper.includes('CONFORME') || valUpper.includes('OPERAT') || valUpper.includes('EN SERVICIO') || valUpper.includes('FUNCIONAMIENTO') || hasSinAnomalias || valUpper === 'SI' || valUpper === 'SÃ');
                                                                                                     if (isRed) return 'bg-red-50 border-2 border-red-400 text-red-700 font-bold';
                                                                                                     if (isGreen) return 'bg-green-50 border-green-300 text-green-700 font-bold';
                                                                                                                                    return 'bg-white border-slate-200 text-slate-500';
@@ -290,7 +290,7 @@ export default function SistemaBombaElectrica({
                                                                                                   })()
                                                                                               ) : isSeleccion ? (
                                                                                                   (() => {
-                                                                                                      const opciones = (item as any).opciones || ['Sí', 'No', 'N/A'];
+                                                                                                      const opciones = (item as any).opciones || ['SÃ­', 'No', 'N/A'];
                                                                                                       return (
                                                                                                           <div className="flex gap-1.5 flex-wrap justify-end">
                                                                                                               {opciones.map((opt: string, idx: number) => {
@@ -339,7 +339,7 @@ export default function SistemaBombaElectrica({
                                                                                                   })()
                                                                                               ) : (
                                                                                                   (() => {
-                                                                                                      const labelLower = (item.label || '').toLowerCase().replace(/[áéíóú]/g, (c) => ({'á':'a','é':'e','í':'i','ó':'o','ú':'u'})[c] || c);
+                                                                                                      const labelLower = (item.label || '').toLowerCase().replace(/[Ã¡Ã©Ã­Ã³Ãº]/g, (c) => ({'Ã¡':'a','Ã©':'e','Ã­':'i','Ã³':'o','Ãº':'u'})[c] || c);
                                                                                                       const esNumeroOrden = labelLower.includes('orden');
                                                                                                       const esUCase = esUbicacionMarcaModelo(item.label, item.key);
                                                                         const esUbic = esCampoUbicacion(item.label, item.key);
@@ -416,7 +416,7 @@ export default function SistemaBombaElectrica({
                                                                                  );
                                                                                 } else if (tipo === 'fecha') {
                                                                                      const labelLower = (item.label || '').toLowerCase();
-                                                                                     const isFechaRevision = labelLower.includes('fecha de revision') || labelLower.includes('fecha de revisión');
+                                                                                     const isFechaRevision = labelLower.includes('fecha de revision') || labelLower.includes('fecha de revisiÃ³n');
                                                                                      const fechaVal = typeof val === 'string' && val 
                                                                                          ? (isFechaRevision ? val.substring(0, 10) : val.substring(0, 7)) 
                                                                                          : '';
@@ -442,13 +442,13 @@ export default function SistemaBombaElectrica({
                                                                                          </div>
                                                                                      );
                                                                              } else if (tipo === 'texto') {
-                                                                                 const labelLower = (item.label || '').toLowerCase().replace(/[áéíóú]/g, (c) => ({'á':'a','é':'e','í':'i','ó':'o','ú':'u'})[c] || c);
+                                                                                 const labelLower = (item.label || '').toLowerCase().replace(/[Ã¡Ã©Ã­Ã³Ãº]/g, (c) => ({'Ã¡':'a','Ã©':'e','Ã­':'i','Ã³':'o','Ãº':'u'})[c] || c);
                                                                                  const esNumeroOrden = labelLower.includes('orden');
                                                                                  const esUCase = esUbicacionMarcaModelo(item.label, item.key);
                                                                         const esUbic = esCampoUbicacion(item.label, item.key);
                                                                         const textoVal = esNumeroOrden ? (eq.codigo || '') : (typeof val === 'string' ? val : '');
                                                                         const esExcedido40 = esUbic && typeof textoVal === 'string' && textoVal.length > 40;
-                                                                                 if (esNumeroOrden) console.log('🔍 Campo Nº Orden detectado, eq.codigo =', eq.codigo);
+                                                                                 if (esNumeroOrden) console.log('ðŸ” Campo NÂº Orden detectado, eq.codigo =', eq.codigo);
                                                                                  const placeholderTexto = labelLower.includes('referencia') && labelLower.includes('instalacion')
                                                                                      ? 'Ejemplo: Area general o zona'
                                                                                      : '...';
@@ -505,7 +505,7 @@ export default function SistemaBombaElectrica({
                                                                                      </div>
                                                                                  );
                                                                              } else if (tipo === 'seleccion') {
-                                                                                 const opciones = (item as any).opciones || ['Sí', 'No', 'N/A'];
+                                                                                 const opciones = (item as any).opciones || ['SÃ­', 'No', 'N/A'];
                                                                                  return (
                                                                                      <div key={item.key} className="flex flex-col gap-1 col-span-2">
                                                                                          <label className="text-[10px] font-semibold text-slate-500">{item.label}</label>
@@ -558,7 +558,7 @@ export default function SistemaBombaElectrica({
                                                                         })}
                                                                      </div>
                                                                  </div>
-                                                                                                                                                                                                      {/* Campos de Anomalías (ROJO) y Observaciones (AZUL) */}
+                                                                                                                                                                                                      {/* Campos de AnomalÃ­as (ROJO) y Observaciones (AZUL) */}
                                                                    {(() => {
                                                                        const valAnom = eq.anomalias;
                                                                        const esNoEncontrado = typeof valAnom === 'string' && valAnom.includes('no localizarse');
@@ -580,7 +580,7 @@ export default function SistemaBombaElectrica({
 
                                                                        return (
                                                                            <div className="px-4 mt-3 space-y-3">
-                                                                               {/* 1. Campo de Anomalías (ROJO si hay anomalías o fallos) */}
+                                                                               {/* 1. Campo de AnomalÃ­as (ROJO si hay anomalÃ­as o fallos) */}
                                                                                <div>
                                                                                    <label className={`text-xs font-semibold mb-1 block ${isErrorAnom ? 'text-red-700 font-bold' : 'text-slate-600'}`}>Anomalías del equipo:</label>
                                                                                    <textarea
@@ -607,7 +607,7 @@ export default function SistemaBombaElectrica({
                                                                        );
                                                                    })()}
 
-                                                                 {/* Galería de fotos debajo de las anomalías */}
+                                                                 {/* GalerÃ­a de fotos debajo de las anomalÃ­as */}
                                                                  {(() => {
                                                                      const currentFotos = Array.isArray((eq as any)['fotos']) 
                                                                          ? (eq as any)['fotos'] 
@@ -625,10 +625,10 @@ export default function SistemaBombaElectrica({
                                                                                              if (newFotos.length === 0) handleCheckChange(eq.id, 'foto', ''); // Mantenemos retrocompatibilidad vaciando 'foto'
                                                                                              else if (idx === 0) handleCheckChange(eq.id, 'foto', newFotos[0]);
                                                                                          }}
-                                                                                         className="absolute top-0 right-0 p-1 bg-red-500 text-white rounded-bl-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                                                                                         className="absolute top-0 right-0 p-1 bg-red-600 hover:bg-red-700 text-white rounded-bl-lg shadow-md transition-all active:scale-95 flex items-center justify-center cursor-pointer"
                                                                                          title="Eliminar foto"
                                                                                      >
-                                                                                         <X className="w-3 h-3" />
+                                                                                         <Trash2 className="w-3.5 h-3.5" />
                                                                                      </button>
                                                                                  </div>
                                                                              ))}
@@ -678,7 +678,7 @@ export default function SistemaBombaElectrica({
                                                                              <label
                                                                                  htmlFor={`foto-file-multi-${eq.id}`}
                                                                                  className="flex flex-col items-center justify-center w-16 h-16 border-2 border-dashed border-slate-300 rounded-lg text-slate-500 hover:text-indigo-600 hover:border-indigo-400 hover:bg-indigo-50 transition-colors cursor-pointer shrink-0"
-                                                                                 title="Añadir foto"
+                                                                                 title="AÃ±adir foto"
                                                                              >
                                                                                  <span className="text-xl leading-none mb-0.5">+</span>
                                                                                  <span className="text-[9px] font-bold">Foto</span>
@@ -707,7 +707,7 @@ export default function SistemaBombaElectrica({
                                                                                                      allFalse[item.key] = false;
                                                                                                  }
                                                                                              });
-                                                                                             // También establecer el campo notas con el texto de anomalía
+                                                                                             // TambiÃ©n establecer el campo notas con el texto de anomalÃ­a
                                                                                              const notasItem = itemsToUse.find(item => {
                                                                                                  const lbl = (item.label || '').toLowerCase();
                                                                                                  return lbl.includes('notas') || lbl.includes('observaciones') || lbl.includes('anomal');
@@ -799,7 +799,7 @@ export default function SistemaBombaElectrica({
                                                                                      const updatedEquipos = equiposInstalados.map(currEq => {
                                                                                          if (currEq.id === eq.id) {
                                                                                              const cleanedEq = { ...currEq, revisado: false };
-                                                                                             cleanedEq.anomalias = ''; // Limpiar siempre anomalías principales
+                                                                                             cleanedEq.anomalias = ''; // Limpiar siempre anomalÃ­as principales
                                                                                              
                                                                                              itemsToUse.forEach(item => {
                                                                                                  const lbl = (item.label || '').toLowerCase();
@@ -882,3 +882,4 @@ export default function SistemaBombaElectrica({
         </>
     );
 }
+

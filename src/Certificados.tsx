@@ -9,6 +9,7 @@ import ConfirmationModal from './ConfirmationModal';
 import { generarCertificadoPDF, generarCertificadoPDFView } from './pdfGenerator';
 import { subscribeCertificados, deleteCertificado, addCertificado } from './firebase';
 import DetailModal from './components/DetailModal';
+import SearchableSelect from './components/SearchableSelect';
 
 const isCanvasBlank = (canvas: HTMLCanvasElement | null): boolean => {
   if (!canvas) return true;
@@ -360,10 +361,30 @@ export default function Certificados() {
     return filtered.sort((a, b) => new Date(b.fechaCreacion).getTime() - new Date(a.fechaCreacion).getTime());
   }, [certificados, clientes, centros, searchTerm, activeCategoryFilter]);
 
+  const clienteOptions = useMemo(() => {
+    return [...clientes]
+      .sort((a, b) => (a.nombre || '').localeCompare(b.nombre || '', 'es', { sensitivity: 'base' }))
+      .map(c => ({
+        value: c.id,
+        label: c.nombre || '',
+        sublabel: c.cif ? `CIF: ${c.cif}` : undefined
+      }));
+  }, [clientes]);
+
   const centrosFiltradosPorCliente = useMemo(() => {
     if (!formManualCert.clienteId) return [];
     return centros.filter(c => c.clienteId === formManualCert.clienteId);
   }, [centros, formManualCert.clienteId]);
+
+  const centroOptions = useMemo(() => {
+    return [...centrosFiltradosPorCliente]
+      .sort((a, b) => (a.nombre || '').localeCompare(b.nombre || '', 'es', { sensitivity: 'base' }))
+      .map(c => ({
+        value: c._docId || c.id,
+        label: c.nombre || '',
+        sublabel: c.poblacion ? `Población: ${c.poblacion}` : undefined
+      }));
+  }, [centrosFiltradosPorCliente]);
 
   const handleGenerarPDF = async (cert: any) => {
     try {
@@ -832,33 +853,27 @@ export default function Certificados() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-zinc-700 uppercase mb-1.5">Seleccionar Cliente *</label>
-                  <select
-                    required
+                  <SearchableSelect
+                    options={clienteOptions}
                     value={formManualCert.clienteId}
-                    onChange={e => setFormManualCert({ ...formManualCert, clienteId: e.target.value, centroId: '' })}
-                    className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-medium outline-none focus:bg-white focus:border-black transition-all text-zinc-900"
-                  >
-                    <option value="">-- Elige un cliente --</option>
-                    {clientes.map(c => (
-                      <option key={c.id} value={c.id}>{c.nombre} ({c.cif})</option>
-                    ))}
-                  </select>
+                    onChange={(val) => {
+                      setFormManualCert(prev => ({ ...prev, clienteId: val, centroId: '' }));
+                    }}
+                    placeholder="-- Buscar o seleccionar cliente --"
+                  />
                 </div>
 
                 <div>
                   <label className="block text-xs font-bold text-zinc-700 uppercase mb-1.5">Centro de Trabajo *</label>
-                  <select
-                    required
-                    disabled={!formManualCert.clienteId}
+                  <SearchableSelect
+                    options={centroOptions}
                     value={formManualCert.centroId}
-                    onChange={e => setFormManualCert({ ...formManualCert, centroId: e.target.value })}
-                    className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-medium outline-none focus:bg-white focus:border-black transition-all text-zinc-900 disabled:opacity-50"
-                  >
-                    <option value="">-- Elige un centro --</option>
-                    {centrosFiltradosPorCliente.map(c => (
-                      <option key={c._docId || c.id} value={c._docId || c.id}>{c.nombre} ({c.poblacion})</option>
-                    ))}
-                  </select>
+                    disabled={!formManualCert.clienteId}
+                    onChange={(val) => {
+                      setFormManualCert(prev => ({ ...prev, centroId: val }));
+                    }}
+                    placeholder={!formManualCert.clienteId ? '-- Selecciona primero un cliente --' : '-- Buscar o seleccionar centro --'}
+                  />
                 </div>
               </div>
 

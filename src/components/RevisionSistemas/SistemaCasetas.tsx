@@ -178,7 +178,7 @@ export default function SistemaCasetas({
                                                                              const rawVal = eq[item.key as keyof EquipoInstalado];
                                                                              const itemOpciones = (item as any).opciones || [];
                                                                              const val = (rawVal === undefined || rawVal === '')
-                                                                                 ? (itemOpciones.includes('CORRECTO') ? 'CORRECTO' : (itemOpciones.includes('CONFORME') ? 'CONFORME' : rawVal))
+                                                                                 ? ((item as any).valorPredeterminado || (itemOpciones.includes('CORRECTO') ? 'CORRECTO' : (itemOpciones.includes('CONFORME') ? 'CONFORME' : rawVal)))
                                                                                  : rawVal;
                                                                              const tipo = (item as ChecklistItem).tipoRespuesta as string || 'check';
                                                                              const lbl = (item.label || '').toLowerCase();

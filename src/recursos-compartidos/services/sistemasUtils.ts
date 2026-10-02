@@ -133,24 +133,84 @@ export function parseFechaEquipo(val: any): Date | null {
   return isNaN(d.getTime()) ? null : d;
 }
 
+export function esSistemaExtintores(sistOrId?: any): boolean {
+  if (!sistOrId) return false;
+  const str = (
+    typeof sistOrId === 'string'
+      ? sistOrId
+      : ((sistOrId.id || '') + ' ' + (sistOrId.tipo || '') + ' ' + (sistOrId.familia || '') + ' ' + (sistOrId.nombre || ''))
+  ).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+  // Excluir cualquier otro sistema
+  if (str.includes('bie') || str.includes('boca') || str.includes('hidrante') || 
+      str.includes('rociador') || str.includes('sprinkler') || str.includes('deteccion') || 
+      str.includes('gas') || str.includes('cocina') || str.includes('campana') || 
+      str.includes('puerta') || str.includes('bomba') || str.includes('abastecimiento') || 
+      str.includes('alumbrado') || str.includes('exutorio') || str.includes('fuente')) {
+    return false;
+  }
+  return str.includes('extintor');
+}
+
+export function esSistemaBies(sistOrId?: any): boolean {
+  if (!sistOrId) return false;
+  const str = (
+    typeof sistOrId === 'string'
+      ? sistOrId
+      : ((sistOrId.id || '') + ' ' + (sistOrId.tipo || '') + ' ' + (sistOrId.familia || '') + ' ' + (sistOrId.nombre || ''))
+  ).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+  // Excluir cualquier otro sistema
+  if (str.includes('extintor') || str.includes('hidrante') || 
+      str.includes('rociador') || str.includes('sprinkler') || str.includes('deteccion') || 
+      str.includes('gas') || str.includes('cocina') || str.includes('campana') || 
+      str.includes('puerta') || str.includes('bomba') || str.includes('abastecimiento') || 
+      str.includes('alumbrado') || str.includes('exutorio') || str.includes('fuente')) {
+    return false;
+  }
+  return str.includes('bie') || str.includes('boca');
+}
+
 export function esEquipoExtintor(eq: any, sist?: any): boolean {
   if (!eq) return false;
-  const texto = (
-    (sist?.tipo || '') + ' ' + (sist?.familia || '') + ' ' + (sist?.nombre || '') + ' ' +
-    (eq.nombre || '') + ' ' + (eq.clase || '') + ' ' + (eq.tipo || '') + ' ' +
-    (eq.sistemaNombre || '') + ' ' + (eq.categoria || '')
-  ).toLowerCase();
-  if (texto.includes('extintor')) return true;
 
-  const esBie = texto.includes('bie') || texto.includes('boca');
-  if (esBie) return false;
-
-  const tieneRetimbreKey = Object.keys(eq).some(k => k.toLowerCase().includes('retimbre'));
-  if (tieneRetimbreKey) return true;
-
-  if (texto.includes('polvo') || texto.includes('co2') || texto.includes('dioxido') || texto.includes('hídrico') || texto.includes('hidrico') || texto.includes('espuma')) {
+  // 1. Si se proporciona sistema explícito, mandar estrictamente por el sistema
+  if (sist) {
+    if (!esSistemaExtintores(sist)) return false;
     return true;
   }
+
+  // 2. Comprobar identificadores de sistema del equipo
+  const sId = (eq.sistemaId || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const sNom = (eq.sistemaNombre || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const sTipo = (eq.sistemaTipo || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const sFam = (eq.familia || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const sysAll = `${sId} ${sNom} ${sTipo} ${sFam}`;
+
+  // Si el sistema del equipo es BIE u otro sistema, NUNCA es extintor
+  if (sysAll.includes('bie') || sysAll.includes('boca') || sysAll.includes('hidrante') || 
+      sysAll.includes('rociador') || sysAll.includes('sprinkler') || sysAll.includes('deteccion') || 
+      sysAll.includes('gas') || sysAll.includes('cocina') || sysAll.includes('campana') || 
+      sysAll.includes('puerta') || sysAll.includes('bomba') || sysAll.includes('abastecimiento') || 
+      sysAll.includes('alumbrado') || sysAll.includes('exutorio') || sysAll.includes('fuente')) {
+    return false;
+  }
+
+  if (sysAll.includes('extintor')) return true;
+
+  // 3. Comprobar nombre/tipo propio del equipo
+  const eqTexto = ((eq.nombre || '') + ' ' + (eq.tipo || '') + ' ' + (eq.clase || '') + ' ' + (eq.categoria || '')).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  if (eqTexto.includes('bie') || eqTexto.includes('boca')) return false;
+  if (eqTexto.includes('extintor')) return true;
+
+  // Si tiene un sistemaId asignado y no dice extintor, no es extintor
+  if (sId && !sId.includes('extintor')) return false;
+
+  // Solo como último recurso si es agente clásico de extintor portátil sin pertenecer a otro sistema
+  if (eqTexto.includes('polvo abc') || eqTexto.includes('co2 2') || eqTexto.includes('co2 5') || eqTexto.includes('dioxido de carbono')) {
+    return true;
+  }
+
   return false;
 }
 
@@ -215,34 +275,38 @@ export interface BieAlertas {
 
 export function esEquipoBie(eq: any, sist?: any): boolean {
   if (!eq) return false;
-  const texto = (
-    (sist?.tipo || '') + ' ' + (sist?.familia || '') + ' ' + (sist?.nombre || '') + ' ' +
-    (sist?.id || '') + ' ' +
-    (eq.sistemaId || '') + ' ' + (eq.sistema || '') + ' ' + (eq.familia || '') + ' ' +
-    (eq.nombre || '') + ' ' + (eq.clase || '') + ' ' + (eq.tipo || '') + ' ' +
-    (eq.sistemaNombre || '') + ' ' + (eq.sistemaTipo || '') + ' ' + (eq.categoria || '')
-  ).toLowerCase();
 
-  if (texto.includes('extintor')) return false;
-  if (texto.includes('hidrante')) return false;
-
-  if (texto.includes('bie') || texto.includes('boca')) return true;
-
-  // Comprobar claves en eq
-  const keysStr = Object.keys(eq).join(' ').toLowerCase();
-  if (keysStr.includes('manguera') || keysStr.includes('pruebahidraulica') || keysStr.includes('lanza') || keysStr.includes('devanadera')) {
+  // 1. Si se proporciona sistema explícito, mandar estrictamente por el sistema
+  if (sist) {
+    if (!esSistemaBies(sist)) return false;
     return true;
   }
 
-  // Comprobar valores de texto en eq
-  for (const v of Object.values(eq)) {
-    if (typeof v === 'string') {
-      const vLow = v.toLowerCase();
-      if ((vLow.includes('bie') || vLow.includes('boca de incendio')) && !vLow.includes('extintor')) {
-        return true;
-      }
-    }
+  // 2. Comprobar identificadores de sistema del equipo
+  const sId = (eq.sistemaId || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const sNom = (eq.sistemaNombre || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const sTipo = (eq.sistemaTipo || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const sFam = (eq.familia || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const sysAll = `${sId} ${sNom} ${sTipo} ${sFam}`;
+
+  // Si el sistema es extintor u otro sistema, NUNCA es BIE
+  if (sysAll.includes('extintor') || sysAll.includes('hidrante') || 
+      sysAll.includes('rociador') || sysAll.includes('sprinkler') || sysAll.includes('deteccion') || 
+      sysAll.includes('gas') || sysAll.includes('cocina') || sysAll.includes('campana') || 
+      sysAll.includes('puerta') || sysAll.includes('bomba') || sysAll.includes('abastecimiento') || 
+      sysAll.includes('alumbrado') || sysAll.includes('exutorio') || sysAll.includes('fuente')) {
+    return false;
   }
+
+  if (sysAll.includes('bie') || sysAll.includes('boca')) return true;
+
+  // 3. Comprobar nombre/tipo propio del equipo
+  const eqTexto = ((eq.nombre || '') + ' ' + (eq.tipo || '') + ' ' + (eq.clase || '') + ' ' + (eq.categoria || '')).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  if (eqTexto.includes('extintor')) return false;
+  if (eqTexto.includes('bie') || eqTexto.includes('boca de incendio')) return true;
+
+  // Si tiene un sistemaId asignado y no es BIE, NO es BIE
+  if (sId && !sId.includes('bie') && !sId.includes('boca')) return false;
 
   return false;
 }

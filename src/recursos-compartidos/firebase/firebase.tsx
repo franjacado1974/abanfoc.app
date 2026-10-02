@@ -39,6 +39,11 @@ export interface Articulo {
   precioVenta: number;
   revisable: boolean;
   fotoUrl?: string;
+  tipo?: string;
+  modelo?: string;
+  cantidad?: number;
+  estado?: 'Nuevo' | 'Usado' | 'Reparado' | string;
+  observaciones?: string;
 }
 
 export interface Familia {
@@ -888,10 +893,89 @@ export async function deleteArticulo(id: string) {
   try {
     const ref = doc(db, 'articulos', id);
     await deleteDoc(ref);
+    try {
+      await eliminarAvisoStock(id);
+    } catch { /* ignore */ }
     return true;
   } catch (e) {
     console.error('deleteArticulo error:', e);
     throw e;
+  }
+}
+
+export interface AvisoStock {
+  id: string;
+  articuloId: string;
+  codigo: string;
+  nombre: string;
+  familia?: string;
+  tipo?: string;
+  modelo?: string;
+  fotoUrl?: string;
+  observaciones?: string;
+  fecha: string;
+  timestamp: number;
+  activo: boolean;
+}
+
+export function subscribeAvisosStock(callback: (avisos: AvisoStock[]) => void) {
+  try {
+    const col = collection(db, 'avisos_stock');
+    const unsub = onSnapshot(col, (snap) => {
+      const items = snap.docs.map(d => {
+        const data = d.data() as any;
+        return { id: d.id, ...data };
+      }) as AvisoStock[];
+      const activos = items.filter(a => a.activo);
+      callback(activos);
+    }, (err) => {
+      console.error('subscribeAvisosStock error:', err);
+      callback([]);
+    });
+    return unsub;
+  } catch (e) {
+    console.error('subscribeAvisosStock error:', e);
+    return () => {};
+  }
+}
+
+export async function registrarAvisoStock(aviso: AvisoStock) {
+  try {
+    const ref = doc(db, 'avisos_stock', aviso.articuloId || aviso.id);
+    await setDoc(ref, {
+      ...aviso,
+      activo: true,
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+    return true;
+  } catch (e) {
+    console.error('registrarAvisoStock error:', e);
+    return false;
+  }
+}
+
+export async function desactivarAvisoStock(articuloId: string) {
+  try {
+    const ref = doc(db, 'avisos_stock', articuloId);
+    await setDoc(ref, {
+      activo: false,
+      desactivadoAt: new Date().toISOString()
+    }, { merge: true });
+    return true;
+  } catch (e) {
+    console.error('desactivarAvisoStock error:', e);
+    return false;
+  }
+}
+
+export async function eliminarAvisoStock(articuloId: string) {
+  try {
+    const ref = doc(db, 'avisos_stock', articuloId);
+    await deleteDoc(ref);
+    return true;
+  } catch (e) {
+    console.error('eliminarAvisoStock error:', e);
+    return false;
   }
 }
 
@@ -2034,6 +2118,8 @@ export interface EquipoInstaladoFirestore {
   checkAcceso?: boolean | null;
   checkAltura?: boolean | null;
   checkSoporte?: boolean | null;
+  checkPuertaCristal?: boolean | null;
+  item_1790629281657?: boolean | null;
   checkSenalizacion?: boolean | null;
   checkManguera?: boolean | null;
   checkPeso?: boolean | null;
@@ -2253,6 +2339,7 @@ export interface ChecklistItem {
   opciones?: string[];     // Opciones si es desplegable (y cabeceras horizontales para tablas)
   filasInicio?: number;    // Cantidad inicial de filas para tablas
   filasNombres?: string[];  // Nombres predefinidos de las filas (cabecera vertical para tablas)
+  valorPredeterminado?: string; // Valor por defecto / predeterminado
 }
 
 // ─── CHECKLIST POR COLECCIÓN DINÁMICA (checklist_{sistemaNombre}) ────────
@@ -2933,5 +3020,211 @@ export async function vaciarPapeleraCompleta() {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// BLOC DE NOTAS (NOTAS COMPARTIDAS) - Firestore CRUD
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface NotaBlocItem {
+  id?: string;
+  _docId?: string;
+  categoria: 'Compras' | 'Visitas' | 'Presupuestos' | 'Varias' | 'Completadas' | string;
+  lugar: string;          // TÍTULO en mayúsculas y negrita (el lugar)
+  motivo: string;         // Motivo o lo que hay que hacer (tono más suave)
+  contenido?: string;     // Detalle completo sin límite
+  usuarioNombre: string;  // Nombre del usuario que ha registrado la nota
+  usuarioId?: string;     // ID del usuario que creó la nota
+  prioridad: 'Baja' | 'Media' | 'Alta' | 'Urgente';
+  fechaCreacion: string;  // ISO string
+  fechaActualizacion?: string;
+  completada?: boolean;
+  completadaPor?: string;
+  fechaCompletada?: string;
+  categoriaAnterior?: string;
+}
+
+export function subscribeNotasBloc(callback: (items: NotaBlocItem[]) => void) {
+  try {
+    const col = collection(db, 'notas_bloc');
+    const unsub = onSnapshot(col, (snap) => {
+      const items = snap.docs.map(d => {
+        const data = d.data() as any;
+        return {
+          _docId: d.id,
+          id: data?.id ?? d.id,
+          categoria: data?.categoria || 'Varias',
+          lugar: data?.lugar || '',
+          motivo: data?.motivo || '',
+          contenido: data?.contenido || '',
+          usuarioNombre: data?.usuarioNombre || 'Usuario',
+          usuarioId: data?.usuarioId || '',
+          prioridad: data?.prioridad || 'Media',
+          fechaCreacion: data?.fechaCreacion || new Date().toISOString(),
+          fechaActualizacion: data?.fechaActualizacion || '',
+        } as NotaBlocItem;
+      });
+      try {
+        localStorage.setItem('firecheck_db_notas_bloc', JSON.stringify(items));
+      } catch (e) {
+        console.error('Error guardando notas_bloc en localStorage:', e);
+      }
+      callback(items);
+    }, (err) => {
+      console.error('subscribeNotasBloc error:', err);
+      try {
+        const cached = localStorage.getItem('firecheck_db_notas_bloc');
+        if (cached) callback(JSON.parse(cached));
+      } catch {
+        callback([]);
+      }
+    });
+    return unsub;
+  } catch (e) {
+    console.error('subscribeNotasBloc error:', e);
+    return () => {};
+  }
+}
+
+export async function addNotaBloc(data: NotaBlocItem) {
+  try {
+    const col = collection(db, 'notas_bloc');
+    const dataToSave = cleanUndefinedForFirestore({
+      ...data,
+      fechaCreacion: data.fechaCreacion || new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+    const docRef = await addDoc(col, dataToSave);
+    return { ...dataToSave, _docId: docRef.id, id: docRef.id };
+  } catch (e) {
+    console.error('addNotaBloc error:', e);
+    throw e;
+  }
+}
+
+export async function updateNotaBloc(docId: string, data: Partial<NotaBlocItem>) {
+  try {
+    const docRef = doc(db, 'notas_bloc', docId);
+    const dataToSave = cleanUndefinedForFirestore({
+      ...data,
+      fechaActualizacion: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+    await updateDoc(docRef, dataToSave as any);
+  } catch (e) {
+    console.error('updateNotaBloc error:', e);
+    throw e;
+  }
+}
+
+export async function deleteNotaBloc(docId: string) {
+  try {
+    const docRef = doc(db, 'notas_bloc', docId);
+    await deleteDoc(docRef);
+  } catch (e) {
+    console.error('deleteNotaBloc error:', e);
+    throw e;
+  }
+}
+
+// ─── INVENTARIO DE TALLER ───────────────────────────────────────────────────
+export interface InventarioItem {
+  id?: string;
+  _docId?: string;
+  articulo: string;
+  tipo: string;
+  modelo: string;
+  familia: string;
+  estado: 'Disponible' | 'Bajo Stock' | 'En Taller' | 'Reservado' | 'Agotado' | string;
+  cantidad: number;
+  observaciones: string;
+  fechaCreacion?: string;
+  fechaActualizacion?: string;
+  creadoPor?: string;
+  updatedAt?: string;
+}
+
+export function subscribeInventario(callback: (items: InventarioItem[]) => void) {
+  try {
+    const col = collection(db, 'inventario');
+    const unsub = onSnapshot(col, (snap) => {
+      const items = snap.docs.map(d => {
+        const data = d.data() as any;
+        return {
+          _docId: d.id,
+          id: data?.id ?? d.id,
+          articulo: data?.articulo || '',
+          tipo: data?.tipo || 'Repuesto',
+          modelo: data?.modelo || '',
+          familia: data?.familia || 'General',
+          estado: data?.estado || 'Disponible',
+          cantidad: typeof data?.cantidad === 'number' ? data.cantidad : Number(data?.cantidad || 0),
+          observaciones: data?.observaciones || '',
+          fechaCreacion: data?.fechaCreacion || '',
+          fechaActualizacion: data?.fechaActualizacion || '',
+          creadoPor: data?.creadoPor || '',
+          updatedAt: data?.updatedAt || ''
+        } as InventarioItem;
+      });
+      try {
+        localStorage.setItem('firecheck_db_inventario', JSON.stringify(items));
+      } catch {}
+      callback(items);
+    }, (err) => {
+      console.error('subscribeInventario error:', err);
+      try {
+        const cached = localStorage.getItem('firecheck_db_inventario');
+        if (cached) callback(JSON.parse(cached));
+      } catch {}
+    });
+    return unsub;
+  } catch (e) {
+    console.error('subscribeInventario error:', e);
+    return () => {};
+  }
+}
+
+export async function addInventarioItem(data: InventarioItem) {
+  try {
+    const col = collection(db, 'inventario');
+    const dataToSave = cleanUndefinedForFirestore({
+      ...data,
+      cantidad: Number(data.cantidad || 0),
+      fechaCreacion: data.fechaCreacion || new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+    const docRef = await addDoc(col, dataToSave);
+    return { ...dataToSave, _docId: docRef.id, id: docRef.id };
+  } catch (e) {
+    console.error('addInventarioItem error:', e);
+    throw e;
+  }
+}
+
+export async function updateInventarioItem(docId: string, data: Partial<InventarioItem>) {
+  try {
+    const docRef = doc(db, 'inventario', docId);
+    const dataToSave = cleanUndefinedForFirestore({
+      ...data,
+      ...(data.cantidad !== undefined ? { cantidad: Number(data.cantidad) } : {}),
+      fechaActualizacion: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+    await updateDoc(docRef, dataToSave as any);
+  } catch (e) {
+    console.error('updateInventarioItem error:', e);
+    throw e;
+  }
+}
+
+export async function deleteInventarioItem(docId: string) {
+  try {
+    const docRef = doc(db, 'inventario', docId);
+    await deleteDoc(docRef);
+  } catch (e) {
+    console.error('deleteInventarioItem error:', e);
+    throw e;
+  }
+}
+
 export {app, storage, db, analytics};
+
 

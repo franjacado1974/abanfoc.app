@@ -32,9 +32,9 @@ export default function BotonGuardarEquipo({
                 type="button"
                 onClick={() => handleGuardarEquipoManual(eqId)}
                 className="inline-flex items-center gap-1.5 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-semibold transition-all shadow-sm"
-                title="Equipo guardado correctamente en Firestore. Clic para forzar nuevo guardado."
+                title="Equipo revisado y guardado. Clic para forzar nuevo guardado."
             >
-                <span>✓ Guardado</span>
+                <span>✓ Equipo revisado</span>
             </button>
         );
     }
@@ -47,20 +47,20 @@ export default function BotonGuardarEquipo({
                 className="inline-flex items-center gap-1.5 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold transition-all shadow-sm"
                 title="Guardado de forma segura en almacenamiento local (Offline). Se sincronizará automáticamente al recuperar la conexión."
             >
-                <span>✓ Guardado en local (Offline)</span>
+                <span>✓ Equipo revisado (Local)</span>
             </button>
         );
     }
 
-    // Estado 'pending' o por defecto: Azul "Guardar"
+    // Estado 'pending' o por defecto: Azul "Equipo revisado"
     return (
         <button
             type="button"
             onClick={() => handleGuardarEquipoManual(eqId)}
             className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold transition-all shadow-sm"
-            title="Guardar datos de este equipo"
+            title="Guardar y confirmar revisión de este equipo"
         >
-            <span>Guardar</span>
+            <span>Equipo revisado</span>
         </button>
     );
 }

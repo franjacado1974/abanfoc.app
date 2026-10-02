@@ -42,6 +42,7 @@ interface ItemLocal {
   filasInicio?: number; // Filas iniciales para tabla
   filasNombres?: string[]; // Nombres de las filas (cabecera vertical para tablas, opcional)
   horizontal?: boolean; // true = label a la izquierda, campo a la derecha
+  valorPredeterminado?: string; // Valor por defecto / predeterminado
   esNuevo?: boolean;    // true si aún no se ha guardado en Firestore
 }
 
@@ -131,7 +132,10 @@ export default function FormBuilderPlantillas() {
         tipoRespuesta: it.tipoRespuesta,
         requerido: it.requerido,
         opciones: it.opciones || [],
+        filasInicio: it.filasInicio,
+        filasNombres: it.filasNombres,
         horizontal: it.horizontal === true,
+        valorPredeterminado: it.valorPredeterminado || '',
         esNuevo: false,
       })));
     });
@@ -340,7 +344,9 @@ export default function FormBuilderPlantillas() {
         requerido: item.requerido,
         opciones: item.opciones || [],
         filasInicio: item.filasInicio,
+        filasNombres: item.filasNombres,
         horizontal: item.horizontal === true,
+        valorPredeterminado: item.valorPredeterminado || '',
       });
       // Si es el item que estamos copiando, insertamos la copia justo después
       if (i === index) {
@@ -353,7 +359,9 @@ export default function FormBuilderPlantillas() {
           requerido: item.requerido,
           opciones: item.opciones || [],
           filasInicio: item.filasInicio,
+          filasNombres: item.filasNombres,
           horizontal: item.horizontal === true,
+          valorPredeterminado: item.valorPredeterminado || '',
         });
       }
     }
@@ -394,7 +402,9 @@ export default function FormBuilderPlantillas() {
       requerido: item.requerido,
       opciones: item.opciones || [],
       filasInicio: item.filasInicio,
+      filasNombres: item.filasNombres,
       horizontal: item.horizontal === true,
+      valorPredeterminado: item.valorPredeterminado || '',
     }));
 
     try {
@@ -472,7 +482,12 @@ export default function FormBuilderPlantillas() {
       case 'check':
         return (
           <label className="flex items-center gap-2 cursor-pointer text-xs px-3 py-2 rounded-lg bg-white border border-zinc-200 hover:border-zinc-300 transition-all select-none text-zinc-700 font-medium">
-            <input type="checkbox" className="w-4 h-4 rounded cursor-pointer text-teal-600 border-zinc-300 focus:ring-teal-500" disabled />
+            <input
+              type="checkbox"
+              className="w-4 h-4 rounded cursor-pointer text-teal-600 border-zinc-300 focus:ring-teal-500"
+              checked={item.valorPredeterminado === 'true'}
+              disabled
+            />
             {item.label}
           </label>
         );
@@ -482,8 +497,9 @@ export default function FormBuilderPlantillas() {
             <label className="text-[10px] font-semibold text-zinc-500">{item.label}</label>
             <input
               type="number"
+              value={item.valorPredeterminado || ''}
+              placeholder={item.valorPredeterminado ? '' : '0'}
               className="w-28 px-3 py-2 bg-white border border-zinc-200 rounded-lg text-xs outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20"
-              placeholder="0"
               disabled
             />
           </div>
@@ -494,8 +510,9 @@ export default function FormBuilderPlantillas() {
             <label className="text-[10px] font-semibold text-zinc-500">{item.label}</label>
             <input
               type="text"
+              value={item.valorPredeterminado || ''}
+              placeholder={item.valorPredeterminado ? '' : '...'}
               className="w-full px-3 py-2 bg-white border border-zinc-200 rounded-lg text-xs outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20"
-              placeholder="..."
               disabled
             />
           </div>
@@ -506,6 +523,7 @@ export default function FormBuilderPlantillas() {
             <label className="text-[10px] font-semibold text-zinc-500">{item.label}</label>
             <input
               type="date"
+              value={item.valorPredeterminado === 'hoy' ? new Date().toISOString().split('T')[0] : (item.valorPredeterminado || '')}
               className="w-full px-3 py-2 bg-white border border-zinc-200 rounded-lg text-xs outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20"
               disabled
             />
@@ -518,7 +536,8 @@ export default function FormBuilderPlantillas() {
             <textarea
               className="w-full px-3 py-2 bg-white border border-zinc-200 rounded-lg text-xs outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 resize-none"
               rows={3}
-              placeholder="..."
+              value={item.valorPredeterminado || ''}
+              placeholder={item.valorPredeterminado ? '' : '...'}
               disabled
             />
           </div>
@@ -538,7 +557,8 @@ export default function FormBuilderPlantillas() {
           <div className="flex flex-col gap-1">
             <label className="text-[10px] font-semibold text-zinc-500">{item.label}</label>
             <select
-              className="w-full px-3 py-2 bg-white border border-zinc-200 rounded-lg text-xs outline-none text-zinc-500"
+              className="w-full px-3 py-2 bg-white border border-zinc-200 rounded-lg text-xs outline-none text-zinc-700 font-medium"
+              value={item.valorPredeterminado || ''}
               disabled
             >
               <option value="">Selecciona...</option>
@@ -555,7 +575,7 @@ export default function FormBuilderPlantillas() {
             <label className="text-[10px] font-semibold text-zinc-500">{item.label}</label>
             <div className="flex flex-wrap items-center gap-4 mt-1">
               {opcionesSel.map((opt, i) => {
-                const isSelected = i === 0;
+                const isSelected = item.valorPredeterminado ? opt === item.valorPredeterminado : (i === 0);
                 return (
                   <div
                     key={i}
@@ -660,29 +680,37 @@ export default function FormBuilderPlantillas() {
           <div className="w-48 shrink-0">
             {innerType === 'check' && (
               <label className="flex items-center gap-2 cursor-pointer text-xs px-3 py-1.5 rounded-lg bg-white border border-zinc-200 hover:border-zinc-300 transition-all select-none text-zinc-700 font-medium">
-                <input type="checkbox" className="w-4 h-4 rounded cursor-pointer text-teal-600 border-zinc-300 focus:ring-teal-500" disabled />
+                <input
+                  type="checkbox"
+                  className="w-4 h-4 rounded cursor-pointer text-teal-600 border-zinc-300 focus:ring-teal-500"
+                  checked={item.valorPredeterminado === 'true'}
+                  disabled
+                />
                 OK
               </label>
             )}
             {innerType === 'texto' && (
               <input
                 type="text"
+                value={item.valorPredeterminado || ''}
+                placeholder={item.valorPredeterminado ? '' : '...'}
                 className="w-full px-3 py-1.5 bg-white border border-zinc-200 rounded-lg text-xs outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20"
-                placeholder="..."
                 disabled
               />
             )}
             {innerType === 'numero' && (
               <input
                 type="number"
+                value={item.valorPredeterminado || ''}
+                placeholder={item.valorPredeterminado ? '' : '0'}
                 className="w-28 px-3 py-1.5 bg-white border border-zinc-200 rounded-lg text-xs outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20"
-                placeholder="0"
                 disabled
               />
             )}
             {innerType === 'fecha' && (
               <input
                 type="date"
+                value={item.valorPredeterminado === 'hoy' ? new Date().toISOString().split('T')[0] : (item.valorPredeterminado || '')}
                 className="w-full px-3 py-1.5 bg-white border border-zinc-200 rounded-lg text-xs outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20"
                 disabled
               />
@@ -691,7 +719,8 @@ export default function FormBuilderPlantillas() {
               <textarea
                 className="w-full px-3 py-1.5 bg-white border border-zinc-200 rounded-lg text-xs outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 resize-none"
                 rows={2}
-                placeholder="..."
+                value={item.valorPredeterminado || ''}
+                placeholder={item.valorPredeterminado ? '' : '...'}
                 disabled
               />
             )}
@@ -703,7 +732,8 @@ export default function FormBuilderPlantillas() {
             )}
             {innerType === 'desplegable' && (
               <select
-                className="w-full px-3 py-1.5 bg-white border border-zinc-200 rounded-lg text-xs outline-none text-zinc-500"
+                className="w-full px-3 py-1.5 bg-white border border-zinc-200 rounded-lg text-xs outline-none text-zinc-700 font-medium"
+                value={item.valorPredeterminado || ''}
                 disabled
               >
                 <option value="">Selecciona...</option>
@@ -714,18 +744,21 @@ export default function FormBuilderPlantillas() {
             )}
             {innerType === 'seleccion' && (
               <div className="flex gap-1 flex-wrap justify-end">
-                {(item.opciones && item.opciones.length > 0 ? item.opciones : ['Sí', 'No', 'N/A']).map((opt, i) => (
-                  <span
-                    key={i}
-                    className={`px-2.5 py-1 text-[10px] rounded-lg border text-center font-semibold shadow-sm transition-all select-none ${
-                      i === 0 
-                        ? 'bg-indigo-600 text-white border-indigo-600 font-bold' 
-                        : 'bg-white text-zinc-600 border-zinc-200'
-                    }`}
-                  >
-                    {opt}
-                  </span>
-                ))}
+                {(item.opciones && item.opciones.length > 0 ? item.opciones : ['Sí', 'No', 'N/A']).map((opt, i) => {
+                  const isSelected = item.valorPredeterminado ? opt === item.valorPredeterminado : (i === 0);
+                  return (
+                    <span
+                      key={i}
+                      className={`px-2.5 py-1 text-[10px] rounded-lg border text-center font-semibold shadow-sm transition-all select-none ${
+                        isSelected 
+                          ? 'bg-indigo-600 text-white border-indigo-600 font-bold' 
+                          : 'bg-white text-zinc-600 border-zinc-200'
+                      }`}
+                    >
+                      {opt}
+                    </span>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -1027,6 +1060,17 @@ export default function FormBuilderPlantillas() {
                           {/* ── Badge del tipo ─────────────────────────────── */}
                           <TipoBadge tipo={item.tipoRespuesta} />
 
+                          {/* ── Badge de valor predeterminado si existe ───── */}
+                          {item.valorPredeterminado && (
+                            <span 
+                              className="hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0 max-w-[140px] truncate" 
+                              title={`Valor por defecto: ${item.valorPredeterminado}`}
+                            >
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
+                              <span className="truncate">Def: {item.valorPredeterminado}</span>
+                            </span>
+                          )}
+
                           {/* ── Checkbox horizontal ──────────────────────────── */}
                           <label className="flex items-center gap-1 text-[9px] text-zinc-500 cursor-pointer shrink-0 hover:text-zinc-700 transition-colors" title="Horizontal: pregunta a la izquierda, campo a la derecha">
                             <input
@@ -1070,14 +1114,131 @@ export default function FormBuilderPlantillas() {
                           
                           {/* ── Editor de opciones para desplegable y selección ── */}
                           {(item.tipoRespuesta === 'desplegable' || item.tipoRespuesta === 'seleccion') && (
-                            <div className="pl-14 pr-2">
-                              <label className="text-[10px] font-semibold text-zinc-500 mb-1 block">
-                                {item.tipoRespuesta === 'seleccion' ? 'Opciones de selección (separadas por comas)' : 'Opciones del desplegable (separadas por comas)'}
-                              </label>
-                              <OpcionesInput 
-                                opciones={item.opciones || []} 
-                                onUpdate={(opts) => handleUpdateItem(item.id, { opciones: opts })} 
+                            <div className="pl-14 pr-2 space-y-2">
+                              <div>
+                                <label className="text-[10px] font-semibold text-zinc-500 mb-1 block">
+                                  {item.tipoRespuesta === 'seleccion' ? 'Opciones de selección (separadas por comas)' : 'Opciones del desplegable (separadas por comas)'}
+                                </label>
+                                <OpcionesInput 
+                                  opciones={item.opciones || []} 
+                                  onUpdate={(opts) => handleUpdateItem(item.id, { opciones: opts })} 
+                                />
+                              </div>
+                              <div className="flex items-center gap-2 pt-1">
+                                <span className="text-[10px] font-bold text-zinc-600">⭐ Valor predeterminado:</span>
+                                <select
+                                  value={item.valorPredeterminado || ''}
+                                  onChange={(e) => handleUpdateItem(item.id, { valorPredeterminado: e.target.value })}
+                                  className="text-xs bg-white border border-zinc-200 rounded-md px-2.5 py-1 outline-none focus:border-teal-500 text-zinc-700 font-medium cursor-pointer hover:border-zinc-300 transition-colors shadow-sm"
+                                >
+                                  <option value="">-- Sin predeterminado (en blanco) --</option>
+                                  {(item.opciones || []).map((op, oIdx) => (
+                                    <option key={oIdx} value={op}>{op}</option>
+                                  ))}
+                                </select>
+                                {item.valorPredeterminado && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateItem(item.id, { valorPredeterminado: '' })}
+                                    className="text-[10px] text-zinc-400 hover:text-red-500 underline transition-colors"
+                                    title="Quitar valor predeterminado"
+                                  >
+                                    Quitar
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {item.tipoRespuesta === 'check' && (
+                            <div className="pl-14 pr-2 pt-1 flex items-center gap-2">
+                              <span className="text-[10px] font-bold text-zinc-600">⭐ Valor predeterminado:</span>
+                              <select
+                                value={item.valorPredeterminado || ''}
+                                onChange={(e) => handleUpdateItem(item.id, { valorPredeterminado: e.target.value })}
+                                className="text-xs bg-white border border-zinc-200 rounded-md px-2.5 py-1 outline-none focus:border-teal-500 text-zinc-700 font-medium cursor-pointer hover:border-zinc-300 transition-colors shadow-sm"
+                              >
+                                <option value="">-- Sin predeterminado (Vacío) --</option>
+                                <option value="CORRECTO">✓ Marcado (CORRECTO)</option>
+                                <option value="NO CORRECTO">✗ Desmarcado / Incorrecto</option>
+                              </select>
+                              {item.valorPredeterminado && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateItem(item.id, { valorPredeterminado: '' })}
+                                  className="text-[10px] text-zinc-400 hover:text-red-500 underline transition-colors"
+                                  title="Quitar valor predeterminado"
+                                >
+                                  Quitar
+                                </button>
+                              )}
+                            </div>
+                          )}
+
+                          {(item.tipoRespuesta === 'texto' || item.tipoRespuesta === 'texto-largo') && (
+                            <div className="pl-14 pr-2 pt-1 flex items-center gap-2">
+                              <span className="text-[10px] font-bold text-zinc-600">⭐ Texto predeterminado:</span>
+                              <input
+                                type="text"
+                                value={item.valorPredeterminado || ''}
+                                onChange={(e) => handleUpdateItem(item.id, { valorPredeterminado: e.target.value })}
+                                placeholder="Escribe el texto por defecto (ej. N/A)..."
+                                className="flex-1 max-w-sm px-2.5 py-1 bg-white border border-zinc-200 rounded-md text-xs outline-none focus:border-teal-500 shadow-sm"
                               />
+                              {item.valorPredeterminado && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateItem(item.id, { valorPredeterminado: '' })}
+                                  className="text-[10px] text-zinc-400 hover:text-red-500 underline transition-colors"
+                                >
+                                  Quitar
+                                </button>
+                              )}
+                            </div>
+                          )}
+
+                          {item.tipoRespuesta === 'numero' && (
+                            <div className="pl-14 pr-2 pt-1 flex items-center gap-2">
+                              <span className="text-[10px] font-bold text-zinc-600">⭐ Número predeterminado:</span>
+                              <input
+                                type="number"
+                                value={item.valorPredeterminado || ''}
+                                onChange={(e) => handleUpdateItem(item.id, { valorPredeterminado: e.target.value })}
+                                placeholder="Ej: 0"
+                                className="w-28 px-2.5 py-1 bg-white border border-zinc-200 rounded-md text-xs outline-none focus:border-teal-500 shadow-sm"
+                              />
+                              {item.valorPredeterminado && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateItem(item.id, { valorPredeterminado: '' })}
+                                  className="text-[10px] text-zinc-400 hover:text-red-500 underline transition-colors"
+                                >
+                                  Quitar
+                                </button>
+                              )}
+                            </div>
+                          )}
+
+                          {item.tipoRespuesta === 'fecha' && (
+                            <div className="pl-14 pr-2 pt-1 flex items-center gap-2">
+                              <span className="text-[10px] font-bold text-zinc-600">⭐ Fecha predeterminada:</span>
+                              <select
+                                value={item.valorPredeterminado || ''}
+                                onChange={(e) => handleUpdateItem(item.id, { valorPredeterminado: e.target.value })}
+                                className="text-xs bg-white border border-zinc-200 rounded-md px-2.5 py-1 outline-none focus:border-teal-500 text-zinc-700 font-medium cursor-pointer hover:border-zinc-300 transition-colors shadow-sm"
+                              >
+                                <option value="">-- Sin predeterminado --</option>
+                                <option value="HOY">📅 Fecha de la revisión (Hoy)</option>
+                              </select>
+                              {item.valorPredeterminado && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateItem(item.id, { valorPredeterminado: '' })}
+                                  className="text-[10px] text-zinc-400 hover:text-red-500 underline transition-colors"
+                                >
+                                  Quitar
+                                </button>
+                              )}
                             </div>
                           )}
 

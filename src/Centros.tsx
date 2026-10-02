@@ -164,6 +164,8 @@ export interface EquipoInstalado {
   checkAcceso?: boolean | null;
   checkAltura?: boolean | null;
   checkSoporte?: boolean | null;
+  checkPuertaCristal?: boolean | null;
+  item_1790629281657?: boolean | null;
   checkSenalizacion?: boolean | null;
   checkManguera?: boolean | null;
   checkPeso?: boolean | null;

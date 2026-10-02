@@ -1,9 +1,8 @@
 import React from 'react';
-import { CheckCircle2, XCircle, X, Pencil, Trash2 } from 'lucide-react';
-import type { CentroSistema, EquipoInstalado, Parte } from '../../Centros';
-import { updateEquipoInstalado, updateParte as updateParteFirestore, uploadFile, type ChecklistItem } from '../../firebase';
-import TableInput from '../TableInput';
-import BotonGuardarEquipo from '../BotonGuardarEquipo';
+import { CheckCircle2, XCircle, Pencil, Trash2 } from 'lucide-react';
+import type { CentroSistema, EquipoInstalado, Parte } from '../../../recursos-compartidos/types/models';
+import { updateEquipoInstalado, updateParte as updateParteFirestore, uploadFile, type ChecklistItem } from '../../../recursos-compartidos/firebase/firebase';
+import TableInput from '../../../recursos-compartidos/components/TableInput';
 
 interface Props {
     sist: CentroSistema;
@@ -21,7 +20,6 @@ interface Props {
     handleCheckChange: (equipoId: string, itemKey: string, value: any, itemName?: string) => void;
     getCheckStats: (eq: EquipoInstalado) => { ok: number; fail: number; pending: number };
     getEquipoSyncStatus?: (equipoId: string) => string;
-    handleGuardarEquipoManual?: (equipoId: string, equipoDirecto?: any) => void | Promise<void>;
     handleCopiarEquipo?: (eqToCopy: EquipoInstalado) => void | Promise<void>;
 }
 
@@ -39,7 +37,7 @@ const esUbicacionMarcaModelo = (label?: string, key?: string) => {
            k.includes('ubicacion') || k.includes('marca') || k.includes('modelo');
 };
 
-export default function SistemaBombaElectrica({
+export default function SistemaExtincionAguaEspuma({
     sist,
     filteredEqs,
     equiposInstalados,
@@ -55,7 +53,6 @@ export default function SistemaBombaElectrica({
     handleCheckChange,
     getCheckStats,
     getEquipoSyncStatus,
-    handleGuardarEquipoManual,
     handleCopiarEquipo
 }: Props) {
     return (
@@ -146,7 +143,7 @@ export default function SistemaBombaElectrica({
                                                                             const rawVal = eq[item.key as keyof EquipoInstalado];
                                                                             const itemOpciones = (item as any).opciones || [];
                                                                             const val = (rawVal === undefined || rawVal === '')
-                                                                                ? ((item as any).valorPredeterminado || (itemOpciones.includes('CORRECTO') ? 'CORRECTO' : (itemOpciones.includes('CONFORME') ? 'CONFORME' : rawVal)))
+                                                                                ? (itemOpciones.includes('CORRECTO') ? 'CORRECTO' : (itemOpciones.includes('CONFORME') ? 'CONFORME' : rawVal))
                                                                                 : rawVal;
                                                                              const tipo = (item as ChecklistItem).tipoRespuesta as string || 'check';
                                                                              const lbl = (item.label || '').toLowerCase();
@@ -625,10 +622,10 @@ export default function SistemaBombaElectrica({
                                                                                              if (newFotos.length === 0) handleCheckChange(eq.id, 'foto', ''); // Mantenemos retrocompatibilidad vaciando 'foto'
                                                                                              else if (idx === 0) handleCheckChange(eq.id, 'foto', newFotos[0]);
                                                                                          }}
-                                                                                         className="absolute top-0 right-0 p-1 bg-red-500 text-white rounded-bl-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                                                                                         className="absolute top-0 right-0 p-1 bg-red-600 hover:bg-red-700 text-white rounded-bl-lg shadow-md transition-all active:scale-95 flex items-center justify-center cursor-pointer"
                                                                                          title="Eliminar foto"
                                                                                      >
-                                                                                         <X className="w-3 h-3" />
+                                                                                         <Trash2 className="w-3.5 h-3.5" />
                                                                                      </button>
                                                                                  </div>
                                                                              ))}
@@ -690,11 +687,47 @@ export default function SistemaBombaElectrica({
                                                                    <div className={`px-4 pb-4 ${algunCheckRojo ? 'border-t border-red-200 pt-3' : 'border-t border-slate-200 pt-3'}`}>
                                                                       <div className="flex flex-wrap items-center justify-between gap-2">
                                                                           <div className="flex items-center gap-2">
-                                                                             <BotonGuardarEquipo
-                                                                                  eqId={eq.id}
-                                                                                  getEquipoSyncStatus={getEquipoSyncStatus}
-                                                                                  handleGuardarEquipoManual={handleGuardarEquipoManual}
-                                                                              />
+                                                                             <button
+                                                                                 type="button"
+                                                                                 onClick={async () => {
+                                                                                     const itemsToUse = getItemsToUse(eq.sistemaId);
+                                                                                     const updatedEquipos = equiposInstalados.map(currEq => {
+                                                                                         if (currEq.id === eq.id) {
+                                                                                             const allChecked: Record<string, any> = {};
+                                                                                             itemsToUse.forEach(item => {
+                                                                                                 if (item.tipoRespuesta === 'check') {
+                                                                                                     allChecked[item.key] = true;
+                                                                                                 }
+                                                                                             });
+                                                                                             return {
+                                                                                                 ...currEq,
+                                                                                                 revisado: true,
+                                                                                                 ...allChecked
+                                                                                             };
+                                                                                         }
+                                                                                         return currEq;
+                                                                                     });
+                                                                                     setEquiposInstalados(updatedEquipos);
+                                                                                     saveEquiposProgress(updatedEquipos);
+                                                                                     const equipoModificado = updatedEquipos.find(currEq => currEq.id === eq.id);
+                                                                                     if (equipoModificado) {
+                                                                                         try { await updateEquipoInstalado(eq.id, equipoModificado as any); } catch (err) { console.error('Error guardando en Firestore:', err); }
+                                                                                     }
+                                                                                     showToast('Guardado');
+                                                                                     // Cambiar estado del parte a "Abierto" si estaba en "Planificado"
+                                                                                     if (parte?.estado === 'Planificado') {
+                                                                                         updateParte({ estado: 'Abierto' });
+                                                                                         const storedPartes = JSON.parse(localStorage.getItem('firecheck_db_partes') || '[]');
+                                                                                         const parteActual = storedPartes.find((p: any) => p.id === parteId);
+                                                                                         const docId = parteActual?._docId || parteId;
+                                                                                         try { await updateParteFirestore(docId, { estado: 'Abierto' }); } catch (err) { console.error('Error actualizando estado en Firestore:', err); }
+                                                                                     }
+                                                                                 }}
+                                                                                 className={`px-4 py-2 rounded-lg text-xs transition-all shadow-sm ${eq.revisado ? 'bg-green-600 hover:bg-green-700 text-white font-bold shadow-md scale-105' : 'bg-green-100 text-green-800 border border-green-300 hover:bg-green-200 font-semibold'}`}
+                                                                             >
+                                                                                 Revisado OK
+                                                                             </button>
+                                                                             
                                                                              <button
                                                                                  type="button"
                                                                                  onClick={async () => {
@@ -727,14 +760,10 @@ export default function SistemaBombaElectrica({
                                                                                      setEquiposInstalados(updatedEquipos);
                                                                                      saveEquiposProgress(updatedEquipos);
                                                                                      const equipoModificado = updatedEquipos.find(currEq => currEq.id === eq.id);
-                                                                                      if (equipoModificado) {
-                                                                                          if (handleGuardarEquipoManual) {
-                                                                                              await handleGuardarEquipoManual(eq.id, equipoModificado);
-                                                                                          } else {
-                                                                                              try { await updateEquipoInstalado(eq.id, equipoModificado as any, (equipoModificado as any).centroId, (equipoModificado as any).sistemaId); } catch (err) { console.error('Error guardando en Firestore:', err); }
-                                                                                          }
-                                                                                      }
-                                                                                      showToast('Guardado');
+                                                                                     if (equipoModificado) {
+                                                                                         try { await updateEquipoInstalado(eq.id, equipoModificado as any); } catch (err) { console.error('Error guardando en Firestore:', err); }
+                                                                                     }
+                                                                                     showToast('Guardado');
                                                                                      // Cambiar estado del parte a "Abierto" si estaba en "Planificado"
                                                                                      if (parte?.estado === 'Planificado') {
                                                                                          updateParte({ estado: 'Abierto' });
@@ -747,50 +776,6 @@ export default function SistemaBombaElectrica({
                                                                                  className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-semibold transition-all shadow-sm"
                                                                              >
                                                                                  Equipo no encontrado
-                                                                             </button>
-                                                                             <button
-                                                                                 type="button"
-                                                                                 onClick={async () => {
-                                                                                     const itemsToUse = getItemsToUse(eq.sistemaId);
-                                                                                     const updatedEquipos = equiposInstalados.map(currEq => {
-                                                                                         if (currEq.id === eq.id) {
-                                                                                             const allChecked: Record<string, any> = {};
-                                                                                             itemsToUse.forEach(item => {
-                                                                                                 if (item.tipoRespuesta === 'check') {
-                                                                                                     allChecked[item.key] = true;
-                                                                                                 }
-                                                                                             });
-                                                                                             return {
-                                                                                                 ...currEq,
-                                                                                                 revisado: true,
-                                                                                                 ...allChecked
-                                                                                             };
-                                                                                         }
-                                                                                         return currEq;
-                                                                                     });
-                                                                                     setEquiposInstalados(updatedEquipos);
-                                                                                     saveEquiposProgress(updatedEquipos);
-                                                                                     const equipoModificado = updatedEquipos.find(currEq => currEq.id === eq.id);
-                                                                                      if (equipoModificado) {
-                                                                                          if (handleGuardarEquipoManual) {
-                                                                                              await handleGuardarEquipoManual(eq.id, equipoModificado);
-                                                                                          } else {
-                                                                                              try { await updateEquipoInstalado(eq.id, equipoModificado as any, (equipoModificado as any).centroId, (equipoModificado as any).sistemaId); } catch (err) { console.error('Error guardando en Firestore:', err); }
-                                                                                          }
-                                                                                      }
-                                                                                      showToast('Guardado');
-                                                                                     // Cambiar estado del parte a "Abierto" si estaba en "Planificado"
-                                                                                     if (parte?.estado === 'Planificado') {
-                                                                                         updateParte({ estado: 'Abierto' });
-                                                                                         const storedPartes = JSON.parse(localStorage.getItem('firecheck_db_partes') || '[]');
-                                                                                         const parteActual = storedPartes.find((p: any) => p.id === parteId);
-                                                                                         const docId = parteActual?._docId || parteId;
-                                                                                         try { await updateParteFirestore(docId, { estado: 'Abierto' }); } catch (err) { console.error('Error actualizando estado en Firestore:', err); }
-                                                                                     }
-                                                                                 }}
-                                                                                 className={`px-4 py-2 rounded-lg text-xs transition-all shadow-sm ${eq.revisado ? 'bg-emerald-500 hover:bg-emerald-600 text-white font-bold shadow-md scale-105' : 'bg-emerald-100 text-emerald-800 border border-emerald-300 hover:bg-emerald-200 font-semibold'}`}
-                                                                             >
-                                                                                 Checks ok
                                                                              </button>
                                                                              <button
                                                                                  type="button"
@@ -818,21 +803,12 @@ export default function SistemaBombaElectrica({
                                                                                      });
                                                                                      setEquiposInstalados(updatedEquipos);
                                                                                      saveEquiposProgress(updatedEquipos);
-                                                                                      const equipoModificado = updatedEquipos.find(currEq => currEq.id === eq.id);
-                                                                                      if (equipoModificado) {
-                                                                                          if (handleGuardarEquipoManual) {
-                                                                                              await handleGuardarEquipoManual(eq.id, equipoModificado);
-                                                                                          } else {
-                                                                                              try { await updateEquipoInstalado(eq.id, equipoModificado as any, (equipoModificado as any).centroId, (equipoModificado as any).sistemaId); } catch (err) { console.error('Error guardando en Firestore:', err); }
-                                                                                          }
-                                                                                      }
-                                                                                      showToast('Guardado');
                                                                                  }}
                                                                                  className="px-4 py-2 bg-slate-400 hover:bg-slate-500 text-white rounded-lg text-xs font-semibold transition-all shadow-sm"
                                                                              >
                                                                                  Limpiar Checks
                                                                              </button>
-                                                                             <button
+                                                                              <button
                                                                                   type="button"
                                                                                   onClick={() => {
                                                                                       if (handleCopiarEquipo) {

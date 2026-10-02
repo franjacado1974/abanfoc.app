@@ -35,23 +35,30 @@ export const getIconForSistema = (nombre: string): string | React.ElementType =>
     const savedCats = localStorage.getItem('firecheck_db_sistemas_categorias');
     if (savedCats) {
       const categorias: SistemaCategoria[] = JSON.parse(savedCats);
+      const norm = (s: string) => (s || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
       const cat = categorias.find(c => {
-        const a = (c.nombre || '').toLowerCase().trim();
-        const b = (nombre || '').toLowerCase().trim();
-        if (a === b) return true;
-        const isMonoxA = a.includes('monoxido') || a.includes('monox');
-        const isMonoxB = b.includes('monoxido') || b.includes('monox');
+        const aNorm = norm(c.nombre || '');
+        const bNorm = norm(nombre || '');
+        if (aNorm === bNorm) return true;
+        const isMonoxA = aNorm.includes('monoxido') || aNorm.includes('monox');
+        const isMonoxB = bNorm.includes('monoxido') || bNorm.includes('monox');
         if (isMonoxA || isMonoxB) return isMonoxA && isMonoxB;
-        const isAspA = a.includes('aspiraci') || a.includes('aspirac');
-        const isAspB = b.includes('aspiraci') || b.includes('aspirac');
+        const isAspA = aNorm.includes('aspiraci') || aNorm.includes('aspirac');
+        const isAspB = bNorm.includes('aspiraci') || bNorm.includes('aspirac');
         if (isAspA || isAspB) return isAspA && isAspB;
-        const isCocinaA = a.includes('cocina') || a.includes('campana');
-        const isCocinaB = b.includes('cocina') || b.includes('campana');
+        const isCocinaA = aNorm.includes('cocina') || aNorm.includes('campana');
+        const isCocinaB = bNorm.includes('cocina') || bNorm.includes('campana');
         if (isCocinaA || isCocinaB) return isCocinaA && isCocinaB;
-        const isGasA = (a.includes('gas') || (a.includes('extinci') && !a.includes('extintor'))) && !isCocinaA;
-        const isGasB = (b.includes('gas') || (b.includes('extinci') && !b.includes('extintor'))) && !isCocinaB;
+        const isEspumaA = aNorm.includes('espuma');
+        const isEspumaB = bNorm.includes('espuma');
+        if (isEspumaA || isEspumaB) return isEspumaA && isEspumaB;
+        const isAguaA = aNorm.includes('agua') && !isEspumaA;
+        const isAguaB = bNorm.includes('agua') && !isEspumaB;
+        if (isAguaA || isAguaB) return isAguaA && isAguaB;
+        const isGasA = (aNorm.includes('gas') || (aNorm.includes('extinci') && !aNorm.includes('extintor'))) && !isCocinaA && !isEspumaA && !isAguaA;
+        const isGasB = (bNorm.includes('gas') || (bNorm.includes('extinci') && !bNorm.includes('extintor'))) && !isCocinaB && !isEspumaB && !isAguaB;
         if (isGasA || isGasB) return isGasA && isGasB;
-        return a.includes(b) || b.includes(a);
+        return aNorm.includes(bNorm) || bNorm.includes(aNorm);
       });
       if (cat?.imagenUrl) {
         return cat.imagenUrl;

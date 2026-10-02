@@ -155,17 +155,6 @@ export default function Reparaciones() {
       .sort((a, b) => a.label.localeCompare(b.label, 'es', { sensitivity: 'base' }));
   }, [clientes]);
 
-  const centroOptions = useMemo(() => {
-    return centros
-      .filter((c: any) => !formData.clienteId || c.clienteId === formData.clienteId || c.cliente === formData.clienteId || c.cliente === formData.clienteNombre)
-      .map((c: any) => ({
-        value: c.id || c._docId,
-        label: c.nombre || c.id || '',
-        sublabel: c.direccion || c.poblacion || ''
-      }))
-      .filter(opt => opt.value && opt.label)
-      .sort((a, b) => a.label.localeCompare(b.label, 'es', { sensitivity: 'base' }));
-  }, [centros, formData.clienteId, formData.clienteNombre]);
 
   // Funciones auxiliares para fechas y meses
   const getItemMonth = (item: { fecha?: string; mes?: string; fechaCreacion?: string }): string => {
@@ -1128,37 +1117,6 @@ export default function Reparaciones() {
                 />
               </div>
 
-              {/* CENTRO */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Centro
-                </label>
-                <SearchableSelect
-                  value={formData.centroId}
-                  onChange={(val, opt) => {
-                    const sel = centros.find((c: any) => c.id === val || c._docId === val);
-                    let nextClienteId = formData.clienteId;
-                    let nextClienteNombre = formData.clienteNombre;
-                    if (!nextClienteId && sel?.clienteId) {
-                      const foundCli: any = clientes.find((c: any) => c.id === sel.clienteId || c._docId === sel.clienteId);
-                      if (foundCli) {
-                        nextClienteId = foundCli.id || foundCli._docId;
-                        nextClienteNombre = foundCli.nombre || foundCli.razonSocial || '';
-                      }
-                    }
-                    setFormData({
-                      ...formData,
-                      clienteId: nextClienteId,
-                      clienteNombre: nextClienteNombre,
-                      centroId: val,
-                      lugar: sel ? (sel.nombre || '') : (opt ? opt.label : formData.lugar)
-                    });
-                  }}
-                  options={centroOptions}
-                  placeholder={formData.clienteId ? "Buscar o escribir centro..." : "Selecciona cliente o busca centro..."}
-                  emptyMessage="No se encontraron centros"
-                />
-              </div>
 
               {/* LUGAR */}
               <div>

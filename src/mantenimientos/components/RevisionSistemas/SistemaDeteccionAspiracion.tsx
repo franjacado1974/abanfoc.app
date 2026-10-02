@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle2, XCircle, X, Pencil, Trash2 } from 'lucide-react';
+import { CheckCircle2, XCircle, Pencil, Trash2 } from 'lucide-react';
 import type { CentroSistema, EquipoInstalado, Parte } from '../../../recursos-compartidos/types/models';
 import { updateEquipoInstalado, updateParte as updateParteFirestore, uploadFile, type ChecklistItem } from '../../../recursos-compartidos/firebase/firebase';
 import TableInput from '../../../recursos-compartidos/components/TableInput';
@@ -622,10 +622,10 @@ export default function SistemaDeteccionAspiracion({
                                                                                              if (newFotos.length === 0) handleCheckChange(eq.id, 'foto', ''); // Mantenemos retrocompatibilidad vaciando 'foto'
                                                                                              else if (idx === 0) handleCheckChange(eq.id, 'foto', newFotos[0]);
                                                                                          }}
-                                                                                         className="absolute top-0 right-0 p-1 bg-red-500 text-white rounded-bl-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                                                                                         className="absolute top-0 right-0 p-1 bg-red-600 hover:bg-red-700 text-white rounded-bl-lg shadow-md transition-all active:scale-95 flex items-center justify-center cursor-pointer"
                                                                                          title="Eliminar foto"
                                                                                      >
-                                                                                         <X className="w-3 h-3" />
+                                                                                         <Trash2 className="w-3.5 h-3.5" />
                                                                                      </button>
                                                                                  </div>
                                                                              ))}

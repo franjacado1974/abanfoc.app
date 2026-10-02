@@ -60,6 +60,7 @@ export interface ItemPlantilla {
   filasInicio?: number; // Cantidad inicial de filas para 'tabla'
   filasNombres?: string[]; // Nombres de las filas (cabecera vertical para tablas, opcional)
   horizontal?: boolean; // Si es true, se muestra en línea horizontal (label + campo)
+  valorPredeterminado?: string; // Valor por defecto / predeterminado (ej: 'N/A', 'CORRECTO', etc.)
   createdAt?: string;
   updatedAt?: string;
 }
@@ -258,7 +259,9 @@ export async function getItemsDePlantilla(plantillaId: string): Promise<ItemPlan
         requerido: data.requerido !== false,
         opciones: data.opciones || [],
         filasInicio: data.filasInicio,
+        filasNombres: data.filasNombres || [],
         horizontal: data.horizontal === true,
+        valorPredeterminado: data.valorPredeterminado || '',
         createdAt: data.createdAt || '',
         updatedAt: data.updatedAt || '',
       } as ItemPlantilla;
@@ -357,7 +360,9 @@ export function subscribeItemsDePlantilla(
             requerido: data.requerido !== false,
             opciones: data.opciones || [],
             filasInicio: data.filasInicio,
+            filasNombres: data.filasNombres || [],
             horizontal: data.horizontal === true,
+            valorPredeterminado: data.valorPredeterminado || '',
             createdAt: data.createdAt || '',
             updatedAt: data.updatedAt || '',
           } as ItemPlantilla;
@@ -481,7 +486,9 @@ export async function reemplazarItemsDePlantilla(
         requerido: item.requerido !== false,
         opciones: item.opciones || [],
         filasInicio: item.filasInicio,
+        filasNombres: item.filasNombres || [],
         horizontal: item.horizontal === true,
+        valorPredeterminado: item.valorPredeterminado || '',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       });
@@ -541,11 +548,12 @@ export const PLANTILLAS_POR_DEFECTO: Array<{
       { plantillaId: '', label: 'Acceso', key: 'checkAcceso', orden: 1, tipoRespuesta: 'check', requerido: true },
       { plantillaId: '', label: 'Señalización', key: 'checkSenalizacion', orden: 2, tipoRespuesta: 'check', requerido: true },
       { plantillaId: '', label: 'Soporte', key: 'checkSoporte', orden: 3, tipoRespuesta: 'check', requerido: true },
-      { plantillaId: '', label: 'Manguera', key: 'checkManguera', orden: 4, tipoRespuesta: 'check', requerido: true },
-      { plantillaId: '', label: 'Presión', key: 'checkPresion', orden: 5, tipoRespuesta: 'check', requerido: true },
-      { plantillaId: '', label: 'Manómetro', key: 'checkManometro', orden: 6, tipoRespuesta: 'check', requerido: true },
-      { plantillaId: '', label: 'Longitud', key: 'checkLongitud', orden: 7, tipoRespuesta: 'numero', requerido: true },
-      { plantillaId: '', label: 'Prueba hidráulica', key: 'checkPruebaHidraulica', orden: 8, tipoRespuesta: 'texto', requerido: false },
+      { plantillaId: '', label: 'Puerta y/o cristal', key: 'item_1790629281657', orden: 4, tipoRespuesta: 'check', requerido: true },
+      { plantillaId: '', label: 'Manguera', key: 'checkManguera', orden: 5, tipoRespuesta: 'check', requerido: true },
+      { plantillaId: '', label: 'Presión', key: 'checkPresion', orden: 6, tipoRespuesta: 'check', requerido: true },
+      { plantillaId: '', label: 'Manómetro', key: 'checkManometro', orden: 7, tipoRespuesta: 'check', requerido: true },
+      { plantillaId: '', label: 'Longitud', key: 'checkLongitud', orden: 8, tipoRespuesta: 'numero', requerido: true },
+      { plantillaId: '', label: 'Prueba hidráulica', key: 'checkPruebaHidraulica', orden: 9, tipoRespuesta: 'texto', requerido: false },
     ],
   },
   {

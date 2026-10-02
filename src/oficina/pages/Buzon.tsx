@@ -1285,13 +1285,13 @@ export default function Buzon({ isTecnicoMode = false, onBack }: BuzonProps) {
                     </div>
                     <div className="sm:col-span-6">
                       <label className="block text-xs font-bold text-slate-700 mb-1">Descripción de la actualización</label>
-                      <input
-                        type="text"
+                      <textarea
+                        rows={4}
                         value={versionDesc}
                         onChange={e => setVersionDesc(e.target.value)}
                         placeholder="Ej. Añadido envío de PDF de albaranes por Gmail y modal de progreso..."
                         required
-                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all resize-y min-h-[90px]"
                       />
                     </div>
                   </div>

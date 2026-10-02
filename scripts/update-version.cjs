@@ -57,14 +57,12 @@ console.log(`📦 Versión generada: ${version}`);
 const constantsFile = path.join(__dirname, '..', 'src', 'constants.ts');
 let content = fs.readFileSync(constantsFile, 'utf8');
 
-const updated = content.replace(
-  /V\.\d{2}\.\d{2}\.\d{2}\.[A-Z]+/g,
-  version
-);
+const versionRegex = /V\.\d{2}\.\d{2}\.\d{2}\.[A-Z]+/;
 
-if (updated === content) {
+if (!versionRegex.test(content)) {
   console.warn('⚠️  No se encontró el patrón de versión en constants.ts. Revisa el formato.');
 } else {
+  const updated = content.replace(versionRegex, version);
   fs.writeFileSync(constantsFile, updated, 'utf8');
   console.log(`✅ constants.ts actualizado con versión: ${version}`);
 }
