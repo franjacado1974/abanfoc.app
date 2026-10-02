@@ -299,9 +299,9 @@ export default function Notas({ user }: NotasProps) {
           prioridad: formPrioridad,
           usuarioNombre: notaEditando.usuarioNombre || currentUserName,
           completada: formCategoria === 'Completadas' ? true : (notaEditando.completada ?? false),
-          completadaPor: formCategoria === 'Completadas' ? (notaEditando.completadaPor || currentUserName) : (formCategoria !== 'Completadas' && notaEditando.categoria === 'Completadas' ? '' : notaEditando.completadaPor),
-          fechaCompletada: formCategoria === 'Completadas' ? (notaEditando.fechaCompletada || new Date().toISOString()) : (formCategoria !== 'Completadas' && notaEditando.categoria === 'Completadas' ? '' : notaEditando.fechaCompletada),
-          categoriaAnterior: notaEditando.categoriaAnterior || (notaEditando.categoria !== 'Completadas' ? notaEditando.categoria : 'Varias')
+          completadaPor: formCategoria === 'Completadas' ? (notaEditando.completadaPor || currentUserName) : ((notaEditando.categoria as string) === 'Completadas' ? '' : notaEditando.completadaPor),
+          fechaCompletada: formCategoria === 'Completadas' ? (notaEditando.fechaCompletada || new Date().toISOString()) : ((notaEditando.categoria as string) === 'Completadas' ? '' : notaEditando.fechaCompletada),
+          categoriaAnterior: notaEditando.categoriaAnterior || ((notaEditando.categoria as string) !== 'Completadas' ? notaEditando.categoria : 'Varias')
         });
       } else {
         await addNotaBloc({
