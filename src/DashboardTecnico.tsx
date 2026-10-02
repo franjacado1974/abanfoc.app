@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { FileText, Package, Power, LogOut, FileCheck, Inbox, Gauge, Calendar, AlertTriangle, Building2, StickyNote } from 'lucide-react';
+import { FileText, Package, Power, LogOut, FileCheck, Mail, Gauge, Calendar, AlertTriangle, Building2, StickyNote } from 'lucide-react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { 
@@ -220,15 +220,27 @@ function DashboardHome({ loggedUser, onLogout, onNavigate }: DashboardTecnicoPro
     };
   }, []);
 
-  // Escuchar novedades del buzon para el técnico
+  // Escuchar novedades del buzon y versiones para el técnico
   useEffect(() => {
     try {
-      const q = query(collection(db, 'buzon'), orderBy('createdAt', 'desc'));
-      const unsub = onSnapshot(q, (snapshot) => {
-        const lastSeenStr = localStorage.getItem('firecheck_buzon_last_seen');
-        const lastSeen = lastSeenStr ? parseInt(lastSeenStr, 10) : 0;
+      const qBuzon = query(collection(db, 'buzon'), orderBy('createdAt', 'desc'));
+      const qVersiones = query(collection(db, 'versiones'), orderBy('createdAt', 'desc'));
 
-        let unread = false;
+      let unreadBuzon = false;
+      let unreadVersiones = false;
+
+      const checkUnread = () => {
+        setHasUnreadBuzon(unreadBuzon || unreadVersiones);
+      };
+
+      const unsubBuzon = onSnapshot(qBuzon, (snapshot) => {
+        const fallback = localStorage.getItem('firecheck_buzon_last_seen');
+        const seenSugStr = localStorage.getItem('firecheck_buzon_seen_sugerencias') || fallback;
+        const seenFallosStr = localStorage.getItem('firecheck_buzon_seen_fallos') || fallback;
+        const seenSug = seenSugStr ? parseInt(seenSugStr, 10) : 0;
+        const seenFallos = seenFallosStr ? parseInt(seenFallosStr, 10) : 0;
+
+        let foundUnread = false;
         snapshot.docs.forEach((d) => {
           const data = d.data();
           let docTime = 0;
@@ -250,16 +262,48 @@ function DashboardHome({ loggedUser, onLogout, onNavigate }: DashboardTecnicoPro
             });
           }
 
-          if (docTime > lastSeen) {
-            unread = true;
+          const threshold = data.tipo === 'Sugerencia' ? seenSug : seenFallos;
+          if (threshold > 0 && docTime > threshold) {
+            foundUnread = true;
           }
         });
 
-        setHasUnreadBuzon(unread);
+        unreadBuzon = foundUnread;
+        checkUnread();
       }, (err) => {
         console.warn('Error escuchando buzon en DashboardHome:', err);
       });
-      return () => unsub();
+
+      const unsubVersiones = onSnapshot(qVersiones, (snapshot) => {
+        const fallback = localStorage.getItem('firecheck_buzon_last_seen');
+        const seenVersionesStr = localStorage.getItem('firecheck_buzon_seen_versiones') || fallback;
+        const seenVersiones = seenVersionesStr ? parseInt(seenVersionesStr, 10) : 0;
+
+        let foundUnread = false;
+        snapshot.docs.forEach((d) => {
+          const data = d.data();
+          let docTime = 0;
+          if (data.updatedAt) {
+            docTime = typeof data.updatedAt.toMillis === 'function' ? data.updatedAt.toMillis() : Number(data.updatedAt);
+          } else if (data.createdAt) {
+            docTime = typeof data.createdAt.toMillis === 'function' ? data.createdAt.toMillis() : Number(data.createdAt);
+          }
+
+          if (seenVersiones > 0 && docTime > seenVersiones) {
+            foundUnread = true;
+          }
+        });
+
+        unreadVersiones = foundUnread;
+        checkUnread();
+      }, (err) => {
+        console.warn('Error escuchando versiones en DashboardHome:', err);
+      });
+
+      return () => {
+        unsubBuzon();
+        unsubVersiones();
+      };
     } catch (err) {
       console.warn('Error configurando listener buzon en DashboardHome:', err);
     }
@@ -270,10 +314,6 @@ function DashboardHome({ loggedUser, onLogout, onNavigate }: DashboardTecnicoPro
   };
 
   const handleCardClick = (cardId: TecnicoView) => {
-    if (cardId === 'buzon') {
-      localStorage.setItem('firecheck_buzon_last_seen', String(Date.now()));
-      setHasUnreadBuzon(false);
-    }
     onNavigate(cardId);
   };
 
@@ -428,7 +468,7 @@ function DashboardHome({ loggedUser, onLogout, onNavigate }: DashboardTecnicoPro
       id: 'buzon' as TecnicoView,
       title: 'Buzón',
       description: 'Sugerencias y reporte de incidencias',
-      icon: Inbox,
+      icon: Mail,
       bgColor: 'bg-purple-500/10 text-purple-600',
       iconColor: 'text-purple-600',
       borderColor: 'border-purple-200/80',

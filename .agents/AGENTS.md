@@ -971,4 +971,14 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
   - En el Acta PDF, tanto en la cabecera (`RENDIMIENTO`) como en todas las celdas del cuerpo de la columna 0 (`0%`, `50%`, `100%`, `140%`) de la tabla "PRUEBA DE CAUDAL Y PRESIÓN", la alineación de texto DEBE ser incondicionalmente **CENTRADA** (`halign: 'center'`).
   - Queda terminantemente prohibido alinear esta columna a la izquierda (`halign: 'left'`).
 
+---
+
+## 69. Blindaje Inviolable del Icono de Sobre en Buzón y Distintivo Parpadeante "NUEVO" por Tarjeta (`Buzon.tsx`, `Sidebar.tsx`, `DashboardTecnico.tsx`)
+- **Icono de Sobre Obligatorio (`Mail`)**:
+  - En toda la aplicación (barra lateral `Sidebar.tsx`, panel de técnico `DashboardTecnico.tsx`, cabecera y accesos directos), el icono representativo del menú Buzón DEBE ser obligatoriamente el sobre (`Mail` de `lucide-react`).
+  - Queda prohibido volver a utilizar el icono de bandeja de entrada (`Inbox`).
+- **Aviso Parpadeante "NUEVO" por Tarjeta Específica**:
+  - En la vista principal del Buzón que contiene las 3 tarjetas (*Sugerencias de Mejora*, *Reporte de Fallos*, *Versiones*), si alguna de las tres secciones tiene novedades o comentarios no vistos por el usuario, DEBE mostrarse una insignia roja parpadeante con el texto literal exacto **`"NUEVO"`** (`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-black tracking-wider text-white bg-red-600 shadow-[0_0_12px_rgba(220,38,38,0.85)] animate-pulse` con punto blanco interior pulsante `animate-ping`) en la tarjeta específica correspondiente.
+  - **Desaparición Inmediata al Entrar**: En cuanto el usuario pulsa y entra en una tarjeta (activando `activeSection`), el aviso **"NUEVO"** de esa tarjeta desaparece de forma instantánea al fijar la marca de lectura con `Math.max(Date.now(), maxTime)`. Al regresar al menú, dicha tarjeta ya no muestra el aviso. Las demás tarjetas que aún no hayan sido abiertas mantendrán su aviso activo.
+
 

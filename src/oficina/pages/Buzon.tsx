@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { 
-  Inbox, MessageSquarePlus, AlertTriangle, CheckCircle2, Clock, 
+  Mail, MessageSquarePlus, AlertTriangle, CheckCircle2, Clock, 
   User, Calendar, Search, Filter, Send, Check, ArrowLeft, Pencil, Trash2, X, MessageSquare,
   Layers, ChevronRight, ArrowUp, ArrowDown, ArrowUpDown
 } from 'lucide-react';
@@ -54,15 +54,117 @@ export interface BuzonRegistro {
   updatedAt?: any;
 }
 
+export function getBuzonDocTime(data: any): number {
+  let maxTime = 0;
+  if (!data) return 0;
+
+  if (data.updatedAt) {
+    const t = typeof data.updatedAt.toMillis === 'function' ? data.updatedAt.toMillis() : Number(data.updatedAt);
+    if (!isNaN(t) && t > maxTime) maxTime = t;
+  }
+  if (data.createdAt) {
+    const t = typeof data.createdAt.toMillis === 'function' ? data.createdAt.toMillis() : Number(data.createdAt);
+    if (!isNaN(t) && t > maxTime) maxTime = t;
+  }
+  if (data.fecha) {
+    try {
+      const parts = String(data.fecha).split('/');
+      if (parts.length === 3) {
+        const d = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10) - 1;
+        let y = parseInt(parts[2], 10);
+        if (y < 100) y += 2000;
+        let hh = 0, mm = 0;
+        if (data.hora && String(data.hora).includes(':')) {
+          const hParts = String(data.hora).split(':');
+          hh = parseInt(hParts[0], 10) || 0;
+          mm = parseInt(hParts[1], 10) || 0;
+        }
+        const t = new Date(y, m, d, hh, mm).getTime();
+        if (!isNaN(t) && t > maxTime) maxTime = t;
+      }
+    } catch {}
+  }
+  if (Array.isArray(data.comentarios) && data.comentarios.length > 0) {
+    data.comentarios.forEach((c: any) => {
+      if (c?.id && typeof c.id === 'string') {
+        const parts = c.id.split('_');
+        if (parts[1]) {
+          const t = parseInt(parts[1], 10);
+          if (!isNaN(t) && t > maxTime) maxTime = t;
+        }
+      }
+      if (c?.fecha) {
+        try {
+          const parts = String(c.fecha).split('/');
+          if (parts.length === 3) {
+            const d = parseInt(parts[0], 10);
+            const m = parseInt(parts[1], 10) - 1;
+            let y = parseInt(parts[2], 10);
+            if (y < 100) y += 2000;
+            let hh = 0, mm = 0;
+            if (c.hora && String(c.hora).includes(':')) {
+              const hParts = String(c.hora).split(':');
+              hh = parseInt(hParts[0], 10) || 0;
+              mm = parseInt(hParts[1], 10) || 0;
+            }
+            const t = new Date(y, m, d, hh, mm).getTime();
+            if (!isNaN(t) && t > maxTime) maxTime = t;
+          }
+        } catch {}
+      }
+    });
+  }
+  return maxTime;
+}
+
 interface BuzonProps {
   isTecnicoMode?: boolean;
   onBack?: () => void;
 }
 
 export default function Buzon({ isTecnicoMode = false, onBack }: BuzonProps) {
-  // Marcar como visto el buzon al entrar
+  // Estados para rastrear qué tarjetas han sido vistas por el usuario
+  const [lastSeenSugerencias, setLastSeenSugerencias] = useState<number>(() => {
+    const val = localStorage.getItem('firecheck_buzon_seen_sugerencias');
+    if (val) return parseInt(val, 10);
+    const global = localStorage.getItem('firecheck_buzon_last_seen');
+    return global ? parseInt(global, 10) : 0;
+  });
+
+  const [lastSeenFallos, setLastSeenFallos] = useState<number>(() => {
+    const val = localStorage.getItem('firecheck_buzon_seen_fallos');
+    if (val) return parseInt(val, 10);
+    const global = localStorage.getItem('firecheck_buzon_last_seen');
+    return global ? parseInt(global, 10) : 0;
+  });
+
+  const [lastSeenVersiones, setLastSeenVersiones] = useState<number>(() => {
+    const val = localStorage.getItem('firecheck_buzon_seen_versiones');
+    if (val) return parseInt(val, 10);
+    const global = localStorage.getItem('firecheck_buzon_last_seen');
+    return global ? parseInt(global, 10) : 0;
+  });
+
   useEffect(() => {
-    localStorage.setItem('firecheck_buzon_last_seen', String(Date.now()));
+    // Si nunca se ha inicializado el registro en este navegador, fijamos el timestamp actual como base
+    if (!localStorage.getItem('firecheck_buzon_initialized')) {
+      const now = Date.now();
+      localStorage.setItem('firecheck_buzon_initialized', 'true');
+      if (!localStorage.getItem('firecheck_buzon_seen_sugerencias')) {
+        localStorage.setItem('firecheck_buzon_seen_sugerencias', String(now));
+        setLastSeenSugerencias(now);
+      }
+      if (!localStorage.getItem('firecheck_buzon_seen_fallos')) {
+        localStorage.setItem('firecheck_buzon_seen_fallos', String(now));
+        setLastSeenFallos(now);
+      }
+      if (!localStorage.getItem('firecheck_buzon_seen_versiones')) {
+        localStorage.setItem('firecheck_buzon_seen_versiones', String(now));
+        setLastSeenVersiones(now);
+      }
+      localStorage.setItem('firecheck_buzon_last_seen', String(now));
+    }
   }, []);
   const loggedUser = (() => {
     try {
@@ -257,6 +359,9 @@ export default function Buzon({ isTecnicoMode = false, onBack }: BuzonProps) {
       };
 
       await addDoc(collection(db, 'buzon'), nuevoRegistro);
+      const t = Date.now();
+      localStorage.setItem('firecheck_buzon_seen_sugerencias', String(t));
+      setLastSeenSugerencias(t);
       setSugerenciaTitulo('');
       setSugerenciaDesc('');
       showToast('¡Sugerencia enviada correctamente!');
@@ -293,6 +398,9 @@ export default function Buzon({ isTecnicoMode = false, onBack }: BuzonProps) {
       };
 
       await addDoc(collection(db, 'buzon'), nuevoRegistro);
+      const t = Date.now();
+      localStorage.setItem('firecheck_buzon_seen_fallos', String(t));
+      setLastSeenFallos(t);
       setErrorTitulo('');
       setErrorDesc('');
       showToast('¡Reporte de error enviado correctamente!');
@@ -322,6 +430,9 @@ export default function Buzon({ isTecnicoMode = false, onBack }: BuzonProps) {
           fecha,
           updatedAt: serverTimestamp()
         });
+        const t = Date.now();
+        localStorage.setItem('firecheck_buzon_seen_versiones', String(t));
+        setLastSeenVersiones(t);
         setVersionEditandoId(null);
         setVersionDesc('');
         setVersionInput(APP_VERSION || '');
@@ -348,6 +459,9 @@ export default function Buzon({ isTecnicoMode = false, onBack }: BuzonProps) {
         await Promise.all(batch);
 
         await addDoc(collection(db, 'versiones'), nuevaVersionData);
+        const t = Date.now();
+        localStorage.setItem('firecheck_buzon_seen_versiones', String(t));
+        setLastSeenVersiones(t);
         setVersionDesc('');
         setVersionInput(APP_VERSION || '');
         setVersionFechaInput(getTodayInputDate());
@@ -546,6 +660,16 @@ export default function Buzon({ isTecnicoMode = false, onBack }: BuzonProps) {
         updatedAt: serverTimestamp()
       });
 
+      if (activeSection === 'sugerencias') {
+        const t = Date.now();
+        localStorage.setItem('firecheck_buzon_seen_sugerencias', String(t));
+        setLastSeenSugerencias(t);
+      } else if (activeSection === 'fallos') {
+        const t = Date.now();
+        localStorage.setItem('firecheck_buzon_seen_fallos', String(t));
+        setLastSeenFallos(t);
+      }
+
       setComentariosTexto(prev => ({ ...prev, [regId]: '' }));
       showToast('Comentario añadido a la conversación');
     } catch (err) {
@@ -608,6 +732,94 @@ export default function Buzon({ isTecnicoMode = false, onBack }: BuzonProps) {
 
   const sugerenciasCount = registros.filter(r => r.tipo === 'Sugerencia').length;
   const erroresCount = registros.filter(r => r.tipo === 'Error').length;
+
+  // Detección de nuevas escrituras por tarjeta
+  const maxTimeSugerencias = useMemo(() => {
+    let max = 0;
+    registros.filter(r => r.tipo === 'Sugerencia').forEach(r => {
+      const t = getBuzonDocTime(r);
+      if (t > max) max = t;
+    });
+    return max;
+  }, [registros]);
+
+  const maxTimeFallos = useMemo(() => {
+    let max = 0;
+    registros.filter(r => r.tipo === 'Error').forEach(r => {
+      const t = getBuzonDocTime(r);
+      if (t > max) max = t;
+    });
+    return max;
+  }, [registros]);
+
+  const maxTimeVersiones = useMemo(() => {
+    let max = 0;
+    versiones.forEach(v => {
+      const t = getBuzonDocTime(v);
+      if (t > max) max = t;
+    });
+    return max;
+  }, [versiones]);
+
+  // En cuanto el usuario entra en una sección, se marca como leída inmediatamente
+  // usando el mayor entre el reloj del cliente y el timestamp más reciente del documento
+  useEffect(() => {
+    if (activeSection === 'sugerencias') {
+      const mark = Math.max(Date.now(), maxTimeSugerencias);
+      localStorage.setItem('firecheck_buzon_seen_sugerencias', String(mark));
+      setLastSeenSugerencias(mark);
+    } else if (activeSection === 'fallos') {
+      const mark = Math.max(Date.now(), maxTimeFallos);
+      localStorage.setItem('firecheck_buzon_seen_fallos', String(mark));
+      setLastSeenFallos(mark);
+    } else if (activeSection === 'versiones') {
+      const mark = Math.max(Date.now(), maxTimeVersiones);
+      localStorage.setItem('firecheck_buzon_seen_versiones', String(mark));
+      setLastSeenVersiones(mark);
+    }
+  }, [activeSection, maxTimeSugerencias, maxTimeFallos, maxTimeVersiones]);
+
+  const hasNewSugerencias = activeSection !== 'sugerencias' && lastSeenSugerencias > 0 && maxTimeSugerencias > lastSeenSugerencias;
+  const hasNewFallos = activeSection !== 'fallos' && lastSeenFallos > 0 && maxTimeFallos > lastSeenFallos;
+  const hasNewVersiones = activeSection !== 'versiones' && lastSeenVersiones > 0 && maxTimeVersiones > lastSeenVersiones;
+
+  const handleOpenSugerencias = () => {
+    const mark = Math.max(Date.now(), maxTimeSugerencias);
+    localStorage.setItem('firecheck_buzon_seen_sugerencias', String(mark));
+    setLastSeenSugerencias(mark);
+    setActiveSection('sugerencias');
+  };
+
+  const handleOpenFallos = () => {
+    const mark = Math.max(Date.now(), maxTimeFallos);
+    localStorage.setItem('firecheck_buzon_seen_fallos', String(mark));
+    setLastSeenFallos(mark);
+    setActiveSection('fallos');
+  };
+
+  const handleOpenVersiones = () => {
+    const mark = Math.max(Date.now(), maxTimeVersiones);
+    localStorage.setItem('firecheck_buzon_seen_versiones', String(mark));
+    setLastSeenVersiones(mark);
+    setActiveSection('versiones');
+  };
+
+  const handleVolverAlMenu = () => {
+    if (activeSection === 'sugerencias') {
+      const mark = Math.max(Date.now(), maxTimeSugerencias);
+      localStorage.setItem('firecheck_buzon_seen_sugerencias', String(mark));
+      setLastSeenSugerencias(mark);
+    } else if (activeSection === 'fallos') {
+      const mark = Math.max(Date.now(), maxTimeFallos);
+      localStorage.setItem('firecheck_buzon_seen_fallos', String(mark));
+      setLastSeenFallos(mark);
+    } else if (activeSection === 'versiones') {
+      const mark = Math.max(Date.now(), maxTimeVersiones);
+      localStorage.setItem('firecheck_buzon_seen_versiones', String(mark));
+      setLastSeenVersiones(mark);
+    }
+    setActiveSection('menu');
+  };
 
   // Renderizador de cada consulta (común a Sugerencias y Fallos)
   const renderRegistroItem = (reg: BuzonRegistro) => {
@@ -850,7 +1062,7 @@ export default function Buzon({ isTecnicoMode = false, onBack }: BuzonProps) {
             type="button"
             onClick={() => {
               if (activeSection !== 'menu') {
-                setActiveSection('menu');
+                handleVolverAlMenu();
               } else if (onBack) {
                 onBack();
               }
@@ -863,7 +1075,7 @@ export default function Buzon({ isTecnicoMode = false, onBack }: BuzonProps) {
             {activeSection !== 'menu' ? 'Menú Buzón' : 'Volver'}
           </button>
           <h1 className="text-base font-black text-slate-900 flex items-center gap-2">
-            <Inbox className="w-5 h-5 text-purple-600" /> Buzón
+            <Mail className="w-5 h-5 text-purple-600" /> Buzón
           </h1>
         </div>
       )}
@@ -875,7 +1087,7 @@ export default function Buzon({ isTecnicoMode = false, onBack }: BuzonProps) {
             {activeSection === 'menu' ? (
               <div className="flex flex-col sm:flex-row items-center gap-3 text-center sm:text-left">
                 <div className="p-3 bg-purple-100 text-purple-700 rounded-2xl shrink-0">
-                  <Inbox className="w-8 h-8" />
+                  <Mail className="w-8 h-8" />
                 </div>
                 <div>
                   <h1 className="text-2xl font-black text-slate-950 tracking-tight">Buzón de Comunicaciones</h1>
@@ -888,7 +1100,7 @@ export default function Buzon({ isTecnicoMode = false, onBack }: BuzonProps) {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <button
                   type="button"
-                  onClick={() => setActiveSection('menu')}
+                  onClick={handleVolverAlMenu}
                   className="inline-flex items-center gap-2 text-xs font-bold text-slate-600 hover:text-slate-950 bg-white hover:bg-slate-50 border border-slate-200 px-4 py-2.5 rounded-2xl shadow-xs transition-all cursor-pointer active:scale-98 self-start"
                 >
                   <ArrowLeft className="w-4 h-4 text-slate-500" />
@@ -922,7 +1134,7 @@ export default function Buzon({ isTecnicoMode = false, onBack }: BuzonProps) {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-in fade-in duration-300">
             {/* TARJETA 1: SUGERENCIAS DE MEJORA */}
             <div
-              onClick={() => setActiveSection('sugerencias')}
+              onClick={handleOpenSugerencias}
               className="group bg-white rounded-3xl border-2 border-purple-100 hover:border-purple-300 p-6 sm:p-8 shadow-xl shadow-purple-500/5 hover:shadow-purple-500/10 transition-all duration-200 cursor-pointer flex flex-col justify-between hover:scale-[1.02] active:scale-[0.99]"
             >
               <div>
@@ -930,9 +1142,17 @@ export default function Buzon({ isTecnicoMode = false, onBack }: BuzonProps) {
                   <div className="p-3.5 bg-purple-50 group-hover:bg-purple-100 text-purple-600 rounded-2xl transition-colors">
                     <MessageSquarePlus className="w-8 h-8" />
                   </div>
-                  <span className="text-xs font-bold px-3 py-1 bg-purple-100/70 text-purple-800 rounded-full border border-purple-200">
-                    {sugerenciasCount} {sugerenciasCount === 1 ? 'registro' : 'registros'}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {hasNewSugerencias && (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-black tracking-wider text-white bg-red-600 shadow-[0_0_12px_rgba(220,38,38,0.85)] animate-pulse">
+                        <span className="w-2 h-2 rounded-full bg-white animate-ping" />
+                        NUEVO
+                      </span>
+                    )}
+                    <span className="text-xs font-bold px-3 py-1 bg-purple-100/70 text-purple-800 rounded-full border border-purple-200">
+                      {sugerenciasCount} {sugerenciasCount === 1 ? 'registro' : 'registros'}
+                    </span>
+                  </div>
                 </div>
                 <h2 className="text-xl font-black text-slate-900 mb-2 group-hover:text-purple-600 transition-colors">
                   Sugerencias de Mejora
@@ -952,7 +1172,7 @@ export default function Buzon({ isTecnicoMode = false, onBack }: BuzonProps) {
 
             {/* TARJETA 2: REPORTE DE FALLOS */}
             <div
-              onClick={() => setActiveSection('fallos')}
+              onClick={handleOpenFallos}
               className="group bg-white rounded-3xl border-2 border-red-100 hover:border-red-300 p-6 sm:p-8 shadow-xl shadow-red-500/5 hover:shadow-red-500/10 transition-all duration-200 cursor-pointer flex flex-col justify-between hover:scale-[1.02] active:scale-[0.99]"
             >
               <div>
@@ -960,9 +1180,17 @@ export default function Buzon({ isTecnicoMode = false, onBack }: BuzonProps) {
                   <div className="p-3.5 bg-red-50 group-hover:bg-red-100 text-red-600 rounded-2xl transition-colors">
                     <AlertTriangle className="w-8 h-8" />
                   </div>
-                  <span className="text-xs font-bold px-3 py-1 bg-red-100/70 text-red-800 rounded-full border border-red-200">
-                    {erroresCount} {erroresCount === 1 ? 'incidencia' : 'incidencias'}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {hasNewFallos && (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-black tracking-wider text-white bg-red-600 shadow-[0_0_12px_rgba(220,38,38,0.85)] animate-pulse">
+                        <span className="w-2 h-2 rounded-full bg-white animate-ping" />
+                        NUEVO
+                      </span>
+                    )}
+                    <span className="text-xs font-bold px-3 py-1 bg-red-100/70 text-red-800 rounded-full border border-red-200">
+                      {erroresCount} {erroresCount === 1 ? 'incidencia' : 'incidencias'}
+                    </span>
+                  </div>
                 </div>
                 <h2 className="text-xl font-black text-slate-900 mb-2 group-hover:text-red-600 transition-colors">
                   Reporte de Fallos
@@ -982,7 +1210,7 @@ export default function Buzon({ isTecnicoMode = false, onBack }: BuzonProps) {
 
             {/* TARJETA 3: VERSIONES */}
             <div
-              onClick={() => setActiveSection('versiones')}
+              onClick={handleOpenVersiones}
               className="group bg-white rounded-3xl border-2 border-blue-100 hover:border-blue-300 p-6 sm:p-8 shadow-xl shadow-blue-500/5 hover:shadow-blue-500/10 transition-all duration-200 cursor-pointer flex flex-col justify-between hover:scale-[1.02] active:scale-[0.99]"
             >
               <div>
@@ -990,9 +1218,17 @@ export default function Buzon({ isTecnicoMode = false, onBack }: BuzonProps) {
                   <div className="p-3.5 bg-blue-50 group-hover:bg-blue-100 text-blue-600 rounded-2xl transition-colors">
                     <Layers className="w-8 h-8" />
                   </div>
-                  <span className="text-xs font-bold px-3 py-1 bg-blue-100/70 text-blue-800 rounded-full border border-blue-200">
-                    Versión: {APP_VERSION}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {hasNewVersiones && (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-black tracking-wider text-white bg-red-600 shadow-[0_0_12px_rgba(220,38,38,0.85)] animate-pulse">
+                        <span className="w-2 h-2 rounded-full bg-white animate-ping" />
+                        NUEVO
+                      </span>
+                    )}
+                    <span className="text-xs font-bold px-3 py-1 bg-blue-100/70 text-blue-800 rounded-full border border-blue-200">
+                      Versión: {APP_VERSION}
+                    </span>
+                  </div>
                 </div>
                 <h2 className="text-xl font-black text-slate-900 mb-2 group-hover:text-blue-600 transition-colors">
                   Versiones
