@@ -163,16 +163,35 @@ export default function SistemaHidrantes({
                                                                                  );
                                                                              }
 
-                                                                             if (tipo === 'tabla') {
+                                                                             const isTablaOGrafico = tipo === 'tabla' || tipo === 'grafico' || (
+                                                                                 typeof item.label === 'string' && (
+                                                                                     item.label.toLowerCase().includes('caudal y presion') ||
+                                                                                     item.label.toLowerCase().includes('caudal y presión') ||
+                                                                                     item.label.toLowerCase().includes('curva de caudal')
+                                                                                 )
+                                                                             );
+
+                                                                             if (isTablaOGrafico) {
+                                                                                 const isGraficoItem = tipo === 'grafico' || (
+                                                                                     typeof item.label === 'string' && (
+                                                                                         item.label.toLowerCase().includes('caudal') &&
+                                                                                         item.label.toLowerCase().includes('presi')
+                                                                                     )
+                                                                                 );
                                                                                  return (
-                                                                                     <TableInput
-                                                                                         key={item.key}
-                                                                                         label={item.label}
-                                                                                         opciones={item.opciones || []}
-                                                                                         filasInicio={item.filasInicio}
-                                                                                         value={String(val || '')}
-                                                                                         onChange={(newVal) => handleCheckChange(eq.id, item.key, newVal)}
-                                                                                     />
+                                                                                     <div key={item.key} className="col-span-full">
+                                                                                         <TableInput
+                                                                                             label={item.label}
+                                                                                             opciones={(item as any).opciones || []}
+                                                                                             filasInicio={(item as any).filasInicio}
+                                                                                             filasNombres={(item as any).filasNombres}
+                                                                                             tipoRespuesta={isGraficoItem ? 'grafico' : tipo}
+                                                                                             currentEquipo={eq}
+                                                                                             equiposInstalados={equiposInstalados}
+                                                                                             value={String(val || '')}
+                                                                                             onChange={(newVal) => handleCheckChange(eq.id, item.key, newVal)}
+                                                                                         />
+                                                                                     </div>
                                                                                  );
                                                                              }
 

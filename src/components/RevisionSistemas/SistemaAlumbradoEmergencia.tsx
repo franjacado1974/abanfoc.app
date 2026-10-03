@@ -150,13 +150,31 @@ export default function SistemaAlumbradoEmergencia({
                                         );
                                     }
 
-                                    if (tipo === 'tabla') {
+                                    const isTablaOGrafico = tipo === 'tabla' || tipo === 'grafico' || (
+                                        typeof item.label === 'string' && (
+                                            item.label.toLowerCase().includes('caudal y presion') ||
+                                            item.label.toLowerCase().includes('caudal y presión') ||
+                                            item.label.toLowerCase().includes('curva de caudal')
+                                        )
+                                    );
+
+                                    if (isTablaOGrafico) {
+                                        const isGraficoItem = tipo === 'grafico' || (
+                                            typeof item.label === 'string' && (
+                                                item.label.toLowerCase().includes('caudal') &&
+                                                item.label.toLowerCase().includes('presi')
+                                            )
+                                        );
                                         return (
                                             <div key={item.key} className="px-4 py-3 border-b border-slate-100">
                                                 <TableInput
                                                     label={item.label}
-                                                    opciones={item.opciones || []}
-                                                    filasInicio={item.filasInicio}
+                                                    opciones={(item as any).opciones || []}
+                                                    filasInicio={(item as any).filasInicio}
+                                                    filasNombres={(item as any).filasNombres}
+                                                    tipoRespuesta={isGraficoItem ? 'grafico' : tipo}
+                                                    currentEquipo={eq}
+                                                    equiposInstalados={equiposInstalados}
                                                     value={String(val || '')}
                                                     onChange={(newVal) => handleCheckChange(eq.id, item.key, newVal)}
                                                 />

@@ -2328,7 +2328,12 @@ export const generarActaExtintoresPDF = async (
             key: item.key
           };
           sectionsList.push(currentSection);
-        } else if (item.tipoRespuesta === 'grafico') {
+        } else if (item.tipoRespuesta === 'grafico' || (
+          typeof item.label === 'string' && (
+            item.label.toUpperCase().includes('CAUDAL Y PRESI') ||
+            item.label.toUpperCase().includes('CURVA DE CAUDAL')
+          )
+        )) {
           currentSection = {
             title: item.label || 'Prueba de Caudal y Presión',
             items: [item],
@@ -2454,10 +2459,19 @@ export const generarActaExtintoresPDF = async (
             }
             previousSecWas218 = false;
           } else {
-            const normalItemsCount = filteredSecItems.filter(item => item.tipoRespuesta !== 'tabla' && item.tipoRespuesta !== 'grafico').length;
-            const hasTableItem = filteredSecItems.some(item => item.tipoRespuesta === 'tabla' || item.tipoRespuesta === 'grafico');
-            const hasGraficoItem = filteredSecItems.some(item => item.tipoRespuesta === 'grafico');
-            const isCurvaOCaudalSec = (hasGraficoItem || (hasTableItem && secTitleNorm.includes('PRUEBA DE CAUDAL'))) && !secTitleNorm.includes('11.');
+            const isItemTablaOGraficoPag = (item: any) => {
+              if (item.tipoRespuesta === 'tabla' || item.tipoRespuesta === 'grafico') return true;
+              const lbl = (item.label || '').toUpperCase();
+              return lbl.includes('CAUDAL Y PRESI') || lbl.includes('CURVA DE CAUDAL');
+            };
+            const normalItemsCount = filteredSecItems.filter(item => !isItemTablaOGraficoPag(item)).length;
+            const hasTableItem = filteredSecItems.some(item => isItemTablaOGraficoPag(item));
+            const hasGraficoItem = filteredSecItems.some(item => {
+              if (item.tipoRespuesta === 'grafico') return true;
+              const lbl = (item.label || '').toUpperCase();
+              return lbl.includes('CAUDAL Y PRESI') || lbl.includes('CURVA DE CAUDAL');
+            });
+            const isCurvaOCaudalSec = (hasGraficoItem || (hasTableItem && (secTitleNorm.includes('PRUEBA DE CAUDAL') || secTitleNorm.includes('CURVA')))) && !secTitleNorm.includes('11.');
 
             let shouldBreakPage = false;
 
@@ -2691,8 +2705,13 @@ export const generarActaExtintoresPDF = async (
             currentY = (doc as any).lastAutoTable.finalY || currentY;
 
           } else {
-            const normalItems = filteredSecItems.filter(item => item.tipoRespuesta !== 'tabla' && item.tipoRespuesta !== 'grafico');
-            const tableItem = filteredSecItems.find(item => item.tipoRespuesta === 'tabla' || item.tipoRespuesta === 'grafico');
+            const isItemTablaOGrafico = (item: any) => {
+              if (item.tipoRespuesta === 'tabla' || item.tipoRespuesta === 'grafico') return true;
+              const lbl = (item.label || '').toUpperCase();
+              return lbl.includes('CAUDAL Y PRESI') || lbl.includes('CURVA DE CAUDAL');
+            };
+            const normalItems = filteredSecItems.filter(item => !isItemTablaOGrafico(item));
+            const tableItem = filteredSecItems.find(item => isItemTablaOGrafico(item));
 
             if (normalItems.length > 0) {
               // Cuestionarios normales (Secciones 2 a 9, 11, etc.): Tabla de 2 columnas por filas
@@ -2834,7 +2853,10 @@ export const generarActaExtintoresPDF = async (
                 currentY += isPuestoItem ? 2 : 6;
               }
               const tableVal = eq[tableItem.key];
-              const isGrafico = tableItem.tipoRespuesta === 'grafico';
+              const isGrafico = tableItem.tipoRespuesta === 'grafico' ||
+                tableItemLblNorm.includes('CAUDAL Y PRESI') ||
+                tableItemLblNorm.includes('CURVA DE CAUDAL') ||
+                (sec.title || '').toUpperCase().includes('CAUDAL Y PRESI');
               let tableHeaders: string[] = isGrafico ? ['Caudal (m³/h)', 'L.P.M.', 'Presión (bar)', 'R.P.M.'] : (tableItem.opciones || []);
               const effectiveFilasNombres = isGrafico ? ['0%', '50%', '100%', '140%'] : (tableItem.filasNombres || []);
               const hasVerticalHeaders = isGrafico || (Array.isArray(tableItem.filasNombres) && tableItem.filasNombres.length > 0);

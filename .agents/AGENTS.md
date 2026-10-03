@@ -926,10 +926,46 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
 
 ---
 
-## 63. Blindaje Inviolable de Preguntas de Prueba de Caudal y Presión en Bombas (`RevisionChecklist.tsx`, `TableInput.tsx` y `FormBuilderPlantillas.tsx`)
-- **Visibilidad Permanente en Formulario Checklist**:
-  - En los sistemas de "Bomba Diesel" (pregunta 12) y "Bomba Eléctrica" (pregunta 7.2 o análoga), la tabla gráfica interactiva de caudal y presión (`tipoRespuesta: 'grafico'`) DEBE mostrarse obligatoria y plenamente funcional en el formulario checklist del parte.
-  - La edición de las filas y columnas de la tabla debe persistir de forma atómica sin borrar valores entre filas al cambiar de celda o escribir datos en los campos numéricos.
+## 63. Blindaje Inviolable de Preguntas de Prueba de Caudal y Presión en Bombas (`RevisionSistemas/*.tsx`, `TableInput.tsx`, `pdfGenerator.ts` y `FormBuilderPlantillas.tsx`)
+- **Renderizado Incondicional en Todos los Componentes de Sistemas (`src/components/RevisionSistemas/*.tsx`)**:
+  - En los 21 componentes de sistemas (especialmente `SistemaBombaDiesel.tsx`, `SistemaBombaElectrica.tsx`, `SistemaBombaJockey.tsx`, `SistemaAbastecimientoSalaBombas.tsx` y `SistemaGenerico.tsx`), queda **ESTRICTAMENTE PROHIBIDO** condicionar el renderizado de tablas exclusivamente a `if (tipo === 'tabla')`.
+  - La condición de renderizado DEBE ser obligatoriamente universal mediante `isTablaOGrafico`:
+    ```typescript
+    const isTablaOGrafico = tipo === 'tabla' || tipo === 'grafico' || (
+        typeof item.label === 'string' && (
+            item.label.toLowerCase().includes('caudal y presion') ||
+            item.label.toLowerCase().includes('caudal y presión') ||
+            item.label.toLowerCase().includes('curva de caudal')
+        )
+    );
+    ```
+  - Al renderizar `<TableInput>`, DEBEN suministrarse incondicionalmente todos sus parámetros esenciales:
+    ```tsx
+    <div key={item.key} className="col-span-full">
+        <TableInput
+            label={item.label}
+            opciones={(item as any).opciones || []}
+            filasInicio={(item as any).filasInicio}
+            filasNombres={(item as any).filasNombres}
+            tipoRespuesta={isGraficoItem ? 'grafico' : tipo}
+            currentEquipo={eq}
+            equiposInstalados={equiposInstalados}
+            value={String(val || '')}
+            onChange={(newVal) => handleCheckChange(eq.id, item.key, newVal)}
+        />
+    </div>
+    ```
+  - Esto evita que una pregunta de tipo `grafico` creada en el editor de plantillas sea ignorada o tratada erróneamente como campo horizontal de texto de 48px, garantizando su presencia fija e interactiva en la tarjeta del equipo.
+- **Aislamiento de Sección y Detección en PDFs (`pdfGenerator.ts` y `src/recursos-compartidos/services/pdfGenerator.ts`)**:
+  - En el agrupador de secciones para el Acta PDF, todo item con `item.tipoRespuesta === 'grafico'` O cuyo label contenga `CAUDAL Y PRESI` o `CURVA DE CAUDAL` DEBE aislarse en su propia sección independiente para evitar que se fusione con secciones anteriores (ej. sección 11).
+  - La variable `isGrafico` en la tabla PDF debe evaluar:
+    ```typescript
+    const isGrafico = tableItem.tipoRespuesta === 'grafico' ||
+      tableItemLblNorm.includes('CAUDAL Y PRESI') ||
+      tableItemLblNorm.includes('CURVA DE CAUDAL') ||
+      (sec.title || '').toUpperCase().includes('CAUDAL Y PRESI');
+    ```
+  - Esto asegura que se dibujen siempre los 4 puntos de funcionamiento (`0%`, `50%`, `100%`, `140%`), se calculen los valores nominales a partir de Abastecimiento o del propio equipo, y se dibuje la gráfica interactiva y vectorizada en el documento PDF generado.
 
 ---
 
