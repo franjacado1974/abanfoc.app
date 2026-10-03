@@ -762,6 +762,123 @@ export const dibujarFirmaAjustada = async (doc: jsPDF, base64Image: string | nul
   }
 };
 
+/**
+ * Obtiene la fecha real de revisión a partir de los campos de los equipos inspeccionados.
+ * Si hubo revisiones en distintos días, toma cronológicamente la última fecha.
+ */
+export function obtenerUltimaFechaRevision(
+  equipos?: Record<string, any>[],
+  checklistItemsPorSistema?: Record<string, any[]>,
+  fallbackDateStr?: string
+): { fechaStr: string; fechaDate: Date; fechaISO: string } {
+  const fechasEncontradas: Date[] = [];
+
+  const parseFecha = (val: any): Date | null => {
+    if (!val) return null;
+    if (val instanceof Date && !isNaN(val.getTime())) return val;
+    if (typeof val !== 'string') return null;
+    const str = val.trim();
+    if (!str || str === '-' || str.toLowerCase() === 'n/a') return null;
+
+    // Formato DD/MM/YYYY o DD-MM-YYYY
+    const dmyMatch = str.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
+    if (dmyMatch) {
+      const d = parseInt(dmyMatch[1], 10);
+      const m = parseInt(dmyMatch[2], 10) - 1;
+      const y = parseInt(dmyMatch[3], 10);
+      const dateObj = new Date(y, m, d, 12, 0, 0);
+      return !isNaN(dateObj.getTime()) && y >= 2000 ? dateObj : null;
+    }
+
+    // Formato YYYY-MM-DD o YYYY/MM/DD o YYYY-MM-DDTHH:mm...
+    const ymdMatch = str.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})/);
+    if (ymdMatch) {
+      const y = parseInt(ymdMatch[1], 10);
+      const m = parseInt(ymdMatch[2], 10) - 1;
+      const d = parseInt(ymdMatch[3], 10);
+      const dateObj = new Date(y, m, d, 12, 0, 0);
+      return !isNaN(dateObj.getTime()) && y >= 2000 ? dateObj : null;
+    }
+
+    // Intento genérico
+    const parsed = new Date(str);
+    if (!isNaN(parsed.getTime()) && parsed.getFullYear() >= 2000) {
+      return parsed;
+    }
+    return null;
+  };
+
+  const revisionKeys = new Set<string>();
+  if (checklistItemsPorSistema) {
+    Object.values(checklistItemsPorSistema).forEach(items => {
+      if (Array.isArray(items)) {
+        items.forEach(item => {
+          const lbl = (item.label || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+          const isFechaTipo = item.tipoRespuesta === 'fecha' || !item.tipoRespuesta || item.tipoRespuesta === 'texto';
+          const isRevision = lbl.includes('revis') || lbl.includes('inspecc');
+          const isNotOtherDate = !lbl.includes('fabric') && !lbl.includes('retimbr') && !lbl.includes('hidra') && !lbl.includes('proxim') && !lbl.includes('caduc');
+          if (isRevision && isNotOtherDate && isFechaTipo) {
+            revisionKeys.add(item.key);
+          }
+        });
+      }
+    });
+  }
+
+  if (Array.isArray(equipos) && equipos.length > 0) {
+    equipos.forEach(eq => {
+      if (!eq) return;
+
+      const directKeys = ['fechaRevision', 'fecha_revision', 'fechaInspeccion', 'fecha_inspeccion'];
+      for (const dk of directKeys) {
+        if (eq[dk]) {
+          const d = parseFecha(eq[dk]);
+          if (d) fechasEncontradas.push(d);
+        }
+      }
+
+      revisionKeys.forEach(rk => {
+        if (eq[rk]) {
+          const d = parseFecha(eq[rk]);
+          if (d) fechasEncontradas.push(d);
+        }
+      });
+
+      Object.entries(eq).forEach(([k, val]) => {
+        if (!val || typeof val !== 'string') return;
+        const kNorm = k.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        const isExcluded = kNorm.includes('fabric') || kNorm.includes('retimbr') || kNorm.includes('hidra') || kNorm.includes('proxim') || kNorm.includes('caduc') || kNorm.includes('alta') || kNorm.includes('baja');
+        if (isExcluded) return;
+
+        if (kNorm.includes('revis') || kNorm.includes('inspecc') || kNorm.includes('fecharevis') || kNorm.includes('fechaderevis')) {
+          const d = parseFecha(val);
+          if (d) fechasEncontradas.push(d);
+        }
+      });
+    });
+  }
+
+  if (fechasEncontradas.length === 0 && fallbackDateStr) {
+    const dFallback = parseFecha(fallbackDateStr);
+    if (dFallback) fechasEncontradas.push(dFallback);
+  }
+
+  let ultimaFecha: Date;
+  if (fechasEncontradas.length > 0) {
+    ultimaFecha = new Date(Math.max(...fechasEncontradas.map(d => d.getTime())));
+  } else {
+    ultimaFecha = new Date();
+  }
+
+  const dd = String(ultimaFecha.getDate()).padStart(2, '0');
+  const mm = String(ultimaFecha.getMonth() + 1).padStart(2, '0');
+  const yyyy = String(ultimaFecha.getFullYear());
+  const fechaStr = `${dd}/${mm}/${yyyy}`;
+  const fechaISO = `${yyyy}-${mm}-${dd}`;
+
+  return { fechaStr, fechaDate: ultimaFecha, fechaISO };
+}
+
 export const generarActaExtintoresPDF = async (
   cliente: Record<string, any>,
   centro: Record<string, any>,
@@ -781,6 +898,7 @@ export const generarActaExtintoresPDF = async (
   const doc = new jsPDF('landscape');
   const pageWidth = doc.internal.pageSize.getWidth();
   const empData = normalizarDatosEmpresa(empresa, centro?.empresaId);
+  const { fechaStr: fechaRevisionDoc, fechaISO: fechaRevisionISO } = obtenerUltimaFechaRevision(equiposTodos, checklistItemsPorSistema);
 
   const firmaIngenieroBase64Raw = await fetchImageToBase64(empData?.ingenieroFirmaUrl || empData?.firmaIngenieroBase64 || empData?.firmaUrl);
   const logoDataRaw = await fetchImageToBase64(empData?.logoUrl);
@@ -853,7 +971,7 @@ export const generarActaExtintoresPDF = async (
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9.5);
     doc.setTextColor(80, 80, 80);
-    doc.text(`N.º Acta: ${numeroMantenimiento || '—'}  -  Fecha: ${new Date().toLocaleDateString('es-ES')}`, pageWidth / 2, 44, { align: 'center' });
+    doc.text(`N.º Acta: ${numeroMantenimiento || '—'}  -  Fecha: ${fechaRevisionDoc}`, pageWidth / 2, 44, { align: 'center' });
 
     // ── SECCIÓN: DATOS DEL CLIENTE Y CENTRO (dos columnas) ──
     let y = 52;
@@ -1012,7 +1130,7 @@ export const generarActaExtintoresPDF = async (
     const infoFields: [string, string][] = [
       ['N.º de mantenimiento:', numeroMantenimiento || '—'],
       ['Técnico asignado:', tecnicoNombre || 'No asignado'],
-      ['Fecha del mantenimiento:', new Date().toLocaleDateString('es-ES')],
+      ['Fecha del mantenimiento:', fechaRevisionDoc],
       ['N.º Habilitación:', habilitacionTecnico || 'No especificado'],
       ['Periodicidad contratada:', periodicidad.length > 0 ? periodicidad.join(', ') : 'No definida'],
       ['Revisiones programadas:', revList],
@@ -1109,7 +1227,7 @@ export const generarActaExtintoresPDF = async (
     doc.setFontSize(7.5);
     doc.setTextColor(150, 150, 150);
     doc.text('Documento generado electrónicamente', pageWidth - 14, 185, { align: 'right' });
-    doc.text(`Fecha de emisión: ${new Date().toLocaleDateString('es-ES')}`, pageWidth - 14, 189, { align: 'right' });
+    doc.text(`Fecha de emisión: ${fechaRevisionDoc}`, pageWidth - 14, 189, { align: 'right' });
   };
 
   await drawInfoPage();
@@ -4037,7 +4155,7 @@ export const generarActaExtintoresPDF = async (
   doc.setFontSize(10);
   doc.setTextColor(0, 0, 0);
 
-  const fechaHora = `${new Date().toLocaleDateString()} - [${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}]`;
+  const fechaHora = fechaRevisionDoc;
 
   const infoFields: [string, string][] = [
     ['Cliente:', cliente?.nombre || 'No especificado'],
@@ -4178,7 +4296,7 @@ export const generarActaExtintoresPDF = async (
 
   // Footer en todas las páginas
   const totalPages = (doc.internal as any).getNumberOfPages();
-  const footerDate = new Date().toLocaleDateString();
+  const footerDate = fechaRevisionDoc;
   const footerCentro = centro?.nombre || '';
 
   for (let i = 1; i <= totalPages; i++) {
@@ -4191,7 +4309,7 @@ export const generarActaExtintoresPDF = async (
     doc.text(text, (pageWidth - textWidth) / 2, 200);
   }
 
-  if (!noSave) doc.save(`Acta_Revision_${centro?.nombre || 'Centro'}_${new Date().toISOString().split('T')[0]}.pdf`);
+  if (!noSave) doc.save(`Acta_Revision_${centro?.nombre || 'Centro'}_${fechaRevisionISO}.pdf`);
   return doc;
 };
 
@@ -4310,7 +4428,8 @@ export const generarAlbaranPDF = async (
   doc.setFont("helvetica", "normal");
   doc.text('Fecha: ', 14, headerY + 14);
   doc.setFont("helvetica", "bold");
-  const dateStr = fechaCreacion ? new Date(fechaCreacion).toLocaleDateString() : new Date().toLocaleDateString();
+  const { fechaStr: fechaRevisionDocAlb } = obtenerUltimaFechaRevision(equiposTodos, undefined, fechaCreacion);
+  const dateStr = fechaRevisionDocAlb;
   doc.text(dateStr, 14 + doc.getTextWidth('Fecha: '), headerY + 14);
 
   doc.setFont("helvetica", "normal");
@@ -4644,6 +4763,7 @@ export const generarCertificadoPDF = async (
   y += cardEmpH + 4;
 
   // ── DATOS DE LA INSTALACIÓN (tarjeta) ──
+  const { fechaStr: fechaRevisionDocCert } = obtenerUltimaFechaRevision(equiposTodos, undefined, parte?.fechaCreacion || parte?.fecha || parte?.fechaRevision);
   const cardInstalacionH = 32;
   doc.setDrawColor(220, 220, 220);
   doc.setFillColor(250, 251, 252);
@@ -4669,7 +4789,7 @@ export const generarCertificadoPDF = async (
     ['Población:', centro?.poblacion || 'No especificada'],
     ['Provincia:', centro?.provincia || 'No especificada'],
     ['N.º Mantenimiento:', parte?.numeroMantenimiento || 'No especificado'],
-    ['Fecha de emisión:', new Date().toLocaleDateString()],
+    ['Fecha de emisión:', fechaRevisionDocCert],
     ['Técnico actuante:', tecnicoNombre || 'No asignado'],
   ];
 

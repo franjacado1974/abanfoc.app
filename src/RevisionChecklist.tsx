@@ -29,6 +29,7 @@ import type { Centro, Parte, Cliente, CentroSistema, EquipoInstalado } from './C
 import ConfirmationModal from './ConfirmationModal';
 import { getIconForSistema } from './Sistemas';
 import EquipoFormulario from './components/EquipoFormulario';
+import { obtenerUltimaFechaRevision } from './pdfGenerator';
 
 export function esFechaRevisionReciente(val: any, maxDias = 15): boolean {
     if (!val || typeof val !== 'string') return false;
@@ -1419,6 +1420,12 @@ export default function RevisionChecklist() {
                 };
             });
 
+            const { fechaDate: revFechaDate } = obtenerUltimaFechaRevision(equiposInstalados);
+            const now = new Date();
+            const fechaRevisionFinalISO = revFechaDate
+                ? new Date(revFechaDate.getFullYear(), revFechaDate.getMonth(), revFechaDate.getDate(), now.getHours(), now.getMinutes(), now.getSeconds()).toISOString()
+                : now.toISOString();
+
             const nuevoAlbaran: Albaran = {
                 id: nextId,
                 titulo: parte?.periodicidad ? `Mantenimiento: Revisión ${parte.periodicidad}` : 'Revisión de Mantenimiento',
@@ -1430,7 +1437,7 @@ export default function RevisionChecklist() {
                 tecnicoId: parte?.tecnicoId || '',
                 numeroMantenimiento: numMantenimiento,
                 numeroPedido: (parte as any)?.numeroPedido || '',
-                fechaCreacion: new Date().toISOString(),
+                fechaCreacion: fechaRevisionFinalISO,
                 facturado: false,
                 items: albaranItems,
                 firmaCliente,
@@ -1454,7 +1461,7 @@ export default function RevisionChecklist() {
                     empresaId: centro?.empresaId || parte?.empresaId || '',
                     parteId: parteId,
                     numeroMantenimiento: numMantenimiento,
-                    fechaCreacion: new Date().toISOString(),
+                    fechaCreacion: fechaRevisionFinalISO,
                     estado: estadoCertificado
                 };
 

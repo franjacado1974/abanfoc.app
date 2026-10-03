@@ -1017,4 +1017,25 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
   - En la vista principal del Buzón que contiene las 3 tarjetas (*Sugerencias de Mejora*, *Reporte de Fallos*, *Versiones*), si alguna de las tres secciones tiene novedades o comentarios no vistos por el usuario, DEBE mostrarse una insignia roja parpadeante con el texto literal exacto **`"NUEVO"`** (`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-black tracking-wider text-white bg-red-600 shadow-[0_0_12px_rgba(220,38,38,0.85)] animate-pulse` con punto blanco interior pulsante `animate-ping`) en la tarjeta específica correspondiente.
   - **Desaparición Inmediata al Entrar**: En cuanto el usuario pulsa y entra en una tarjeta (activando `activeSection`), el aviso **"NUEVO"** de esa tarjeta desaparece de forma instantánea al fijar la marca de lectura con `Math.max(Date.now(), maxTime)`. Al regresar al menú, dicha tarjeta ya no muestra el aviso. Las demás tarjetas que aún no hayan sido abiertas mantendrán su aviso activo.
 
+---
+
+## 70. Blindaje Inviolable de la Fecha Real de Revisión en Documentos PDF (`pdfGenerator.ts`, `RevisionChecklist.tsx` y réplicas)
+- **Extracción Obligatoria de la Fecha de Revisión de los Equipos**:
+  - En todos los documentos generados a partir de un parte de mantenimiento (**Acta de revisión**, **Certificado** y **Albarán**), queda **ESTRICTAMENTE PROHIBIDO** plasmar la fecha actual (`new Date()`) en los campos representativos de la revisión cuando los equipos contengan una fecha de revisión registrada por el técnico.
+  - La fecha del documento DEBE determinarse dinámicamente mediante `obtenerUltimaFechaRevision(equiposTodos, checklistItemsPorSistema, fallbackDateStr)`.
+  - Si la revisión se extendió a lo largo de varios días con distintas fechas introducidas en los equipos (ej. 03/06/2026 y 04/06/2026), el sistema tomará **cronológicamente la última fecha** de revisión registrada para todos los documentos.
+- **Campos Afectados en el Acta de Revisión (`generarActaExtintoresPDF`)**:
+  - **Cabecera**: Subtítulo superior centrado `N.º Acta: MANT-xxxxx  -  Fecha: DD/MM/YYYY`.
+  - **Portada**: Campo `'Fecha del mantenimiento: DD/MM/YYYY'`.
+  - **Sello/Firma Digital**: Campo `'Fecha de emisión: DD/MM/YYYY'`.
+  - **Hoja de Firmas**: Campo `'Fecha de revisión: DD/MM/YYYY'`.
+  - **Pie de página (todas las hojas)**: Texto inferior centrado `DD/MM/YYYY - Centro: [Nombre] - (página X de Y)`.
+  - **Nombre de archivo guardado**: `Acta_Revision_[Centro]_[YYYY-MM-DD].pdf`.
+- **Campos Afectados en Certificado y Albarán**:
+  - **Certificado (`generarCertificadoPDF`)**: Campo `'Fecha de emisión: DD/MM/YYYY'` en la tarjeta de Datos de la Instalación.
+  - **Albarán (`generarAlbaranPDF`)**: Campo `'Fecha: DD/MM/YYYY'` en la cabecera.
+  - **Persistencia en Firestore/Local (`RevisionChecklist.tsx`)**: Al finalizar el parte, `nuevoAlbaran` y `nuevoCertificado` se registran con `fechaCreacion` coincidente con la fecha de revisión obtenida.
+
+
+
 
