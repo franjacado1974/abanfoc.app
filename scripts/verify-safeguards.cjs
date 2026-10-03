@@ -817,6 +817,40 @@ if (fs.existsSync(pdfGenPath)) {
   }
 }
 
+// 42. Verificación de Curva de Caudal y Presión en Bombas (AGENTS.md REGLA 63)
+const dieselPath = path.join(__dirname, '../src/components/RevisionSistemas/SistemaBombaDiesel.tsx');
+if (fs.existsSync(dieselPath)) {
+  const dContent = fs.readFileSync(dieselPath, 'utf8');
+  if (!dContent.includes('isTablaOGrafico') || !dContent.includes("tipo === 'grafico'")) {
+    errors.push('CRÍTICO: SistemaBombaDiesel.tsx carece del renderizado incondicional para tipo === "grafico" (AGENTS.md REGLA 63).');
+  }
+}
+
+// 43. Verificación de Alineación Centrada de RENDIMIENTO en Bombas PDF (AGENTS.md REGLA 68)
+if (fs.existsSync(pdfGenPath)) {
+  const pdfContent = fs.readFileSync(pdfGenPath, 'utf8');
+  if (!pdfContent.includes('isColRendimiento') || !pdfContent.includes("data.cell.styles.halign = 'center'")) {
+    errors.push('CRÍTICO: pdfGenerator.ts carece del centrado obligatorio en la columna RENDIMIENTO (AGENTS.md REGLA 68).');
+  }
+}
+
+// 44. Verificación del Icono Mail y Badge "NUEVO" en Buzón (AGENTS.md REGLA 69)
+const buzonViewPath = path.join(__dirname, '../src/Buzon.tsx');
+if (fs.existsSync(buzonViewPath)) {
+  const bContent = fs.readFileSync(buzonViewPath, 'utf8');
+  if (!bContent.includes('NUEVO') || !bContent.includes('activeSection')) {
+    errors.push('CRÍTICO: Buzon.tsx carece del distintivo "NUEVO" por tarjeta o su desaparición al entrar (AGENTS.md REGLA 69).');
+  }
+}
+
+// 45. Verificación de la Fecha Real de Revisión en Documentos PDF (AGENTS.md REGLA 70)
+if (fs.existsSync(pdfGenPath)) {
+  const pdfContent = fs.readFileSync(pdfGenPath, 'utf8');
+  if (!pdfContent.includes('obtenerUltimaFechaRevision') || !pdfContent.includes('fechaRevisionDoc')) {
+    errors.push('CRÍTICO: pdfGenerator.ts carece de la función obtenerUltimaFechaRevision para fechas reales de equipos (AGENTS.md REGLA 70).');
+  }
+}
+
 // Resultado de la verificación
 if (errors.length > 0) {
   console.error('\n❌ ERROR CRÍTICO DE BLINDAJE INTEGRAL (AGENTS.md):');
