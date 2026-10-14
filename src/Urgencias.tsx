@@ -203,9 +203,22 @@ export default function Urgencias() {
       console.error('Error cargando urgencias de localStorage:', e);
     }
 
+    const safeLocalSet = (key: string, value: string) => {
+      try {
+        localStorage.setItem(key, value);
+      } catch (e) {
+        console.warn(`[StorageQuota] Error guardando ${key} en localStorage:`, e);
+      }
+    };
+
+    // Timer de seguridad: liberar pantalla de carga tras 2 segundos si Firestore tarda
+    const loadingSafetyTimer = setTimeout(() => {
+      setLoading(false);
+    }, 2000);
+
     const unsubUrg = subscribeUrgencias((items) => {
       setUrgencias(items);
-      localStorage.setItem('firecheck_db_urgencias', JSON.stringify(items));
+      safeLocalSet('firecheck_db_urgencias', JSON.stringify(items));
       setLoading(false);
     });
 
@@ -215,6 +228,7 @@ export default function Urgencias() {
     const unsubEmp = subscribeEmpresas((items) => setEmpresas(items));
 
     return () => {
+      clearTimeout(loadingSafetyTimer);
       unsubUrg();
       unsubTec();
       unsubCen();
@@ -226,7 +240,11 @@ export default function Urgencias() {
   // Guardar en localStorage cuando cambien
   const updateLocalAndState = (newItems: UrgenciaItem[]) => {
     setUrgencias(newItems);
-    localStorage.setItem('firecheck_db_urgencias', JSON.stringify(newItems));
+    try {
+      localStorage.setItem('firecheck_db_urgencias', JSON.stringify(newItems));
+    } catch (e) {
+      console.warn('[StorageQuota] Error guardando firecheck_db_urgencias:', e);
+    }
   };
 
   // Abrir modal para crear
@@ -253,11 +271,11 @@ export default function Urgencias() {
   const handleOpenEditModal = (item: UrgenciaItem) => {
     setEditingItem(item);
     setFormData({
-      titulo: item.titulo || '',
+      titulo: item.titulo || item.urgencia || '',
       clienteId: item.clienteId || '',
       clienteNombre: item.clienteNombre || '',
       centroId: item.centroId || '',
-      urgencia: item.urgencia || '',
+      urgencia: item.urgencia || item.titulo || '',
       lugar: item.lugar || '',
       tecnicoAsignado: item.tecnicoAsignado || '',
       comercial: item.comercial || '',
@@ -947,14 +965,14 @@ export default function Urgencias() {
               {/* TÍTULO */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Título de la Tarea <span className="text-red-500">*</span>
+                  TITULO OBLIGATORIO A MOSTRAR EN EL AVISO <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
                   required
                   value={formData.titulo}
                   onChange={(e) => setFormData({ ...formData, titulo: e.target.value })}
-                  placeholder="Ej: Fuga de agua en manguera de BIE 3"
+                  placeholder="Ej: Fallo gotera en bazar chino"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
                 />
               </div>

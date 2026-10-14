@@ -54,9 +54,12 @@ function DashboardHome({ loggedUser, onLogout, onNavigate }: DashboardTecnicoPro
       };
 
       const unsubBuzon = onSnapshot(qBuzon, (snapshot) => {
-        const fallback = localStorage.getItem('firecheck_buzon_last_seen');
-        const seenSugStr = localStorage.getItem('firecheck_buzon_seen_sugerencias') || fallback;
-        const seenFallosStr = localStorage.getItem('firecheck_buzon_seen_fallos') || fallback;
+        const currentUserName = getLoggedUserName();
+        const userSugKey = getLoggedUserStorageKey('firecheck_buzon_seen_sugerencias');
+        const userFallosKey = getLoggedUserStorageKey('firecheck_buzon_seen_fallos');
+        const seenSugStr = localStorage.getItem(userSugKey);
+        const seenFallosStr = localStorage.getItem(userFallosKey);
+        
         const seenSug = seenSugStr ? parseInt(seenSugStr, 10) : 0;
         const seenFallos = seenFallosStr ? parseInt(seenFallosStr, 10) : 0;
 
@@ -65,9 +68,16 @@ function DashboardHome({ loggedUser, onLogout, onNavigate }: DashboardTecnicoPro
           const data = d.data();
           let docTime = 0;
           if (data.updatedAt) {
-            docTime = typeof data.updatedAt.toMillis === 'function' ? data.updatedAt.toMillis() : Number(data.updatedAt);
-          } else if (data.createdAt) {
-            docTime = typeof data.createdAt.toMillis === 'function' ? data.createdAt.toMillis() : Number(data.createdAt);
+            if (typeof data.updatedAt.toMillis === 'function') docTime = data.updatedAt.toMillis();
+            else if (typeof data.updatedAt.seconds === 'number') docTime = data.updatedAt.seconds * 1000;
+            else if (typeof data.updatedAt === 'number') docTime = data.updatedAt;
+          }
+          if (data.createdAt) {
+            let cTime = 0;
+            if (typeof data.createdAt.toMillis === 'function') cTime = data.createdAt.toMillis();
+            else if (typeof data.createdAt.seconds === 'number') cTime = data.createdAt.seconds * 1000;
+            else if (typeof data.createdAt === 'number') cTime = data.createdAt;
+            if (cTime > docTime) docTime = cTime;
           }
 
           if (Array.isArray(data.comentarios) && data.comentarios.length > 0) {
@@ -83,7 +93,12 @@ function DashboardHome({ loggedUser, onLogout, onNavigate }: DashboardTecnicoPro
           }
 
           const threshold = data.tipo === 'Sugerencia' ? seenSug : seenFallos;
-          if (threshold > 0 && docTime > threshold) {
+          const esPropio = data.usuario && currentUserName && data.usuario.trim().toLowerCase() === currentUserName.trim().toLowerCase();
+          if (threshold > 0) {
+            if (docTime > threshold) {
+              foundUnread = true;
+            }
+          } else if (!esPropio && docTime > (Date.now() - 30 * 24 * 3600 * 1000)) {
             foundUnread = true;
           }
         });
@@ -95,8 +110,8 @@ function DashboardHome({ loggedUser, onLogout, onNavigate }: DashboardTecnicoPro
       });
 
       const unsubVersiones = onSnapshot(qVersiones, (snapshot) => {
-        const fallback = localStorage.getItem('firecheck_buzon_last_seen');
-        const seenVersionesStr = localStorage.getItem('firecheck_buzon_seen_versiones') || fallback;
+        const userVersionesKey = getLoggedUserStorageKey('firecheck_buzon_seen_versiones');
+        const seenVersionesStr = localStorage.getItem(userVersionesKey);
         const seenVersiones = seenVersionesStr ? parseInt(seenVersionesStr, 10) : 0;
 
         let foundUnread = false;
@@ -104,12 +119,33 @@ function DashboardHome({ loggedUser, onLogout, onNavigate }: DashboardTecnicoPro
           const data = d.data();
           let docTime = 0;
           if (data.updatedAt) {
-            docTime = typeof data.updatedAt.toMillis === 'function' ? data.updatedAt.toMillis() : Number(data.updatedAt);
-          } else if (data.createdAt) {
-            docTime = typeof data.createdAt.toMillis === 'function' ? data.createdAt.toMillis() : Number(data.createdAt);
+            if (typeof data.updatedAt.toMillis === 'function') docTime = data.updatedAt.toMillis();
+            else if (typeof data.updatedAt.seconds === 'number') docTime = data.updatedAt.seconds * 1000;
+            else if (typeof data.updatedAt === 'number') docTime = data.updatedAt;
+          }
+          if (data.createdAt) {
+            let cTime = 0;
+            if (typeof data.createdAt.toMillis === 'function') cTime = data.createdAt.toMillis();
+            else if (typeof data.createdAt.seconds === 'number') cTime = data.createdAt.seconds * 1000;
+            else if (typeof data.createdAt === 'number') cTime = data.createdAt;
+            if (cTime > docTime) docTime = cTime;
+          }
+          if (!docTime && data.fecha) {
+            try {
+              const parts = String(data.fecha).split('/');
+              if (parts.length === 3) {
+                let y = parseInt(parts[2], 10);
+                if (y < 100) y += 2000;
+                docTime = new Date(y, parseInt(parts[1], 10) - 1, parseInt(parts[0], 10)).getTime();
+              }
+            } catch {}
           }
 
-          if (seenVersiones > 0 && docTime > seenVersiones) {
+          if (seenVersiones > 0) {
+            if (docTime > seenVersiones) {
+              foundUnread = true;
+            }
+          } else if (docTime > (Date.now() - 30 * 24 * 3600 * 1000)) {
             foundUnread = true;
           }
         });
@@ -606,6 +642,32 @@ function TecnicoApp({ loggedUser, onLogout }: DashboardTecnicoProps) {
 }
 
 // ─── EXPORT CON ROUTER (para que RevisionChecklist pueda usar useNavigate) ────
+function getLoggedUserStorageKey(prefix: string): string {
+  try {
+    const raw = sessionStorage.getItem('firecheck_logged_user') || localStorage.getItem('firecheck_logged_user');
+    if (raw) {
+      const u = JSON.parse(raw);
+      const id = u.id || u.uid || u.usuario || u.username || u.email || u.nombre;
+      if (id) {
+        const clean = String(id).trim().toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+        return `${prefix}_${clean}`;
+      }
+    }
+  } catch {}
+  return prefix;
+}
+
+function getLoggedUserName(): string {
+  try {
+    const raw = sessionStorage.getItem('firecheck_logged_user') || localStorage.getItem('firecheck_logged_user');
+    if (raw) {
+      const u = JSON.parse(raw);
+      return `${u.nombre || ''} ${u.apellidos || ''}`.trim() || u.nombre || u.usuario || '';
+    }
+  } catch {}
+  return '';
+}
+
 export default function DashboardTecnico({ loggedUser, onLogout }: DashboardTecnicoProps) {
   return (
     <BrowserRouter>

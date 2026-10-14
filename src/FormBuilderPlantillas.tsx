@@ -14,13 +14,14 @@
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Plus, Trash2, Save, ChevronUp, ChevronDown,
   GripVertical, AlertCircle,
-  ClipboardList, Edit3, X, Loader, Copy, Image,
+  ClipboardList, Edit3, X, Loader, Copy, Image, ImagePlus,
   Table, TrendingUp
 } from 'lucide-react';
+import { uploadFile } from './firebase';
 import {
   subscribePlantillas, subscribeItemsDePlantilla,
   addPlantilla, updatePlantilla, deletePlantilla,
@@ -80,6 +81,9 @@ export default function FormBuilderPlantillas() {
   const [items, setItems] = useState<ItemLocal[]>([]);
   const [nombrePlantilla, setNombrePlantilla] = useState('');
   const [descripcionPlantilla, setDescripcionPlantilla] = useState('');
+  const [imagenPlantilla, setImagenPlantilla] = useState<string>('');
+  const [subiendoImagen, setSubiendoImagen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [editandoNombre, setEditandoNombre] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [mensaje, setMensaje] = useState<{ tipo: 'ok' | 'error'; texto: string } | null>(null);
@@ -149,6 +153,7 @@ export default function FormBuilderPlantillas() {
     if (p) {
       setNombrePlantilla(p.nombre);
       setDescripcionPlantilla(p.descripcion || '');
+      setImagenPlantilla(p.imagenUrl || '');
     }
   }, [plantillaSeleccionada, plantillas]);
 
@@ -207,12 +212,51 @@ export default function FormBuilderPlantillas() {
     }
   };
 
+  const handleSubirImagen = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !plantillaSeleccionada) return;
+    
+    // Resetear input para permitir seleccionar el mismo archivo de nuevo
+    e.target.value = '';
+
+    setSubiendoImagen(true);
+    try {
+      const path = `plantillas_imagenes/${plantillaSeleccionada}_${Date.now()}`;
+      const url = await uploadFile(file, path);
+      await updatePlantilla(plantillaSeleccionada, { imagenUrl: url });
+      setImagenPlantilla(url);
+      mostrarMensaje('ok', 'Imagen actualizada correctamente');
+    } catch (err: any) {
+      console.error('Error al subir imagen de plantilla:', err);
+      mostrarMensaje('error', 'Error al subir la imagen');
+    } finally {
+      setSubiendoImagen(false);
+    }
+  };
+
+  const handleEliminarImagen = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!plantillaSeleccionada) return;
+    if (!confirm('¿Eliminar la imagen de esta plantilla?')) return;
+    try {
+      await updatePlantilla(plantillaSeleccionada, { imagenUrl: '' });
+      setImagenPlantilla('');
+      mostrarMensaje('ok', 'Imagen eliminada');
+    } catch (err: any) {
+      console.error('Error al eliminar imagen de plantilla:', err);
+      mostrarMensaje('error', 'Error al eliminar la imagen');
+    }
+  };
+
   const handleGuardarNombre = async () => {
     if (!plantillaSeleccionada || !nombrePlantilla.trim()) return;
     try {
       const datos: any = { nombre: nombrePlantilla.trim() };
       if (descripcionPlantilla.trim()) {
         datos.descripcion = descripcionPlantilla.trim();
+      }
+      if (imagenPlantilla) {
+        datos.imagenUrl = imagenPlantilla;
       }
       await updatePlantilla(plantillaSeleccionada, datos);
       setEditandoNombre(false);
@@ -807,6 +851,15 @@ export default function FormBuilderPlantillas() {
                     }`}
                     onClick={() => setPlantillaSeleccionada(p.id)}
                   >
+                    {/* Icono o miniatura de la plantilla */}
+                    <div className="w-8 h-8 rounded-lg bg-zinc-100 flex items-center justify-center shrink-0 border border-zinc-200/80 overflow-hidden">
+                      {p.imagenUrl ? (
+                        <img src={p.imagenUrl} alt={p.nombre} className="w-full h-full object-contain p-0.5" />
+                      ) : (
+                        <Image className="w-4 h-4 text-zinc-400" />
+                      )}
+                    </div>
+
                     <div className="flex-1 min-w-0">
                       <p className={`text-xs font-bold truncate ${
                         plantillaSeleccionada === p.id ? 'text-teal-800' : 'text-zinc-800'
@@ -856,7 +909,74 @@ export default function FormBuilderPlantillas() {
             <div className="max-w-3xl mx-auto space-y-6">
               {/* ── CABECERA DE LA PLANTILLA ──────────────────────────────── */}
               <div className="bg-white rounded-2xl border border-zinc-200 p-5 shadow-sm">
+                {/* Input oculto para subir imagen */}
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                  onChange={handleSubirImagen}
+                  className="hidden"
+                />
+
                 <div className="flex items-start justify-between gap-4">
+                  {/* Selector / Previsualización de Imagen al lado del título */}
+                  <div className="relative group shrink-0">
+                    {imagenPlantilla ? (
+                      <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-zinc-50 border-2 border-teal-500/30 overflow-hidden flex items-center justify-center shadow-inner group">
+                        <img
+                          src={imagenPlantilla}
+                          alt="Icono del sistema"
+                          className="w-full h-full object-contain p-1.5 transition-transform group-hover:scale-105"
+                        />
+                        {/* Botón flotante para cambiar imagen */}
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          disabled={subiendoImagen}
+                          className="absolute inset-0 bg-black/40 text-white opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center gap-1 transition-opacity text-[10px] font-bold"
+                          title="Cambiar imagen"
+                        >
+                          {subiendoImagen ? (
+                            <Loader className="w-5 h-5 animate-spin" />
+                          ) : (
+                            <>
+                              <Edit3 className="w-4 h-4" />
+                              <span>Cambiar</span>
+                            </>
+                          )}
+                        </button>
+                        {/* Botón flotante para eliminar imagen */}
+                        <button
+                          type="button"
+                          onClick={handleEliminarImagen}
+                          className="absolute top-1 right-1 p-1 bg-red-600 hover:bg-red-700 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                          title="Quitar imagen"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={subiendoImagen}
+                        className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl border-2 border-dashed border-teal-300 hover:border-teal-500 bg-teal-50/50 hover:bg-teal-50 flex flex-col items-center justify-center gap-1 text-teal-700 transition-all cursor-pointer group shadow-sm active:scale-95"
+                        title="Subir imagen para la plantilla"
+                      >
+                        {subiendoImagen ? (
+                          <Loader className="w-5 h-5 animate-spin text-teal-600" />
+                        ) : (
+                          <>
+                            <ImagePlus className="w-5 h-5 text-teal-600 group-hover:scale-110 transition-transform" />
+                            <span className="text-[10px] font-bold text-teal-700 text-center leading-tight px-1">
+                              Añadir foto
+                            </span>
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </div>
+
                   <div className="flex-1 min-w-0">
                     {editandoNombre ? (
                       <div className="space-y-2">

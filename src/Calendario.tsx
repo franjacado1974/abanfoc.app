@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
+  Phone,
   ChevronLeft,
   ChevronRight,
   Clock,
@@ -13,7 +14,10 @@ import {
   CalendarDays,
   Briefcase,
   Sparkles,
-  AlertTriangle
+  AlertTriangle,
+  ExternalLink,
+  CheckCircle2,
+  RotateCcw
 } from 'lucide-react';
 import {
   subscribePartes,
@@ -114,7 +118,11 @@ export interface EventoCalendario {
   clienteResumido: string;
   tituloCompleto: string;
   lugar?: string;
+  direccion?: string;
+  poblacion?: string;
   cliente?: string;
+  contacto?: string;
+  telefono?: string;
   tecnico?: string;
   comercial?: string;
   estado?: string;
@@ -126,6 +134,7 @@ export interface EventoCalendario {
   icono: typeof ClipboardCheck;
   detalles?: string;
   completado?: boolean;
+  resueltaManual?: boolean;
 }
 
 export default function Calendario() {
@@ -140,10 +149,37 @@ export default function Calendario() {
   const [tecnicos, setTecnicos] = useState<any[]>([]);
   const [selectedEvento, setSelectedEvento] = useState<EventoCalendario | null>(null);
   const [mostrarFinSemana, setMostrarFinSemana] = useState(false);
+  const [guardandoResuelta, setGuardandoResuelta] = useState(false);
+
+  // Filtros de visibilidad para tareas en el calendario (tachado al ocultar)
+  const [filtrosVisibles, setFiltrosVisibles] = useState({
+    revisiones: true,
+    reparaciones: true,
+    instalaciones: true,
+    urgencias: true
+  });
+
+  const toggleFiltro = (filtroKey: keyof typeof filtrosVisibles) => {
+    setFiltrosVisibles((prev) => ({ ...prev, [filtroKey]: !prev[filtroKey] }));
+  };
 
   // Estados para Drag & Drop entre días
   const [draggedEvento, setDraggedEvento] = useState<EventoCalendario | null>(null);
   const [dragOverDate, setDragOverDate] = useState<string | null>(null);
+
+  // Comprobar si el usuario actual es Super Administrador (único con permiso para marcar/desmarcar tareas como resueltas)
+  const isSuperUser = (() => {
+    try {
+      const raw = sessionStorage.getItem('firecheck_logged_user') || localStorage.getItem('firecheck_logged_user');
+      const loggedUser = raw ? JSON.parse(raw) : null;
+      if (!loggedUser) return true;
+      const rol = (loggedUser.rol || '').toLowerCase().trim();
+      const userStr = (loggedUser.usuario || loggedUser.username || loggedUser.nombre || '').toLowerCase().trim();
+      return rol === 'super-administrador' || rol === 'superusuario' || rol === 'superadministrador' || userStr === 'superusuario' || userStr === 'super-administrador';
+    } catch {
+      return true;
+    }
+  })();
 
   // Carga de centros, clientes y técnicos para resolver nombres
   useEffect(() => {
@@ -332,6 +368,16 @@ export default function Calendario() {
       const nombreCentro = p.nombreCentro || c?.nombre || cl?.nombre || 'Centro';
       const tieneAlbaran = albaranes.some((a) => a.parteId === p.id || a.parteId === (p as any)._docId || (p.numeroMantenimiento && a.numeroMantenimiento === p.numeroMantenimiento));
       const completado = tieneAlbaran || p.estado === 'Finalizado' || p.estado === 'Cerrado';
+      const poblacion = c?.poblacion || (p as any).poblacionCentro || cl?.poblacion;
+      const direccion = c?.direccion || (p as any).direccionCentro || cl?.direccion;
+      const contacto = c?.contacto || (p as any).contacto || cl?.contacto;
+      const telefono = c?.telefono || (p as any).telefono || cl?.telefono;
+
+      // Unificar dirección y población en el lugar
+      const direccionConPoblacion = [direccion, poblacion].filter(Boolean).join(', ');
+      const lugarTexto = c?.nombre
+        ? (direccionConPoblacion ? `${c.nombre} (${direccionConPoblacion})` : c.nombre)
+        : (direccionConPoblacion || undefined);
 
       addEvento(p.fechaProgramada, {
         id: `parte-${p.id || (p as any)._docId}`,
@@ -339,8 +385,12 @@ export default function Calendario() {
         sigla: 'Rev.',
         clienteResumido: nombreCentro,
         tituloCompleto: p.nombreCentro || c?.nombre || 'Revisión Mantenimiento',
-        lugar: c?.nombre ? `${c.nombre} (${c.direccion || ''})` : c?.direccion,
+        lugar: lugarTexto,
+        direccion,
+        poblacion,
         cliente: cl?.nombre,
+        contacto,
+        telefono,
         tecnico: tec?.nombre ? `${tec.nombre} ${tec.apellidos || ''}` : undefined,
         comercial: (p as any).comercial || (c as any)?.comercial || undefined,
         estado: p.estado || 'Planificado',
@@ -360,11 +410,24 @@ export default function Calendario() {
       const fecha = r.fecha || (r.fechaCreacion ? r.fechaCreacion.slice(0, 10) : '');
       if (!fecha) return;
 
-      const c = centros.find((cent) => cent.nombre && r.lugar && cent.nombre.toLowerCase().includes(r.lugar.toLowerCase()));
-      const cl = clientes.find((cli) => (cli._docId || cli.id) === c?.clienteId || (cli.nombre && r.lugar && cli.nombre.toLowerCase().includes(r.lugar.toLowerCase())));
+      const c = centros.find((cent) => (r.centroId && (cent._docId || cent.id) === r.centroId) || (cent.nombre && r.lugar && cent.nombre.toLowerCase().includes(r.lugar.toLowerCase())));
+      const cl = clientes.find((cli) => (cli._docId || cli.id) === r.clienteId || (cli._docId || cli.id) === c?.clienteId || (cli.nombre && r.lugar && cli.nombre.toLowerCase().includes(r.lugar.toLowerCase())));
       const nombreCliente = cl?.nombre || r.lugar || 'Cliente';
       const tieneAlbaran = !!r.albaranId || albaranes.some((a) => a.reparacionId === r.id || a.reparacionId === (r as any)._docId || a.id === r.albaranId);
-      const completado = tieneAlbaran || r.estado === 'Finalizado';
+      const resueltaManual = (r as any).resueltaManual === true;
+      const completado = tieneAlbaran || r.estado === 'Finalizado' || resueltaManual;
+      const poblacion = (r as any).poblacion || c?.poblacion || cl?.poblacion;
+      const direccion = c?.direccion || cl?.direccion;
+      const contacto = c?.contacto || (r as any).contacto || cl?.contacto;
+      const telefono = c?.telefono || (r as any).telefono || cl?.telefono;
+
+      // Si el lugar no incluye la población, incorporarla
+      let lugarTexto = r.lugar;
+      if (poblacion && lugarTexto && !lugarTexto.toLowerCase().includes(poblacion.toLowerCase())) {
+        lugarTexto = `${lugarTexto}, ${poblacion}`;
+      } else if (!lugarTexto && poblacion) {
+        lugarTexto = [direccion, poblacion].filter(Boolean).join(', ');
+      }
 
       addEvento(fecha, {
         id: `rep-${r.id || (r as any)._docId}`,
@@ -372,19 +435,24 @@ export default function Calendario() {
         sigla: 'Rep.',
         clienteResumido: nombreCliente,
         tituloCompleto: r.reparacion || 'Reparación / Avería',
-        lugar: r.lugar,
+        lugar: lugarTexto,
+        direccion,
+        poblacion,
         cliente: cl?.nombre,
         tecnico: r.tecnicoAsignado,
         comercial: r.comercial || (r as any).comercialAsignado || undefined,
         estado: r.estado || 'Pendiente',
         fecha,
+        contacto,
+        telefono,
         modulo: 'Reparaciones',
         tipoBadge: 'Reparación / Avería',
         colorTag: completado ? COLOR_COMPLETADO_TAG : 'bg-sky-100 text-sky-900 border-sky-300 hover:bg-sky-200/90',
         colorBadge: completado ? COLOR_COMPLETADO_BADGE : 'bg-sky-50 text-sky-800 border-sky-200',
         icono: Wrench,
         detalles: r.nota || r.observaciones || undefined,
-        completado
+        completado,
+        resueltaManual
       });
     });
 
@@ -393,11 +461,23 @@ export default function Calendario() {
       const fecha = i.fecha || (i.fechaCreacion ? i.fechaCreacion.slice(0, 10) : '');
       if (!fecha) return;
 
-      const c = centros.find((cent) => cent.nombre && i.lugar && cent.nombre.toLowerCase().includes(i.lugar.toLowerCase()));
-      const cl = clientes.find((cli) => (cli._docId || cli.id) === c?.clienteId || (cli.nombre && i.lugar && cli.nombre.toLowerCase().includes(i.lugar.toLowerCase())));
+      const c = centros.find((cent) => (i.centroId && (cent._docId || cent.id) === i.centroId) || (cent.nombre && i.lugar && cent.nombre.toLowerCase().includes(i.lugar.toLowerCase())));
+      const cl = clientes.find((cli) => (cli._docId || cli.id) === i.clienteId || (cli._docId || cli.id) === c?.clienteId || (cli.nombre && i.lugar && cli.nombre.toLowerCase().includes(i.lugar.toLowerCase())));
       const nombreCliente = cl?.nombre || i.lugar || 'Cliente';
       const tieneAlbaran = !!i.albaranId || albaranes.some((a) => a.instalacionId === i.id || a.instalacionId === (i as any)._docId || a.id === i.albaranId);
-      const completado = tieneAlbaran || i.estado === 'Finalizado';
+      const resueltaManual = (i as any).resueltaManual === true;
+      const completado = tieneAlbaran || i.estado === 'Finalizado' || resueltaManual;
+      const poblacion = (i as any).poblacion || c?.poblacion || cl?.poblacion;
+      const direccion = c?.direccion || cl?.direccion;
+      const contacto = c?.contacto || (i as any).contacto || cl?.contacto;
+      const telefono = c?.telefono || (i as any).telefono || cl?.telefono;
+
+      let lugarTexto = i.lugar;
+      if (poblacion && lugarTexto && !lugarTexto.toLowerCase().includes(poblacion.toLowerCase())) {
+        lugarTexto = `${lugarTexto}, ${poblacion}`;
+      } else if (!lugarTexto && poblacion) {
+        lugarTexto = [direccion, poblacion].filter(Boolean).join(', ');
+      }
 
       addEvento(fecha, {
         id: `inst-${i.id || (i as any)._docId}`,
@@ -405,19 +485,24 @@ export default function Calendario() {
         sigla: 'Inst.',
         clienteResumido: nombreCliente,
         tituloCompleto: i.instalacion || 'Instalación / Montaje',
-        lugar: i.lugar,
+        lugar: lugarTexto,
+        direccion,
+        poblacion,
         cliente: cl?.nombre,
         tecnico: i.tecnicoAsignado,
         comercial: i.comercial || (i as any).comercialAsignado || undefined,
         estado: i.estado || 'Pendiente',
         fecha,
+        contacto,
+        telefono,
         modulo: 'Instalaciones',
         tipoBadge: 'Instalación / Montaje',
         colorTag: completado ? COLOR_COMPLETADO_TAG : 'bg-red-100 text-red-900 border-red-300 hover:bg-red-200/90',
         colorBadge: completado ? COLOR_COMPLETADO_BADGE : 'bg-red-50 text-red-800 border-red-200',
         icono: HardHat,
         detalles: i.nota || i.observaciones || undefined,
-        completado
+        completado,
+        resueltaManual
       });
     });
 
@@ -426,31 +511,50 @@ export default function Calendario() {
       const fecha = u.fecha || (u.fechaCreacion ? u.fechaCreacion.slice(0, 10) : '');
       if (!fecha) return;
 
-      const c = centros.find((cent) => cent.nombre && u.lugar && cent.nombre.toLowerCase().includes(u.lugar.toLowerCase()));
-      const cl = clientes.find((cli) => (cli._docId || cli.id) === c?.clienteId || (cli.nombre && u.lugar && cli.nombre.toLowerCase().includes(u.lugar.toLowerCase())));
+      const c = centros.find((cent) => (u.centroId && (cent._docId || cent.id) === u.centroId) || (cent.nombre && u.lugar && cent.nombre.toLowerCase().includes(u.lugar.toLowerCase())));
+      const cl = clientes.find((cli) => (cli._docId || cli.id) === u.clienteId || (cli._docId || cli.id) === c?.clienteId || (cli.nombre && u.lugar && cli.nombre.toLowerCase().includes(u.lugar.toLowerCase())));
       const nombreCliente = cl?.nombre || u.lugar || 'Cliente';
       const tieneAlbaran = !!u.albaranId || albaranes.some((a) => a.reparacionId === u.id || a.reparacionId === (u as any)._docId || (a as any).urgenciaId === u.id || (a as any).urgenciaId === (u as any)._docId || a.id === u.albaranId);
-      const completado = tieneAlbaran || u.estado === 'Finalizado';
+      const resueltaManual = (u as any).resueltaManual === true;
+      const completado = tieneAlbaran || u.estado === 'Finalizado' || resueltaManual;
+      const poblacion = (u as any).poblacion || c?.poblacion || cl?.poblacion;
+      const direccion = c?.direccion || cl?.direccion;
+      const contacto = c?.contacto || (u as any).contacto || cl?.contacto;
+      const telefono = c?.telefono || (u as any).telefono || cl?.telefono;
+
+      let lugarTexto = u.lugar;
+      if (poblacion && lugarTexto && !lugarTexto.toLowerCase().includes(poblacion.toLowerCase())) {
+        lugarTexto = `${lugarTexto}, ${poblacion}`;
+      } else if (!lugarTexto && poblacion) {
+        lugarTexto = [direccion, poblacion].filter(Boolean).join(', ');
+      }
+
+      const tituloAviso = u.titulo || u.urgencia || nombreCliente || 'Aviso de Urgencia';
 
       addEvento(fecha, {
         id: `urg-${u.id || (u as any)._docId}`,
         rawDocId: (u as any)._docId || u.id,
         sigla: 'Urg.',
-        clienteResumido: nombreCliente,
-        tituloCompleto: u.urgencia || 'Aviso de Urgencia',
-        lugar: u.lugar,
+        clienteResumido: tituloAviso,
+        tituloCompleto: tituloAviso,
+        lugar: lugarTexto,
+        direccion,
+        poblacion,
         cliente: cl?.nombre,
         tecnico: u.tecnicoAsignado,
         comercial: u.comercial || undefined,
         estado: u.estado || 'Pendiente',
         fecha,
+        contacto,
+        telefono,
         modulo: 'Urgencias',
         tipoBadge: u.prioridad ? `Urgencia (${u.prioridad})` : 'Aviso de Urgencia',
         colorTag: completado ? COLOR_COMPLETADO_TAG : 'bg-black text-white border-zinc-950 hover:bg-zinc-800 shadow-xs',
         colorBadge: completado ? COLOR_COMPLETADO_BADGE : 'bg-zinc-900 text-white border-black',
         icono: AlertTriangle,
         detalles: u.nota || u.observaciones || undefined,
-        completado
+        completado,
+        resueltaManual
       });
     });
 
@@ -689,6 +793,56 @@ export default function Calendario() {
     }
   };
 
+  // Marcar / Desmarcar como resuelta (solo Super Admin; solo Reparaciones, Instalaciones y Urgencias).
+  // Usa un campo independiente `resueltaManual` sin modificar el `estado` de la tarea.
+  const handleToggleResuelta = async (ev: EventoCalendario, valor: boolean) => {
+    if (!isSuperUser) return;
+    const { rawDocId, modulo, id: evId } = ev;
+    if (!rawDocId || (modulo !== 'Reparaciones' && modulo !== 'Instalaciones' && modulo !== 'Urgencias')) return;
+
+    const cleanId = (evId || '').replace(/^(rep|inst|urg)-/, '');
+    const matchesItem = (it: any) => {
+      if (!it) return false;
+      return (
+        it._docId === rawDocId ||
+        it.id === rawDocId ||
+        (cleanId && (it.id === cleanId || it._docId === cleanId))
+      );
+    };
+
+    const aplicar = <T,>(list: T[]): T[] =>
+      list.map((it: any) => (matchesItem(it) ? { ...it, resueltaManual: valor } : it));
+
+    const persistLocal = (key: string) => {
+      try {
+        const stored = JSON.parse(localStorage.getItem(key) || '[]');
+        if (Array.isArray(stored)) localStorage.setItem(key, JSON.stringify(aplicar(stored)));
+      } catch {}
+    };
+
+    setGuardandoResuelta(true);
+    try {
+      if (modulo === 'Reparaciones') {
+        setReparaciones((prev) => aplicar(prev));
+        persistLocal('firecheck_db_reparaciones');
+        await updateReparacion(rawDocId, { resueltaManual: valor } as any);
+      } else if (modulo === 'Instalaciones') {
+        setInstalaciones((prev) => aplicar(prev));
+        persistLocal('firecheck_db_instalaciones');
+        await updateInstalacion(rawDocId, { resueltaManual: valor } as any);
+      } else {
+        setUrgencias((prev) => aplicar(prev));
+        persistLocal('firecheck_db_urgencias');
+        await updateUrgencia(rawDocId, { resueltaManual: valor } as any);
+      }
+    } catch (err) {
+      console.error('Error al marcar/desmarcar tarea como resuelta en Firestore:', err);
+    } finally {
+      setGuardandoResuelta(false);
+      setSelectedEvento(null);
+    }
+  };
+
   return (
     <div className="h-screen max-h-screen bg-[#F8FAFC] flex flex-col p-3 sm:p-4 lg:p-5 select-none overflow-hidden">
       {/* Barra de cabecera del Calendario */}
@@ -712,24 +866,63 @@ export default function Calendario() {
             </div>
           </div>
 
-          {/* Leyenda y Conteo de Etiquetas */}
+          {/* Leyenda y Conteo de Etiquetas con Filtros Interactivos */}
           <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-amber-50 text-amber-900 border border-amber-300">
-              <span className="font-extrabold text-amber-700">Rev.</span>
+            <button
+              type="button"
+              onClick={() => toggleFiltro('revisiones')}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
+                filtrosVisibles.revisiones
+                  ? 'bg-amber-50 text-amber-900 border-amber-300 shadow-xs'
+                  : 'bg-slate-50 text-slate-400 border-slate-200 opacity-60 line-through'
+              }`}
+              title={filtrosVisibles.revisiones ? 'Clic para ocultar Revisiones' : 'Clic para mostrar Revisiones'}
+            >
+              <span className={`font-extrabold ${filtrosVisibles.revisiones ? 'text-amber-700' : 'text-slate-400'}`}>Rev.</span>
               <span>Revisiones ({statsMes.mantCount})</span>
-            </span>
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-sky-50 text-sky-900 border border-sky-300">
-              <span className="font-extrabold text-sky-700">Rep.</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => toggleFiltro('reparaciones')}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
+                filtrosVisibles.reparaciones
+                  ? 'bg-sky-50 text-sky-900 border-sky-300 shadow-xs'
+                  : 'bg-slate-50 text-slate-400 border-slate-200 opacity-60 line-through'
+              }`}
+              title={filtrosVisibles.reparaciones ? 'Clic para ocultar Reparaciones' : 'Clic para mostrar Reparaciones'}
+            >
+              <span className={`font-extrabold ${filtrosVisibles.reparaciones ? 'text-sky-700' : 'text-slate-400'}`}>Rep.</span>
               <span>Reparaciones ({statsMes.repCount})</span>
-            </span>
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-red-50 text-red-900 border border-red-300">
-              <span className="font-extrabold text-red-700">Inst.</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => toggleFiltro('instalaciones')}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
+                filtrosVisibles.instalaciones
+                  ? 'bg-red-50 text-red-900 border-red-300 shadow-xs'
+                  : 'bg-slate-50 text-slate-400 border-slate-200 opacity-60 line-through'
+              }`}
+              title={filtrosVisibles.instalaciones ? 'Clic para ocultar Instalaciones' : 'Clic para mostrar Instalaciones'}
+            >
+              <span className={`font-extrabold ${filtrosVisibles.instalaciones ? 'text-red-700' : 'text-slate-400'}`}>Inst.</span>
               <span>Instalaciones ({statsMes.instCount})</span>
-            </span>
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-black text-white border border-zinc-950 shadow-xs">
-              <span className="font-extrabold text-white">Urg.</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => toggleFiltro('urgencias')}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
+                filtrosVisibles.urgencias
+                  ? 'bg-black text-white border-zinc-950 shadow-xs'
+                  : 'bg-slate-50 text-slate-400 border-slate-200 opacity-60 line-through'
+              }`}
+              title={filtrosVisibles.urgencias ? 'Clic para ocultar Urgencias' : 'Clic para mostrar Urgencias'}
+            >
+              <span className={`font-extrabold ${filtrosVisibles.urgencias ? 'text-white' : 'text-slate-400'}`}>Urg.</span>
               <span>Urgencias ({statsMes.urgCount})</span>
-            </span>
+            </button>
           </div>
 
           <div className="flex items-center gap-2 w-full lg:w-auto justify-end">
@@ -802,7 +995,14 @@ export default function Calendario() {
               d.date.getFullYear() === today.getFullYear();
 
             const isHoliday = !!festivosPorFecha[d.iso];
-            const eventosDia = eventosPorFecha[d.iso] || [];
+            const todosEventosDia = eventosPorFecha[d.iso] || [];
+            const eventosDia = todosEventosDia.filter((ev) => {
+              if (ev.sigla === 'Rev.' && !filtrosVisibles.revisiones) return false;
+              if (ev.sigla === 'Rep.' && !filtrosVisibles.reparaciones) return false;
+              if (ev.sigla === 'Inst.' && !filtrosVisibles.instalaciones) return false;
+              if (ev.sigla === 'Urg.' && !filtrosVisibles.urgencias) return false;
+              return true;
+            });
             const isOverThisDay = dragOverDate === d.iso;
 
             return (
@@ -859,7 +1059,7 @@ export default function Calendario() {
                         title={
                           isFestivo
                             ? `${ev.tituloCompleto} (Festivo oficial en Barcelona / España)`
-                            : `${ev.sigla} ${ev.clienteResumido}${ev.completado ? ' · Completada (Albarán generado)' : ''} (Arrastra a otro día para reprogramar o haz clic para ver detalles)`
+                            : `${ev.sigla} ${ev.clienteResumido}${ev.poblacion ? ` [${ev.poblacion}]` : ''}${ev.completado ? ' · Completada (Albarán generado)' : ''} (Arrastra a otro día para reprogramar o haz clic para ver detalles)`
                         }
                       >
                         <span className="font-extrabold tracking-tight shrink-0">{ev.sigla}</span>
@@ -937,13 +1137,94 @@ export default function Calendario() {
                 </div>
               )}
 
-              {selectedEvento.lugar && (
-                <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                  <MapPin className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
-                  <div>
-                    <span className="text-[10px] text-slate-600 font-bold block uppercase">Lugar / Centro</span>
-                    <span className="font-bold text-slate-800">{selectedEvento.lugar}</span>
+              {selectedEvento.lugar && (() => {
+                // Generar query limpio para Google Maps combinando dirección o lugar y población
+                const rawQuery = [selectedEvento.direccion, selectedEvento.poblacion].filter(Boolean).join(', ') || selectedEvento.lugar || '';
+                const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(rawQuery)}`;
+
+                return (
+                  <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200/90 shadow-2xs space-y-2">
+                    <div className="flex items-start gap-2.5">
+                      <MapPin className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                      <div className="flex-1 min-w-0">
+                        <span className="text-[10px] text-slate-500 font-bold block uppercase tracking-wider">
+                          Lugar / Dirección y Población
+                        </span>
+                        <div className="font-bold text-slate-800 text-xs leading-snug break-words">
+                          {selectedEvento.lugar}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="pt-1.5 border-t border-slate-200/60 flex items-center justify-between">
+                      {selectedEvento.poblacion && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-sky-50 text-sky-800 border border-sky-200 rounded-md text-[10px] font-bold">
+                          📍 {selectedEvento.poblacion}
+                        </span>
+                      )}
+                      <a
+                        href={mapsUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 ml-auto px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 border border-slate-200 hover:border-slate-300 rounded-xl text-[11px] font-bold shadow-xs hover:shadow-sm transition-all cursor-pointer group"
+                        title="Abrir ubicación en Google Maps"
+                      >
+                        {/* Icono oficial Google Maps Pin Multicolor */}
+                        <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none">
+                          <path
+                            d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"
+                            fill="#EA4335"
+                          />
+                          <path
+                            d="M12 2C8.13 2 5 5.13 5 9c0 2.22 1.25 5.14 3.06 8.35L12 9V2z"
+                            fill="#4285F4"
+                          />
+                          <path
+                            d="M12 9v13s2.94-3.26 4.94-7.65L12 9z"
+                            fill="#FBBC04"
+                          />
+                          <path
+                            d="M12 22s-2.06-2.28-3.94-6.65L12 9v13z"
+                            fill="#34A853"
+                          />
+                          <circle cx="12" cy="9" r="2.8" fill="#FFFFFF" />
+                        </svg>
+                        <span>Abrir en Google Maps</span>
+                        <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-600 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
+                      </a>
+                    </div>
                   </div>
+                );
+              })()}
+
+              {(selectedEvento.contacto || selectedEvento.telefono) && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {selectedEvento.contacto && (
+                    <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                      <User className="w-4 h-4 text-slate-400 shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <span className="text-[10px] text-slate-500 font-bold block uppercase tracking-wider">Contacto</span>
+                        <span className="font-bold text-slate-800 text-xs truncate block" title={selectedEvento.contacto}>
+                          {selectedEvento.contacto}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                  {selectedEvento.telefono && (
+                    <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                      <Phone className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <span className="text-[10px] text-slate-500 font-bold block uppercase tracking-wider">Teléfono</span>
+                        <a
+                          href={`tel:${selectedEvento.telefono}`}
+                          className="font-bold text-emerald-700 hover:text-emerald-800 text-xs hover:underline inline-block truncate max-w-full"
+                          title="Llamar al teléfono"
+                        >
+                          {selectedEvento.telefono}
+                        </a>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -973,7 +1254,7 @@ export default function Calendario() {
                   <div className="flex items-center gap-1.5">
                     {selectedEvento.completado && (
                       <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-200 text-slate-700 border border-slate-300">
-                        Albarán generado
+                        {selectedEvento.resueltaManual ? 'Resuelta manualmente' : 'Albarán generado'}
                       </span>
                     )}
                     <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-white border border-slate-200 text-slate-800 shadow-xs">
@@ -992,7 +1273,36 @@ export default function Calendario() {
             </div>
 
             {/* Pie del modal */}
-            <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex justify-end">
+            <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex flex-wrap items-center justify-end gap-2">
+              {isSuperUser &&
+                (selectedEvento.modulo === 'Reparaciones' || selectedEvento.modulo === 'Instalaciones' || selectedEvento.modulo === 'Urgencias') && (
+                  <>
+                    {!selectedEvento.completado && (
+                      <button
+                        type="button"
+                        disabled={guardandoResuelta}
+                        onClick={() => handleToggleResuelta(selectedEvento, true)}
+                        className="mr-auto inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-all shadow-sm cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                        title="Marcar esta tarea como resuelta aunque no tenga albarán"
+                      >
+                        <CheckCircle2 className="w-4 h-4" />
+                        Marcar como resuelta
+                      </button>
+                    )}
+                    {selectedEvento.resueltaManual && (
+                      <button
+                        type="button"
+                        disabled={guardandoResuelta}
+                        onClick={() => handleToggleResuelta(selectedEvento, false)}
+                        className="mr-auto inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white hover:bg-blue-50 text-blue-700 border border-blue-300 font-bold text-xs transition-all shadow-sm cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                        title="Quitar la marca de resuelta y devolver la tarea a pendiente"
+                      >
+                        <RotateCcw className="w-4 h-4" />
+                        Desmarcar como resuelta
+                      </button>
+                    )}
+                  </>
+                )}
               <button
                 type="button"
                 onClick={() => setSelectedEvento(null)}

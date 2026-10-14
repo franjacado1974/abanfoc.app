@@ -2,6 +2,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { extintorBase64 } from './icono_extintor';
 import { biesBase64 } from './icono_bies';
+import { logoGrimecBase64 } from './logo_grimec_base64';
 import { getSistemasCategorias } from '../firebase/firebase';
 
 const MESES = [
@@ -511,17 +512,89 @@ export function determinarSiFechaEsInvalida(
   return false;
 }
 
+export const esSistemaRociadoresPuestosPDF = (sistNombre?: string, sistTipo?: string, sistFamilia?: string): boolean => {
+  const sStr = `${sistNombre || ''} ${sistTipo || ''} ${sistFamilia || ''}`.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  return sStr.includes('ROCIADOR') || sStr.includes('SPRINKLER') || (sStr.includes('PUESTO') && sStr.includes('CONTROL'));
+};
+
+export const contarEquiposInventarioPuestosPDF = (equipos: any[]): number => {
+  let recuentoInventario = 0;
+  for (const eq of equipos) {
+    let tablaVal: any = undefined;
+    for (const [k, v] of Object.entries(eq)) {
+      const kLower = k.toLowerCase();
+      if (kLower.includes('caudal') || kLower.includes('presi') || kLower.includes('curva') || kLower.includes('anomali') || kLower.includes('observaci') || kLower.includes('foto')) continue;
+      if (kLower.includes('puesto') || kLower.includes('control') || kLower.includes('inventario') || kLower.includes('tabla')) {
+        if (v && (typeof v === 'string' || Array.isArray(v))) {
+          tablaVal = v;
+          break;
+        }
+      }
+    }
+    if (!tablaVal) {
+      for (const [k, v] of Object.entries(eq)) {
+        const kLower = k.toLowerCase();
+        if (kLower.includes('caudal') || kLower.includes('presi') || kLower.includes('curva') || kLower.includes('anomali') || kLower.includes('observaci') || kLower.includes('foto') || kLower === 'id' || kLower === 'codigo' || kLower === 'sistemaid' || kLower === 'ubicacion') continue;
+        if (Array.isArray(v) && v.length > 0) {
+          tablaVal = v;
+          break;
+        }
+        if (typeof v === 'string') {
+          const trimmed = v.trim();
+          if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+            try {
+              const p = JSON.parse(trimmed);
+              if (Array.isArray(p) && p.length > 0) {
+                tablaVal = v;
+                break;
+              }
+            } catch {}
+          }
+        }
+      }
+    }
+    let rows: any[] = [];
+    if (Array.isArray(tablaVal)) {
+      rows = tablaVal;
+    } else if (typeof tablaVal === 'string') {
+      try {
+        const parsed = JSON.parse(tablaVal.trim());
+        if (Array.isArray(parsed)) rows = parsed;
+      } catch {}
+    }
+    const filasValidas = rows.filter(row => {
+      if (Array.isArray(row)) return row.some(c => typeof c === 'string' && c.trim() !== '' && c.trim() !== '-');
+      if (row && typeof row === 'object') return Object.values(row).some(c => typeof c === 'string' && (c as any).trim() !== '' && (c as any).trim() !== '-');
+      return false;
+    });
+    recuentoInventario += (filasValidas.length > 0 ? filasValidas.length : rows.length);
+  }
+  return recuentoInventario;
+};
+
+const imageBase64Cache = new Map<string, string | null>();
 
 export const fetchImageToBase64 = async (urlOrBase64: string | null | undefined): Promise<string | null> => {
   if (!urlOrBase64) return null;
-  let rawResult: string | null = null;
-
   if (urlOrBase64.startsWith('data:')) {
-    rawResult = urlOrBase64;
-  } else if (urlOrBase64.startsWith('http')) {
+    const opt = await optimizarImagenParaPDF(urlOrBase64, 800, 0.75);
+    return opt.base64;
+  }
+
+  if (imageBase64Cache.has(urlOrBase64)) {
+    return imageBase64Cache.get(urlOrBase64) || null;
+  }
+
+  let rawResult: string | null = null;
+  let isAbort = false;
+
+  if (urlOrBase64.startsWith('http') || urlOrBase64.startsWith('/')) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      const timeoutId = setTimeout(() => {
+        isAbort = true;
+        controller.abort();
+      }, 1500);
       const response = await fetch(urlOrBase64, { signal: controller.signal });
       clearTimeout(timeoutId);
       if (response.ok) {
@@ -539,11 +612,14 @@ export const fetchImageToBase64 = async (urlOrBase64: string | null | undefined)
           reader.readAsDataURL(blob);
         });
       }
-    } catch (e) {
-      console.error("Error fetching image via fetch():", e);
+    } catch (e: any) {
+      if (e?.name === 'AbortError') {
+        isAbort = true;
+      }
     }
-    // Fallback si falla el fetch (ej. CORS)
-    if (!rawResult) {
+
+    // Fallback rápido si falla el fetch (solo si no fue abortado por timeout)
+    if (!rawResult && !isAbort) {
       try {
         rawResult = await new Promise<string | null>((resolve) => {
           const img = new Image();
@@ -551,7 +627,7 @@ export const fetchImageToBase64 = async (urlOrBase64: string | null | undefined)
           const timeoutId = setTimeout(() => {
             img.src = '';
             resolve(null);
-          }, 4000);
+          }, 1500);
           img.onload = () => {
             clearTimeout(timeoutId);
             let width = img.naturalWidth || img.width;
@@ -569,8 +645,7 @@ export const fetchImageToBase64 = async (urlOrBase64: string | null | undefined)
               ctx.drawImage(img, 0, 0, width, height);
               try {
                 resolve(canvas.toDataURL('image/jpeg', 0.75));
-              } catch (err) {
-                console.error("Error converting canvas to base64:", err);
+              } catch {
                 resolve(null);
               }
             } else {
@@ -583,20 +658,22 @@ export const fetchImageToBase64 = async (urlOrBase64: string | null | undefined)
           };
           img.src = urlOrBase64;
         });
-      } catch (fallbackErr) {
-        console.error("Error in fallback image loading:", fallbackErr);
-        return null;
+      } catch {
+        rawResult = null;
       }
     }
   } else {
     rawResult = urlOrBase64;
   }
 
+  let finalResult: string | null = null;
   if (rawResult && rawResult.startsWith('data:')) {
     const opt = await optimizarImagenParaPDF(rawResult, 800, 0.75);
-    return opt.base64;
+    finalResult = opt.base64;
   }
-  return rawResult;
+
+  imageBase64Cache.set(urlOrBase64, finalResult);
+  return finalResult;
 };
 
 export const removeWhiteBackground = (base64Img: string, maxWidth: number = 400): Promise<string> => {
@@ -894,10 +971,12 @@ export const generarActaExtintoresPDF = async (
   const firmaIngenieroBase64Raw = await fetchImageToBase64(empData?.ingenieroFirmaUrl || empData?.firmaIngenieroBase64 || empData?.firmaUrl);
   const logoDataRaw = await fetchImageToBase64(empData?.logoUrl);
   const selloEmpresaBase64Raw = await fetchImageToBase64(empData?.selloUrl);
+  const gremioLogoRaw = await fetchImageToBase64(empData?.gremioLogoUrl || logoGrimecBase64);
 
   const { base64: logoData } = await optimizarImagenParaPDF(logoDataRaw, 800, 0.75);
   const { base64: firmaIngenieroBase64 } = await optimizarImagenParaPDF(firmaIngenieroBase64Raw, 600, 0.7, true);
   const { base64: selloEmpresaBase64 } = await optimizarImagenParaPDF(selloEmpresaBase64Raw, 800, 0.75);
+  const { base64: gremioLogoData } = await optimizarImagenParaPDF(gremioLogoRaw, 800, 0.75);
 
   // Cargar categorías de sistemas para obtener iconos correctos
   let categoriasSistema: any[] = [];
@@ -935,6 +1014,23 @@ export const generarActaExtintoresPDF = async (
         doc.addImage(logoData, format, pageWidth - 14 - logoWidth, 12, logoWidth, logoHeight);
       } catch (err) {
         console.error("Error drawing logo on cover page:", err);
+      }
+    }
+
+    // ── Logo del Gremio (esquina superior izquierda) ──
+    if (gremioLogoData) {
+      try {
+        const gremioProps = doc.getImageProperties(gremioLogoData);
+        const maxGremioWidth = 18;
+        const maxGremioHeight = 18;
+        const gremioRatio = gremioProps.width / gremioProps.height;
+        const gremioWidth = Math.min(maxGremioWidth, maxGremioHeight * gremioRatio);
+        const gremioHeight = gremioWidth / gremioRatio;
+        const gremioFormat = getImageFormat(gremioLogoData);
+        const gremioY = Math.max(5, 22 - (gremioHeight / 2) - 5);
+        doc.addImage(gremioLogoData, gremioFormat, 14, gremioY, gremioWidth, gremioHeight);
+      } catch (err) {
+        console.error("Error drawing gremio logo on cover page:", err);
       }
     }
 
@@ -1247,6 +1343,23 @@ export const generarActaExtintoresPDF = async (
         doc.addImage(logoData, format, pageWidth - 14 - logoWidth, 11, logoWidth, logoHeight);
       } catch (err) {
         console.error("Error drawing logo in header:", err);
+      }
+    }
+
+    // ── Logo del Gremio (esquina superior izquierda) ──
+    if (gremioLogoData) {
+      try {
+        const gremioProps = doc.getImageProperties(gremioLogoData);
+        const maxGremioWidth = 18;
+        const maxGremioHeight = 18;
+        const gremioRatio = gremioProps.width / gremioProps.height;
+        const gremioWidth = Math.min(maxGremioWidth, maxGremioHeight * gremioRatio);
+        const gremioHeight = gremioWidth / gremioRatio;
+        const gremioFormat = getImageFormat(gremioLogoData);
+        const gremioY = 6;
+        doc.addImage(gremioLogoData, gremioFormat, 14, gremioY, gremioWidth, gremioHeight);
+      } catch (err) {
+        console.error("Error drawing gremio logo in header:", err);
       }
     }
 
@@ -1656,7 +1769,8 @@ export const generarActaExtintoresPDF = async (
         doc.setTextColor(0, 0, 0);
         finalY += 6;
       } else {
-        for (const eq of anomalias) {
+        for (let eqIdx = 0; eqIdx < anomalias.length; eqIdx++) {
+          const eq = anomalias[eqIdx];
           // Verificar si necesitamos una nueva página
           if (finalY > 188) {
             doc.addPage();
@@ -1683,10 +1797,50 @@ export const generarActaExtintoresPDF = async (
             const maxTextWidth = pageWidth - 28;
 
             // 1) Imprimir número de equipo en MAYÚSCULA como encabezado del bloque
-            const numEquipoStr = `EQUIPO Nº ${String(eq.codigo || eq.numero || 'S/N').toUpperCase()}${eq.placa ? ` (${String(eq.placa).toUpperCase()})` : ''}`;
-            const headerLines: string[] = doc.splitTextToSize(numEquipoStr, maxTextWidth);
+            const itemUbicacionEquipo = checkItemsDeSistema?.find(item => {
+              const lbl = (item.label || '').toLowerCase();
+              const k = (item.key || '').toLowerCase();
+              return lbl.includes('ubicaci') || lbl.includes('cobertura') || lbl.includes('planta') || k === 'ubicacion';
+            });
+            const rawUbic = (typeof eq.ubicacion === 'string' && eq.ubicacion.trim())
+              ? eq.ubicacion.trim()
+              : ((typeof eq.cobertura === 'string' && eq.cobertura.trim())
+                ? eq.cobertura.trim()
+                : ((typeof eq.zona === 'string' && eq.zona.trim())
+                  ? eq.zona.trim()
+                  : ((itemUbicacionEquipo && eq[itemUbicacionEquipo.key] && typeof eq[itemUbicacionEquipo.key] === 'string' && eq[itemUbicacionEquipo.key].trim() && eq[itemUbicacionEquipo.key].trim() !== '-')
+                    ? String(eq[itemUbicacionEquipo.key]).trim()
+                    : '')));
+            // Detectar si el equipo pertenece a un sistema de bombas para nombrarlo específicamente
+            const bombaContext = `${title || ''} ${nombreSistemaUpper || ''} ${eq.sistemaNombre || ''} ${eq.tipo || ''} ${eq.nombre || ''}`.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            let tipoBombaRef = '';
+            if (bombaContext.includes('JOCKEY')) {
+              tipoBombaRef = 'BOMBA JOCKEY';
+            } else if (bombaContext.includes('DIESEL') || bombaContext.includes('GASOIL') || bombaContext.includes('MOTOBOMBA')) {
+              tipoBombaRef = 'BOMBA DIESEL';
+            } else if (bombaContext.includes('ELECTRICA') || bombaContext.includes('ELECTROBOMBA')) {
+              tipoBombaRef = 'BOMBA ELECTRICA';
+            }
 
-            headerLines.forEach((hLine) => {
+            let rawUbicTexto = '';
+            if (tipoBombaRef) {
+              rawUbicTexto = tipoBombaRef;
+            } else if (rawUbic && rawUbic !== 'N/A' && rawUbic !== '-') {
+              rawUbicTexto = rawUbic;
+            }
+
+            let infoTexto = '';
+            if (rawUbicTexto) {
+              let clean = rawUbicTexto.replace(/^\s*\(\s*/, '').replace(/\s*\)\s*$/, '').trim();
+              if (clean.length > 0) {
+                clean = clean.charAt(0).toUpperCase() + clean.slice(1).toLowerCase();
+                infoTexto = `(${clean})`;
+              }
+            }
+
+            const boldPart = `EQUIPO Nº ${String(eq.codigo || eq.numero || 'S/N').toUpperCase()}${eq.placa ? ` (${String(eq.placa).toUpperCase()})` : ''}${infoTexto ? ' - ' : ''}`;
+
+            const checkPageBreakHeader = () => {
               if (finalY > 188) {
                 doc.addPage();
                 const newPageNum = (doc.internal as any).getNumberOfPages();
@@ -1702,13 +1856,65 @@ export const generarActaExtintoresPDF = async (
                 doc.setFont("helvetica", "normal");
                 finalY += 7;
               }
+            };
 
+            if (!infoTexto) {
+              checkPageBreakHeader();
               doc.setFont("helvetica", "bold");
               doc.setTextColor(0, 0, 0);
-              doc.text(hLine, 14, finalY);
+              doc.text(boldPart, 14, finalY);
               doc.setFont("helvetica", "normal");
               finalY += 5.5;
-            });
+            } else {
+              doc.setFont("helvetica", "bold");
+              const boldW = doc.getTextWidth(boldPart);
+              doc.setFont("helvetica", "normal");
+              const normalW = doc.getTextWidth(infoTexto);
+
+              if (boldW + normalW <= maxTextWidth) {
+                checkPageBreakHeader();
+                doc.setFont("helvetica", "bold");
+                doc.setTextColor(0, 0, 0);
+                doc.text(boldPart, 14, finalY);
+                doc.setFont("helvetica", "normal");
+                doc.text(infoTexto, 14 + boldW, finalY);
+                finalY += 5.5;
+              } else {
+                const words = infoTexto.split(' ');
+                let line1 = '';
+                let remainingWords: string[] = [];
+                for (let wIdx = 0; wIdx < words.length; wIdx++) {
+                  const testStr = line1 ? `${line1} ${words[wIdx]}` : words[wIdx];
+                  if (boldW + doc.getTextWidth(testStr) <= maxTextWidth) {
+                    line1 = testStr;
+                  } else {
+                    remainingWords = words.slice(wIdx);
+                    break;
+                  }
+                }
+
+                checkPageBreakHeader();
+                doc.setFont("helvetica", "bold");
+                doc.setTextColor(0, 0, 0);
+                doc.text(boldPart, 14, finalY);
+                if (line1) {
+                  doc.setFont("helvetica", "normal");
+                  doc.text(line1, 14 + boldW, finalY);
+                }
+                finalY += 5.5;
+
+                if (remainingWords.length > 0) {
+                  const remLines = doc.splitTextToSize(remainingWords.join(' '), maxTextWidth);
+                  remLines.forEach((rLine: string) => {
+                    checkPageBreakHeader();
+                    doc.setFont("helvetica", "normal");
+                    doc.setTextColor(0, 0, 0);
+                    doc.text(rLine, 14, finalY);
+                    finalY += 5.5;
+                  });
+                }
+              }
+            }
 
             // 2) Imprimir todas las anomalías debajo con guión y en ROJO
             if (anomaliasLines.length > 0) {
@@ -1783,8 +1989,6 @@ export const generarActaExtintoresPDF = async (
               doc.setTextColor(0, 0, 0);
             }
 
-            // Separación final después de todas las anotaciones de este equipo
-            finalY += 3.0;
           }
 
           // Si hay fotos, añadirlas todas (hasta 4 en la misma línea)
@@ -1836,7 +2040,28 @@ export const generarActaExtintoresPDF = async (
               if (h > maxImgHeight) maxImgHeight = h;
             }
             
-            finalY += maxImgHeight + 5;
+            finalY += maxImgHeight + 3.5;
+
+            if (eqIdx < anomalias.length - 1) {
+              const lineY = finalY;
+              if (lineY <= 186) {
+                doc.setDrawColor(220, 224, 230);
+                doc.setLineWidth(0.25);
+                doc.line(14, lineY, pageWidth - 14, lineY);
+                finalY = lineY + 5.5;
+              }
+            }
+          } else {
+            if (eqIdx < anomalias.length - 1) {
+              // Línea horizontal divisoria con un pequeño respiro simétrico antes y después
+              const lineY = finalY - 2.0;
+              if (lineY <= 186) {
+                doc.setDrawColor(220, 224, 230);
+                doc.setLineWidth(0.25);
+                doc.line(14, lineY, pageWidth - 14, lineY);
+                finalY = lineY + 5.5;
+              }
+            }
           }
         }
       }
@@ -2797,7 +3022,7 @@ export const generarActaExtintoresPDF = async (
                   if (itemForCol) {
                     const lblNorm = (itemForCol.label || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
                     const esBombaDieselNum = lblNorm.includes('esta es la bomba') && (lblNorm.includes('numero') || lblNorm.includes('nº') || lblNorm.includes('no.'));
-                    if (lblNorm.includes('cobertura') || esBombaDieselNum || lblNorm.includes('instalaciones que abastece') || lblNorm.includes('se alimenta')) {
+                    if (lblNorm.includes('cobertura') || esBombaDieselNum || lblNorm.includes('instalaciones que abastece') || lblNorm.includes('se alimenta') || (lblNorm.includes('cuadro') && (lblNorm.includes('control') || lblNorm.includes('mando')))) {
                       data.cell.styles.fillColor = [255, 249, 196]; // amarillo claro #FFF9C4
                       if (data.column.index % 2 === 1) {
                         data.cell.styles.fontStyle = 'bold';
@@ -2826,8 +3051,13 @@ export const generarActaExtintoresPDF = async (
               const checkRows: any[] = [];
               for (const item of normalItems) {
                 let rawVal = eq[item.key];
-                if ((rawVal === undefined || rawVal === '' || rawVal === '-') && ((item.label || '').toLowerCase().includes('ubicacion') || (item.label || '').toLowerCase().includes('cobertura'))) {
-                  rawVal = eq.ubicacion || eq.cobertura || rawVal;
+                if ((rawVal === undefined || rawVal === '' || rawVal === '-')) {
+                  const lLower = (item.label || '').toLowerCase();
+                  if (lLower.includes('cuadro')) {
+                    rawVal = eq[item.key] || (eq as any).cuadroControl || (eq as any).ubicacionCuadro || (eq as any).cuadro || rawVal;
+                  } else if (lLower.includes('ubicacion') || lLower.includes('cobertura')) {
+                    rawVal = eq.ubicacion || eq.cobertura || rawVal;
+                  }
                 }
                 const itemOpciones = (item as any).opciones || [];
                 if (rawVal === undefined || rawVal === '') {
@@ -2839,12 +3069,53 @@ export const generarActaExtintoresPDF = async (
                     rawVal = 'CONFORME';
                   }
                 }
-                const val = getMark(rawVal);
-                checkRows.push([
-                  item.label || '',
-                  val
-                ]);
+
+                const itemLblNorm = (item.label || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                const secTitleUpper = (sec.title || '').toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                const isManifoldSec = secTitleUpper.includes('MANIFOLD') || secTitleUpper.includes('COLECTOR');
+                const itemIndex = normalItems.indexOf(item);
+                const isManifoldRefOUbic = isManifoldSec && (
+                  itemIndex === 0 ||
+                  itemIndex === 1 ||
+                  itemLblNorm.includes('referencia') ||
+                  itemLblNorm.includes('ubicaci') ||
+                  itemLblNorm.includes('cobertura') ||
+                  itemLblNorm.includes('planta')
+                );
+                const isAbastecePregunta = itemLblNorm.includes('instalaciones que abastece') || (itemLblNorm.includes('abastece') && !itemLblNorm.includes('quedo') && !itemLblNorm.includes('quedó') && !itemLblNorm.includes('comprobacion'));
+                const isCuadroControlPregunta = (itemLblNorm.includes('cuadro') && (itemLblNorm.includes('control') || itemLblNorm.includes('mando'))) || itemLblNorm.includes('ubicacion del cuadro') || itemLblNorm.includes('ubicacion cuadro');
+                const isAreaCobertura = itemLblNorm.includes('cobertura') || isManifoldRefOUbic || isAbastecePregunta || isCuadroControlPregunta;
+
+                if (isAreaCobertura) {
+                  let labelText = (item.label || '').trim().replace(/[\.:\s]+$/, '') + ':';
+                  const rawValStr = Array.isArray(rawVal) ? rawVal.join(', ') : String(rawVal || '');
+                  let respUpper = rawValStr.trim().toUpperCase();
+                  if (respUpper === '-') respUpper = '';
+                  const displayText = respUpper ? `${labelText}  ${respUpper}` : labelText;
+
+                  checkRows.push([
+                    {
+                      content: displayText,
+                      colSpan: 2,
+                      styles: {
+                        fillColor: [255, 249, 196],
+                        textColor: [0, 0, 0],
+                        halign: 'left',
+                        fontStyle: 'normal'
+                      }
+                    }
+                  ]);
+                } else {
+                  const val = getMark(rawVal);
+                  checkRows.push([
+                    item.label || '',
+                    val
+                  ]);
+                }
               }
+
+              const secTitleUpper = (sec.title || '').toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+              const isManifoldSec = secTitleUpper.includes('MANIFOLD') || secTitleUpper.includes('COLECTOR');
 
               autoTable(doc, {
                 startY: currentY,
@@ -2859,10 +3130,16 @@ export const generarActaExtintoresPDF = async (
                   0: { halign: 'left', cellWidth: 229 },
                   1: { halign: 'center', cellWidth: 40 }
                 },
-                head: [[
-                  { content: sec.title, styles: { halign: 'left', fontStyle: 'bold', fontSize: 8.5 } },
-                  { content: 'ESTADO', styles: { halign: 'center', fontStyle: 'bold', fontSize: 8.5 } }
-                ]],
+                head: isManifoldSec ? [
+                  [{ content: sec.title, colSpan: 2, styles: { fillColor: [128, 0, 32], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5, halign: 'left', lineWidth: 0.1, lineColor: [128, 0, 32] } }]
+                ] : ((sec.title && (sec.title.trim().toUpperCase() === 'GENERAL' || sec.title.trim().toUpperCase().replace(/^[0-9\.\s]+/, '') === 'GENERAL' || sec.key === 'default_sec')) ? [
+                  [{ content: 'REFERENCIA', colSpan: 2, styles: { fillColor: [128, 0, 32], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5, halign: 'left', lineWidth: 0.1, lineColor: [128, 0, 32] } }]
+                ] : [
+                  [
+                    { content: sec.title, styles: { halign: 'left', fontStyle: 'bold', fontSize: 8.5 } },
+                    { content: 'ESTADO', styles: { halign: 'center', fontStyle: 'bold', fontSize: 8.5 } }
+                  ]
+                ]),
                 body: checkRows,
                 didDrawPage: function (_data: any) {
                   const absolutePageNum = (doc.internal as any).getCurrentPageInfo().pageNumber;
@@ -2875,6 +3152,19 @@ export const generarActaExtintoresPDF = async (
                   if (data.section === 'body') {
                     data.cell.styles.overflow = 'hidden';
                     data.cell.styles.valign = 'middle';
+
+                    const itemNorm = normalItems[data.row.index];
+                    const lblNorm = itemNorm ? (itemNorm.label || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") : '';
+                    const isCuadroControlPregunta = (lblNorm.includes('cuadro') && (lblNorm.includes('control') || lblNorm.includes('mando'))) || lblNorm.includes('ubicacion del cuadro') || lblNorm.includes('ubicacion cuadro');
+                    const isAreaCobertura = lblNorm.includes('cobertura') || data.cell.colSpan === 2 || isCuadroControlPregunta;
+
+                    if (isAreaCobertura) {
+                      data.cell.styles.fillColor = [255, 249, 196]; // amarillo claro #FFF9C4
+                      data.cell.styles.textColor = [0, 0, 0];
+                      data.cell.text = ['']; // Dibujado exacto en didDrawCell
+                      return;
+                    }
+
                     const rawVal = data.cell.raw !== undefined && data.cell.raw !== null ? data.cell.raw : data.cell.text;
                     const strVal = Array.isArray(rawVal) ? rawVal.join(' ') : String(rawVal);
                     const cleanStr = strVal.replace(/[\r\n]+/g, ' ').trim();
@@ -2882,16 +3172,14 @@ export const generarActaExtintoresPDF = async (
                       data.cell.text = [cleanStr];
                     }
 
-                    const itemNorm = normalItems[data.row.index];
                     if (itemNorm) {
-                      const lblNorm = (itemNorm.label || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
                       const esBombaDieselNum = lblNorm.includes('esta es la bomba') && (lblNorm.includes('numero') || lblNorm.includes('nº') || lblNorm.includes('no.'));
                       const isTipoInstRow = lblNorm.includes('tipo de instalacion') || (itemNorm.label || '').trim().startsWith('1.1');
                       if (isTipoInstRow && data.column.index === 1) {
                         data.cell.styles.halign = 'center';
                         data.cell.styles.fontStyle = 'bold';
                       }
-                      if (lblNorm.includes('cobertura') || esBombaDieselNum || lblNorm.includes('instalaciones que abastece') || lblNorm.includes('se alimenta')) {
+                      if (esBombaDieselNum || lblNorm.includes('instalaciones que abastece') || lblNorm.includes('se alimenta') || (lblNorm.includes('cuadro') && (lblNorm.includes('control') || lblNorm.includes('mando')))) {
                         data.cell.styles.fillColor = [255, 249, 196]; // amarillo claro #FFF9C4
                         if (data.column.index === 1) {
                           data.cell.styles.fontStyle = 'bold';
@@ -2938,14 +3226,63 @@ export const generarActaExtintoresPDF = async (
                 }
                 },
                 didDrawCell: function (data: any) {
-                  if (data.section === 'body' && data.column.index === 1 && (data.cell.raw === 'TICK' || data.cell.raw === true || (typeof data.cell.raw === 'string' && data.cell.raw.trim().toLowerCase() === 'true'))) {
-                    const { x, y, width, height } = data.cell;
-                    const cx = x + width / 2;
-                    const cy = y + height / 2;
-                    doc.setDrawColor(34, 197, 94);
-                    doc.setLineWidth(0.6);
-                    doc.line(cx - 1, cy + 0.2, cx - 0.2, cy + 1);
-                    doc.line(cx - 0.2, cy + 1, cx + 1.2, cy - 1.2);
+                  if (data.section === 'body') {
+                    const itemNorm = normalItems[data.row.index];
+                    const lblNorm = itemNorm ? (itemNorm.label || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") : '';
+                    const isCuadroControlPregunta = (lblNorm.includes('cuadro') && (lblNorm.includes('control') || lblNorm.includes('mando'))) || lblNorm.includes('ubicacion del cuadro') || lblNorm.includes('ubicacion cuadro');
+                    const isAreaCobertura = lblNorm.includes('cobertura') || data.cell.colSpan === 2 || isCuadroControlPregunta;
+
+                    if (isAreaCobertura) {
+                      const { x, y, height } = data.cell;
+                      const textX = x + 2;
+                      const textY = y + height / 2 + 1;
+
+                      let labelText = (itemNorm ? itemNorm.label || '' : 'Área de cobertura:').trim().replace(/[\.:\s]+$/, '') + ':';
+
+                      let rawVal = itemNorm ? eq[itemNorm.key] : undefined;
+                      if ((rawVal === undefined || rawVal === '' || rawVal === '-') && itemNorm) {
+                        const lLower = (itemNorm.label || '').toLowerCase();
+                        if (lLower.includes('cuadro')) {
+                          rawVal = eq[itemNorm.key] || (eq as any).cuadroControl || (eq as any).ubicacionCuadro || (eq as any).cuadro || '';
+                        } else if (lLower.includes('ubicacion') || lLower.includes('cobertura')) {
+                          rawVal = eq.ubicacion || eq.cobertura || rawVal;
+                        } else if (lLower.includes('referencia')) {
+                          rawVal = eq.referencia || eq.codigo || rawVal;
+                        }
+                      }
+                      const rawValStr = Array.isArray(rawVal) ? rawVal.join(', ') : String(rawVal || '');
+                      let respUpper = rawValStr.trim().toUpperCase();
+                      if (respUpper === '-') respUpper = '';
+
+                      doc.setFont('helvetica', 'normal');
+                      doc.setFontSize(7);
+                      doc.setTextColor(0, 0, 0);
+
+                      let currentFontSize = 7;
+                      while (currentFontSize > 5 && (doc.getTextWidth(labelText) + 3 + (respUpper ? doc.getTextWidth(respUpper) : 0) > 260)) {
+                        currentFontSize -= 0.5;
+                        doc.setFontSize(currentFontSize);
+                      }
+
+                      doc.text(labelText, textX, textY);
+
+                      if (respUpper) {
+                        const labelWidth = doc.getTextWidth(labelText);
+                        doc.setFont('helvetica', 'bold');
+                        doc.text(respUpper, textX + labelWidth + 2.5, textY);
+                      }
+                      return;
+                    }
+
+                    if (data.column.index === 1 && (data.cell.raw === 'TICK' || data.cell.raw === true || (typeof data.cell.raw === 'string' && data.cell.raw.trim().toLowerCase() === 'true'))) {
+                      const { x, y, width, height } = data.cell;
+                      const cx = x + width / 2;
+                      const cy = y + height / 2;
+                      doc.setDrawColor(34, 197, 94);
+                      doc.setLineWidth(0.6);
+                      doc.line(cx - 1, cy + 0.2, cx - 0.2, cy + 1);
+                      doc.line(cx - 0.2, cy + 1, cx + 1.2, cy - 1.2);
+                    }
                   }
                 }
               });
@@ -3146,33 +3483,33 @@ export const generarActaExtintoresPDF = async (
                   if (norm.includes('orden') || norm === 'nº' || norm === 'no.' || norm === '#' || colIdx === 0) {
                     colStyles[colIdx] = { cellWidth: 12, halign: 'center' };
                   } else if (norm.includes('ubicacion')) {
-                    colStyles[colIdx] = { cellWidth: 34, halign: 'left' };
+                    colStyles[colIdx] = { cellWidth: 28, halign: 'left' };
                   } else if (norm.includes('zona') || norm.includes('cobertura')) {
-                    colStyles[colIdx] = { cellWidth: 26, halign: 'left' };
+                    colStyles[colIdx] = { cellWidth: 22, halign: 'left' };
                   } else if (norm === 'tipo' || norm.startsWith('tipo')) {
-                    colStyles[colIdx] = { cellWidth: 22, halign: 'center' };
+                    colStyles[colIdx] = { cellWidth: 14, halign: 'center' };
                   } else if (norm.includes('marca') || norm.includes('modelo')) {
-                    colStyles[colIdx] = { cellWidth: 24, halign: 'center' };
+                    colStyles[colIdx] = { cellWidth: 19, halign: 'center' };
                   } else if (norm.includes('fabricacion') || norm.includes('ano')) {
-                    colStyles[colIdx] = { cellWidth: 20, halign: 'center' };
+                    colStyles[colIdx] = { cellWidth: 17, halign: 'center' };
                   } else if (norm.includes('diametro')) {
-                    colStyles[colIdx] = { cellWidth: 20, halign: 'center' };
+                    colStyles[colIdx] = { cellWidth: 16, halign: 'center' };
                   } else if (norm.includes('presion') && norm.includes('entrada')) {
-                    colStyles[colIdx] = { cellWidth: 22, halign: 'center' };
+                    colStyles[colIdx] = { cellWidth: 15, halign: 'center' };
                   } else if (norm.includes('presion') && norm.includes('red')) {
-                    colStyles[colIdx] = { cellWidth: 22, halign: 'center' };
+                    colStyles[colIdx] = { cellWidth: 15, halign: 'center' };
                   } else if (norm.includes('sprinkler') || norm.includes('cantidad')) {
-                    colStyles[colIdx] = { cellWidth: 22, halign: 'center' };
+                    colStyles[colIdx] = { cellWidth: 17, halign: 'center' };
                   } else if (norm.includes('comprobacion')) {
-                    colStyles[colIdx] = { cellWidth: 28, halign: 'center' };
+                    colStyles[colIdx] = { cellWidth: 24, halign: 'center' };
                   } else if (norm.includes('actuacion') && norm.includes('valvula')) {
                     colStyles[colIdx] = { cellWidth: 28, halign: 'center' };
                   } else if (norm.includes('presostato')) {
-                    colStyles[colIdx] = { cellWidth: 28, halign: 'center' };
-                  } else if (norm.includes('gong')) {
                     colStyles[colIdx] = { cellWidth: 24, halign: 'center' };
+                  } else if (norm.includes('gong')) {
+                    colStyles[colIdx] = { cellWidth: 18, halign: 'center' };
                   } else {
-                    colStyles[colIdx] = { cellWidth: 22, halign: 'center' };
+                    colStyles[colIdx] = { cellWidth: 18, halign: 'center' };
                   }
                 });
               } else {
@@ -3181,7 +3518,7 @@ export const generarActaExtintoresPDF = async (
                   const norm = String(h || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
                   const isColOrden = norm === 'orden' || norm === 'nº' || norm === 'no.' || norm === '#' || norm === 'item' || norm.startsWith('orden');
                   if (isColOrden) {
-                    colStyles[colIdx] = { cellWidth: 10, halign: 'center' };
+                    colStyles[colIdx] = { cellWidth: 14, halign: 'center' };
                   } else if (norm.includes('ubicacion') || norm.includes('planta')) {
                     ubicColIdx = colIdx;
                   } else if (norm.includes('tipo') || norm.includes('clase') || norm.includes('modelo')) {
@@ -3406,7 +3743,12 @@ export const generarActaExtintoresPDF = async (
                   const isColRendimiento = isGrafico || 
                     (tableItem.label || '').toUpperCase().includes('CAUDAL') || 
                     (sec.title || '').toUpperCase().includes('CAUDAL');
-                  if (isColRendimiento && data.column.index === 0) {
+                  if (data.section === 'head' && isPuestosControl) {
+                    data.cell.styles.cellPadding = { top: 2, bottom: 2, left: 1.2, right: 1.2 };
+                  }
+                  if (data.section === 'head' && data.row.index === 0) {
+                    data.cell.styles.halign = 'left';
+                  } else if (isColRendimiento && data.column.index === 0) {
                     data.cell.styles.halign = 'center';
                   }
                   if (isGrafico && data.section === 'body') {
@@ -3968,7 +4310,7 @@ export const generarActaExtintoresPDF = async (
   // Orden de sistemas en Actas: 1º EXTINTORES, 2º BOCAS DE INCENDIO (BIE), 3º HIDRANTES, 4º CASETAS, resto...
   const sistemasOrdenados = [...sistemas].sort((a, b) => {
     const getWeight = (s: any) => {
-      const familyOrType = `${s.familia || ''} ${s.tipo || ''} ${s.nombre || ''}`.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      const familyOrType = `${s.familia || ''} ${s.tipo || ''} ${s.nombre || ''} ${s.name || ''} ${s.descripcion || ''} ${s.categoria || ''} ${s.id || ''}`.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
       // 1º Extintores
       if (familyOrType.includes('EXTINTOR')) return 10;
       // 2º Bocas de Incendios (BIE)
@@ -3977,6 +4319,7 @@ export const generarActaExtintoresPDF = async (
       if (familyOrType.includes('HIDRANTE') && !familyOrType.includes('CASETA') && !familyOrType.includes('DOTACION')) return 30;
       // 4º Casetas
       if (familyOrType.includes('CASETA') || familyOrType.includes('DOTACION')) return 40;
+      if (familyOrType.includes('ARQUETA') || familyOrType.includes('ACOMETIDA')) return 45;
       // Después el resto
       if (familyOrType.includes('ABASTECIMIENTO') || familyOrType.includes('SALA DE BOMBAS')) return 50;
       if (familyOrType.includes('JOCKEY')) return 51;
@@ -4051,6 +4394,11 @@ export const generarActaExtintoresPDF = async (
           const isCocinaB = b.includes('cocina') || b.includes('campana');
           if (isCocinaA || isCocinaB) {
             return isCocinaA && isCocinaB;
+          }
+          const isArquetaA = a.includes('arqueta') || a.includes('acometida');
+          const isArquetaB = b.includes('arqueta') || b.includes('acometida');
+          if (isArquetaA || isArquetaB) {
+            return isArquetaA && isArquetaB;
           }
           const isEspumaA = a.includes('espuma');
           const isEspumaB = b.includes('espuma');
@@ -4166,20 +4514,22 @@ export const generarActaExtintoresPDF = async (
     doc.text(value, colX + 42, rowY);
   });
 
-  sigY += 32;
+  // Subir línea separadora 10 puntos (sigY += 22 en lugar de 32)
+  sigY += 22;
 
   // Línea separadora
   doc.setDrawColor(180, 180, 180);
   doc.setLineWidth(0.3);
   doc.line(10, sigY, pageWidth - 10, sigY);
-  sigY += 12;
+  // Subir observaciones pegado a la línea gris (sigY += 5 en lugar de 12)
+  sigY += 5;
 
   // Observaciones del técnico
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
   doc.setTextColor(0, 0, 0);
   doc.text('OBSERVACIONES DEL TÉCNICO', 20, sigY);
-  sigY += 8;
+  sigY += 6;
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8.5);
@@ -4216,8 +4566,8 @@ export const generarActaExtintoresPDF = async (
   const totalBlocksWidth = blockW * 3 + gap * 2;
   const startBlocksX = (pageWidth - totalBlocksWidth) / 2;
 
-  // Subir la sección de firmas 5 puntos respecto al valor anterior (bajado 10 puntos en total)
-  sigY -= 5;
+  // Subir la sección de firmas 10 puntos adicionales (sigY -= 15)
+  sigY -= 15;
 
   for (let i = 0; i < 3; i++) {
     const bx = startBlocksX + i * (blockW + gap);
@@ -4473,12 +4823,83 @@ export const generarAlbaranPDF = async (
       conteoPorSistema[sistId].cantidad += 1;
     });
 
+    // Ajuste exclusivo para RED DE ROCIADORES Y PUESTO DE CONTROL en albarán
+    sistemas?.forEach(sist => {
+      const sStr = `${sist.nombre || ''} ${sist.tipo || ''} ${sist.familia || ''}`.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      const esRociadoresPuestos = sStr.includes('ROCIADOR') || sStr.includes('SPRINKLER') || (sStr.includes('PUESTO') && sStr.includes('CONTROL'));
+      if (esRociadoresPuestos) {
+        const equiposSist = equiposTodos.filter(eq => eq.sistemaId === sist.id);
+        if (equiposSist.length > 0) {
+          let recuentoInventario = 0;
+          for (const eq of equiposSist) {
+            let tablaVal: any = undefined;
+            for (const [k, v] of Object.entries(eq)) {
+              const kLower = k.toLowerCase();
+              if (kLower.includes('caudal') || kLower.includes('presi') || kLower.includes('curva') || kLower.includes('anomali') || kLower.includes('observaci') || kLower.includes('foto')) continue;
+              if (kLower.includes('puesto') || kLower.includes('control') || kLower.includes('inventario') || kLower.includes('tabla')) {
+                if (v && (typeof v === 'string' || Array.isArray(v))) {
+                  tablaVal = v;
+                  break;
+                }
+              }
+            }
+            if (!tablaVal) {
+              for (const [k, v] of Object.entries(eq)) {
+                const kLower = k.toLowerCase();
+                if (kLower.includes('caudal') || kLower.includes('presi') || kLower.includes('curva') || kLower.includes('anomali') || kLower.includes('observaci') || kLower.includes('foto') || kLower === 'id' || kLower === 'codigo' || kLower === 'sistemaid' || kLower === 'ubicacion') continue;
+                if (Array.isArray(v) && v.length > 0) {
+                  tablaVal = v;
+                  break;
+                }
+                if (typeof v === 'string') {
+                  const trimmed = v.trim();
+                  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+                    try {
+                      const p = JSON.parse(trimmed);
+                      if (Array.isArray(p) && p.length > 0) {
+                        tablaVal = v;
+                        break;
+                      }
+                    } catch {}
+                  }
+                }
+              }
+            }
+            let rows: any[] = [];
+            if (Array.isArray(tablaVal)) {
+              rows = tablaVal;
+            } else if (typeof tablaVal === 'string') {
+              try {
+                const parsed = JSON.parse(tablaVal.trim());
+                if (Array.isArray(parsed)) rows = parsed;
+              } catch {}
+            }
+            const filasValidas = rows.filter(row => {
+              if (Array.isArray(row)) return row.some(c => typeof c === 'string' && c.trim() !== '' && c.trim() !== '-');
+              if (row && typeof row === 'object') return Object.values(row).some(c => typeof c === 'string' && (c as any).trim() !== '' && (c as any).trim() !== '-');
+              return false;
+            });
+            recuentoInventario += (filasValidas.length > 0 ? filasValidas.length : rows.length);
+          }
+          if (recuentoInventario > 0 && conteoPorSistema[sist.id]) {
+            conteoPorSistema[sist.id].cantidad = recuentoInventario;
+            conteoPorSistema[sist.id].nombre = 'Red de rociadores y puestos de control';
+          }
+        }
+      }
+    });
+
     const per = periodicidad || 'Revisión';
     const conceptoStr = per.toLowerCase().includes('revisión') || per.toLowerCase().includes('revision') ? per : `Revisión ${per}`;
 
     tableData = Object.values(conteoPorSistema).map((sys) => {
       const desc = (sys.nombre || '').trim();
-      const formattedDesc = desc ? desc.charAt(0).toUpperCase() + desc.slice(1).toLowerCase() : '';
+      const sNorm = desc.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      const isRociador = sNorm.includes('ROCIADOR') || sNorm.includes('SPRINKLER') || (sNorm.includes('PUESTO') && sNorm.includes('CONTROL'));
+      let formattedDesc = isRociador
+        ? 'Red de rociadores y puestos de control'
+        : (desc ? desc.charAt(0).toUpperCase() + desc.slice(1).toLowerCase() : '');
+      formattedDesc = formattedDesc.replace(/\brf\b/gi, 'RF');
       return [
         `${sys.cantidad} und.`,
         conceptoStr,
@@ -4935,6 +5356,36 @@ export const generarCertificadoPDF = async (
         conteoPorTipo[clave] = (conteoPorTipo[clave] || 0) + 1;
       });
 
+      // Ajuste exclusivo para EXTINTORES en el certificado:
+      // Mostrar recuento unificado: "• Extintores varios formatos: XX und."
+      const esExtintorCert = nombreSistema.toUpperCase().includes('EXTINTOR');
+      if (esExtintorCert) {
+        const totalExtintores = eqs.length;
+        Object.keys(conteoPorTipo).forEach(k => delete conteoPorTipo[k]);
+        conteoPorTipo['Extintores varios formatos'] = totalExtintores;
+      }
+
+      // Ajuste exclusivo para BOCAS DE INCENDIO (BIE) en el certificado:
+      // Mostrar recuento unificado: "• Bocas de incendios equipadas varios formatos: XX unds."
+      const esBieCert = nombreSistema.toUpperCase().includes('BIE') || nombreSistema.toUpperCase().includes('BOCA');
+      if (esBieCert) {
+        const totalBies = eqs.length;
+        Object.keys(conteoPorTipo).forEach(k => delete conteoPorTipo[k]);
+        conteoPorTipo['Bocas de incendios equipadas varios formatos'] = totalBies;
+      }
+
+      // Ajuste exclusivo para RED DE ROCIADORES Y PUESTO DE CONTROL:
+      // Lo que se suman son los puestos de control de la tabla de inventario, no los colectores individuales
+      const esRociadoresPuestosCert = esSistemaRociadoresPuestosPDF(nombreSistema, sist?.tipo, sist?.familia);
+      if (esRociadoresPuestosCert) {
+        const recuentoPuestos = contarEquiposInventarioPuestosPDF(eqs);
+        if (recuentoPuestos > 0) {
+          Object.keys(conteoPorTipo).forEach(k => delete conteoPorTipo[k]);
+          const labelPuesto = recuentoPuestos === 1 ? 'Puesto de control.' : 'Puestos de control.';
+          conteoPorTipo[labelPuesto] = recuentoPuestos;
+        }
+      }
+
       const linesCount = Object.keys(conteoPorTipo).length;
       const height = 5 + linesCount * 4.5 + 2;
 
@@ -4946,7 +5397,42 @@ export const generarCertificadoPDF = async (
       };
     });
 
-    // Ordenar de forma estricta: Extintores -> BIEs -> Detección (columna izquierda), Resto a la derecha
+    // Función para ordenar las líneas de equipos dentro de un sistema (por tipo/agente y capacidad ascendente)
+    const ordenarClavesEquipos = (claves: string[]): string[] => {
+      const getPrioridadAgente = (k: string) => {
+        const u = k.toUpperCase();
+        if (u.includes('POLVO')) return 1;
+        if (u.includes('CO2')) return 2;
+        if (u.includes('AGUA')) return 3;
+        if (u.includes('ESPUMA')) return 4;
+        if (u.includes('BIE 25')) return 10;
+        if (u.includes('BIE 45')) return 11;
+        if (u.includes('BIE 70')) return 12;
+        return 50;
+      };
+
+      const getCapacidadNum = (k: string) => {
+        const m = k.match(/(\d+(?:[.,]\d+)?)\s*(?:kg|l|mm)\b/i);
+        if (m) {
+          return parseFloat(m[1].replace(',', '.'));
+        }
+        return 999;
+      };
+
+      return [...claves].sort((a, b) => {
+        const prioA = getPrioridadAgente(a);
+        const prioB = getPrioridadAgente(b);
+        if (prioA !== prioB) return prioA - prioB;
+
+        const capA = getCapacidadNum(a);
+        const capB = getCapacidadNum(b);
+        if (capA !== capB) return capA - capB;
+
+        return a.localeCompare(b, 'es', { numeric: true });
+      });
+    };
+
+    // Ordenar de forma estricta según Regla 8: Extintores -> BIEs -> Detección -> Resto
     const sistemasExtintores: SystemWithHeight[] = [];
     const sistemasBies: SystemWithHeight[] = [];
     const sistemasDeteccion: SystemWithHeight[] = [];
@@ -4965,11 +5451,98 @@ export const generarCertificadoPDF = async (
       }
     });
 
-    const col0: SystemWithHeight[] = [...sistemasExtintores, ...sistemasBies, ...sistemasDeteccion];
-    const col1: SystemWithHeight[] = sistemasResto;
+    sistemasResto.sort((a, b) => {
+      const getRestoWeight = (name: string) => {
+        const u = name.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        if (u.includes('HIDRANTE') && !u.includes('CASETA') && !u.includes('DOTACION')) return 30;
+        if (u.includes('CASETA') || u.includes('DOTACION')) return 40;
+        if (u.includes('ARQUETA') || u.includes('ACOMETIDA')) return 45;
+        if (u.includes('ABASTECIMIENTO') || u.includes('SALA DE BOMBAS')) return 50;
+        if (u.includes('JOCKEY')) return 51;
+        if (u.includes('ELECTRICA')) return 52;
+        if (u.includes('GASOIL') || u.includes('DIESEL') || u.includes('MOTOBOMBA')) return 53;
+        if (u.includes('ROCIADOR') || u.includes('SPRINKLER')) return 60;
+        if (u.includes('COCINA') || u.includes('CAMPANA')) return 80;
+        if (u.includes('AGUA') || u.includes('ESPUMA')) return 81;
+        if (u.includes('GAS') || u.includes('EXTINCION')) return 82;
+        if (u.includes('ALUMBRADO') || u.includes('EMERGENCIA')) return 85;
+        if (u.includes('PUERTA') || u.includes('CORTAFUEGO') || u.includes('RF')) return 90;
+        return 100;
+      };
+      return getRestoWeight(a.nombreSistema) - getRestoWeight(b.nombreSistema);
+    });
 
-    const h0 = col0.reduce((sum, s) => sum + s.height, 0);
-    const h1 = col1.reduce((sum, s) => sum + s.height, 0);
+    const ordenSistemas = [...sistemasExtintores, ...sistemasBies, ...sistemasDeteccion, ...sistemasResto];
+
+    // Distribución y balanceo inteligente en 2 columnas:
+    // Permite que la tarjeta nunca quede descompensada ni empuje las firmas hacia abajo.
+    interface ColumnaItem {
+      nombreSistema: string;
+      lineas: { clave: string; cantidad: number }[];
+      height: number;
+    }
+
+    const itemsCol0: ColumnaItem[] = [];
+    const itemsCol1: ColumnaItem[] = [];
+
+    // Si solo hay 1 sistema pero tiene 4 o más tipos de equipos, dividimos sus líneas entre las 2 columnas
+    if (ordenSistemas.length === 1 && Object.keys(ordenSistemas[0].conteoPorTipo).length >= 4) {
+      const sist = ordenSistemas[0];
+      const clavesOrdenadas = ordenarClavesEquipos(Object.keys(sist.conteoPorTipo));
+      const mitad = Math.ceil(clavesOrdenadas.length / 2);
+      
+      const lineas0 = clavesOrdenadas.slice(0, mitad).map(c => ({ clave: c, cantidad: sist.conteoPorTipo[c] }));
+      const lineas1 = clavesOrdenadas.slice(mitad).map(c => ({ clave: c, cantidad: sist.conteoPorTipo[c] }));
+
+      itemsCol0.push({
+        nombreSistema: sist.nombreSistema,
+        lineas: lineas0,
+        height: 5 + lineas0.length * 4.5 + 2
+      });
+      itemsCol1.push({
+        nombreSistema: `${sist.nombreSistema} (cont.)`,
+        lineas: lineas1,
+        height: 5 + lineas1.length * 4.5 + 2
+      });
+    } else {
+      // Si hay varios sistemas o la columna derecha convencional quedaría vacía (ej. solo extintores y bies),
+      // balanceamos dinámicamente según la altura acumulada
+      let hAcum0 = 0;
+      let hAcum1 = 0;
+
+      ordenSistemas.forEach(s => {
+        const clavesOrdenadas = ordenarClavesEquipos(Object.keys(s.conteoPorTipo));
+        const lineas = clavesOrdenadas.map(c => ({ clave: c, cantidad: s.conteoPorTipo[c] }));
+        const sistH = 5 + lineas.length * 4.5 + 2;
+
+        // Si la columna 0 ya tiene peso y la columna 1 tiene menos, balancear hacia la columna 1
+        if (hAcum0 > 0 && hAcum1 + sistH <= hAcum0 + 4) {
+          itemsCol1.push({
+            nombreSistema: s.nombreSistema,
+            lineas,
+            height: sistH
+          });
+          hAcum1 += sistH;
+        } else if (hAcum0 <= hAcum1) {
+          itemsCol0.push({
+            nombreSistema: s.nombreSistema,
+            lineas,
+            height: sistH
+          });
+          hAcum0 += sistH;
+        } else {
+          itemsCol1.push({
+            nombreSistema: s.nombreSistema,
+            lineas,
+            height: sistH
+          });
+          hAcum1 += sistH;
+        }
+      });
+    }
+
+    const h0 = itemsCol0.reduce((sum, s) => sum + s.height, 0);
+    const h1 = itemsCol1.reduce((sum, s) => sum + s.height, 0);
     const maxHeight = Math.max(h0, h1, 10);
     const cardSistemasH = maxHeight + 10;
 
@@ -4985,39 +5558,51 @@ export const generarCertificadoPDF = async (
 
     let currentBlockY = y + 11;
 
-    // Dibujar Columna 0 (Izquierda: Extintores y BIEs)
+    // Dibujar Columna 0 (Izquierda)
     let col0_Y = currentBlockY;
-    col0.forEach(s => {
+    itemsCol0.forEach(s => {
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(8);
       doc.setTextColor(50, 70, 120);
       doc.text(s.nombreSistema, margen + 8, col0_Y);
       col0_Y += 5;
 
-      Object.entries(s.conteoPorTipo).forEach(([clave, cantidad]) => {
+      s.lineas.forEach(({ clave, cantidad }) => {
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(7.5);
         doc.setTextColor(80, 80, 80);
-        doc.text(`• ${clave} = ${cantidad} unidad${cantidad > 1 ? 'es' : ''}`, margen + 14, col0_Y, { maxWidth: (pageWidth / 2) - margen - 12 });
+        let textoLinea = `• ${clave} = ${cantidad} unidad${cantidad > 1 ? 'es' : ''}`;
+        if (clave === 'Extintores varios formatos') {
+          textoLinea = `• Extintores varios formatos: ${cantidad} und.`;
+        } else if (clave === 'Bocas de incendios equipadas varios formatos') {
+          textoLinea = `• Bocas de incendios equipadas varios formatos: ${cantidad} unds.`;
+        }
+        doc.text(textoLinea, margen + 14, col0_Y, { maxWidth: (pageWidth / 2) - margen - 14 });
         col0_Y += 4.5;
       });
       col0_Y += 2;
     });
 
-    // Dibujar Columna 1 (Derecha: Resto de equipos)
+    // Dibujar Columna 1 (Derecha)
     let col1_Y = currentBlockY;
-    col1.forEach(s => {
+    itemsCol1.forEach(s => {
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(8);
       doc.setTextColor(50, 70, 120);
       doc.text(s.nombreSistema, pageWidth / 2 + 4, col1_Y);
       col1_Y += 5;
 
-      Object.entries(s.conteoPorTipo).forEach(([clave, cantidad]) => {
+      s.lineas.forEach(({ clave, cantidad }) => {
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(7.5);
         doc.setTextColor(80, 80, 80);
-        doc.text(`• ${clave} = ${cantidad} unidad${cantidad > 1 ? 'es' : ''}`, pageWidth / 2 + 10, col1_Y, { maxWidth: (pageWidth / 2) - margen - 12 });
+        let textoLinea = `• ${clave} = ${cantidad} unidad${cantidad > 1 ? 'es' : ''}`;
+        if (clave === 'Extintores varios formatos') {
+          textoLinea = `• Extintores varios formatos: ${cantidad} und.`;
+        } else if (clave === 'Bocas de incendios equipadas varios formatos') {
+          textoLinea = `• Bocas de incendios equipadas varios formatos: ${cantidad} unds.`;
+        }
+        doc.text(textoLinea, pageWidth / 2 + 10, col1_Y, { maxWidth: (pageWidth / 2) - margen - 14 });
         col1_Y += 4.5;
       });
       col1_Y += 2;

@@ -151,12 +151,12 @@ export default function SistemaCasetas({
                                                                         {getEquipoSyncStatus && (() => {
                                                                             const status = getEquipoSyncStatus(eq.id);
                                                                             if (status === 'saving') {
-                                                                                return <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-full animate-pulse shadow-xs">🟡 Guardando...</span>;
+                                                                                return <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-full animate-pulse shadow-xs"><span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block animate-ping"></span> Guardando...</span>;
                                                                             }
                                                                             if (status === 'offline') {
-                                                                                return <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-700 bg-red-50 border border-red-200/80 px-2 py-0.5 rounded-full shadow-xs">🔴 Sin conexión</span>;
+                                                                                return <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-700 bg-red-50 border border-red-200/80 px-2 py-0.5 rounded-full shadow-xs"><span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block"></span> Sin conexión</span>;
                                                                             }
-                                                                            return <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-full shadow-xs">🟢 Sincronizado</span>;
+                                                                            return <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-full shadow-xs"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block"></span> Sincronizado</span>;
                                                                         })()}
                                                                     </div>
                                                                     <div className="flex items-center gap-1.5">
@@ -679,7 +679,7 @@ export default function SistemaCasetas({
                                                                                              if (newFotos.length === 0) handleCheckChange(eq.id, 'foto', ''); // Mantenemos retrocompatibilidad vaciando 'foto'
                                                                                              else if (idx === 0) handleCheckChange(eq.id, 'foto', newFotos[0]);
                                                                                          }}
-                                                                                         className="absolute top-0 right-0 p-1 bg-red-600 hover:bg-red-700 text-white rounded-bl-lg shadow-md transition-all active:scale-95 flex items-center justify-center cursor-pointer"
+                                                                                         className="absolute top-0 right-0 p-1 bg-red-600 hover:bg-red-700 text-white rounded-bl-lg shadow-md transition-all active:scale-95 flex items-center justify-center cursor-pointer z-10"
                                                                                          title="Eliminar foto"
                                                                                      >
                                                                                          <Trash2 className="w-3.5 h-3.5" />

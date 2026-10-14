@@ -207,10 +207,23 @@ export default function Reparaciones() {
       console.error('Error cargando reparaciones de localStorage:', e);
     }
 
+    const safeLocalSet = (key: string, value: string) => {
+      try {
+        localStorage.setItem(key, value);
+      } catch (e) {
+        console.warn(`[StorageQuota] Error guardando ${key} en localStorage:`, e);
+      }
+    };
+
+    // Timer de seguridad: liberar pantalla de carga tras 2 segundos si Firestore tarda
+    const loadingSafetyTimer = setTimeout(() => {
+      setLoading(false);
+    }, 2000);
+
     // 2. Suscribir a Firebase
     const unsubRep = subscribeReparaciones((items) => {
       setReparaciones(items);
-      localStorage.setItem('firecheck_db_reparaciones', JSON.stringify(items));
+      safeLocalSet('firecheck_db_reparaciones', JSON.stringify(items));
       setLoading(false);
     });
 
@@ -223,6 +236,7 @@ export default function Reparaciones() {
     const unsubPed = subscribePedidos((items) => setPedidos(items));
 
     return () => {
+      clearTimeout(loadingSafetyTimer);
       unsubRep();
       unsubTec();
       unsubCen();
@@ -237,7 +251,11 @@ export default function Reparaciones() {
   // Guardar en localStorage cuando cambien
   const updateLocalAndState = (newItems: ReparacionItem[]) => {
     setReparaciones(newItems);
-    localStorage.setItem('firecheck_db_reparaciones', JSON.stringify(newItems));
+    try {
+      localStorage.setItem('firecheck_db_reparaciones', JSON.stringify(newItems));
+    } catch (e) {
+      console.warn('[StorageQuota] Error guardando firecheck_db_reparaciones:', e);
+    }
   };
 
   // Abrir modal para crear

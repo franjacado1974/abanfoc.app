@@ -122,12 +122,12 @@ export default function SistemaExtincionAguaEspuma({
                                                                         {getEquipoSyncStatus && (() => {
                                                                             const status = getEquipoSyncStatus(eq.id);
                                                                             if (status === 'saving') {
-                                                                                return <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-full animate-pulse shadow-xs">ðŸŸ¡ Guardando...</span>;
+                                                                                return <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-full animate-pulse shadow-xs"><span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block animate-ping"></span> Guardando...</span>;
                                                                             }
                                                                             if (status === 'offline') {
-                                                                                return <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-700 bg-red-50 border border-red-200/80 px-2 py-0.5 rounded-full shadow-xs">ðŸ”´ Sin conexiÃ³n</span>;
+                                                                                return <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-700 bg-red-50 border border-red-200/80 px-2 py-0.5 rounded-full shadow-xs"><span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block"></span> Sin conexión</span>;
                                                                             }
-                                                                            return <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-full shadow-xs">ðŸŸ¢ Sincronizado</span>;
+                                                                            return <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-full shadow-xs"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block"></span> Sincronizado</span>;
                                                                         })()}
                                                                     </div>
                                                                     <div className="flex items-center gap-1.5">
@@ -136,7 +136,7 @@ export default function SistemaExtincionAguaEspuma({
 
                                                                 <div className="px-4 pb-3">
                                                                     <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 gap-x-3 gap-y-1.5">
-                                                                        {/* SOLO los items del checklist dinÃ¡mico (exactamente como en el editor de plantillas) */}
+                                                                        {/* SOLO los items del checklist dinámico (exactamente como en el editor de plantillas) */}
                                                                         {getItemsToUse(sist.id).filter((item: ChecklistItem) => {
                                                                             const lbl = (item.label || '').toLowerCase();
                                                                             // Solo filtrar campo de notas para ponerlo debajo del grid
@@ -250,7 +250,7 @@ export default function SistemaExtincionAguaEspuma({
                                                                                               ) : isFecha ? (
                                                                                                   (() => {
                                                                                                       const labelLower = (item.label || '').toLowerCase();
-                                                                                                      const isFechaRevision = labelLower.includes('fecha de revision') || labelLower.includes('fecha de revisiÃ³n');
+                                                                                                      const isFechaRevision = labelLower.includes('fecha de revision') || labelLower.includes('fecha de revisión');
                                                                                                       const fechaVal = typeof val === 'string' && val 
                                                                                                           ? (isFechaRevision ? val.substring(0, 10) : val.substring(0, 7)) 
                                                                                                           : '';
@@ -309,7 +309,7 @@ export default function SistemaExtincionAguaEspuma({
                                                                                                   })()
                                                                                               ) : isSeleccion ? (
                                                                                                   (() => {
-                                                                                                      const opciones = (item as any).opciones || ['SÃ­', 'No', 'N/A'];
+                                                                                                      const opciones = (item as any).opciones || ['Sí', 'No', 'N/A'];
                                                                                                       return (
                                                                                                           <div className="flex gap-1.5 flex-wrap justify-end">
                                                                                                               {opciones.map((opt: string, idx: number) => {
@@ -358,7 +358,7 @@ export default function SistemaExtincionAguaEspuma({
                                                                                                   })()
                                                                                               ) : (
                                                                                                   (() => {
-                                                                                                      const labelLower = (item.label || '').toLowerCase().replace(/[Ã¡Ã©Ã­Ã³Ãº]/g, (c) => ({'Ã¡':'a','Ã©':'e','Ã­':'i','Ã³':'o','Ãº':'u'})[c] || c);
+                                                                                                      const labelLower = (item.label || '').toLowerCase().replace(/[áéíóú]/g, (c) => ({'á':'a','é':'e','í':'i','ó':'o','ú':'u'})[c] || c);
                                                                                                       const esNumeroOrden = labelLower.includes('orden');
                                                                                                       const esUCase = esUbicacionMarcaModelo(item.label, item.key);
                                                                         const esUbic = esCampoUbicacion(item.label, item.key);
@@ -435,7 +435,7 @@ export default function SistemaExtincionAguaEspuma({
                                                                                  );
                                                                                 } else if (tipo === 'fecha') {
                                                                                      const labelLower = (item.label || '').toLowerCase();
-                                                                                     const isFechaRevision = labelLower.includes('fecha de revision') || labelLower.includes('fecha de revisiÃ³n');
+                                                                                     const isFechaRevision = labelLower.includes('fecha de revision') || labelLower.includes('fecha de revisión');
                                                                                      const fechaVal = typeof val === 'string' && val 
                                                                                          ? (isFechaRevision ? val.substring(0, 10) : val.substring(0, 7)) 
                                                                                          : '';
@@ -461,13 +461,13 @@ export default function SistemaExtincionAguaEspuma({
                                                                                          </div>
                                                                                      );
                                                                              } else if (tipo === 'texto') {
-                                                                                 const labelLower = (item.label || '').toLowerCase().replace(/[Ã¡Ã©Ã­Ã³Ãº]/g, (c) => ({'Ã¡':'a','Ã©':'e','Ã­':'i','Ã³':'o','Ãº':'u'})[c] || c);
+                                                                                 const labelLower = (item.label || '').toLowerCase().replace(/[áéíóú]/g, (c) => ({'á':'a','é':'e','í':'i','ó':'o','ú':'u'})[c] || c);
                                                                                  const esNumeroOrden = labelLower.includes('orden');
                                                                                  const esUCase = esUbicacionMarcaModelo(item.label, item.key);
                                                                         const esUbic = esCampoUbicacion(item.label, item.key);
                                                                         const textoVal = esNumeroOrden ? (eq.codigo || '') : (typeof val === 'string' ? val : '');
                                                                         const esExcedido40 = esUbic && typeof textoVal === 'string' && textoVal.length > 40;
-                                                                                 if (esNumeroOrden) console.log('ðŸ” Campo NÂº Orden detectado, eq.codigo =', eq.codigo);
+                                                                                 if (esNumeroOrden) console.log('[Info] Campo Nº Orden detectado',  eq.codigo);
                                                                                  const placeholderTexto = labelLower.includes('referencia') && labelLower.includes('instalacion')
                                                                                      ? 'Ejemplo: Area general o zona'
                                                                                      : '...';
@@ -524,7 +524,7 @@ export default function SistemaExtincionAguaEspuma({
                                                                                      </div>
                                                                                  );
                                                                              } else if (tipo === 'seleccion') {
-                                                                                 const opciones = (item as any).opciones || ['SÃ­', 'No', 'N/A'];
+                                                                                 const opciones = (item as any).opciones || ['Sí', 'No', 'N/A'];
                                                                                  return (
                                                                                      <div key={item.key} className="flex flex-col gap-1 col-span-2">
                                                                                          <label className="text-[10px] font-semibold text-slate-500">{item.label}</label>
@@ -577,7 +577,7 @@ export default function SistemaExtincionAguaEspuma({
                                                                         })}
                                                                      </div>
                                                                  </div>
-                                                                                                                                                                                                      {/* Campos de AnomalÃ­as (ROJO) y Observaciones (AZUL) */}
+                                                                                                                                                                                                      {/* Campos de Anomalías (ROJO) y Observaciones (AZUL) */}
                                                                    {(() => {
                                                                        const valAnom = eq.anomalias;
                                                                        const esNoEncontrado = typeof valAnom === 'string' && valAnom.includes('no localizarse');
@@ -599,7 +599,7 @@ export default function SistemaExtincionAguaEspuma({
 
                                                                        return (
                                                                            <div className="px-4 mt-3 space-y-3">
-                                                                               {/* 1. Campo de AnomalÃ­as (ROJO si hay anomalÃ­as o fallos) */}
+                                                                               {/* 1. Campo de Anomalías (ROJO si hay anomalías o fallos) */}
                                                                                <div>
                                                                                    <label className={`text-xs font-semibold mb-1 block ${isErrorAnom ? 'text-red-700 font-bold' : 'text-slate-600'}`}>Anomalías del equipo:</label>
                                                                                    <textarea
@@ -626,7 +626,7 @@ export default function SistemaExtincionAguaEspuma({
                                                                        );
                                                                    })()}
 
-                                                                 {/* GalerÃ­a de fotos debajo de las anomalÃ­as */}
+                                                                 {/* Galería de fotos debajo de las anomalías */}
                                                                  {(() => {
                                                                      const currentFotos = Array.isArray((eq as any)['fotos']) 
                                                                          ? (eq as any)['fotos'] 
@@ -644,7 +644,7 @@ export default function SistemaExtincionAguaEspuma({
                                                                                              if (newFotos.length === 0) handleCheckChange(eq.id, 'foto', ''); // Mantenemos retrocompatibilidad vaciando 'foto'
                                                                                              else if (idx === 0) handleCheckChange(eq.id, 'foto', newFotos[0]);
                                                                                          }}
-                                                                                         className="absolute top-0 right-0 p-1 bg-red-600 hover:bg-red-700 text-white rounded-bl-lg shadow-md transition-all active:scale-95 flex items-center justify-center cursor-pointer"
+                                                                                         className="absolute top-0 right-0 p-1 bg-red-600 hover:bg-red-700 text-white rounded-bl-lg shadow-md transition-all active:scale-95 flex items-center justify-center cursor-pointer z-10"
                                                                                          title="Eliminar foto"
                                                                                      >
                                                                                          <Trash2 className="w-3.5 h-3.5" />
@@ -697,7 +697,7 @@ export default function SistemaExtincionAguaEspuma({
                                                                              <label
                                                                                  htmlFor={`foto-file-multi-${eq.id}`}
                                                                                  className="flex flex-col items-center justify-center w-16 h-16 border-2 border-dashed border-slate-300 rounded-lg text-slate-500 hover:text-indigo-600 hover:border-indigo-400 hover:bg-indigo-50 transition-colors cursor-pointer shrink-0"
-                                                                                 title="AÃ±adir foto"
+                                                                                 title="Añadir foto"
                                                                              >
                                                                                  <span className="text-xl leading-none mb-0.5">+</span>
                                                                                  <span className="text-[9px] font-bold">Foto</span>
@@ -726,7 +726,7 @@ export default function SistemaExtincionAguaEspuma({
                                                                                                      allFalse[item.key] = false;
                                                                                                  }
                                                                                              });
-                                                                                             // TambiÃ©n establecer el campo notas con el texto de anomalÃ­a
+                                                                                             // También establecer el campo notas con el texto de anomalía
                                                                                              const notasItem = itemsToUse.find(item => {
                                                                                                  const lbl = (item.label || '').toLowerCase();
                                                                                                  return lbl.includes('notas') || lbl.includes('observaciones') || lbl.includes('anomal');
@@ -818,7 +818,7 @@ export default function SistemaExtincionAguaEspuma({
                                                                                      const updatedEquipos = equiposInstalados.map(currEq => {
                                                                                          if (currEq.id === eq.id) {
                                                                                              const cleanedEq = { ...currEq, revisado: false };
-                                                                                             cleanedEq.anomalias = ''; // Limpiar siempre anomalÃ­as principales
+                                                                                             cleanedEq.anomalias = ''; // Limpiar siempre anomalías principales
                                                                                              
                                                                                              itemsToUse.forEach(item => {
                                                                                                  const lbl = (item.label || '').toLowerCase();

@@ -63,7 +63,7 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
 
 ---
 
-## 7. Reglas Inviolables para Anomalías Automáticas de Fechas (Extintores y BIEs)
+## 7. Reglas Inviolables para Anomalías y Avisos Automáticos de Fechas (Extintores y BIEs)
 - **Extintores con Fecha de Fabricación ≥ 20 años**:
   - Texto exacto obligatorio en `eq.anomalias`: `- Extintor caducado + de 20 años, se debe sustituir por equipo nuevo.`
 - **Extintores con Último Retimbre / Prueba Hidráulica ≥ 5 años**:
@@ -72,8 +72,15 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
   - Texto exacto obligatorio en `eq.anomalias`: `- BIE caducado + de 20 años, se debe sustituir tramo de manguera según normativa.`
 - **BIEs con Prueba Hidráulica ≥ 5 años**:
   - Texto exacto obligatorio en `eq.anomalias`: `- BIE necesita realizar prueba hidráulica obligatoria cada 5 años.`
+- **Aviso de Proximidad en Extintores (Observaciones del Equipo `eq.observaciones`)**:
+  - **Condición**: Extintor a **3 meses o menos** para el próximo retimbrado de 5 años ($\ge 57$ y $< 60$ meses desde `dateRet || dateFab`), o a **3 meses o menos** para cumplir 20 años desde su fabricación ($\ge 237$ y $< 240$ meses desde `dateFab`).
+  - **Texto exacto obligatorio en `eq.observaciones`**: `Se informa de fecha próxima a operación obligatoria del equipo. Posible retimbrado o sustitución en el  próximo mantenimiento.` (ubicado en `TEXTO_AVISO_PROXIMIDAD_EXTINTOR`).
+  - **Independencia de Fechas**: El cómputo de proximidad de retimbrado **no debe depender** de que exista fecha de fabricación informada.
+  - **Parser Universal de Fechas (`parseFechaUniversal`)**: Soporte obligatorio y tolerante a múltiples formatos españoles (`MM/YYYY`, `DD/MM/YYYY`, texto de meses en español, `YYYY-MM`, etc.).
+  - **Preservación Estricta**: Al igual que en anomalías, respeta y preserva íntegramente los textos manuales, teclas Espacio y Enter. Si la fecha se actualiza quedando fuera del rango de proximidad, se retira limpiamente el aviso sin borrar notas manuales.
+  - **Análisis de Partes Nuevos y Existentes**: Evaluado y persistido automáticamente al abrir o sincronizar cualquier parte (antiguo o nuevo), tanto en el estado de `RevisionChecklist.tsx` como en el rastreo preventivo de `Partes.tsx`.
 - **Recuperación Automática y Preservación**:
-  - Al abrir o guardar un parte, el sistema evaluará automáticamente todos los equipos. Si superan los plazos, insertará las anomalías correspondientes en `eq.anomalias` sin borrar el texto manual existente.
+  - Al abrir o guardar un parte, el sistema evaluará automáticamente todos los equipos. Si superan los plazos o están en rango de proximidad, insertará los textos correspondientes en `eq.anomalias` y `eq.observaciones` sin borrar el texto manual existente.
 
 ---
 
@@ -778,12 +785,11 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
 
 ---
 
-## 51. Blindaje Inviolable de Carpeta Única en el Escritorio (Prohibición de Carpetas Espejo Duplicadas)
-- **Carpeta Única y Definitiva en el Escritorio**:
-  - La única carpeta de trabajo autorizada en el Escritorio es: **`Salamandra`** (`C:\Users\canci\OneDrive\Escritorio\Salamandra`).
-- **Prohibición Estricta de Creación de Múltiples Carpetas o Copias Espejo**:
-  - Queda **ESTRICTAMENTE PROHIBIDO** crear nuevas carpetas de copia, carpetas espejo o carpetas con nombres duplicados o fechas en el Escritorio del usuario.
-  - Cuando se realicen modificaciones o actualizaciones conjuntas, se actualizará **única y exclusivamente la carpeta `Salamandra` existente**, manteniendo siempre un solo directorio de trabajo limpio en el Escritorio sin duplicidades.
+## 51. Blindaje Inviolable de Renombrado de Carpeta en Escritorio a la Versión Actual
+- **Carpeta Única Renombrada a la Versión Actual**:
+  - La carpeta de trabajo y réplica en el Escritorio DEBE renombrarse siempre con el nombre y versión actual del proyecto: **`SALAMANDRA [VERSIÓN]`** (ej. `SALAMANDRA V.08.10.26.F` en `C:\Users\canci\OneDrive\Escritorio\SALAMANDRA [VERSIÓN]`).
+- **Mantenimiento de Directorio Único sin Duplicados**:
+  - Al realizar la copia espejo y actualización de versión, la carpeta anterior en el Escritorio se renombra/sincroniza a la versión nueva (`SALAMANDRA V.DD.MM.YY.LETRA`), eliminando versiones residuales antiguas para mantener un único directorio limpio en el Escritorio.
 
 ---
 
@@ -1009,13 +1015,19 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
 
 ---
 
-## 69. Blindaje Inviolable del Icono de Sobre en Buzón y Distintivo Parpadeante "NUEVO" por Tarjeta (`Buzon.tsx`, `Sidebar.tsx`, `DashboardTecnico.tsx`)
+## 69. Blindaje Inviolable del Icono de Sobre en Buzón, Distintivo Limpio "NUEVO" y Control de Lectura por Usuario (`Buzon.tsx` y `oficina/pages/Buzon.tsx`)
 - **Icono de Sobre Obligatorio (`Mail`)**:
   - En toda la aplicación (barra lateral `Sidebar.tsx`, panel de técnico `DashboardTecnico.tsx`, cabecera y accesos directos), el icono representativo del menú Buzón DEBE ser obligatoriamente el sobre (`Mail` de `lucide-react`).
   - Queda prohibido volver a utilizar el icono de bandeja de entrada (`Inbox`).
-- **Aviso Parpadeante "NUEVO" por Tarjeta Específica**:
-  - En la vista principal del Buzón que contiene las 3 tarjetas (*Sugerencias de Mejora*, *Reporte de Fallos*, *Versiones*), si alguna de las tres secciones tiene novedades o comentarios no vistos por el usuario, DEBE mostrarse una insignia roja parpadeante con el texto literal exacto **`"NUEVO"`** (`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-black tracking-wider text-white bg-red-600 shadow-[0_0_12px_rgba(220,38,38,0.85)] animate-pulse` con punto blanco interior pulsante `animate-ping`) en la tarjeta específica correspondiente.
-  - **Desaparición Inmediata al Entrar**: En cuanto el usuario pulsa y entra en una tarjeta (activando `activeSection`), el aviso **"NUEVO"** de esa tarjeta desaparece de forma instantánea al fijar la marca de lectura con `Math.max(Date.now(), maxTime)`. Al regresar al menú, dicha tarjeta ya no muestra el aviso. Las demás tarjetas que aún no hayan sido abiertas mantendrán su aviso activo.
+- **Alerta Limpia y Estática de "NUEVO" sin Destellos ni Bordes Rojos Invasivos**:
+  - En la vista principal del Buzón que contiene las 3 tarjetas (*Sugerencias de Mejora*, *Reporte de Fallos*, *Versiones*), si alguna de las secciones tiene novedades o comentarios no vistos, DEBE mostrarse una pastilla estática y limpia con el texto literal exacto **`"NUEVO"`**:
+    `<span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-black tracking-wider text-white bg-red-600 shadow-xs">NUEVO</span>`
+  - Queda **ESTRICTAMENTE PROHIBIDO** aplicar bordes rojos (`border-red-500`), anillos pulsantes (`ring-4 ring-red-500/20`), sombras fluorescentes rojas gigantes, textos rojos o animaciones invasivas (`animate-pulse`, `animate-ping`) sobre las tarjetas. Cada tarjeta debe mantener sus colores y estética sobria reglamentaria (morado para Sugerencias, rose/slate para Fallos y azul para Versiones).
+- **Control y Persistencia de Lectura Individual por Usuario**:
+  - Cada usuario tiene su propio registro independiente de lectura mediante `getLoggedUserId()`, persistido tanto en `localStorage` (clave de usuario) como en Firestore (`buzon_lecturas/{userId}`).
+  - **Desaparición Inmediata al Entrar**: En cuanto un usuario pulsa y entra en una sección (o envía una sugerencia, fallo o versión), dicha sección se marca como leída y la alerta **"NUEVO"** desaparece de inmediato para él.
+  - **Independencia entre Usuarios**: La alerta continuará visible de forma independiente para todos los demás usuarios hasta que cada uno de ellos acceda a la sección correspondiente.
+  - Esta arquitectura DEBE mantenerse sincronizada e idéntica en `src/Buzon.tsx` y en `src/oficina/pages/Buzon.tsx`.
 
 ---
 
@@ -1035,6 +1047,295 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
   - **Certificado (`generarCertificadoPDF`)**: Campo `'Fecha de emisión: DD/MM/YYYY'` en la tarjeta de Datos de la Instalación.
   - **Albarán (`generarAlbaranPDF`)**: Campo `'Fecha: DD/MM/YYYY'` en la cabecera.
   - **Persistencia en Firestore/Local (`RevisionChecklist.tsx`)**: Al finalizar el parte, `nuevoAlbaran` y `nuevoCertificado` se registran con `fechaCreacion` coincidente con la fecha de revisión obtenida.
+
+
+
+
+
+---
+
+## 71. Blindaje Inviolable de Imagen en Editor de Plantillas y Sistema 'EXTINCIÓN MANUAL CON AGUA'
+- **Selector y Subida de Imagen por Plantilla (`FormBuilderPlantillas.tsx` y réplicas)**:
+  - En la cabecera del editor de plantillas junto al título, debe existir de forma permanente la capacidad de seleccionar y previsualizar una imagen para el sistema correspondiente, persistiendo `imagenUrl` en Firestore y en los tipos de datos de `Plantilla`.
+  - Esta imagen debe sincronizarse con las categorías de sistemas (`sistemas`) y mostrarse como miniatura tanto en el listado lateral de plantillas como en los iconos de sistemas.
+- **Sistema Dedicado 'EXTINCIÓN MANUAL CON AGUA' (`SistemaExtincionManualAgua.tsx`)**:
+  - DEBE mantenerse de forma permanente el componente `SistemaExtincionManualAgua.tsx` con su cuestionario dinámico vinculado a su plantilla, campo ubicación con límite de 40 caracteres y las dos cajas independientes obligatorias de Anomalías y Observaciones.
+  - **Discriminación Estricta sin Confusiones**: En `RevisionChecklist.tsx`, `Sistemas.tsx` y `pdfGenerator.ts`, debe evaluarse prioritariamente `sistLower.includes('manual') && sistLower.includes('agua')` para evitar cualquier colisión o solapamiento con los sistemas de extinción automática por agua o espuma (`!isExtincionManualAgua`).
+
+---
+
+## 72. Blindaje Inviolable de Indicadores de Sincronización CSS Nativos (Prevención de Mojibake `ðŸŸ¢`)
+- **Prohibición de Emojis Unicode de 4 Bytes en Etiquetas de Sincronización**:
+  - En todos los componentes de sistemas de revisión de equipos (`src/components/RevisionSistemas/*.tsx` y `src/mantenimientos/components/RevisionSistemas/*.tsx`), queda **ESTRICTAMENTE PROHIBIDO** usar caracteres de emoji Unicode directos como `🟢`, `🟡` o `🔴` para los estados de sincronización.
+  - Esto previene de forma absoluta la corrupción de codificación de caracteres en entornos Windows/ANSI que provocaba la aparición del texto corrupto `ðŸŸ¢ Sincronizado`, `ðŸŸ¡ Guardando...` o `ðŸ”´ Sin conexión`.
+- **Indicadores CSS Nativos Obligatorios**:
+  - Estado Sincronizado: `<span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block"></span> Sincronizado`.
+  - Estado Guardando: `<span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block animate-ping"></span> Guardando...`.
+  - Estado Sin conexión: `<span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block"></span> Sin conexión`.
+
+---
+
+## 73. Blindaje Inviolable del Sistema 'CAÑÓN MONITOR CON ESPUMA'
+- **Componente Dedicado Multi-Equipo**:
+  - DEBE mantenerse de forma permanente el componente `SistemaCanonMonitorEspuma.tsx` (y su réplica en `src/mantenimientos/components/RevisionSistemas/SistemaCanonMonitorEspuma.tsx`).
+  - Su comportamiento en formulario debe ser análogo a Hidrantes y Extintores: tabla con múltiples equipos, cuestionario estructurado, límite de 40 caracteres en ubicación y las dos cajas independientes obligatorias de Anomalías (roja) y Observaciones (azul).
+- **Sincronización Reactiva con el Editor de Plantillas en Actas PDF (`pdfGenerator.ts`)**:
+  - En `pdfGenerator.ts`, las columnas de la tabla de Cañón Monitor DEBEN construirse dinámicamente a partir de la plantilla configurada en Firestore (`checklistItemsPorSistema[sist.id]`).
+  - Si el usuario borra, añade o modifica columnas/preguntas en el editor de plantillas, el PDF DEBE reflejar con total fidelidad esos cambios exactos sin columnas residuales ni hardcodeadas.
+- **Cabecera de Ubicación en 1 Sola Línea**:
+  - En la cabecera de la tabla de Cañón Monitor, el texto `"Ubicación del equipo"` DEBE maquetarse forzosamente en una sola línea plana horizontal (vía `formatCanonHeader` sin saltos de carro).
+- **Ancho Horizontal Proporcional y Sin Espacios Excesivos**:
+  - El reparto de anchuras de columna (`colNaturalWidths` escalado a 269 mm exactos) debe evitar excesivo espacio en blanco en Ubicación y distribuir espacio holgado a las columnas de preguntas.
+- **Tipografía Homogénea en la Tabla**:
+  - En toda la tabla de Cañón Monitor, el tamaño de letra debe ser uniforme: cuerpo en `6.8pt` (vía `didParseCell`) y cabecera en `7pt`.
+
+---
+
+## 74. Blindaje Inviolable del Índice Interactivo en Página 2 y Marcadores Laterales en Actas PDF
+- **Reserva Exclusiva de Página 2 para el Índice**:
+  - Inmediatamente tras la portada (`drawInfoPage`), se añade una página dedicada (`doc.addPage(); doc.setPage(2);`) para el índice. Todos los sistemas comienzan obligatoriamente en páginas >= 3.
+- **Declaración Previa de `drawnTablePages`**:
+  - La variable `const drawnTablePages = new Set<number>();` DEBE declararse antes de la página 2 para prevenir errores en tiempo de ejecución (`ReferenceError: Cannot access 'drawnTablePages' before initialization`).
+- **Tarjetas Clicables con `doc.link`**:
+  - Cada sistema del acta y la sección final de Firmas deben renderizarse con tarjetas estilizadas provistas de insignia numérica circular, título en mayúsculas, conteo de equipos y pastilla `Pág. X`.
+  - Toda el área de la tarjeta debe ser interactiva mediante hipervínculo interno `doc.link(x, y, w, h, { pageNumber })` que redirige a la página inicial del sistema o de firmas.
+- **Marcadores Laterales (PDF Outlines / Bookmarks)**:
+  - Se deben registrar en la barra lateral del visor PDF: `1. Portada y Datos Generales` (pág. 1), `2. Índice de Sistemas` (pág. 2), `[N]. [Nombre Sistema] ([X] eq.)` y `[N+1]. Firmas y Conformidad` mediante `doc.outline.add`.
+- **Encapsulación Defensiva con `try...catch`**:
+  - La llamada a `drawIndicePage()`, la creación de enlaces `doc.link` y los marcadores `doc.outline.add` DEBEN estar protegidos con bloques `try...catch` para asegurar que ninguna anomalía de visor interrumpa la descarga del PDF.
+
+---
+
+## 75. Blindaje Inviolable del Sistema 'ARQUETA Y ACOMETIDA'
+- **Habilitación Completa Multi-Equipo**:
+  - DEBE mantenerse de forma permanente el componente `SistemaArquetaAcometida.tsx` (y su réplica en `src/mantenimientos/components/RevisionSistemas/SistemaArquetaAcometida.tsx`).
+  - Su comportamiento en formulario debe ser multi-equipo con tarjetas/cuestionario dinámico según plantilla de Firestore (`QzUYmjPnYFFUM6MBf2jD`), límite de 40 caracteres en ubicación y las dos cajas independientes obligatorias de Anomalías (roja) y Observaciones (azul).
+- **Discriminación Estricta sin Confusiones**:
+  - En `RevisionChecklist.tsx`, `Partes.tsx`, `Sistemas.tsx`, `sistemasUtils.ts`, `EquipoFormulario.tsx` y `pdfGenerator.ts`, debe reconocerse prioritariamente `'ARQUETA'` o `'ACOMETIDA'` (`isArquetaAcometida`, `isArquetaA`, `isArquetaB`).
+- **Orden Obligatorio en PDFs**:
+  - En las Actas PDF y Certificados (`pdfGenerator.ts`), Arqueta y Acometida DEBE ordenarse inmediatamente después de los BIEs o después de los Hidrantes/Casetas (peso `45` en la jerarquía, siempre después de cualquiera de estos sistemas que esté presente), precediendo a los grupos de presión/abastecimiento y resto de sistemas.
+
+---
+
+## 76. Blindaje Inviolable de Ubicación y Nombres Exclusivos de Bombas en Anomalías del Acta PDF (pdfGenerator.ts)
+- **Ubicación o Referencia en la Cabecera de Anomalías**:
+  - En la sección de anomalías y observaciones de cada sistema en el Acta PDF, la cabecera de cada equipo DEBE incluir su ubicación o referencia al lado de la numeración: `EQUIPO Nº XX - [Ubicación]` (ej. `EQUIPO Nº 06 - Pasillo principal`).
+  - La ubicación se obtiene de `eq.ubicacion`, `eq.cobertura`, `eq.zona` o del campo dinámico de plantilla. Si no tiene ubicación registrada, se mantiene limpio como `EQUIPO Nº XX`.
+- **Identificación Exclusiva y Limpia en Sistemas de Bombas**:
+  - En los equipos pertenecientes a grupos de presión y salas de bombas, la cabecera DEBE identificar taxativamente el tipo de bomba:
+    - `EQUIPO Nº 01 - BOMBA JOCKEY`
+    - `EQUIPO Nº 01 - BOMBA ELECTRICA`
+    - `EQUIPO Nº 01 - BOMBA DIESEL`
+  - Queda **ESTRICTAMENTE PROHIBIDO** añadir sufijos, porcentajes o textos residuales de plantilla (como ` - 80%`, ` - N/A`) a las bombas en la cabecera de anomalías.
+
+---
+
+## 77. Blindaje Inviolable del Concepto '*Desplazamientos' en Albaranes (Albaranes.tsx y Firestore)
+- **Persistencia en Firestore y Grupo VISITAS**:
+  - En la colección `trabajos` de Cloud Firestore, el documento `-VISITAS` DEBE conservar de forma permanente la clave `*Desplazamientos`.
+- **Respaldo Offline en Albaranes**:
+  - En `src/Albaranes.tsx` y `src/oficina/pages/Albaranes.tsx`, la lista de respaldo (fallback) de conceptos DEBE incluir obligatoriamente `'*Desplazamientos'` para garantizar su selección aun sin conexión a internet.
+
+---
+
+## 78. Blindaje Inviolable de Ubicación Unificada, Población y Enlace Oficial a Google Maps en el Calendario (Calendario.tsx)
+- **Interfaz `EventoCalendario` y Extracción de Población**:
+  - La interfaz `EventoCalendario` DEBE incluir de forma permanente las propiedades `poblacion?: string;` y `direccion?: string;`.
+  - En la transformación de tareas para los 4 módulos (Mantenimientos `partes`, Reparaciones `reparaciones`, Instalaciones `instalaciones` y Urgencias `urgencias`), la población DEBE extraerse prioritariamente a partir del objeto o de sus centros (`c.poblacion`) o clientes (`cl.poblacion`) vinculados.
+- **Unificación de Dirección y Población en un Solo Campo**:
+  - En el modal de detalle del evento (`selectedEvento`), la dirección y la localidad DEBEN mostrarse unificadas bajo el título **`Lugar / Dirección y Población`**, evitando cajas separadas redundantes.
+  - El modal DEBE exhibir la pastilla distintiva `📍 [Población]` cuando esté disponible.
+- **Botón y Enlace Interactivo Oficial a Google Maps**:
+  - En el mismo bloque de ubicación del modal, DEBE mantenerse de forma permanente el botón con el **icono vectorial oficial multicolor de Google Maps** (Pin con cuadrantes `#EA4335`, `#4285F4`, `#FBBC04`, `#34A853` y círculo blanco central).
+  - El enlace DEBE apuntar directamente a `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(rawQuery)}` con `target="_blank"` y `rel="noopener noreferrer"`.
+- **Tooltip Informativo en Etiquetas de Calendario**:
+  - En las píldoras de evento del calendario diario, el atributo `title` DEBE incorporar la población entre corchetes (`[${ev.poblacion}]`) para consulta rápida al sobrevolar con el ratón.
+
+---
+
+## 79. Blindaje Inviolable de Renombrado Obligatorio de la Carpeta del Escritorio con la Versión Actual
+- **Nomenclatura Obligatoria de la Carpeta en el Escritorio**:
+  - En cada copia espejo, sincronización o avance de versión, la carpeta ubicada en el Escritorio del usuario (`C:\Users\canci\OneDrive\Escritorio\...`) DEBE renombrarse obligatoria y taxativamente con la marca y versión activa:
+    **`SALAMANDRA [VERSIÓN]`** (ejemplo exacto: `SALAMANDRA V.08.10.26.F`).
+- **Eliminación de Nombres Genéricos y Versiones Antiguas**:
+  - Queda **ESTRICTAMENTE PROHIBIDO** mantener carpetas con el nombre plano `Salamandra` a secas o acumular carpetas desfasadas con versiones anteriores en el Escritorio.
+  - Al generar o actualizar cualquier versión (`V.DD.MM.YY.LETRA`), el agente DEBE renombrar la carpeta anterior a la versión nueva y garantizar la sincronización integral de los archivos sin duplicar directorios.
+
+---
+
+## 80. Blindaje Inviolable de Maquetación de Rociadores y Puestos de Control en Actas PDF (pdfGenerator.ts)
+- **Cabecera Exclusiva de Manifold / Colector sin Columna 'ESTADO'**:
+  - En la sección **"MANIFOLD / COLECTOR DE PUESTOS DE CONTROL"** de la tabla de Red de Rociadores en el Acta PDF, la primera fila de cabecera DEBE tener `colSpan: 2` abarcando todo el ancho (269 mm), alineada a la izquierda en color granate burdeos (`[128, 0, 32]`).
+  - Queda **ESTRICTAMENTE PROHIBIDO** mostrar la palabra `ESTADO` o trazar una línea separadora vertical en esta primera fila.
+- **Filas Combinadas 2 y 3 (Referencia y Ubicación) en Fondo Amarillo Identificativo**:
+  - La fila 2 (`Referencia manifold / colector`) y la fila 3 (`Ubicación del manifold / colector`) DEBEN tener `colSpan: 2` sin divisiones verticales intermedias y con fondo amarillo claro reglamentario (`fillColor: [255, 249, 196]`).
+  - La etiqueta/pregunta se imprime alineada a la izquierda en tipografía normal y la **respuesta pegada a continuación en negrita y mayúsculas** (`fontStyle: 'bold'`).
+- **Formato en Anomalías del Acta PDF**:
+  - En las cabeceras de anomalías por equipo (`EQUIPO Nº XX - [Ubicación]`), solo debe ir en negrita el prefijo `EQUIPO Nº XX - `, mientras que la referencia o ubicación del equipo DEBE imprimirse en estilo de fuente normal (sin negrita).
+
+---
+
+## 81. Blindaje Inviolable de Ventana Modal de Progreso de Generación y Descarga de Documentos (Partes.tsx)
+- **Modal Flotante Reactivo Inmediato**:
+  - Al pulsar el botón "Descargar" en el diálogo de selección de documentos de un parte (`Partes.tsx`), DEBE desplegarse de forma instantánea una ventana modal flotante central con fondo desenfocado (`bg-black/70 backdrop-blur-md`).
+- **Elementos Visuales Obligatorios**:
+  - Icono animado central con documento pulsante y aro de carga giratorio (`FileText` + `Loader2 animate-spin`).
+  - Barra de progreso horizontal fluida con gradiente de color (`bg-gradient-to-r from-red-500 via-rose-500 to-amber-500`) y porcentaje numérico reactivo visible.
+  - Mensajes de estado descriptivos por cada fase del proceso:
+    - *Preparando sistemas y equipos del centro...*
+    - *Generando Acta de Mantenimiento...*
+    - *Generando Certificado Oficial...*
+    - *Generando Albarán de Trabajo...*
+    - *Generando Contrato de Mantenimiento...* (si procede).
+- **Finalización y Cierre Automático**:
+  - Al concluir al 100%, el modal DEBE exhibir un icono verde de éxito rebotante (`CheckCircle2` en `bg-emerald-50 text-emerald-600`) y el texto exacto **`¡Documentos generados y descargados con éxito!`**.
+  - La ventana debe permanecer visible durante un retardo de cortesía de aproximadamente 1,4 segundos antes de cerrarse suavemente.
+
+---
+
+## 82. Blindaje Inviolable de Ancho y Distribución de Columnas en Tabla de Puestos de Control del Acta PDF (pdfGenerator.ts)
+- **Ancho Total Idéntico de 269 mm**:
+  - En la tabla "4. INVENTARIO Y PRUEBAS EN LOS PUESTOS DE CONTROL" del sistema RED DE ROCIADORES Y PUESTO DE CONTROL en el Acta PDF, la suma total de anchos de columna DEBE ser exactamente **269 mm** (margen a margen: 14 a 283).
+- **Ajuste y Amplitud de Columnas sin Saltos de Texto Anti-estéticos**:
+  - La primera columna (`Orden`) DEBE contar con al menos **11 mm** de ancho para garantizar que la palabra "Orden" quepa holgadamente en una sola línea sin partirse verticalmente jamás (`"Orde\nn"`).
+  - Las preguntas y columnas cortas ("Alarma", "Presión campana", "Presión manómetro", etc.) se ajustan dinámicamente entre 14 y 22 mm, otorgando el ancho sobrante a la columna descriptiva/ubicación del puesto de control para absorber el ancho del 100% de la hoja.
+
+---
+
+## 83. Blindaje Inviolable de Recuento de Puestos de Control del Inventario en Certificado y Albarán (pdfGenerator.ts)
+- **Recuento Real por Puestos de Control de la Tabla de Inventario**:
+  - Exclusivamente en el sistema RED DE ROCIADORES Y PUESTO DE CONTROL, la suma de equipos en el Certificado Oficial (`generarCertificadoPDF`) y en el Albarán de Trabajo (`generarAlbaranPDF`) DEBE calcularse a partir del número de puestos de control listados en la tabla de inventario mediante `contarEquiposInventarioPuestosPDF(eqs)`.
+  - Queda **ESTRICTAMENTE PROHIBIDO** contar los colectores/manifolds individuales como si fueran el total de equipos revisados, garantizando la perfecta coincidencia entre el Inventario del Acta, el Certificado Oficial y el Albarán.
+
+---
+
+## 84. Blindaje Inviolable de Tarjeta en 2 Columnas y Recuentos Unificados en Certificado PDF (pdfGenerator.ts)
+- **Recuentos Unificados Reglamentarios para Extintores y BIEs**:
+  - En la tarjeta "SISTEMAS Y EQUIPOS REVISADOS" del Certificado Oficial PDF:
+    - **Extintores**: Debe mostrar obligatoria y unificadamente la línea:
+      `• Extintores varios formatos: XX und.`
+    - **Bocas de Incendios Equipadas (BIE)**: Debe mostrar obligatoria y unificadamente la línea:
+      `• Bocas de incendios equipadas varios formatos: XX unds.`
+  - Queda **ESTRICTAMENTE PROHIBIDO** desglosar extintores o BIEs por agentes o capacidades ficticias que no coincidan con la realidad física del centro.
+- **Distribución y Balanceo Dinámico en 2 Columnas**:
+  - La tarjeta de sistemas y equipos revisados DEBE balancear dinámicamente sus bloques en 2 columnas (Izquierda y Derecha) calculando la altura acumulada para que ambas mitades queden equilibradas y nunca sobrecarguen una sola columna vertical.
+  - Esto previene de forma permanente que la tarjeta empuje los bloques de firmas de conformidad hacia el límite inferior de la página.
+
+---
+
+## 85. Blindaje Inviolable de Persistencia Multi-Pestaña de Firestore y Carga Operativa Continua
+- **Persistencia Multi-Pestaña Obligatoria (`firebase.tsx`)**:
+  - La inicialización de Firestore localCache DEBE utilizar incondicionalmente `persistentMultipleTabManager()`.
+  - Queda **ESTRICTAMENTE PROHIBIDO** utilizar `persistentSingleTabManager()`, ya que bloquea el acceso exclusivo a IndexedDB e interrumpe las suscripciones `onSnapshot` cuando existen múltiples pestañas o recargas de la aplicación.
+- **Temporizador de Seguridad de Carga (`loadingSafetyTimer`)**:
+  - En las vistas operativas principales (`Revisiones.tsx`, `Reparaciones.tsx`, `Instalaciones.tsx` y `Urgencias.tsx`), DEBE incluirse un temporizador de seguridad de 2000 ms (`loadingSafetyTimer = setTimeout(() => setLoading(false), 2000)`).
+  - Esto garantiza que la interfaz jamás quede congelada en estado de carga aunque Firestore o la conexión de red experimenten latencia.
+- **Protección de Almacenamiento Local (`safeLocalSet`)**:
+  - En los componentes de operaciones, las escrituras en `localStorage` DEBEN gestionarse de forma segura para evitar que errores por cuota de almacenamiento (`QuotaExceededError`) bloqueen la reactividad del componente.
+- **Selector de Estado de Parte Exclusivo para SuperAdministrador (`RevisionChecklist.tsx`)**:
+  - En la vista de revisión de partes, el selector desplegable de cambio manual de estado (`Abierto`, `En curso`, `Pre-Cerrado`, `Cerrado`, `Finalizado`) sólo debe ser visible y editable para usuarios con rol de SuperAdministrador (`userRole === 'super-administrador' || userRole === 'superusuario' || userRole === 'superadministrador'`). Para el resto de roles se muestra como etiqueta de solo lectura.
+
+---
+
+## 86. Blindaje Inviolable de Cierre y Navegación de Detalle de Centro (Centros.tsx y oficina/pages/Centros.tsx)
+- **Cierre Incondicional del Modal de Detalle (`handleTryCloseDetail`)**:
+  - En la vista de detalle del centro (`DetailModal`), el botón de volver (`<ArrowLeft /> Volver`), la cruz de cierre (`X`) y la tecla `Escape` ejecutan `handleTryCloseDetail()`.
+  - Esta función DEBE ejecutar incondicionalmente `setIsDetailOpen(false)` para regresar limpiamente y sin trabas al listado de centros.
+  - Queda **ESTRICTAMENTE PROHIBIDO** condicionar el cierre del detalle a validaciones de campos incompletos o invocar `setShowValidationModal(true)` desde `handleTryCloseDetail`.
+- **Preservación de Validación Obligatoria en Guardado (`handleSave`)**:
+  - Las validaciones obligatorias de datos generales, contrato, técnico, empresa y sistemas mínimos pertenecen de forma exclusiva al guardado del formulario (`handleSave`) al crear o editar un centro.
+- **Sincronización Dual Obligatoria**:
+  - Esta lógica DEBE mantenerse idéntica e inviolable en `src/Centros.tsx` y en `src/oficina/pages/Centros.tsx`.
+
+---
+
+## 87. Blindaje Inviolable de Marcado Manual de Tareas Resueltas en Calendario para Super Administrador (Calendario.tsx)
+- **Conmutador Rápido Exclusivo de Super Administrador (`handleToggleResuelta`)**:
+  - En el modal de visualización de tarea del calendario (`Calendario.tsx`), DEBE incluirse un botón azul conmutador ("Marcar como resuelta" / "Desmarcar como resuelta") visible y accionable exclusivamente por usuarios con rol de Super Administrador (`isSuperUser`).
+  - Aplica exclusivamente a tareas operativas de **Reparaciones**, **Instalaciones** y **Urgencias** (las revisiones de mantenimiento no se ven afectadas).
+- **Insignia y Estilo Atenuado en Gris de Tarea Resuelta (`COLOR_COMPLETADO_TAG` y `COLOR_COMPLETADO_BADGE`)**:
+  - Al marcarse como resuelta (`resueltaManual: true`), la tarea adquiere inmediatamente el estilo visual atenuado en gris claro en la cuadrícula del calendario, considerándose completada sin necesidad de contar con un albarán emitido.
+- **Persistencia Dual Simultánea (Firestore + LocalStorage)**:
+  - Todo cambio persiste de forma inmediata en el documento correspondiente de Firestore (`updateReparacion`, `updateInstalacion`, `updateUrgencia`) y en la memoria local (`firecheck_db_reparaciones`, `firecheck_db_instalaciones`, `firecheck_db_urgencias`).
+
+---
+
+## 88. Blindaje Inviolable de Filtros de Visibilidad con Tachado en Cabecera del Calendario (Calendario.tsx)
+- **Botones Interactivos de Conteo y Visibilidad (`filtrosVisibles`)**:
+  - Las cuatro etiquetas de resumen mensual ubicadas en la cabecera del calendario (`Rev.`, `Rep.`, `Inst.`, `Urg.`) DEBEN ser botones interactivos que alternan la visibilidad de cada categoría de tarea (`toggleFiltro`).
+- **Efecto Visual Tachado al Desactivar**:
+  - Al desactivar una categoría, su botón pasa al estilo inactivo tachado (`bg-slate-50 text-slate-400 border-slate-200 opacity-60 line-through`).
+  - Al estar desactivada, todas las tareas de dicha categoría se ocultan de las celdas de los días del calendario.
+  - Al activarse nuevamente, recupera su color y sombra habitual y restaura la visibilidad de las tareas.
+- **Recálculo Reactivo de Tareas por Día**:
+  - El distintivo numérico de cantidad de tareas en cada celda del día (`eventosDia.length`) DEBE recalcularse en tiempo real para reflejar exactamente el número de tareas visibles.
+  - Los días festivos oficiales permanecen siempre visibles e inalterados.
+
+---
+
+## 89. Blindaje Inviolable de Título Obligatorio y Visualización en Avisos / Urgencias (Urgencias.tsx y Calendario.tsx)
+- **Etiqueta Obligatoria en Formulario de Urgencias (`Urgencias.tsx`)**:
+  - En el modal de creación y edición de avisos de urgencia (`src/Urgencias.tsx`), la etiqueta del campo de título DEBE denominarse obligatoriamente:
+    `TITULO OBLIGATORIO A MOSTRAR EN EL AVISO *`
+    con el placeholder indicativo `Ej: Fallo gotera en bazar chino`.
+- **Visualización Exacta del Título en Alertas del Calendario (`Calendario.tsx`)**:
+  - En la vista del calendario (`src/Calendario.tsx`), las etiquetas de avisos de urgencia DEBEN mostrar en primer plano el título del aviso: `Urg. [Título]` (ej. `Urg. Fallo gotera en bazar chino`), mapeando `clienteResumido: u.titulo || u.urgencia || ...`.
+
+---
+
+## 90. Blindaje Inviolable de Eliminación de Partes con Confirmación Modal a la Papelera (`Partes.tsx`)
+- **Permiso Universal de Eliminación a Papelera**:
+  - En el listado de partes (`Partes.tsx`), cualquier parte listado (incluidos los partes en estado `Pre-Cerrado`, `En revisión`, de prueba o planificados) DEBE poder ser enviado a la papelera mediante el botón con icono de papelera (`Trash2`).
+  - Queda **ESTRICTAMENTE PROHIBIDO** bloquear la acción de eliminar o condicionarla restrictivamente según el estado del parte.
+- **Modal Flotante de Confirmación Obligatorio (`parteAEliminar`)**:
+  - Al pulsar el botón de eliminar, DEBE abrirse una ventana modal flotante moderna (`parteAEliminar`) con `backdrop-blur-sm`, advirtiendo claramente: *"¿Estás seguro de que deseas mover este parte a la papelera?"* y detallando el cliente, centro y número de parte o mantenimiento.
+  - Botones estilizados de acción: *"Cancelar"* y *"Mover a la papelera"*.
+- **Envío a Papelera y Recuperación Garantizada (`deleteParte`)**:
+  - Al confirmar, el sistema ejecuta `deleteParte(docId, usuarioNombre, fallbackData)` enviando el registro a la colección de papelera con metadatos completos para permitir su restauración en cualquier momento.
+  - Se actualiza de inmediato el almacenamiento local (`firecheck_db_partes`) y el estado React sin requerir recargar la página.
+
+---
+
+## 91. Blindaje Inviolable del Logotipo del Gremio (GRIMEC) en la Cabecera Izquierda del Acta PDF (`pdfGenerator.ts`)
+- **Presencia Obligatoria en Todas las Páginas del Acta PDF**:
+  - En el documento Acta de Revisión (`generarActaExtintoresPDF`), DEBE incluirse en la esquina superior izquierda de **todas las hojas** (tanto en la portada `drawInfoPage` como en todas las hojas siguientes `drawTableHeader`: índice, tablas de sistemas, inventario y firmas) la imagen oficial del gremio al que pertenece la empresa (**GRIMEC** - *Gremi d'Instal·ladors i Mantenidors d'Extintors de Catalunya*).
+- **Disposición y Balance Simétrico de la Cabecera**:
+  - **Izquierda**: Logotipo del Gremio (`x = 14`, alineado y proporcionado).
+  - **Centro**: Título del Acta y datos descriptivos del centro/cliente centrados (`pageWidth / 2`).
+  - **Derecha**: Logotipo de la Empresa Mantenedora (`pageWidth - 14 - logoWidth`).
+- **Optimización Obligatoria de Imagen**:
+  - La imagen del gremio (`logoGrimecBase64` / `empData?.gremioLogoUrl`) DEBE procesarse incondicionalmente mediante `optimizarImagenParaPDF(gremioLogoRaw, 800, 0.75)` antes de insertarse en el documento, garantizando soporte 100% offline y peso ligero del PDF.
+- **Sincronización Dual**:
+  - Mantenido de forma idéntica en `src/pdfGenerator.ts` y en `src/recursos-compartidos/services/pdfGenerator.ts`.
+
+---
+
+## 92. Blindaje Inviolable de Eliminación Certera de Equipos y Prevención de Resurrección / Duplicación en Firestore y PDFs
+- **Eliminación y Validación Robusta en Firestore (`deleteEquipoInstalado`)**:
+  - `deleteEquipoInstalado` en `src/firebase.tsx` DEBE validar incondicionalmente que `centroId`, `sistemaId` y `equipoId` sean válidos y no vacíos. Si faltan `centroId` o `sistemaId`, debe recurrir a `localStorage` (`firecheck_db_equipos_instalados`) para recuperarlos antes de construir la ruta de Firestore (`doc(db, 'centros', cId, 'inventario', sId, 'equipos', targetId)`).
+  - `subscribeEquiposInstalados` DEBE inyectar siempre `centroId` y `sistemaId` en cada objeto retornado.
+- **Prevención de Resurrección en `RevisionChecklist.tsx`**:
+  - Uso obligatorio del registro de exclusión `deletedEquiposIdsRef` (`useRef<Set<string>>(new Set())`).
+  - Al eliminar un equipo (`confirmDeleteEquipo`), su ID DEBE registrarse inmediatamente en `deletedEquiposIdsRef`, retirarse de `pendingEquiposRef` e `inFlightSyncRef`, y removerse del estado local `equiposInstalados`, de `firecheck_db_equipos_instalados`, de `updateParteOfflineData` y de Firestore mediante `deleteEquipoInstalado`.
+  - El listener de Firestore (`subscribeEquiposInstalados`) DEBE filtrar cualquier equipo presente en `deletedEquiposIdsRef` y en `nuevosLocales` solo DEBE incluir equipos explícitamente registrados en `pendingEquiposRef` que no estén en `deletedEquiposIdsRef`. Queda estrictamente prohibido resucitar equipos no presentes en Firestore.
+  - `saveEquiposProgress` DEBE omitir incondicionalmente cualquier equipo presente en `deletedEquiposIdsRef` para no re-crearlo en Firestore con `setDoc({ merge: true })`.
+- **Eliminación Inmediata con Latencia Cero en `Centros.tsx` y `oficina/pages/Centros.tsx`**:
+  - En `confirmDeleteEquipo`, resolver `centroId` y `sistemaId` con fallback a `centroSeleccionado` y `sistemaSeleccionado`.
+  - Actualizar de inmediato el estado local `setEquiposInstalados` y `firecheck_db_equipos_instalados` para latencia cero y ejecutar `deleteEquipoInstalado`.
+
+---
+
+## 93. Blindaje Inviolable de Celdas Combinadas en Cuadro de Control y Datos Generales de Sistemas (Actas PDF - `pdfGenerator.ts`)
+- **Fila Combinada de Cuadro de Control (`isCuadroControlPregunta` y `colSpan: 2`)**:
+  - En las tablas de sistemas en el Acta PDF (`src/pdfGenerator.ts` y `src/recursos-compartidos/services/pdfGenerator.ts`), toda pregunta referente al cuadro de control (`cuadro de control`, `ubicacion del cuadro del control`, `cuadro de mando`, etc.) y datos de cobertura/referencia DEBEN maquetarse como fila de celda combinada (`colSpan: 2`), eliminando la separación vertical.
+  - Fondo amarillo suave reglamentario (`fillColor: [255, 249, 196]`).
+  - La pregunta DEBE finalizar obligatoriamente con dos puntos (`:`).
+  - La respuesta DEBE dibujarse a la izquierda inmediatamente tras los dos puntos en formato **MAYÚSCULAS** y **NEGRITA** (`fontStyle: 'bold'`).
+- **Anomalías con Encabezado Formato Oración y Línea Divisoria Gris Suave**:
+  - En las anomalías de equipos del Acta PDF, el título de equipo DEBE imprimirse como `EQUIPO Nº XX - (Ubicación en formato oración)` con solo la primera letra en mayúscula y entre paréntesis.
+  - Separación entre anomalías de distintos equipos mediante una línea divisoria horizontal gris suave (`RGB: [220, 224, 230]`, grosor `0.25 mm`) con espacio simétrico para una legibilidad óptima.
+- **Sincronización Dual**:
+  - Mantenido de forma idéntica en `src/pdfGenerator.ts` y en `src/recursos-compartidos/services/pdfGenerator.ts`.
 
 
 

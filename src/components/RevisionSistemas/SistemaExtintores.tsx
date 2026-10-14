@@ -4,6 +4,7 @@ import type { CentroSistema, EquipoInstalado, Parte } from '../../Centros';
 import { updateEquipoInstalado, updateParte as updateParteFirestore, uploadFile, type ChecklistItem } from '../../firebase';
 import TableInput from '../TableInput';
 import BotonGuardarEquipo from '../BotonGuardarEquipo';
+import { extraerFechasEquipo } from '../../RevisionChecklist';
 
 interface Props {
     sist: CentroSistema;
@@ -73,41 +74,36 @@ export default function SistemaExtintores({
                                                         });
                                                         const stats = getCheckStats(eq);
                                                         
-                                                        const isExtintor = (sist.tipo || sist.familia || '').toLowerCase().includes('extintor');
+                                                        const isExtintor = (sist.tipo || sist.familia || (sist as any).nombre || '').toLowerCase().includes('extintor') ||
+                                                                           (typeof eq.codigo === 'string' && eq.codigo.toUpperCase().startsWith('EXT'));
                                                         let caducado = false;
                                                         let necesitaRetimbre = false;
                                                         let seAproxima = false;
-                                                        let fabItemKey = "";
-                                                        let retItemKey = "";
+                                                        const fabItem = itemsToUse.find(i => (i.label||'').toLowerCase().includes('fabricaci'));
+                                                        const retItem = itemsToUse.find(i => (i.label||'').toLowerCase().includes('retimbre'));
+                                                        const fabItemKey = fabItem?.key || "";
+                                                        const retItemKey = retItem?.key || "";
+
                                                         if (isExtintor) {
-                                                            const fabItem = itemsToUse.find(i => (i.label||'').toLowerCase().includes('fabricaci'));
-                                                            const retItem = itemsToUse.find(i => (i.label||'').toLowerCase().includes('retimbre'));
-                                                            fabItemKey = fabItem?.key || "";
-                                                            retItemKey = retItem?.key || "";
-                                                            if (fabItem) {
-                                                                const valFab = eq[fabItem.key as keyof EquipoInstalado] as string;
-                                                                const valRet = retItem ? eq[retItem.key as keyof EquipoInstalado] as string : null;
-                                                                if (valFab) {
-                                                                    const today = new Date();
-                                                                    const dateFab = new Date(valFab);
-                                                                    if (!isNaN(dateFab.getTime())) {
-                                                                        const monthsSinceFab = (today.getFullYear() - dateFab.getFullYear()) * 12 + today.getMonth() - dateFab.getMonth();
-                                                                        if (monthsSinceFab >= 240) {
-                                                                            caducado = true;
-                                                                        } else {
-                                                                            let refDate = dateFab;
-                                                                            if (valRet) {
-                                                                                const dr = new Date(valRet);
-                                                                                if (!isNaN(dr.getTime())) refDate = dr;
-                                                                            }
-                                                                            const monthsSinceRef = (today.getFullYear() - refDate.getFullYear()) * 12 + today.getMonth() - refDate.getMonth();
-                                                                            if (monthsSinceRef >= 60) {
-                                                                                necesitaRetimbre = true;
-                                                                            } else if (monthsSinceFab >= 237 || monthsSinceRef >= 57) {
-                                                                                seAproxima = true;
-                                                                            }
-                                                                        }
-                                                                    }
+                                                            const { dateFab, dateRet } = extraerFechasEquipo(eq);
+                                                            const today = new Date();
+
+                                                            if (dateFab) {
+                                                                const monthsSinceFab = (today.getFullYear() - dateFab.getFullYear()) * 12 + today.getMonth() - dateFab.getMonth();
+                                                                if (monthsSinceFab >= 240) {
+                                                                    caducado = true;
+                                                                } else if (monthsSinceFab >= 237) {
+                                                                    seAproxima = true;
+                                                                }
+                                                            }
+
+                                                            const refDate = dateRet || dateFab;
+                                                            if (refDate) {
+                                                                const monthsSinceRef = (today.getFullYear() - refDate.getFullYear()) * 12 + today.getMonth() - refDate.getMonth();
+                                                                if (monthsSinceRef >= 60) {
+                                                                    necesitaRetimbre = true;
+                                                                } else if (monthsSinceRef >= 57) {
+                                                                    seAproxima = true;
                                                                 }
                                                             }
                                                         }
@@ -122,12 +118,12 @@ export default function SistemaExtintores({
                                                                         {getEquipoSyncStatus && (() => {
                                                                             const status = getEquipoSyncStatus(eq.id);
                                                                             if (status === 'saving') {
-                                                                                return <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-full animate-pulse shadow-xs">🟡 Guardando...</span>;
+                                                                                return <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-full animate-pulse shadow-xs"><span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block animate-ping"></span> Guardando...</span>;
                                                                             }
                                                                             if (status === 'offline') {
-                                                                                return <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-700 bg-red-50 border border-red-200/80 px-2 py-0.5 rounded-full shadow-xs">🔴 Sin conexión</span>;
+                                                                                return <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-700 bg-red-50 border border-red-200/80 px-2 py-0.5 rounded-full shadow-xs"><span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block"></span> Sin conexión</span>;
                                                                             }
-                                                                            return <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-full shadow-xs">🟢 Sincronizado</span>;
+                                                                            return <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-full shadow-xs"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block"></span> Sincronizado</span>;
                                                                         })()}
                                                                     </div>
                                                                     <div className="flex items-center gap-1.5">
@@ -664,7 +660,7 @@ export default function SistemaExtintores({
                                                                                              if (newFotos.length === 0) handleCheckChange(eq.id, 'foto', ''); // Mantenemos retrocompatibilidad vaciando 'foto'
                                                                                              else if (idx === 0) handleCheckChange(eq.id, 'foto', newFotos[0]);
                                                                                          }}
-                                                                                         className="absolute top-0 right-0 p-1 bg-red-600 hover:bg-red-700 text-white rounded-bl-lg shadow-md transition-all active:scale-95 flex items-center justify-center cursor-pointer"
+                                                                                         className="absolute top-0 right-0 p-1 bg-red-600 hover:bg-red-700 text-white rounded-bl-lg shadow-md transition-all active:scale-95 flex items-center justify-center cursor-pointer z-10"
                                                                                          title="Eliminar foto"
                                                                                      >
                                                                                          <Trash2 className="w-3.5 h-3.5" />

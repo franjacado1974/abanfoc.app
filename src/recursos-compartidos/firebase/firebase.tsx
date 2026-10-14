@@ -2518,6 +2518,7 @@ export interface ReparacionItem {
   albaranId?: string;
   pedidoId?: string;
   presupuestoId?: string;
+  resueltaManual?: boolean;
 }
 
 export function subscribeReparaciones(callback: (items: ReparacionItem[]) => void) {
@@ -2543,6 +2544,7 @@ export function subscribeReparaciones(callback: (items: ReparacionItem[]) => voi
           albaranId: data?.albaranId || '',
           pedidoId: data?.pedidoId || '',
           presupuestoId: data?.presupuestoId || '',
+          resueltaManual: !!data?.resueltaManual,
         } as ReparacionItem;
       });
       items.sort((a, b) => (b.fechaCreacion || '').localeCompare(a.fechaCreacion || ''));
@@ -2572,7 +2574,17 @@ export async function addReparacion(data: ReparacionItem) {
 export async function updateReparacion(docId: string, data: Partial<ReparacionItem>) {
   try {
     const docRef = doc(db, 'reparaciones', docId);
-    await updateDoc(docRef, data as any);
+    try {
+      await updateDoc(docRef, data as any);
+    } catch {
+      const q = query(collection(db, 'reparaciones'), where('id', '==', docId));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        await updateDoc(snap.docs[0].ref, data as any);
+      } else {
+        await setDoc(docRef, data as any, { merge: true });
+      }
+    }
   } catch (e) {
     console.error('updateReparacion error:', e);
     throw e;
@@ -2607,6 +2619,7 @@ export interface InstalacionItem {
   albaranId?: string;
   pedidoId?: string;
   presupuestoId?: string;
+  resueltaManual?: boolean;
 }
 
 export function subscribeInstalaciones(callback: (items: InstalacionItem[]) => void) {
@@ -2632,6 +2645,7 @@ export function subscribeInstalaciones(callback: (items: InstalacionItem[]) => v
           albaranId: data?.albaranId || '',
           pedidoId: data?.pedidoId || '',
           presupuestoId: data?.presupuestoId || '',
+          resueltaManual: !!data?.resueltaManual,
         } as InstalacionItem;
       });
       items.sort((a, b) => (b.fechaCreacion || '').localeCompare(a.fechaCreacion || ''));
@@ -2661,12 +2675,23 @@ export async function addInstalacion(data: InstalacionItem) {
 export async function updateInstalacion(docId: string, data: Partial<InstalacionItem>) {
   try {
     const docRef = doc(db, 'instalaciones', docId);
-    await updateDoc(docRef, data as any);
+    try {
+      await updateDoc(docRef, data as any);
+    } catch {
+      const q = query(collection(db, 'instalaciones'), where('id', '==', docId));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        await updateDoc(snap.docs[0].ref, data as any);
+      } else {
+        await setDoc(docRef, data as any, { merge: true });
+      }
+    }
   } catch (e) {
     console.error('updateInstalacion error:', e);
     throw e;
   }
 }
+
 
 export async function deleteInstalacion(docId: string) {
   try {
@@ -2699,6 +2724,7 @@ export interface UrgenciaItem {
   nota?: string;
   facturado?: boolean;
   albaranId?: string;
+  resueltaManual?: boolean;
 }
 
 export function subscribeUrgencias(callback: (items: UrgenciaItem[]) => void) {
@@ -2727,6 +2753,7 @@ export function subscribeUrgencias(callback: (items: UrgenciaItem[]) => void) {
           nota: data?.nota || data?.observaciones || '',
           facturado: !!data?.facturado,
           albaranId: data?.albaranId || '',
+          resueltaManual: !!data?.resueltaManual,
         } as UrgenciaItem;
       });
       callback(items);
@@ -2755,7 +2782,17 @@ export async function addUrgencia(data: UrgenciaItem) {
 export async function updateUrgencia(docId: string, data: Partial<UrgenciaItem>) {
   try {
     const docRef = doc(db, 'urgencias', docId);
-    await updateDoc(docRef, data as any);
+    try {
+      await updateDoc(docRef, data as any);
+    } catch {
+      const q = query(collection(db, 'urgencias'), where('id', '==', docId));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        await updateDoc(snap.docs[0].ref, data as any);
+      } else {
+        await setDoc(docRef, data as any, { merge: true });
+      }
+    }
   } catch (e) {
     console.error('updateUrgencia error:', e);
     throw e;

@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileText, Building2, MapPin, CalendarDays, Search, Trash2, Download, Eye, X, Check, ArrowLeft, Filter, ChevronDown, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
-import { subscribePartes, subscribeCentros, subscribeClientes, subscribeTecnicos, deleteParte, db, updateParte, getEquiposInstalados } from './firebase';
+import { FileText, Building2, MapPin, CalendarDays, Search, Trash2, Download, Eye, X, Check, ArrowLeft, Filter, ChevronDown, ArrowUp, ArrowDown, ArrowUpDown, Loader2, CheckCircle2, RotateCcw } from 'lucide-react';
+import { subscribePartes, subscribeCentros, subscribeClientes, subscribeTecnicos, deleteParte, db, updateParte, getEquiposInstalados, updateEquipoInstalado } from './firebase';
 import { collection, getDocs, doc, getDoc, query, where } from 'firebase/firestore';
 import { generarActaExtintoresPDF, generarAlbaranPDF, generarCertificadoPDF } from './pdfGenerator';
 import { generarContratoPDF } from './pdfContratoGenerator';
 import { calcularAlertasExtintores, calcularAlertasBies, esEquipoExtintor, esEquipoBie, esSistemaExtintores, esSistemaBies, type ExtintorAlertas, type BieAlertas } from './recursos-compartidos/services/sistemasUtils';
+import { evaluarObservacionesPorFecha, evaluarAnomaliasPorFecha } from './RevisionChecklist';
 
 interface ParteItem {
   id: string;
@@ -133,7 +134,13 @@ export default function Partes() {
 
   const [showDownloadModal, setShowDownloadModal] = useState(false);
   const [selectedParteToDownload, setSelectedParteToDownload] = useState<ParteItem | null>(null);
+  const [parteAEliminar, setParteAEliminar] = useState<ParteItem | null>(null);
+  const [isDeletingParte, setIsDeletingParte] = useState(false);
   const [downloadOptions, setDownloadOptions] = useState({ acta: true, certificado: true, albaran: true, contrato: false });
+  const [isGeneratingPDFs, setIsGeneratingPDFs] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState(0);
+  const [downloadStepText, setDownloadStepText] = useState('');
+  const [downloadCompleted, setDownloadCompleted] = useState(false);
 
   const [isSignatureModalOpen, setIsSignatureModalOpen] = useState(false);
   const [isViewSignaturesModalOpen, setIsViewSignaturesModalOpen] = useState(false);
@@ -202,7 +209,20 @@ export default function Partes() {
 
       try {
         const stored = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
-        for (const eq of stored) {
+        let modifiedLocal = false;
+        const actualizadosLocal = stored.map((eq: any) => {
+          const anoAct = evaluarAnomaliasPorFecha(eq);
+          const obsAct = evaluarObservacionesPorFecha(eq);
+          let res = eq;
+          if (anoAct !== eq.anomalias) { res = { ...res, anomalias: anoAct }; modifiedLocal = true; }
+          if (obsAct !== eq.observaciones) { res = { ...res, observaciones: obsAct }; modifiedLocal = true; }
+          return res;
+        });
+        if (modifiedLocal) {
+          localStorage.setItem('firecheck_db_equipos_instalados', JSON.stringify(actualizadosLocal));
+        }
+
+        for (const eq of actualizadosLocal) {
           if (eq.centroId) {
             if (esEquipoExtintor(eq)) {
               if (!nuevosMapExt[eq.centroId]) nuevosMapExt[eq.centroId] = [];
@@ -254,12 +274,25 @@ export default function Partes() {
               const sTipo = sData.tipo || sDoc.id || '';
               const isExtSist = esSistemaExtintores(sDoc.id) || esSistemaExtintores(sNombre);
               const isBieSist = esSistemaBies(sDoc.id) || esSistemaBies(sNombre);
-              const taggedList = list.map(e => ({
-                ...e,
-                sistemaNombre: e.sistemaNombre || sNombre,
-                sistemaTipo: e.sistemaTipo || sTipo,
-                sistemaId: e.sistemaId || sDoc.id
-              }));
+              const taggedList = list.map(e => {
+                const sistObj = { id: sDoc.id, nombre: sNombre, tipo: sTipo };
+                const anoAct = evaluarAnomaliasPorFecha(e, sistObj);
+                const obsAct = evaluarObservacionesPorFecha(e, sistObj);
+                if (anoAct !== e.anomalias || obsAct !== e.observaciones) {
+                  updateEquipoInstalado(e.id, { anomalias: anoAct, observaciones: obsAct } as any, targetDocId, sDoc.id).catch(() => {});
+                  if (centro?.id && targetDocId !== centro.id) {
+                    updateEquipoInstalado(e.id, { anomalias: anoAct, observaciones: obsAct } as any, centro.id, sDoc.id).catch(() => {});
+                  }
+                }
+                return {
+                  ...e,
+                  anomalias: anoAct,
+                  observaciones: obsAct,
+                  sistemaNombre: e.sistemaNombre || sNombre,
+                  sistemaTipo: e.sistemaTipo || sTipo,
+                  sistemaId: e.sistemaId || sDoc.id
+                };
+              });
               const keys = [cId, targetDocId, centro?._docId, centro?.id].filter(Boolean) as string[];
               for (const k of keys) {
                 if (isExtSist) {
@@ -361,13 +394,54 @@ export default function Partes() {
     });
   };
 
-  const eliminarParte = async (parte: ParteItem) => {
-    if (!confirm('¿Estás seguro de eliminar este parte de trabajo?')) return;
+  const eliminarParte = (parte: ParteItem) => {
+    setParteAEliminar(parte);
+  };
+
+  const confirmarEliminarParte = async () => {
+    if (!parteAEliminar) return;
+    setIsDeletingParte(true);
     try {
-      const docId = (parte as any)._docId || parte.id;
-      await deleteParte(docId);
+      const docId = (parteAEliminar as any)._docId || parteAEliminar.id;
+      const centro = getCentro(parteAEliminar.centroId);
+      const cliente = getCliente(parteAEliminar.clienteId);
+
+      let usuarioNombre = 'Usuario';
+      try {
+        const saved = localStorage.getItem('firecheck_logged_user') || sessionStorage.getItem('firecheck_logged_user');
+        if (saved) {
+          const u = JSON.parse(saved);
+          if (u?.nombre) usuarioNombre = `${u.nombre} ${u.apellidos || ''}`.trim();
+          else if (u?.usuario) usuarioNombre = u.usuario;
+        }
+      } catch { /* ignore */ }
+
+      const fallbackData = {
+        ...parteAEliminar,
+        clienteNombre: cliente?.nombre || (parteAEliminar as any).clienteNombre || (parteAEliminar as any).nombreCliente || '',
+        centroNombre: centro?.nombre || parteAEliminar.nombreCentro || (parteAEliminar as any).centroNombre || '',
+        numeroMantenimiento: (parteAEliminar as any).numeroMantenimiento || parteAEliminar.id
+      };
+
+      await deleteParte(docId, usuarioNombre, fallbackData);
+
+      // Actualizar estado local inmediatamente
+      setPartes(prev => {
+        const filtrados = prev.filter(p => (p._docId || p.id) !== docId && p.id !== parteAEliminar.id);
+        try {
+          localStorage.setItem('firecheck_db_partes', JSON.stringify(filtrados));
+        } catch (e) {
+          console.warn("[StorageQuota] Error guardando firecheck_db_partes tras eliminar:", e);
+        }
+        return filtrados;
+      });
+
+      setParteAEliminar(null);
     } catch (err) {
-      console.error('Error eliminando parte:', err);
+      console.error('Error eliminando parte a la papelera:', err);
+      alert('Ocurrió un error al mover el parte a la papelera. Por favor, inténtalo de nuevo.');
+    } finally {
+      setIsDeletingParte(false);
     }
   };
 
@@ -584,7 +658,22 @@ export default function Partes() {
       alert('Falta información de centro o cliente.');
       return;
     }
+
+    // Liberar memoria de localStorage para garantizar que Firebase no falle por QuotaExceededError
+    try {
+      ['firecheck_db_albaranes', 'firecheck_db_certificados', 'firecheck_db_presupuestos'].forEach(k => {
+        const item = localStorage.getItem(k);
+        if (item && item.length > 300000) {
+          localStorage.removeItem(k);
+        }
+      });
+    } catch { /* ignore */ }
     
+    setIsGeneratingPDFs(true);
+    setDownloadCompleted(false);
+    setDownloadProgress(10);
+    setDownloadStepText('Preparando sistemas y equipos del centro...');
+
     try {
       // 1. Obtener Sistemas del centro
       const sistemasCol = collection(db, 'centros', centro._docId || centro.id, 'inventario');
@@ -611,6 +700,9 @@ export default function Partes() {
       const firmaTecnico = (parte as any).firmaTecnico || '';
       const nombreFirmante = (parte as any).nombreFirmante || '';
       const numeroMantenimiento = (parte as any).numeroMantenimiento || parte.id;
+
+      setDownloadProgress(25);
+      setDownloadStepText('Cargando listas de verificación y empresas...');
 
       let checklistItemsPorSistema: Record<string, any[]> = {};
       try {
@@ -639,8 +731,8 @@ export default function Partes() {
             const esAspiracion = rawSistNombre.includes('aspiraci') || rawSistNombre.includes('aspirac') || rawSistNombre.includes('asd');
 
             const sistemaCat = categoriasSistema.find((c: any) => {
-                const nombreSist = cleanNorm((sist as any).tipo || (sist as any).familia || (sist as any).descripcion || '');
-                const nombreCat = cleanNorm(c.nombre || '');
+                const nombreSist = cleanNorm((sist as any).tipo || (sist as any).familia || (sist as any).descripcion || (sist as any).id || '');
+                const nombreCat = cleanNorm(c.nombre || c.id || '');
                 if (nombreCat && nombreSist && nombreCat === nombreSist) return true;
                 const isAspA = nombreSist.includes('aspiraci') || nombreSist.includes('aspirac') || nombreSist.includes('asd');
                 const isAspB = nombreCat.includes('aspiraci') || nombreCat.includes('aspirac') || nombreCat.includes('asd');
@@ -651,14 +743,20 @@ export default function Partes() {
                 const isCocinaA = nombreSist.includes('cocina') || nombreSist.includes('campana');
                 const isCocinaB = nombreCat.includes('cocina') || nombreCat.includes('campana');
                 if (isCocinaA || isCocinaB) return isCocinaA && isCocinaB;
-                const isEspumaA = nombreSist.includes('espuma');
-                const isEspumaB = nombreCat.includes('espuma');
+                const isCanonMonitorA = (nombreSist.includes('canon') || nombreSist.includes('cañon') || nombreSist.includes('cañón') || nombreSist.includes('monitor')) && (nombreSist.includes('monitor') || nombreSist.includes('espuma'));
+                const isCanonMonitorB = (nombreCat.includes('canon') || nombreCat.includes('cañon') || nombreCat.includes('cañón') || nombreCat.includes('monitor')) && (nombreCat.includes('monitor') || nombreCat.includes('espuma'));
+                if (isCanonMonitorA || isCanonMonitorB) return isCanonMonitorA && isCanonMonitorB;
+                const isManualAguaA = nombreSist.includes('manual') && nombreSist.includes('agua');
+                const isManualAguaB = nombreCat.includes('manual') && nombreCat.includes('agua');
+                if (isManualAguaA || isManualAguaB) return isManualAguaA && isManualAguaB;
+                const isEspumaA = nombreSist.includes('espuma') && !isCanonMonitorA;
+                const isEspumaB = nombreCat.includes('espuma') && !isCanonMonitorB;
                 if (isEspumaA || isEspumaB) return isEspumaA && isEspumaB;
-                const isAguaA = nombreSist.includes('agua') && !isEspumaA;
-                const isAguaB = nombreCat.includes('agua') && !isEspumaB;
+                const isAguaA = nombreSist.includes('agua') && !isEspumaA && !isManualAguaA && !isCanonMonitorA;
+                const isAguaB = nombreCat.includes('agua') && !isEspumaB && !isManualAguaB && !isCanonMonitorB;
                 if (isAguaA || isAguaB) return isAguaA && isAguaB;
-                const isGasA = (nombreSist.includes('gas') || (nombreSist.includes('extinci') && !nombreSist.includes('extintor'))) && !isCocinaA && !isEspumaA && !isAguaA;
-                const isGasB = (nombreCat.includes('gas') || (nombreCat.includes('extinci') && !nombreCat.includes('extintor'))) && !isCocinaB && !isEspumaB && !isAguaB;
+                const isGasA = (nombreSist.includes('gas') || (nombreSist.includes('extinci') && !nombreSist.includes('extintor'))) && !isCocinaA && !isEspumaA && !isAguaA && !isManualAguaA && !isCanonMonitorA;
+                const isGasB = (nombreCat.includes('gas') || (nombreCat.includes('extinci') && !nombreCat.includes('extintor'))) && !isCocinaB && !isEspumaB && !isAguaB && !isManualAguaB && !isCanonMonitorB;
                 if (isGasA || isGasB) return isGasA && isGasB;
                 return nombreCat.includes(nombreSist) || nombreSist.includes(nombreCat);
             });
@@ -666,11 +764,50 @@ export default function Partes() {
             if (!sistemaNombre) continue;
 
             const nombreSistemaNorm = normalizarNombre(sistemaNombre);
+            const isManualAguaSist = nombreSistemaNorm.includes('manual') && nombreSistemaNorm.includes('agua');
+            const isCanonMonitorSist = (nombreSistemaNorm.includes('canon') || nombreSistemaNorm.includes('cañon') || nombreSistemaNorm.includes('cañón') || nombreSistemaNorm.includes('monitor')) && (nombreSistemaNorm.includes('monitor') || nombreSistemaNorm.includes('espuma'));
+            const isArquetaAcometidaSist = nombreSistemaNorm.includes('arqueta') || nombreSistemaNorm.includes('acometida');
+
             // Buscar la plantilla que coincida con el nombre del sistema con orden de prioridad
             let plantilla: any = null;
 
-            // Prioridad absoluta para Detección por Aspiración (ASD)
-            if (esAspiracion || nombreSistemaNorm.includes('aspirac') || nombreSistemaNorm.includes('asd')) {
+            // Prioridad absoluta para Arqueta y Acometida
+            if (isArquetaAcometidaSist) {
+                plantilla = plantillas.find((p: any) => {
+                    const np = normalizarNombre(p.nombre || '');
+                    return np.includes('arqueta') || np.includes('acometida');
+                });
+            }
+
+            // Prioridad absoluta para Cañón Monitor con Espuma
+            if (!plantilla && isCanonMonitorSist) {
+                const candidatos = plantillas.filter((p: any) => {
+                    const np = normalizarNombre(p.nombre || '');
+                    return (np.includes('canon') || np.includes('cañon') || np.includes('cañón') || np.includes('monitor')) && (np.includes('monitor') || np.includes('espuma'));
+                });
+                candidatos.sort((a: any, b: any) => {
+                    const actA = (a.activa !== false) ? 1 : 0;
+                    const actB = (b.activa !== false) ? 1 : 0;
+                    if (actA !== actB) return actB - actA;
+                    const dateA = a.updatedAt || a.createdAt || '';
+                    const dateB = b.updatedAt || b.createdAt || '';
+                    return dateB.localeCompare(dateA);
+                });
+                if (candidatos.length > 0) {
+                    plantilla = candidatos[0];
+                }
+            }
+
+            // Prioridad absoluta para Extinción Manual con Agua
+            if (!plantilla && isManualAguaSist) {
+                plantilla = plantillas.find((p: any) => {
+                    const np = normalizarNombre(p.nombre || '');
+                    return np.includes('manual') && np.includes('agua');
+                });
+            }
+
+            // Prioridad para Detección por Aspiración (ASD)
+            if (!plantilla && (esAspiracion || nombreSistemaNorm.includes('aspirac') || nombreSistemaNorm.includes('asd'))) {
                 plantilla = plantillas.find((p: any) => {
                     const np = normalizarNombre(p.nombre || '');
                     return np.includes('aspirac') || np.includes('asd');
@@ -690,6 +827,12 @@ export default function Partes() {
                 plantilla = plantillas.find((p: any) => {
                     const nombrePlantillaNorm = normalizarNombre(p.nombre || '');
                     if (nombrePlantillaNorm.includes('aspirac') || nombrePlantillaNorm.includes('asd') || nombrePlantillaNorm.includes('monox')) return false;
+                    const isManualP = nombrePlantillaNorm.includes('manual') && nombrePlantillaNorm.includes('agua');
+                    if (isManualP !== isManualAguaSist) return false;
+                    const isCanonP = (nombrePlantillaNorm.includes('canon') || nombrePlantillaNorm.includes('cañon') || nombrePlantillaNorm.includes('cañón') || nombrePlantillaNorm.includes('monitor')) && (nombrePlantillaNorm.includes('monitor') || nombrePlantillaNorm.includes('espuma'));
+                    if (isCanonP !== isCanonMonitorSist) return false;
+                    const isArquetaP = nombrePlantillaNorm.includes('arqueta') || nombrePlantillaNorm.includes('acometida');
+                    if (isArquetaP !== isArquetaAcometidaSist) return false;
                     return nombrePlantillaNorm.includes(nombreSistemaNorm) || nombreSistemaNorm.includes(nombrePlantillaNorm);
                 });
             }
@@ -699,6 +842,12 @@ export default function Partes() {
                 plantilla = plantillas.find((p: any) => {
                     const nombrePlantillaNorm = normalizarNombre(p.nombre || '');
                     if (nombrePlantillaNorm.includes('aspirac') || nombrePlantillaNorm.includes('asd') || nombrePlantillaNorm.includes('monox')) return false;
+                    const isManualP = nombrePlantillaNorm.includes('manual') && nombrePlantillaNorm.includes('agua');
+                    if (isManualP !== isManualAguaSist) return false;
+                    const isCanonP = (nombrePlantillaNorm.includes('canon') || nombrePlantillaNorm.includes('cañon') || nombrePlantillaNorm.includes('cañón') || nombrePlantillaNorm.includes('monitor')) && (nombrePlantillaNorm.includes('monitor') || nombrePlantillaNorm.includes('espuma'));
+                    if (isCanonP !== isCanonMonitorSist) return false;
+                    const isArquetaP = nombrePlantillaNorm.includes('arqueta') || nombrePlantillaNorm.includes('acometida');
+                    if (isArquetaP !== isArquetaAcometidaSist) return false;
                     const palabrasSistema = nombreSistemaNorm.split(' ').filter((w: string) => w.length > 3);
                     const palabrasPlantilla = nombrePlantillaNorm.split(' ').filter((w: string) => w.length > 3);
                     return palabrasSistema.some((ps: string) => palabrasPlantilla.some((pp: string) => ps === pp || pp.includes(ps) || ps.includes(pp)));
@@ -708,7 +857,7 @@ export default function Partes() {
           if (plantilla) {
             const itemsCol = collection(db, 'plantillas', plantilla.id, 'items');
             const itemsSnap = await getDocs(itemsCol);
-            let items = itemsSnap.docs.map(d => ({ key: d.id, ...d.data() }));
+            let items = itemsSnap.docs.map(d => ({ id: d.id, key: d.data().key || d.id, ...d.data() }));
             items.sort((a: any, b: any) => (a.orden || a.order || 0) - (b.orden || b.order || 0));
             checklistItemsPorSistema[sist.id] = items;
           }
@@ -738,6 +887,10 @@ export default function Partes() {
 
       // 1. Acta
       if (downloadOptions.acta) {
+        setDownloadProgress(45);
+        setDownloadStepText('Generando Acta de Mantenimiento...');
+        // Pequeño retardo para permitir que el navegador pinte el estado
+        await new Promise(r => setTimeout(r, 60));
         await generarActaExtintoresPDF(
           cliente, centro, sistemasDelCentro, equiposTodos, numeroMantenimiento,
           tecnicoNombre, undefined, firmaCliente, firmaTecnico, nombreFirmante, checklistItemsPorSistema, empresaSeleccionada,
@@ -747,6 +900,9 @@ export default function Partes() {
 
       // 2. Certificado
       if (downloadOptions.certificado) {
+        setDownloadProgress(70);
+        setDownloadStepText('Generando Certificado Oficial...');
+        await new Promise(r => setTimeout(r, 60));
         await generarCertificadoPDF(
           cliente, centro, parte, tecnicoNombre, (parte as any).estadoCertificado || undefined, sistemasDelCentro, equiposTodos,
           firmaCliente, firmaTecnico, nombreFirmante, false, empresaSeleccionada
@@ -755,6 +911,9 @@ export default function Partes() {
 
       // 3. Albarán
       if (downloadOptions.albaran) {
+        setDownloadProgress(88);
+        setDownloadStepText('Generando Albarán de Trabajo...');
+        await new Promise(r => setTimeout(r, 60));
         let numeroPedido = (parte as any).numeroPedido || '';
         try {
           const albaranesCol = collection(db, 'albaranes');
@@ -782,6 +941,9 @@ export default function Partes() {
 
       // 4. Contrato de Mantenimiento
       if (downloadOptions.contrato) {
+        setDownloadProgress(95);
+        setDownloadStepText('Generando Contrato de Mantenimiento...');
+        await new Promise(r => setTimeout(r, 60));
         const systemsWithCounts = sistemasDelCentro.map(s => {
           const count = equiposTodos.filter(eq => eq.sistemaId === s.id).length;
           return {
@@ -806,8 +968,20 @@ export default function Partes() {
         );
       }
 
+      setDownloadProgress(100);
+      setDownloadStepText('¡Documentos generados y descargados con éxito!');
+      setDownloadCompleted(true);
+
+      setTimeout(() => {
+        setIsGeneratingPDFs(false);
+        setDownloadCompleted(false);
+        setDownloadProgress(0);
+        setDownloadStepText('');
+      }, 1400);
+
     } catch (error) {
       console.error('Error generando PDFs:', error);
+      setIsGeneratingPDFs(false);
       alert('Hubo un error al generar los documentos. Ver consola.');
     }
   };
@@ -1293,6 +1467,120 @@ export default function Partes() {
           <span>Total: {partesPlanificados.length} parte{partesPlanificados.length !== 1 ? 's' : ''} planificado{partesPlanificados.length !== 1 ? 's' : ''}</span>
         </div>
 
+      {/* Modal de Confirmación para Mover Parte a Papelera */}
+      {parteAEliminar && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 border border-zinc-100">
+            {/* Cabecera */}
+            <div className="flex items-center justify-between p-5 border-b border-zinc-100 bg-red-50/50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-red-100 flex items-center justify-center text-red-600 shadow-sm shrink-0">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-zinc-900 text-lg leading-tight">
+                    ¿Eliminar parte de trabajo?
+                  </h3>
+                  <p className="text-xs text-zinc-500 mt-0.5">
+                    Se moverá a la papelera con opción de recuperarlo
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => !isDeletingParte && setParteAEliminar(null)}
+                disabled={isDeletingParte}
+                className="p-2 -mr-2 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 rounded-full transition-colors disabled:opacity-50"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Cuerpo con detalles del parte */}
+            <div className="p-6 space-y-4">
+              {(() => {
+                const cCentro = getCentro(parteAEliminar.centroId);
+                const cCliente = getCliente(parteAEliminar.clienteId);
+                const numMantenimiento = (parteAEliminar as any).numeroMantenimiento || parteAEliminar.id;
+                return (
+                  <div className="bg-zinc-50 rounded-2xl p-4 border border-zinc-200/80 space-y-2.5 text-sm">
+                    <div className="flex items-start justify-between gap-2 pb-2 border-b border-zinc-200/60">
+                      <div>
+                        <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider block">Parte / Mantenimiento</span>
+                        <span className="font-bold text-zinc-900 font-mono text-base">{numMantenimiento}</span>
+                      </div>
+                      <span className={`px-2.5 py-1 text-[11px] font-extrabold rounded-full border ${
+                        parteAEliminar.estado === 'Pre-Cerrado'
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : parteAEliminar.estado === 'Cerrado'
+                            ? 'bg-zinc-900 text-white border-zinc-900'
+                            : parteAEliminar.estado === 'Finalizado'
+                              ? 'bg-blue-50 text-blue-700 border-blue-200'
+                              : 'bg-amber-50 text-amber-700 border-amber-200'
+                      }`}>
+                        {parteAEliminar.estado}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-2 pt-1 text-xs">
+                      <div>
+                        <span className="text-zinc-400 font-medium block">Cliente:</span>
+                        <span className="font-semibold text-zinc-800">{cCliente?.nombre || '—'}</span>
+                      </div>
+                      <div>
+                        <span className="text-zinc-400 font-medium block">Centro / Lugar:</span>
+                        <span className="font-semibold text-zinc-800">{cCentro?.nombre || parteAEliminar.nombreCentro || '—'}</span>
+                      </div>
+                      <div className="flex items-center justify-between pt-1 text-[11px] text-zinc-500">
+                        <span>Tipo: <strong className="text-zinc-700">{getTipoRevision(parteAEliminar.periodicidad)}</strong></span>
+                        <span>Fecha: <strong className="text-zinc-700">{formatFecha(parteAEliminar.fechaProgramada)}</strong></span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Mensaje informativo de recuperación */}
+              <div className="bg-amber-50/80 border border-amber-200 rounded-2xl p-3.5 flex items-start gap-3 text-xs text-amber-900">
+                <RotateCcw className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <p className="leading-relaxed">
+                  Este parte se trasladará a la <strong>Papelera de reciclaje</strong>. Podrás restaurarlo íntegramente con todos sus datos y revisiones en cualquier momento durante los próximos <strong>100 días</strong>.
+                </p>
+              </div>
+            </div>
+
+            {/* Acciones */}
+            <div className="flex items-center justify-end gap-3 p-5 border-t border-zinc-100 bg-zinc-50/60">
+              <button
+                type="button"
+                onClick={() => setParteAEliminar(null)}
+                disabled={isDeletingParte}
+                className="px-5 py-2.5 rounded-xl border border-zinc-300 text-zinc-700 font-bold text-sm hover:bg-zinc-100 transition-colors disabled:opacity-50 cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={confirmarEliminarParte}
+                disabled={isDeletingParte}
+                className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-sm transition-all shadow-md shadow-red-600/20 flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+              >
+                {isDeletingParte ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Moviendo...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span>Sí, mover a papelera</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal de Opciones de Descarga PDF */}
       {showDownloadModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
@@ -1383,6 +1671,55 @@ export default function Partes() {
                   Descargar
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Progreso de Generación y Descarga de PDFs */}
+      {isGeneratingPDFs && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-md p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden p-6 sm:p-7 text-center relative border border-zinc-100 animate-in zoom-in-95 duration-200">
+            {/* Icono central de estado */}
+            <div className="mx-auto mb-4 w-16 h-16 rounded-2xl flex items-center justify-center transition-all duration-300 relative shadow-inner">
+              {downloadCompleted ? (
+                <div className="w-16 h-16 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center animate-bounce">
+                  <CheckCircle2 className="w-10 h-10 text-emerald-600" />
+                </div>
+              ) : (
+                <div className="w-16 h-16 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center relative">
+                  <FileText className="w-8 h-8 text-red-600 animate-pulse" />
+                  <Loader2 className="w-12 h-12 text-red-600/30 absolute inset-0 m-auto animate-spin" />
+                </div>
+              )}
+            </div>
+
+            <h3 className="text-lg font-black text-zinc-900 mb-1">
+              {downloadCompleted ? '¡Descarga Lista!' : 'Generando Documentos'}
+            </h3>
+            
+            <p className="text-xs font-semibold text-zinc-500 mb-5 min-h-[32px] flex items-center justify-center px-2">
+              {downloadStepText}
+            </p>
+
+            {/* Barra de progreso */}
+            <div className="w-full bg-zinc-100 rounded-full h-3 mb-3 overflow-hidden p-0.5 border border-zinc-200/60 shadow-inner">
+              <div
+                className={`h-full rounded-full transition-all duration-300 ease-out ${
+                  downloadCompleted
+                    ? 'bg-emerald-500'
+                    : 'bg-gradient-to-r from-red-500 via-rose-500 to-amber-500'
+                }`}
+                style={{ width: `${downloadProgress}%` }}
+              />
+            </div>
+
+            {/* Porcentaje y estado inferior */}
+            <div className="flex items-center justify-between text-[11px] font-bold text-zinc-400 px-1">
+              <span>{downloadCompleted ? 'Completado' : 'Procesando...'}</span>
+              <span className={downloadCompleted ? 'text-emerald-600 font-extrabold' : 'text-red-600 font-extrabold'}>
+                {downloadProgress}%
+              </span>
             </div>
           </div>
         </div>

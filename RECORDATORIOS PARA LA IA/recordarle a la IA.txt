@@ -2,5 +2,5 @@
 
 que lea:
 
-lee: documentos.md, y también: .agents/AGENTS.md
+lee atentamente: documentacion.md, y también: .agents/AGENTS.md
 

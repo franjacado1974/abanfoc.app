@@ -73,6 +73,7 @@ export interface Plantilla {
   id: string;
   nombre: string;
   descripcion?: string;
+  imagenUrl?: string;
   activa: boolean;
   createdAt?: string;
   updatedAt?: string;
@@ -107,6 +108,7 @@ export async function getPlantillas(): Promise<Plantilla[]> {
         id: d.id,
         nombre: data.nombre || '',
         descripcion: data.descripcion || '',
+        imagenUrl: data.imagenUrl || '',
         activa: data.activa !== false,
         createdAt: data.createdAt || '',
         updatedAt: data.updatedAt || '',
@@ -131,6 +133,7 @@ export async function getPlantilla(id: string): Promise<Plantilla | null> {
       id: snap.id,
       nombre: data.nombre || '',
       descripcion: data.descripcion || '',
+      imagenUrl: data.imagenUrl || '',
       activa: data.activa !== false,
       createdAt: data.createdAt || '',
       updatedAt: data.updatedAt || '',
@@ -218,6 +221,7 @@ export function subscribePlantillas(callback: (plantillas: Plantilla[]) => void)
             id: d.id,
             nombre: data.nombre || '',
             descripcion: data.descripcion || '',
+            imagenUrl: data.imagenUrl || '',
             activa: data.activa !== false,
             createdAt: data.createdAt || '',
             updatedAt: data.updatedAt || '',
@@ -624,6 +628,7 @@ export async function duplicarPlantilla(plantillaId: string): Promise<Plantilla>
     const nuevaPlantillaData = {
       nombre: `COPIA - ${original.nombre}`,
       descripcion: original.descripcion || '',
+      imagenUrl: original.imagenUrl || '',
       activa: true,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),

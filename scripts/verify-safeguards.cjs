@@ -48,6 +48,14 @@ if (!fs.existsSync(revChecklistPath)) {
   if (!content.includes('3000')) {
     errors.push('CRÍTICO: RevisionChecklist.tsx carece del temporizador de 3 segundos (3000ms) para la permanencia del mensaje final.');
   }
+
+  // f. Aviso de proximidad obligatorio en observaciones de extintores (AGENTS.md REGLA 7)
+  if (!content.includes('TEXTO_AVISO_PROXIMIDAD_EXTINTOR') || !content.includes('evaluarObservacionesPorFecha') || !content.includes('Se informa de fecha próxima a operación obligatoria')) {
+    errors.push('CRÍTICO: RevisionChecklist.tsx carece del aviso de proximidad reglamentario obligatorio en observaciones de extintores (AGENTS.md REGLA 7).');
+  }
+  if (!content.includes('parseFechaUniversal') || !content.includes('extraerFechasEquipo')) {
+    errors.push('CRÍTICO: RevisionChecklist.tsx carece de las funciones blindadas parseFechaUniversal y extraerFechasEquipo para extintores.');
+  }
 }
 
 // 2. Verificación de los 18 componentes de sistemas
@@ -834,14 +842,22 @@ if (fs.existsSync(pdfGenPath)) {
   }
 }
 
-// 44. Verificación del Icono Mail y Badge "NUEVO" en Buzón (AGENTS.md REGLA 69)
-const buzonViewPath = path.join(__dirname, '../src/Buzon.tsx');
-if (fs.existsSync(buzonViewPath)) {
-  const bContent = fs.readFileSync(buzonViewPath, 'utf8');
-  if (!bContent.includes('NUEVO') || !bContent.includes('activeSection')) {
-    errors.push('CRÍTICO: Buzon.tsx carece del distintivo "NUEVO" por tarjeta o su desaparición al entrar (AGENTS.md REGLA 69).');
+// 44. Verificación del Icono Mail, Badge Limpio "NUEVO" y Control de Lectura por Usuario en Buzón (AGENTS.md REGLA 69)
+[buzonPath, buzonOficinaPath].forEach(bPath => {
+  if (fs.existsSync(bPath)) {
+    const bContent = fs.readFileSync(bPath, 'utf8');
+    const bName = path.basename(bPath);
+    if (!bContent.includes('NUEVO') || !bContent.includes('activeSection')) {
+      errors.push(`CRÍTICO: ${bName} carece del distintivo "NUEVO" por tarjeta o su desaparición al entrar (AGENTS.md REGLA 69).`);
+    }
+    if (!bContent.includes('getLoggedUserId') || !bContent.includes('buzon_lecturas')) {
+      errors.push(`CRÍTICO: ${bName} carece del control y persistencia de lectura individual por usuario (buzon_lecturas / getLoggedUserId) (AGENTS.md REGLA 69).`);
+    }
+    if (bContent.includes('ring-4 ring-red-500/20')) {
+      errors.push(`CRÍTICO: ${bName} contiene destellos o anillos rojos invasivos en las tarjetas del menú (AGENTS.md REGLA 69).`);
+    }
   }
-}
+});
 
 // 45. Verificación de la Fecha Real de Revisión en Documentos PDF (AGENTS.md REGLA 70)
 if (fs.existsSync(pdfGenPath)) {
@@ -850,6 +866,332 @@ if (fs.existsSync(pdfGenPath)) {
     errors.push('CRÍTICO: pdfGenerator.ts carece de la función obtenerUltimaFechaRevision para fechas reales de equipos (AGENTS.md REGLA 70).');
   }
 }
+
+// 46. Verificación de Imagen en Plantillas y Sistema EXTINCIÓN MANUAL CON AGUA (AGENTS.md REGLA 71)
+{
+  const manualAguaCompPath = path.join(__dirname, '../src/components/RevisionSistemas/SistemaExtincionManualAgua.tsx');
+  if (!fs.existsSync(manualAguaCompPath)) {
+    errors.push('CRÍTICO: Falta el componente SistemaExtincionManualAgua.tsx (AGENTS.md REGLA 71).');
+  }
+  const rcPath = path.join(__dirname, '../src/RevisionChecklist.tsx');
+  if (fs.existsSync(rcPath)) {
+    const rcContent = fs.readFileSync(rcPath, 'utf8');
+    if (!rcContent.includes('SistemaExtincionManualAgua') || !rcContent.includes('isExtincionManualAgua')) {
+      errors.push('CRÍTICO: RevisionChecklist.tsx carece del enrutamiento o discriminación isExtincionManualAgua (AGENTS.md REGLA 71).');
+    }
+  }
+}
+
+// 47. Verificación de Indicadores CSS Nativos de Sincronización sin Mojibake (AGENTS.md REGLA 72)
+const revSistemasDir = path.join(__dirname, '../src/components/RevisionSistemas');
+if (fs.existsSync(revSistemasDir)) {
+  for (const f of fs.readdirSync(revSistemasDir)) {
+    if (f.endsWith('.tsx')) {
+      const fPath = path.join(revSistemasDir, f);
+      const c = fs.readFileSync(fPath, 'utf8');
+      if (c.includes('ðŸŸ¢') || c.includes('🟢 Sincronizado')) {
+        errors.push(`CRÍTICO: ${f} contiene emoji o mojibake en la etiqueta Sincronizado en lugar de indicador CSS nativo (AGENTS.md REGLA 72).`);
+      }
+    }
+  }
+}
+
+// 48. Verificación del Sistema CAÑÓN MONITOR CON ESPUMA (AGENTS.md REGLA 73)
+{
+  const canonCompPath = path.join(__dirname, '../src/components/RevisionSistemas/SistemaCanonMonitorEspuma.tsx');
+  if (!fs.existsSync(canonCompPath)) {
+    errors.push('CRÍTICO: Falta el componente SistemaCanonMonitorEspuma.tsx (AGENTS.md REGLA 73).');
+  }
+  const rcPath = path.join(__dirname, '../src/RevisionChecklist.tsx');
+  if (fs.existsSync(rcPath)) {
+    const rcContent = fs.readFileSync(rcPath, 'utf8');
+    if (!rcContent.includes('SistemaCanonMonitorEspuma') || !rcContent.includes('isCanonMonitor')) {
+      errors.push('CRÍTICO: RevisionChecklist.tsx carece del enrutamiento a SistemaCanonMonitorEspuma (AGENTS.md REGLA 73).');
+    }
+  }
+  if (fs.existsSync(pdfGenPath)) {
+    const pdfContent = fs.readFileSync(pdfGenPath, 'utf8');
+    if (!pdfContent.includes('esCanonMonitor') || !pdfContent.includes('formatCanonHeader')) {
+      errors.push('CRÍTICO: pdfGenerator.ts carece del tratamiento específico o formatCanonHeader para Cañón Monitor (AGENTS.md REGLA 73).');
+    }
+  }
+}
+
+// 49. Verificación de Índice Interactivo en Página 2 y Marcadores Laterales en Acta PDF (AGENTS.md REGLA 74)
+if (fs.existsSync(pdfGenPath)) {
+  const pdfContent = fs.readFileSync(pdfGenPath, 'utf8');
+  if (!pdfContent.includes('drawIndicePage') || !pdfContent.includes('systemStartPages') || !pdfContent.includes('doc.outline')) {
+    errors.push('CRÍTICO: pdfGenerator.ts carece del índice interactivo o marcadores laterales en Acta PDF (AGENTS.md REGLA 74).');
+  }
+  // Verificar orden estricto de inicialización de drawnTablePages antes de página 2
+  const drawnDeclIdx = pdfContent.indexOf('const drawnTablePages = new Set<number>()');
+  const page2Idx = pdfContent.indexOf('drawnTablePages.add(2)');
+  if (drawnDeclIdx === -1 || page2Idx === -1 || drawnDeclIdx > page2Idx) {
+    errors.push('CRÍTICO: pdfGenerator.ts tiene drawnTablePages declarado después de su uso en la página 2 (AGENTS.md REGLA 74).');
+  }
+}
+
+// 50. Verificación del Sistema ARQUETA Y ACOMETIDA (AGENTS.md REGLA 75)
+{
+  const arquetaCompPath = path.join(__dirname, '../src/components/RevisionSistemas/SistemaArquetaAcometida.tsx');
+  if (!fs.existsSync(arquetaCompPath)) {
+    errors.push('CRÍTICO: Falta el componente SistemaArquetaAcometida.tsx (AGENTS.md REGLA 75).');
+  }
+  const rcPath = path.join(__dirname, '../src/RevisionChecklist.tsx');
+  if (fs.existsSync(rcPath)) {
+    const rcContent = fs.readFileSync(rcPath, 'utf8');
+    if (!rcContent.includes('SistemaArquetaAcometida') || !rcContent.includes('isArquetaAcometida')) {
+      errors.push('CRÍTICO: RevisionChecklist.tsx carece del enrutamiento a SistemaArquetaAcometida (AGENTS.md REGLA 75).');
+    }
+  }
+  if (fs.existsSync(pdfGenPath)) {
+    const pdfContent = fs.readFileSync(pdfGenPath, 'utf8');
+    if (!pdfContent.includes('isArquetaA') || !pdfContent.includes('ARQUETA') || !pdfContent.includes('ACOMETIDA')) {
+      errors.push('CRÍTICO: pdfGenerator.ts carece del tratamiento o peso de sistema para Arqueta y Acometida (AGENTS.md REGLA 75).');
+    }
+  }
+}
+
+
+  // 60. Verificación de visibilidad permanente de eliminación de fotos (AGENTS.md REGLA 60)
+  const sistemasDirParaFotos = path.join(__dirname, '../src/components/RevisionSistemas');
+  if (fs.existsSync(sistemasDirParaFotos)) {
+    const sistFiles = fs.readdirSync(sistemasDirParaFotos).filter(f => f.endsWith('.tsx'));
+    sistFiles.forEach(file => {
+      const fContent = fs.readFileSync(path.join(sistemasDirParaFotos, file), 'utf8');
+      if (fContent.includes('title="Eliminar foto"') && fContent.includes('opacity-0 group-hover:opacity-100')) {
+        errors.push(`CRÍTICO: El botón de eliminar foto en ${file} está oculto con opacity-0 group-hover:opacity-100 (AGENTS.md REGLA 60).`);
+      }
+    });
+  }
+
+  // 76. Verificación de cabeceras de bombas y ubicación en anomalías de Actas PDF (AGENTS.md REGLA 76)
+  if (fs.existsSync(pdfGenPath)) {
+    const pdfContent = fs.readFileSync(pdfGenPath, 'utf8');
+    if (!pdfContent.includes('BOMBA JOCKEY') || !pdfContent.includes('BOMBA ELECTRICA') || !pdfContent.includes('BOMBA DIESEL')) {
+      errors.push('CRÍTICO: pdfGenerator.ts carece de la identificación reglamentaria de bombas (AGENTS.md REGLA 76).');
+    }
+  }
+
+  // 77. Verificación del concepto '*Desplazamientos' en Albaranes (AGENTS.md REGLA 77)
+  const albPath = path.join(__dirname, '../src/Albaranes.tsx');
+  if (fs.existsSync(albPath)) {
+    const albContent = fs.readFileSync(albPath, 'utf8');
+    if (!albContent.includes("'*Desplazamientos'")) {
+      errors.push('CRÍTICO: Albaranes.tsx carece del concepto "*Desplazamientos" en su lista de opciones (AGENTS.md REGLA 77).');
+    }
+  }
+
+  // 78. Verificación de Población y Google Maps en Calendario (AGENTS.md REGLA 78)
+  const calPath78 = path.join(__dirname, '../src/Calendario.tsx');
+  if (fs.existsSync(calPath78)) {
+    const calContent78 = fs.readFileSync(calPath78, 'utf8');
+    if (!calContent78.includes('poblacion?: string;') || !calContent78.includes('google.com/maps/search/')) {
+      errors.push('CRÍTICO: Calendario.tsx carece de la interfaz de población o del enlace a Google Maps (AGENTS.md REGLA 78).');
+    }
+    if (!calContent78.includes('#EA4335') || !calContent78.includes('#4285F4') || !calContent78.includes('#FBBC04') || !calContent78.includes('#34A853')) {
+      errors.push('CRÍTICO: Calendario.tsx carece del icono multicolor oficial de Google Maps (AGENTS.md REGLA 78).');
+    }
+    if (!calContent78.includes('Lugar / Dirección y Población')) {
+      errors.push('CRÍTICO: Calendario.tsx carece del campo unificado "Lugar / Dirección y Población" en el modal de detalle (AGENTS.md REGLA 78).');
+    }
+  }
+
+  // 79. Verificación de la regla de carpeta en Escritorio con versión (AGENTS.md REGLA 79)
+  const agentsPath = path.join(__dirname, '../.agents/AGENTS.md');
+  if (fs.existsSync(agentsPath)) {
+    const agentsContent = fs.readFileSync(agentsPath, 'utf8');
+    if (!agentsContent.includes('REGLA 79') && !agentsContent.includes('## 79.')) {
+      errors.push('CRÍTICO: AGENTS.md carece del registro obligatorio de la REGLA 79 (Renombrado de carpeta en Escritorio con versión).');
+    }
+  }
+
+  // 80. Verificación de maquetación de Manifold/Colector en Actas PDF (AGENTS.md REGLA 80)
+  if (fs.existsSync(pdfGenPath)) {
+    const pdfContent = fs.readFileSync(pdfGenPath, 'utf8');
+    if (!pdfContent.includes('isManifoldSec') || !pdfContent.includes('[255, 249, 196]')) {
+      errors.push('CRÍTICO: pdfGenerator.ts carece de la maquetación reglamentaria de Manifold/Colector en fondo amarillo (AGENTS.md REGLA 80).');
+    }
+    if (!pdfContent.includes('isManifoldSec ? [')) {
+      errors.push('CRÍTICO: pdfGenerator.ts carece de la cabecera unificada colSpan: 2 sin la columna ESTADO para Manifold/Colector (AGENTS.md REGLA 80).');
+    }
+  }
+
+  // 81. Verificación de modal flotante de progreso de descarga de PDFs (AGENTS.md REGLA 81)
+  const partesPath81 = path.join(__dirname, '../src/Partes.tsx');
+  if (fs.existsSync(partesPath81)) {
+    const partesContent = fs.readFileSync(partesPath81, 'utf8');
+    if (!partesContent.includes('isGeneratingPDFs') || !partesContent.includes('downloadProgress') || !partesContent.includes('downloadCompleted')) {
+      errors.push('CRÍTICO: Partes.tsx carece del estado de control del modal de progreso de generación de PDFs (AGENTS.md REGLA 81).');
+    }
+    if (!partesContent.includes('¡Documentos generados y descargados con éxito!')) {
+      errors.push('CRÍTICO: Partes.tsx carece del mensaje reglamentario de confirmación al 100% de descarga (AGENTS.md REGLA 81).');
+    }
+  }
+
+  // 82. Verificación de anchos de columnas de Puestos de Control en Acta PDF (AGENTS.md REGLA 82)
+  if (fs.existsSync(pdfGenPath)) {
+    const pdfContent = fs.readFileSync(pdfGenPath, 'utf8');
+    if (!pdfContent.includes('isPuestosControl') || !pdfContent.includes("colStyles[colIdx] = { cellWidth: 12, halign: 'center' };")) {
+      errors.push('CRÍTICO: pdfGenerator.ts carece de la adaptación de columnas y ancho específico para Puestos de Control (AGENTS.md REGLA 82).');
+    }
+  }
+
+  // 83. Verificación de recuento de puestos de control del inventario en certificado y albarán (AGENTS.md REGLA 83)
+  if (fs.existsSync(pdfGenPath)) {
+    const pdfContent = fs.readFileSync(pdfGenPath, 'utf8');
+    if (!pdfContent.includes('contarEquiposInventarioPuestosPDF') || !pdfContent.includes('esSistemaRociadoresPuestosPDF')) {
+      errors.push('CRÍTICO: pdfGenerator.ts carece del cálculo por puestos de control de inventario en Certificado y Albarán (AGENTS.md REGLA 83).');
+    }
+  }
+
+  // 84. Verificación de tarjeta en 2 columnas y recuentos unificados de Extintores y BIEs (AGENTS.md REGLA 84)
+  if (fs.existsSync(pdfGenPath)) {
+    const pdfContent = fs.readFileSync(pdfGenPath, 'utf8');
+    if (!pdfContent.includes('Extintores varios formatos') || !pdfContent.includes('Bocas de incendios equipadas varios formatos')) {
+      errors.push('CRÍTICO: pdfGenerator.ts carece de los recuentos unificados de Extintores o BIEs en el Certificado Oficial (AGENTS.md REGLA 84).');
+    }
+    if (!pdfContent.includes('itemsCol0') || !pdfContent.includes('itemsCol1')) {
+      errors.push('CRÍTICO: pdfGenerator.ts carece del balanceo dinámico en 2 columnas de la tarjeta de sistemas en el Certificado Oficial (AGENTS.md REGLA 84).');
+    }
+  }
+
+  // 85. Verificación de persistencia multi-pestaña, loadingSafetyTimer y selector SuperAdmin (AGENTS.md REGLA 85)
+  const fbPath = path.join(__dirname, '../src/firebase.tsx');
+  if (fs.existsSync(fbPath)) {
+    const fbContent = fs.readFileSync(fbPath, 'utf8');
+    if (!fbContent.includes('persistentMultipleTabManager')) {
+      errors.push('CRÍTICO: firebase.tsx carece de persistentMultipleTabManager (AGENTS.md REGLA 85).');
+    }
+  }
+
+  const opFiles = [
+    { file: '../src/Revisiones.tsx', name: 'Revisiones.tsx' },
+    { file: '../src/Reparaciones.tsx', name: 'Reparaciones.tsx' },
+    { file: '../src/Instalaciones.tsx', name: 'Instalaciones.tsx' },
+    { file: '../src/Urgencias.tsx', name: 'Urgencias.tsx' }
+  ];
+  opFiles.forEach(({ file, name }) => {
+    const p = path.join(__dirname, file);
+    if (fs.existsSync(p)) {
+      const c = fs.readFileSync(p, 'utf8');
+      if (!c.includes('loadingSafetyTimer')) {
+        errors.push(`CRÍTICO: ${name} carece del loadingSafetyTimer de seguridad (AGENTS.md REGLA 85).`);
+      }
+    }
+  });
+
+  const revChkPath = path.join(__dirname, '../src/RevisionChecklist.tsx');
+  if (fs.existsSync(revChkPath)) {
+    const revChkContent = fs.readFileSync(revChkPath, 'utf8');
+    if (!revChkContent.includes('isSuperAdmin') || !revChkContent.includes('Cambiar estado del parte (Exclusivo SuperAdmin)')) {
+      errors.push('CRÍTICO: RevisionChecklist.tsx carece del selector de cambio de estado para SuperAdmin (AGENTS.md REGLA 85).');
+    }
+  }
+
+  // 86. Verificación de Cierre Incondicional de Detalle de Centro (AGENTS.md REGLA 86)
+  const centrosPaths = ['../src/Centros.tsx', '../src/oficina/pages/Centros.tsx'];
+  centrosPaths.forEach(relPath => {
+    const fullPath = path.join(__dirname, relPath);
+    if (fs.existsSync(fullPath)) {
+      const c = fs.readFileSync(fullPath, 'utf8');
+      if (!c.includes('const handleTryCloseDetail = () => {') || !c.includes('setIsDetailOpen(false);')) {
+        errors.push(`CRÍTICO: ${relPath} carece de handleTryCloseDetail incondicional con setIsDetailOpen(false) (AGENTS.md REGLA 86).`);
+      }
+      const closeSection = c.split('const handleTryCloseDetail')[1]?.slice(0, 150) || '';
+      if (closeSection.includes('setShowValidationModal(true)') || closeSection.includes('missingFields.push')) {
+        errors.push(`CRÍTICO: ${relPath} contiene validaciones bloqueantes dentro de handleTryCloseDetail (AGENTS.md REGLA 86).`);
+      }
+    }
+  });
+
+  // 87, 88, 89. Verificación de Calendario.tsx (AGENTS.md REGLAS 87, 88 y 89)
+  const calPath87 = path.join(__dirname, '../src/Calendario.tsx');
+  if (fs.existsSync(calPath87)) {
+    const calContent87 = fs.readFileSync(calPath87, 'utf8');
+    if (!calContent87.includes('handleToggleResuelta') || !calContent87.includes('resueltaManual')) {
+      errors.push('CRÍTICO: Calendario.tsx carece del conmutador handleToggleResuelta / resueltaManual (AGENTS.md REGLA 87).');
+    }
+    if (!calContent87.includes('filtrosVisibles') || !calContent87.includes('toggleFiltro') || !calContent87.includes('line-through')) {
+      errors.push('CRÍTICO: Calendario.tsx carece de filtrosVisibles o botones conmutadores con tachado (AGENTS.md REGLA 88).');
+    }
+    if (!calContent87.includes('tituloAviso = u.titulo || u.urgencia')) {
+      errors.push('CRÍTICO: Calendario.tsx no mapea u.titulo / u.urgencia en la etiqueta de Urgencias (AGENTS.md REGLA 89).');
+    }
+  }
+
+  // 89. Verificación de Etiqueta Obligatoria en Formulario de Urgencias (AGENTS.md REGLA 89)
+  const urgPath = path.join(__dirname, '../src/Urgencias.tsx');
+  if (fs.existsSync(urgPath)) {
+    const urgContent = fs.readFileSync(urgPath, 'utf8');
+    if (!urgContent.includes('TITULO OBLIGATORIO A MOSTRAR EN EL AVISO')) {
+      errors.push('CRÍTICO: Urgencias.tsx carece de la etiqueta "TITULO OBLIGATORIO A MOSTRAR EN EL AVISO" (AGENTS.md REGLA 89).');
+    }
+  }
+
+  // 90. Verificación de Eliminación de Partes con Confirmación Modal a la Papelera (AGENTS.md REGLA 90)
+  const partesPath90 = path.join(__dirname, '../src/Partes.tsx');
+  if (fs.existsSync(partesPath90)) {
+    const pContent90 = fs.readFileSync(partesPath90, 'utf8');
+    if (!pContent90.includes('parteAEliminar') || !pContent90.includes('confirmarEliminarParte')) {
+      errors.push('CRÍTICO: Partes.tsx carece del estado o handler de confirmación para eliminar partes (AGENTS.md REGLA 90).');
+    }
+    if (!pContent90.includes('deleteParte') || !pContent90.toLowerCase().includes('mover a papelera')) {
+      errors.push('CRÍTICO: Partes.tsx carece de la llamada deleteParte o del botón modal "mover a papelera" (AGENTS.md REGLA 90).');
+    }
+  }
+
+  // 91. Verificación del Logotipo del Gremio (GRIMEC) en Cabecera del Acta PDF (AGENTS.md REGLA 91)
+  const pdfGenPath91 = path.join(__dirname, '../src/pdfGenerator.ts');
+  const sharedPdfGenPath91 = path.join(__dirname, '../src/recursos-compartidos/services/pdfGenerator.ts');
+  [pdfGenPath91, sharedPdfGenPath91].forEach(pPath => {
+    if (fs.existsSync(pPath)) {
+      const pContent = fs.readFileSync(pPath, 'utf8');
+      const pName = path.basename(pPath);
+      if (!pContent.includes('logoGrimecBase64') || !pContent.includes('gremioLogoData')) {
+        errors.push(`CRÍTICO: ${pName} carece de la carga y renderizado del logotipo del gremio (logoGrimecBase64 / gremioLogoData) (AGENTS.md REGLA 91).`);
+      }
+    }
+  });
+
+  // 92. Verificación de Eliminación Certera de Equipos y Prevención de Resurrección (AGENTS.md REGLA 92)
+  const fbPath92 = path.join(__dirname, '../src/firebase.tsx');
+  if (fs.existsSync(fbPath92)) {
+    const fbContent92 = fs.readFileSync(fbPath92, 'utf8');
+    if (!fbContent92.includes('deleteEquipoInstalado') || !fbContent92.includes('deleteEquipoInstalado omitido')) {
+      errors.push('CRÍTICO: firebase.tsx carece de validación o fallback en deleteEquipoInstalado (AGENTS.md REGLA 92).');
+    }
+  }
+
+  const revPath92 = path.join(__dirname, '../src/RevisionChecklist.tsx');
+  if (fs.existsSync(revPath92)) {
+    const revContent92 = fs.readFileSync(revPath92, 'utf8');
+    if (!revContent92.includes('deletedEquiposIdsRef') || !revContent92.includes('pendingEquiposRef.current.has(e.id)')) {
+      errors.push('CRÍTICO: RevisionChecklist.tsx carece de deletedEquiposIdsRef o comprobación de pendingEquiposRef en el listener (AGENTS.md REGLA 92).');
+    }
+  }
+
+  const centrosPath92 = path.join(__dirname, '../src/Centros.tsx');
+  if (fs.existsSync(centrosPath92)) {
+    const cContent92 = fs.readFileSync(centrosPath92, 'utf8');
+    if (!cContent92.includes('centroSeleccionado?._docId') || !cContent92.includes('setEquiposInstalados(prev => prev.filter')) {
+      errors.push('CRÍTICO: Centros.tsx carece de borrado local inmediato o fallback de centroId en confirmDeleteEquipo (AGENTS.md REGLA 92).');
+    }
+  }
+
+  // 93. Verificación de Celdas Combinadas en Cuadro de Control y Datos Generales de Sistemas en Actas PDF (AGENTS.md REGLA 93)
+  [pdfGenPath91, sharedPdfGenPath91].forEach(pPath => {
+    if (fs.existsSync(pPath)) {
+      const pContent = fs.readFileSync(pPath, 'utf8');
+      const pName = path.basename(pPath);
+      if (!pContent.includes('isCuadroControlPregunta')) {
+        errors.push(`CRÍTICO: ${pName} carece de la definición de isCuadroControlPregunta para celdas combinadas de cuadro de control (AGENTS.md REGLA 93).`);
+      }
+      if (!pContent.includes('220, 224, 230')) {
+        errors.push(`CRÍTICO: ${pName} carece de la línea divisoria horizontal gris suave [220, 224, 230] entre anomalías (AGENTS.md REGLA 93).`);
+      }
+    }
+  });
 
 // Resultado de la verificación
 if (errors.length > 0) {

@@ -256,64 +256,7 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
   const [isSaving, setIsSaving] = useState(false);
 
   const handleTryCloseDetail = () => {
-    if (!selectedCentro) {
-      setIsDetailOpen(false);
-      return;
-    }
-
-    const missingFields = [];
-
-    // 1. Periodicidad
-    if (!selectedCentro.periodicidad || selectedCentro.periodicidad.length === 0) {
-      missingFields.push('Periodicidad (debes configurar al menos una frecuencia: Mensual, Trimestral o Anual).');
-    }
-
-    // 2. Contrato de Mantenimiento
-    if (!selectedCentro.numeroContrato || String(selectedCentro.numeroContrato).trim() === '') {
-      missingFields.push('Contrato de Mantenimiento (debes completar los datos del contrato).');
-    }
-
-    // 3. Asignar Técnico
-    if (!selectedCentro.tecnicoId || String(selectedCentro.tecnicoId).trim() === '') {
-      missingFields.push('Asignar Técnico (debes asignar un técnico al centro).');
-    }
-
-    // 4. Empresa Mantenedora
-    if (!selectedCentro.empresaId || String(selectedCentro.empresaId).trim() === '') {
-      missingFields.push('Empresa Mantenedora (debes asignar la empresa mantenedora).');
-    }
-
-    // 5. Editar Centro (datos generales)
-    const generalFields = [
-      { key: 'telefono', label: 'Teléfono' },
-      { key: 'correo', label: 'Correo Electrónico' },
-      { key: 'direccion', label: 'Dirección' },
-      { key: 'poblacion', label: 'Población' },
-      { key: 'cp', label: 'Código Postal (CP)' },
-      { key: 'provincia', label: 'Provincia' },
-      { key: 'contacto', label: 'Persona de Contacto' }
-    ];
-    const emptyGeneral = generalFields
-      .filter(f => !(selectedCentro as any)[f.key] || String((selectedCentro as any)[f.key]).trim() === '')
-      .map(f => f.label);
-    
-    if (emptyGeneral.length > 0) {
-      missingFields.push('Editar Centro (faltan rellenar los siguientes datos generales: ' + emptyGeneral.join(', ') + ').');
-    }
-
-    // 6. Ver Sistemas
-    const sistCount = centroSistemas.filter(s => s.centroId === selectedCentro._docId || s.centroId === selectedCentro.id).length;
-    if (sistCount === 0) {
-      missingFields.push('Ver Sistemas (debes añadir al menos 1 sistema instalado al centro).');
-    }
-
-    // Mostrar modal con listado de errores si falta algo
-    if (missingFields.length > 0) {
-      setValidationErrors(missingFields);
-      setShowValidationModal(true);
-    } else {
-      setIsDetailOpen(false);
-    }
+    setIsDetailOpen(false);
   };
   const [expandedSistemaId, setExpandedSistemaId] = useState<string | null>(null);
   const [clienteSearchTerm, setClienteSearchTerm] = useState('');
@@ -968,7 +911,10 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
     const siguienteNumero = (maxNum + 1).toString().padStart(padLength, '0');
     const oldCodigo = eq.codigo || '';
 
-    const newEquipo = { ...eq, id: generateId(), codigo: siguienteNumero };
+    const centroDocId = eq.centroId || centroSeleccionado?._docId || centroSeleccionado?.id || '';
+    const sistemaId = eq.sistemaId || sistemaSeleccionado?.id || '';
+
+    const newEquipo = { ...eq, id: generateId(), centroId: centroDocId, sistemaId, codigo: siguienteNumero };
 
     if (oldCodigo) {
       Object.keys(newEquipo).forEach(key => {
@@ -986,13 +932,24 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
 
   const confirmDeleteEquipo = async () => {
     if (!itemToDelete || itemToDelete.type !== 'equipo') return;
+    const targetId = itemToDelete.id;
     setIsConfirmModalOpen(false);
-    // Buscar el equipo para obtener centroId y sistemaId
-    const equipoObj = equiposInstalados.find(e => e.id === itemToDelete.id);
-    const centroIdEq = equipoObj?.centroId || '';
-    const sistemaIdEq = equipoObj?.sistemaId || '';
-    try { await deleteEquipoInstalado(centroIdEq, sistemaIdEq, itemToDelete.id); } catch (err) { console.error('Error borrando equipo en Firestore:', err); }
     setItemToDelete(null);
+
+    // Buscar el equipo para obtener centroId y sistemaId con fallback certero
+    const equipoObj = equiposInstalados.find(e => e.id === targetId);
+    const centroIdEq = equipoObj?.centroId || centroSeleccionado?._docId || centroSeleccionado?.id || '';
+    const sistemaIdEq = equipoObj?.sistemaId || sistemaSeleccionado?.id || '';
+
+    // Actualizar estado local inmediatamente para latencia cero
+    setEquiposInstalados(prev => prev.filter(e => e.id !== targetId));
+    const allEquipos = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
+    const updatedAll = allEquipos.filter((eq: any) => eq.id !== targetId);
+    localStorage.setItem('firecheck_db_equipos_instalados', JSON.stringify(updatedAll));
+
+    if (centroIdEq && sistemaIdEq) {
+      try { await deleteEquipoInstalado(centroIdEq, sistemaIdEq, targetId); } catch (err) { console.error('Error borrando equipo en Firestore:', err); }
+    }
   };
 
   const selectedCliente = form.clienteId ? clientes.find(c => c.id === form.clienteId) : null;
@@ -1746,11 +1703,15 @@ const renderModals = () => {
               plantillaId={sistemaSeleccionado.tipo || sistemaSeleccionado.familia || ''}
               equiposExistentes={equiposInstalados.filter(e => e.sistemaId === sistemaSeleccionado.id)}
               onSave={async (equipo) => {
+                const cId = centroSeleccionado._docId || centroSeleccionado.id;
+                const sId = sistemaSeleccionado.id;
                 if (formEquipo.id) {
-                  await updateEquipoInstalado(equipo.id!, equipo as any);
+                  await updateEquipoInstalado(equipo.id!, equipo as any, cId, sId);
                 } else {
                   const equipoConCodigo = {
                     ...equipo,
+                    centroId: cId,
+                    sistemaId: sId,
                     codigo: equipo.codigo || ''
                   };
                   await addEquipoInstalado(equipoConCodigo as any);

@@ -164,6 +164,14 @@ export default function EquipoFormulario({
                     });
                 }
 
+                const isArquetaAcometida = nombreSistemaNorm.includes('arqueta') || nombreSistemaNorm.includes('acometida');
+                if (!plantillaEncontrada && isArquetaAcometida) {
+                    plantillaEncontrada = plantillas.find(p => {
+                        const np = normalizarNombre(p.nombre || '');
+                        return np.includes('arqueta') || np.includes('acometida');
+                    });
+                }
+
                 // 1. Coincidencia exacta
                 if (!plantillaEncontrada) {
                     plantillaEncontrada = plantillas.find(p => {

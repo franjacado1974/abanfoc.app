@@ -602,13 +602,31 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
   }, []);
 
   useEffect(() => {
+    // Rutina de desahogo y saneamiento de cuota de almacenamiento:
+    // Eliminar claves que contienen documentos masivos pesados para que Firebase y la app tengan espacio de sobra
+    try {
+      ['firecheck_db_albaranes', 'firecheck_db_certificados', 'firecheck_db_presupuestos'].forEach(k => {
+        const item = localStorage.getItem(k);
+        if (item && item.length > 500000) { // Si pesa más de 500 KB, liberar para evitar QuotaExceededError
+          localStorage.removeItem(k);
+        }
+      });
+    } catch { /* ignore */ }
+
     const unsubs: (() => void)[] = [];
 
     const safeLocalSet = (key: string, value: string) => {
       try {
         localStorage.setItem(key, value);
-      } catch (e) {
+      } catch (e: any) {
         console.warn(`[StorageQuota] Error guardando ${key} en localStorage:`, e);
+        // Si la cuota se satura, liberar inmediatamente cachés no esenciales
+        try {
+          localStorage.removeItem('firecheck_db_albaranes');
+          localStorage.removeItem('firecheck_db_certificados');
+          localStorage.removeItem('firecheck_db_presupuestos');
+          localStorage.setItem(key, value);
+        } catch { /* ignore */ }
       }
     };
 

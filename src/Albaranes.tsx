@@ -138,7 +138,11 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
   useEffect(() => {
     const unsubAlbaranes = subscribeAlbaranes((firebaseAlbaranes) => {
       setAlbaranes(firebaseAlbaranes);
-      localStorage.setItem('firecheck_db_albaranes', JSON.stringify(firebaseAlbaranes)); // Keep localStorage updated as a cache
+      try {
+        localStorage.setItem('firecheck_db_albaranes', JSON.stringify(firebaseAlbaranes));
+      } catch {
+        // Ignorar si excede cuota para no bloquear la app
+      }
     });
 
     const unsubEmpresas = subscribeEmpresas((firebaseEmpresas) => {
@@ -1172,7 +1176,7 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                           <td className="p-2">
                             <select value={item.concepto} onChange={e => updateItem(index, 'concepto', e.target.value)} className="w-full bg-transparent border-b border-transparent group-hover:border-zinc-200 outline-none p-1">
                               <option value="">Seleccionar concepto...</option>
-                              {item.concepto && !trabajosConfig.some(tc => tc.opciones.includes(item.concepto)) && !['Nuevo', 'Revisión', 'Reparación', 'Instalación', 'Suministro', 'Visita técnica'].includes(item.concepto) && (
+                              {item.concepto && !trabajosConfig.some(tc => tc.opciones.includes(item.concepto)) && !['Nuevo', 'Revisión', 'Reparación', 'Instalación', 'Suministro', 'Visita técnica', '*Desplazamientos'].includes(item.concepto) && (
                                 <option value={item.concepto}>{item.concepto}</option>
                               )}
                               {trabajosConfig.length > 0 ? (
@@ -1182,7 +1186,7 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                                   </optgroup>
                                 ))
                               ) : (
-                                ['Nuevo', 'Revisión', 'Reparación', 'Instalación', 'Suministro', 'Visita técnica'].map(opt => <option key={opt} value={opt}>{opt}</option>)
+                                ['Nuevo', 'Revisión', 'Reparación', 'Instalación', 'Suministro', 'Visita técnica', '*Desplazamientos'].map(opt => <option key={opt} value={opt}>{opt}</option>)
                               )}
                             </select>
                           </td>
@@ -1384,7 +1388,7 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                        <label className="text-xs font-bold text-zinc-500 uppercase">Concepto</label>
                        <select value={form.items[editingLineIndex].concepto} onChange={e => updateItem(editingLineIndex, 'concepto', e.target.value)} className="w-full px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl outline-none focus:ring-2 focus:ring-violet-500/20 text-sm">
                           <option value="">Seleccionar...</option>
-                          {form.items[editingLineIndex].concepto && !trabajosConfig.some(tc => tc.opciones.includes(form.items[editingLineIndex].concepto)) && !['Nuevo', 'Revisión', 'Reparación', 'Instalación', 'Suministro', 'Visita técnica'].includes(form.items[editingLineIndex].concepto) && (
+                          {form.items[editingLineIndex].concepto && !trabajosConfig.some(tc => tc.opciones.includes(form.items[editingLineIndex].concepto)) && !['Nuevo', 'Revisión', 'Reparación', 'Instalación', 'Suministro', 'Visita técnica', '*Desplazamientos'].includes(form.items[editingLineIndex].concepto) && (
                             <option value={form.items[editingLineIndex].concepto}>{form.items[editingLineIndex].concepto}</option>
                           )}
                           {trabajosConfig.length > 0 ? (
@@ -1394,7 +1398,7 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                               </optgroup>
                             ))
                           ) : (
-                            ['Nuevo', 'Revisión', 'Reparación', 'Instalación', 'Suministro', 'Visita técnica'].map(opt => <option key={opt} value={opt}>{opt}</option>)
+                            ['Nuevo', 'Revisión', 'Reparación', 'Instalación', 'Suministro', 'Visita técnica', '*Desplazamientos'].map(opt => <option key={opt} value={opt}>{opt}</option>)
                           )}
                         </select>
                      </div>

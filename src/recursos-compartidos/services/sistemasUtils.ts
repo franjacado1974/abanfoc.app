@@ -19,6 +19,9 @@ export const getIconForSistema = (nombre: string): string | React.ElementType =>
         const isCocinaA = a.includes('cocina') || a.includes('campana');
         const isCocinaB = b.includes('cocina') || b.includes('campana');
         if (isCocinaA || isCocinaB) return isCocinaA && isCocinaB;
+        const isArquetaA = a.includes('arqueta') || a.includes('acometida');
+        const isArquetaB = b.includes('arqueta') || b.includes('acometida');
+        if (isArquetaA || isArquetaB) return isArquetaA && isArquetaB;
         const isGasA = (a.includes('gas') || (a.includes('extinci') && !a.includes('extintor'))) && !isCocinaA;
         const isGasB = (b.includes('gas') || (b.includes('extinci') && !b.includes('extintor'))) && !isCocinaB;
         if (isGasA || isGasB) return isGasA && isGasB;

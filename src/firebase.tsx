@@ -1,6 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
-import { getFirestore, collection, getDocs, getDoc, query, where, orderBy, addDoc, doc, updateDoc, setDoc, deleteDoc, onSnapshot, enableMultiTabIndexedDbPersistence, documentId } from "firebase/firestore";
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, getDocs, getDoc, query, where, orderBy, addDoc, doc, updateDoc, setDoc, deleteDoc, onSnapshot, documentId } from "firebase/firestore";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { generarAlbaranPDF } from "./pdfGenerator";
 
@@ -270,19 +270,10 @@ try {
   console.warn('Firebase Analytics not available in this environment:', e);
 }
 const storage = getStorage(app);
-const db = getFirestore(app);
-
-enableMultiTabIndexedDbPersistence(db).catch((err) => {
-  if (err.code === 'failed-precondition') {
-    console.warn('La persistencia falló: Múltiples pestañas abiertas.');
-  } else if (err.code === 'unimplemented') {
-    console.warn('El navegador no soporta persistencia offline.');
-  } else if (err.message?.includes('message channel closed')) {
-    // Error interno de Firebase al cerrar pestañas - no afecta al funcionamiento
-    console.debug('Persistencia offline: mensaje interno ignorado');
-  } else {
-    console.debug('Persistencia offline error:', err.code, err.message);
-  }
+const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({
+    tabManager: persistentMultipleTabManager()
+  })
 });
 
 export async function addUserToFirestore(user: { nombre: string; apellidos: string; rol: string; password: string }) {
@@ -1923,24 +1914,67 @@ export async function updateParte(id: string, parte: Partial<ParteFirestore>) {
   }
 }
 
-export async function deleteParte(id: string, usuario?: string) {
+export async function deleteParte(id: string, usuario?: string, datosFallback?: any) {
   try {
+    let targetDocId = id;
+    let data: any = null;
+
+    // 1. Intentar getDoc directo por id
     const ref = doc(db, 'partes', id);
     const snap = await getDoc(ref);
     if (snap.exists()) {
-      const data = snap.data();
+      data = snap.data();
+      targetDocId = snap.id;
+    } else {
+      // 2. Si no existe por docId directo, buscar por campo 'id'
+      const q = query(collection(db, 'partes'), where('id', '==', id));
+      const qSnap = await getDocs(q);
+      if (!qSnap.empty) {
+        targetDocId = qSnap.docs[0].id;
+        data = qSnap.docs[0].data();
+      }
+    }
+
+    // 3. Si no se encontró en Firestore pero tenemos datosFallback
+    if (!data && datosFallback) {
+      data = { ...datosFallback };
+      if (datosFallback._docId) {
+        targetDocId = datosFallback._docId;
+      }
+    }
+
+    if (data) {
+      const titulo = data.numeroMantenimiento || data.id || targetDocId || 'Parte de Trabajo';
+      const clienteNombre = data.clienteNombre || data.nombreCliente || data.cliente || '';
+      const centroNombre = data.centroNombre || data.nombreCentro || data.centro || '';
+
       await moverAPapelera({
         coleccion: 'partes',
-        originalDocId: id,
+        originalDocId: targetDocId,
         tipo: 'Parte de Trabajo',
-        titulo: data.numeroMantenimiento || data.id || id,
-        clienteNombre: data.nombreCliente || data.clienteNombre || '',
-        centroNombre: data.nombreCentro || data.centroNombre || '',
+        titulo,
+        clienteNombre,
+        centroNombre,
         datos: data,
         usuario
       });
+
+      // Si había otros documentos duplicados con el mismo campo id, eliminarlos también
+      try {
+        const qDuplicados = query(collection(db, 'partes'), where('id', '==', id));
+        const qDupSnap = await getDocs(qDuplicados);
+        for (const d of qDupSnap.docs) {
+          if (d.id !== targetDocId) {
+            await deleteDoc(doc(db, 'partes', d.id));
+          }
+        }
+      } catch (errDup) {
+        console.warn('Error limpiando posibles duplicados del parte:', errDup);
+      }
+
       return true;
     }
+
     await deleteDoc(ref);
     return true;
   } catch (e) {
@@ -2459,7 +2493,25 @@ export async function updateEquipoInstalado(id: string, equipo: Partial<EquipoIn
 
 export async function deleteEquipoInstalado(centroId: string, sistemaId: string, equipoId: string) {
   try {
-    const ref = doc(db, 'centros', centroId, 'inventario', sistemaId, 'equipos', equipoId);
+    let cId = centroId;
+    let sId = sistemaId;
+    if (!cId || !sId) {
+      try {
+        const stored = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]') : [];
+        const found = stored.find((e: any) => e.id === equipoId);
+        if (found) {
+          if (!cId) cId = found.centroId;
+          if (!sId) sId = found.sistemaId;
+        }
+      } catch (storageErr) {
+        // ignore storage parse error
+      }
+    }
+    if (!cId || !sId || !equipoId) {
+      console.warn('deleteEquipoInstalado omitido: falta centroId, sistemaId o equipoId', { centroId: cId, sistemaId: sId, equipoId });
+      return false;
+    }
+    const ref = doc(db, 'centros', cId, 'inventario', sId, 'equipos', equipoId);
     await deleteDoc(ref);
     return true;
   } catch (e) {
@@ -2470,11 +2522,15 @@ export async function deleteEquipoInstalado(centroId: string, sistemaId: string,
 
 export function subscribeEquiposInstalados(centroId: string, sistemaId: string, callback: (equipos: EquipoInstaladoFirestore[]) => void) {
   try {
+    if (!centroId || !sistemaId) {
+      callback([]);
+      return () => {};
+    }
     const col = collection(db, 'centros', centroId, 'inventario', sistemaId, 'equipos');
     const unsub = onSnapshot(col, (snap) => {
       const items = snap.docs.map(d => {
         const data = d.data() as any;
-        return { _docId: d.id, id: d.id, ...data } as EquipoInstaladoFirestore;
+        return { _docId: d.id, id: d.id, centroId, sistemaId, ...data } as EquipoInstaladoFirestore;
       });
       callback(items);
     }, (err) => {
@@ -2794,6 +2850,7 @@ export interface ReparacionItem {
   albaranId?: string;
   pedidoId?: string;
   presupuestoId?: string;
+  resueltaManual?: boolean;
 }
 
 export function subscribeReparaciones(callback: (items: ReparacionItem[]) => void) {
@@ -2823,6 +2880,7 @@ export function subscribeReparaciones(callback: (items: ReparacionItem[]) => voi
           albaranId: data?.albaranId || '',
           pedidoId: data?.pedidoId || '',
           presupuestoId: data?.presupuestoId || '',
+          resueltaManual: !!data?.resueltaManual,
         } as ReparacionItem;
       });
       callback(items);
@@ -2851,9 +2909,19 @@ export async function addReparacion(data: ReparacionItem) {
 
 export async function updateReparacion(docId: string, data: Partial<ReparacionItem>) {
   try {
-    const docRef = doc(db, 'reparaciones', docId);
     const dataToSave = cleanFirestoreData({ ...data, updatedAt: new Date().toISOString() });
-    await updateDoc(docRef, dataToSave as any);
+    const docRef = doc(db, 'reparaciones', docId);
+    try {
+      await updateDoc(docRef, dataToSave as any);
+    } catch {
+      const q = query(collection(db, 'reparaciones'), where('id', '==', docId));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        await updateDoc(snap.docs[0].ref, dataToSave as any);
+      } else {
+        await setDoc(docRef, dataToSave as any, { merge: true });
+      }
+    }
   } catch (e) {
     console.error('updateReparacion error:', e);
     throw e;
@@ -2892,6 +2960,7 @@ export interface InstalacionItem {
   albaranId?: string;
   pedidoId?: string;
   presupuestoId?: string;
+  resueltaManual?: boolean;
 }
 
 export function subscribeInstalaciones(callback: (items: InstalacionItem[]) => void) {
@@ -2921,6 +2990,7 @@ export function subscribeInstalaciones(callback: (items: InstalacionItem[]) => v
           albaranId: data?.albaranId || '',
           pedidoId: data?.pedidoId || '',
           presupuestoId: data?.presupuestoId || '',
+          resueltaManual: !!data?.resueltaManual,
         } as InstalacionItem;
       });
       callback(items);
@@ -2949,9 +3019,19 @@ export async function addInstalacion(data: InstalacionItem) {
 
 export async function updateInstalacion(docId: string, data: Partial<InstalacionItem>) {
   try {
-    const docRef = doc(db, 'instalaciones', docId);
     const dataToSave = cleanFirestoreData({ ...data, updatedAt: new Date().toISOString() });
-    await updateDoc(docRef, dataToSave as any);
+    const docRef = doc(db, 'instalaciones', docId);
+    try {
+      await updateDoc(docRef, dataToSave as any);
+    } catch {
+      const q = query(collection(db, 'instalaciones'), where('id', '==', docId));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        await updateDoc(snap.docs[0].ref, dataToSave as any);
+      } else {
+        await setDoc(docRef, dataToSave as any, { merge: true });
+      }
+    }
   } catch (e) {
     console.error('updateInstalacion error:', e);
     throw e;
@@ -2989,6 +3069,7 @@ export interface UrgenciaItem {
   nota?: string;
   facturado?: boolean;
   albaranId?: string;
+  resueltaManual?: boolean;
 }
 
 export function subscribeUrgencias(callback: (items: UrgenciaItem[]) => void) {
@@ -3017,6 +3098,7 @@ export function subscribeUrgencias(callback: (items: UrgenciaItem[]) => void) {
           nota: data?.nota || data?.observaciones || '',
           facturado: !!data?.facturado,
           albaranId: data?.albaranId || '',
+          resueltaManual: !!data?.resueltaManual,
         } as UrgenciaItem;
       });
       callback(items);
@@ -3045,9 +3127,19 @@ export async function addUrgencia(data: UrgenciaItem) {
 
 export async function updateUrgencia(docId: string, data: Partial<UrgenciaItem>) {
   try {
-    const docRef = doc(db, 'urgencias', docId);
     const dataToSave = cleanFirestoreData({ ...data, updatedAt: new Date().toISOString() });
-    await updateDoc(docRef, dataToSave as any);
+    const docRef = doc(db, 'urgencias', docId);
+    try {
+      await updateDoc(docRef, dataToSave as any);
+    } catch {
+      const q = query(collection(db, 'urgencias'), where('id', '==', docId));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        await updateDoc(snap.docs[0].ref, dataToSave as any);
+      } else {
+        await setDoc(docRef, dataToSave as any, { merge: true });
+      }
+    }
   } catch (e) {
     console.error('updateUrgencia error:', e);
     throw e;
@@ -3396,6 +3488,24 @@ export async function restaurarElementoPapelera(item: PapeleraItem) {
     // Eliminar de la papelera
     const papeleraRef = doc(db, 'papelera', item._docId || item.id);
     await deleteDoc(papeleraRef);
+
+    // Si es un parte, sincronizar de inmediato en el almacenamiento local para reactividad inmediata
+    if (item.coleccion === 'partes') {
+      try {
+        const stored = JSON.parse(localStorage.getItem('firecheck_db_partes') || '[]');
+        const targetId = item.originalDocId;
+        const index = stored.findIndex((p: any) => (p._docId || p.id) === targetId || p.id === item.datos.id);
+        const restoredItem = { _docId: targetId, id: item.datos.id || targetId, ...item.datos };
+        if (index >= 0) {
+          stored[index] = restoredItem;
+        } else {
+          stored.unshift(restoredItem);
+        }
+        localStorage.setItem('firecheck_db_partes', JSON.stringify(stored));
+      } catch (err) {
+        console.warn('Error sincronizando localStorage al restaurar parte:', err);
+      }
+    }
 
     console.info(`restaurarElementoPapelera: ${item.originalDocId} restaurado en ${item.coleccion}`);
     return true;

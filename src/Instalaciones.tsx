@@ -207,10 +207,23 @@ export default function Instalaciones() {
       console.error('Error cargando instalaciones de localStorage:', e);
     }
 
+    const safeLocalSet = (key: string, value: string) => {
+      try {
+        localStorage.setItem(key, value);
+      } catch (e) {
+        console.warn(`[StorageQuota] Error guardando ${key} en localStorage:`, e);
+      }
+    };
+
+    // Timer de seguridad: liberar pantalla de carga tras 2 segundos si Firestore tarda
+    const loadingSafetyTimer = setTimeout(() => {
+      setLoading(false);
+    }, 2000);
+
     // 2. Suscribir a Firebase
     const unsubIns = subscribeInstalaciones((items) => {
       setInstalaciones(items);
-      localStorage.setItem('firecheck_db_instalaciones', JSON.stringify(items));
+      safeLocalSet('firecheck_db_instalaciones', JSON.stringify(items));
       setLoading(false);
     });
 
@@ -223,6 +236,7 @@ export default function Instalaciones() {
     const unsubPed = subscribePedidos((items) => setPedidos(items));
 
     return () => {
+      clearTimeout(loadingSafetyTimer);
       unsubIns();
       unsubTec();
       unsubCen();
@@ -237,7 +251,11 @@ export default function Instalaciones() {
   // Guardar en localStorage cuando cambien
   const updateLocalAndState = (newItems: InstalacionItem[]) => {
     setInstalaciones(newItems);
-    localStorage.setItem('firecheck_db_instalaciones', JSON.stringify(newItems));
+    try {
+      localStorage.setItem('firecheck_db_instalaciones', JSON.stringify(newItems));
+    } catch (e) {
+      console.warn('[StorageQuota] Error guardando firecheck_db_instalaciones:', e);
+    }
   };
 
   // Abrir modal para crear

@@ -207,24 +207,38 @@ export default function Revisiones() {
       console.error('Error cargando cache local:', e);
     }
 
+    const safeLocalSet = (key: string, value: string) => {
+      try {
+        localStorage.setItem(key, value);
+      } catch (e) {
+        console.warn(`[StorageQuota] Error guardando ${key} en localStorage:`, e);
+      }
+    };
+
+    // Timer de seguridad: liberar pantalla de carga tras 2 segundos si Firestore tarda
+    const loadingSafetyTimer = setTimeout(() => {
+      setLoading(false);
+    }, 2000);
+
     // 2. Suscribir a Firestore
     const unsubCen = subscribeCentros((items) => {
       setCentros(items);
-      localStorage.setItem('firecheck_db_centros', JSON.stringify(items));
+      safeLocalSet('firecheck_db_centros', JSON.stringify(items));
     });
 
     const unsubEmp = subscribeEmpresas((items) => {
       setEmpresas(items);
-      localStorage.setItem('firecheck_db_empresas', JSON.stringify(items));
+      safeLocalSet('firecheck_db_empresas', JSON.stringify(items));
     });
 
     const unsubRev = subscribeRevisiones((items) => {
       setRevisionesState(items);
-      localStorage.setItem('firecheck_db_revisiones', JSON.stringify(items));
+      safeLocalSet('firecheck_db_revisiones', JSON.stringify(items));
       setLoading(false);
     });
 
     return () => {
+      clearTimeout(loadingSafetyTimer);
       unsubCen();
       unsubEmp();
       unsubRev();

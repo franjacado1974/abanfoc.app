@@ -3,6 +3,27 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
 
+// Función de seguridad: Libera cuota eliminando exclusivamente claves temporales huérfanas de Firestore en localStorage
+function limpiarCoordinacionTemporalFirestore() {
+  try {
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('firestore_')) {
+        keysToRemove.push(k);
+      }
+    }
+    keysToRemove.forEach(k => {
+      try { localStorage.removeItem(k); } catch { /* ignore */ }
+    });
+  } catch (e) {
+    console.debug('Aviso comprobando claves temporales de Firestore:', e);
+  }
+}
+
+// Ejecución preventiva antes de montar la aplicación
+limpiarCoordinacionTemporalFirestore();
+
 interface ErrorBoundaryProps {
   children: ReactNode;
 }
@@ -28,6 +49,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 
   handleReset = () => {
     try {
+      limpiarCoordinacionTemporalFirestore();
       sessionStorage.removeItem('firecheck_logged_user');
       localStorage.removeItem('firecheck_logged_user');
     } catch { /* ignore */ }

@@ -924,7 +924,7 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                                   </optgroup>
                                 ))
                               ) : (
-                                ['Nuevo', 'Revisión', 'Reparación', 'Instalación', 'Suministro', 'Visita técnica'].map(opt => <option key={opt} value={opt}>{opt}</option>)
+                                ['Nuevo', 'Revisión', 'Reparación', 'Instalación', 'Suministro', 'Visita técnica', '*Desplazamientos'].map(opt => <option key={opt} value={opt}>{opt}</option>)
                               )}
                             </select>
                           </td>
@@ -1133,7 +1133,7 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                               </optgroup>
                             ))
                           ) : (
-                            ['Nuevo', 'Revisión', 'Reparación', 'Instalación', 'Suministro', 'Visita técnica'].map(opt => <option key={opt} value={opt}>{opt}</option>)
+                            ['Nuevo', 'Revisión', 'Reparación', 'Instalación', 'Suministro', 'Visita técnica', '*Desplazamientos'].map(opt => <option key={opt} value={opt}>{opt}</option>)
                           )}
                         </select>
                      </div>

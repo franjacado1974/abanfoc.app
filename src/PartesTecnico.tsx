@@ -237,8 +237,8 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
             const esAspiracion = rawSistNombre.includes('aspiraci') || rawSistNombre.includes('aspirac') || rawSistNombre.includes('asd');
 
             const sistemaCat = categoriasSistema.find((c: any) => {
-              const nombreSist = cleanNorm((sist as any).tipo || (sist as any).familia || (sist as any).descripcion || '');
-              const nombreCat = cleanNorm(c.nombre || '');
+              const nombreSist = cleanNorm((sist as any).tipo || (sist as any).familia || (sist as any).descripcion || (sist as any).id || '');
+              const nombreCat = cleanNorm(c.nombre || c.id || '');
               if (nombreCat && nombreSist && nombreCat === nombreSist) return true;
               const isAspA = nombreSist.includes('aspiraci') || nombreSist.includes('aspirac') || nombreSist.includes('asd');
               const isAspB = nombreCat.includes('aspiraci') || nombreCat.includes('aspirac') || nombreCat.includes('asd');
@@ -249,14 +249,20 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
               const isCocinaA = nombreSist.includes('cocina') || nombreSist.includes('campana');
               const isCocinaB = nombreCat.includes('cocina') || nombreCat.includes('campana');
               if (isCocinaA || isCocinaB) return isCocinaA && isCocinaB;
-              const isEspumaA = nombreSist.includes('espuma');
-              const isEspumaB = nombreCat.includes('espuma');
+              const isCanonMonitorA = (nombreSist.includes('canon') || nombreSist.includes('cañon') || nombreSist.includes('cañón') || nombreSist.includes('monitor')) && (nombreSist.includes('monitor') || nombreSist.includes('espuma'));
+              const isCanonMonitorB = (nombreCat.includes('canon') || nombreCat.includes('cañon') || nombreCat.includes('cañón') || nombreCat.includes('monitor')) && (nombreCat.includes('monitor') || nombreCat.includes('espuma'));
+              if (isCanonMonitorA || isCanonMonitorB) return isCanonMonitorA && isCanonMonitorB;
+              const isManualAguaA = nombreSist.includes('manual') && nombreSist.includes('agua');
+              const isManualAguaB = nombreCat.includes('manual') && nombreCat.includes('agua');
+              if (isManualAguaA || isManualAguaB) return isManualAguaA && isManualAguaB;
+              const isEspumaA = nombreSist.includes('espuma') && !isCanonMonitorA;
+              const isEspumaB = nombreCat.includes('espuma') && !isCanonMonitorB;
               if (isEspumaA || isEspumaB) return isEspumaA && isEspumaB;
-              const isAguaA = nombreSist.includes('agua') && !isEspumaA;
-              const isAguaB = nombreCat.includes('agua') && !isEspumaB;
+              const isAguaA = nombreSist.includes('agua') && !isEspumaA && !isManualAguaA && !isCanonMonitorA;
+              const isAguaB = nombreCat.includes('agua') && !isEspumaB && !isManualAguaB && !isCanonMonitorB;
               if (isAguaA || isAguaB) return isAguaA && isAguaB;
-              const isGasA = (nombreSist.includes('gas') || (nombreSist.includes('extinci') && !nombreSist.includes('extintor'))) && !isCocinaA && !isEspumaA && !isAguaA;
-              const isGasB = (nombreCat.includes('gas') || (nombreCat.includes('extinci') && !nombreCat.includes('extintor'))) && !isCocinaB && !isEspumaB && !isAguaB;
+              const isGasA = (nombreSist.includes('gas') || (nombreSist.includes('extinci') && !nombreSist.includes('extintor'))) && !isCocinaA && !isEspumaA && !isAguaA && !isManualAguaA && !isCanonMonitorA;
+              const isGasB = (nombreCat.includes('gas') || (nombreCat.includes('extinci') && !nombreCat.includes('extintor'))) && !isCocinaB && !isEspumaB && !isAguaB && !isManualAguaB && !isCanonMonitorB;
               if (isGasA || isGasB) return isGasA && isGasB;
               return nombreCat.includes(nombreSist) || nombreSist.includes(nombreCat);
             });
@@ -264,9 +270,36 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
             if (!sistemaNombre) continue;
 
             const nombreSistemaNorm = normalizarNombre(sistemaNombre);
+            const isManualAguaSist = nombreSistemaNorm.includes('manual') && nombreSistemaNorm.includes('agua');
+            const isCanonMonitorSist = (nombreSistemaNorm.includes('canon') || nombreSistemaNorm.includes('cañon') || nombreSistemaNorm.includes('cañón') || nombreSistemaNorm.includes('monitor')) && (nombreSistemaNorm.includes('monitor') || nombreSistemaNorm.includes('espuma'));
             let plantilla: any = null;
 
-            if (esAspiracion || nombreSistemaNorm.includes('aspirac') || nombreSistemaNorm.includes('asd')) {
+            if (isCanonMonitorSist) {
+              const candidatos = plantillas.filter((p: any) => {
+                const np = normalizarNombre(p.nombre || '');
+                return (np.includes('canon') || np.includes('cañon') || np.includes('cañón') || np.includes('monitor')) && (np.includes('monitor') || np.includes('espuma'));
+              });
+              candidatos.sort((a: any, b: any) => {
+                const actA = (a.activa !== false) ? 1 : 0;
+                const actB = (b.activa !== false) ? 1 : 0;
+                if (actA !== actB) return actB - actA;
+                const dateA = a.updatedAt || a.createdAt || '';
+                const dateB = b.updatedAt || b.createdAt || '';
+                return dateB.localeCompare(dateA);
+              });
+              if (candidatos.length > 0) {
+                plantilla = candidatos[0];
+              }
+            }
+
+            if (!plantilla && isManualAguaSist) {
+              plantilla = plantillas.find((p: any) => {
+                const np = normalizarNombre(p.nombre || '');
+                return np.includes('manual') && np.includes('agua');
+              });
+            }
+
+            if (!plantilla && (esAspiracion || nombreSistemaNorm.includes('aspirac') || nombreSistemaNorm.includes('asd'))) {
               plantilla = plantillas.find((p: any) => {
                 const np = normalizarNombre(p.nombre || '');
                 return np.includes('aspirac') || np.includes('asd');
@@ -279,6 +312,10 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
               plantilla = plantillas.find((p: any) => {
                 const np = normalizarNombre(p.nombre || '');
                 if (np.includes('aspirac') || np.includes('asd') || np.includes('monox')) return false;
+                const isManualP = np.includes('manual') && np.includes('agua');
+                if (isManualP !== isManualAguaSist) return false;
+                const isCanonP = (np.includes('canon') || np.includes('cañon') || np.includes('cañón') || np.includes('monitor')) && (np.includes('monitor') || np.includes('espuma'));
+                if (isCanonP !== isCanonMonitorSist) return false;
                 return np.includes(nombreSistemaNorm) || nombreSistemaNorm.includes(np);
               });
             }
@@ -286,6 +323,10 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
               plantilla = plantillas.find((p: any) => {
                 const np = normalizarNombre(p.nombre || '');
                 if (np.includes('aspirac') || np.includes('asd') || np.includes('monox')) return false;
+                const isManualP = np.includes('manual') && np.includes('agua');
+                if (isManualP !== isManualAguaSist) return false;
+                const isCanonP = (np.includes('canon') || np.includes('cañon') || np.includes('cañón') || np.includes('monitor')) && (np.includes('monitor') || np.includes('espuma'));
+                if (isCanonP !== isCanonMonitorSist) return false;
                 const ps = nombreSistemaNorm.split(' ').filter((w: string) => w.length > 3);
                 const pp = np.split(' ').filter((w: string) => w.length > 3);
                 return ps.some((x: string) => pp.some((y: string) => x === y || y.includes(x) || x.includes(y)));
@@ -295,7 +336,7 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
             if (plantilla) {
               const itemsCol = collection(db, 'plantillas', plantilla.id, 'items');
               const itemsSnap = await getDocs(itemsCol);
-              let items = itemsSnap.docs.map(d => ({ key: d.id, ...d.data() }));
+              let items = itemsSnap.docs.map(d => ({ id: d.id, key: d.data().key || d.id, ...d.data() }));
               items.sort((a: any, b: any) => (a.orden || a.order || 0) - (b.orden || b.order || 0));
               checklistItemsPorSistema[sist.id] = items;
             }
