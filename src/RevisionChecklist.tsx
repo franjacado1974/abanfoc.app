@@ -25,7 +25,7 @@ import SistemaAlumbradoEmergencia from './components/RevisionSistemas/SistemaAlu
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Save, Layers, ChevronDown, ChevronUp, Plus, X, CheckCircle2, AlertTriangle, PenLine, RotateCcw, CheckCheck, Lock, MessageSquare, Unlock, Calendar, Wifi, WifiOff, RefreshCw } from 'lucide-react';
-import { addEquipoInstalado, addAlbaran, updateEquipoInstalado, updateParte as updateParteFirestore, updateCentro, subscribePartes, subscribeCentros, subscribeClientes, subscribeCentroSistemas, subscribeEquiposInstalados, subscribeArticulos, subscribeSistemasCategorias, generateNumeroMantenimiento, uploadFile, obtenerSiguienteNumeroAlbaran, type Albaran, type ChecklistItem } from './firebase';
+import { addEquipoInstalado, addAlbaran, updateEquipoInstalado, updateParte as updateParteFirestore, updateCentro, subscribePartes, subscribeCentros, subscribeClientes, subscribeCentroSistemas, subscribeEquiposInstalados, getEquiposInstalados, subscribeArticulos, subscribeSistemasCategorias, generateNumeroMantenimiento, uploadFile, obtenerSiguienteNumeroAlbaran, type Albaran, type ChecklistItem } from './firebase';
 import { subscribePlantillas, subscribeItemsDePlantilla, type ItemPlantilla } from './plantillas';
 import { getParteOfflineBundle, updateParteOfflineData, getPendingSyncItems, markSyncItemDone, markSyncItemFailed, addPendingSyncItem } from './offlineDB';
 import type { Centro, Parte, Cliente, CentroSistema, EquipoInstalado } from './Centros';
@@ -1095,60 +1095,121 @@ export default function RevisionChecklist() {
         loadLocalBundle();
     }, [parteId]);
 
-    // Función de Sincronización Transaccional por Bloques (Idempotente y en segundo plano)
+    // Función de Sincronización Bidireccional (Push + Pull) por Bloques
     const handleSincronizarParteCompleto = async () => {
-        if (!parteId) return;
+        if (!parteId || !centroId) return;
         setIsSyncingFullParte(true);
         setSyncStatusText('syncing');
 
         try {
+            // ── FASE 1: PUSH (Enviar cambios pendientes de esta tablet) ──────────
             const pendingItems = await getPendingSyncItems(parteId);
-            if (pendingItems.length === 0) {
-                setSyncStatusText('synced');
-                setPendingSyncCount(0);
-                showToast('✅ El parte está 100% sincronizado.');
-                setIsSyncingFullParte(false);
-                return;
-            }
-
             let successCount = 0;
 
-            for (const item of pendingItems) {
-                try {
-                    if (item.blockType === 'equipo') {
-                        const payloadToSync = { ...item.payload };
-                        // Convertir y subir cualquier URL de Blob local a Firebase Storage
-                        for (const [key, val] of Object.entries(payloadToSync)) {
-                            if (typeof val === 'string' && val.startsWith('blob:')) {
-                                try {
-                                    const controller = new AbortController();
-                                    const timeoutId = setTimeout(() => controller.abort(), 5000);
-                                    const res = await fetch(val, { signal: controller.signal });
-                                    clearTimeout(timeoutId);
-                                    const blobData = await res.blob();
-                                    const fileObj = new File([blobData], `photo_${Date.now()}.jpg`, { type: 'image/jpeg' });
-                                    const storagePath = `equipos/${centroId}/${payloadToSync.sistemaId || 'sist'}/${item.blockId}/${key}_${Date.now()}`;
-                                    const uploadedUrl = await uploadFile(fileObj, storagePath);
-                                    payloadToSync[key] = uploadedUrl;
-                                } catch (photoErr) {
-                                    console.warn(`[SyncBlob] Error subiendo foto blob en ${key}:`, photoErr);
+            if (pendingItems.length > 0) {
+                for (const item of pendingItems) {
+                    try {
+                        if (item.blockType === 'equipo') {
+                            const payloadToSync = { ...item.payload };
+                            // Convertir y subir cualquier URL de Blob local a Firebase Storage
+                            for (const [key, val] of Object.entries(payloadToSync)) {
+                                if (typeof val === 'string' && val.startsWith('blob:')) {
+                                    try {
+                                        const controller = new AbortController();
+                                        const timeoutId = setTimeout(() => controller.abort(), 5000);
+                                        const res = await fetch(val, { signal: controller.signal });
+                                        clearTimeout(timeoutId);
+                                        const blobData = await res.blob();
+                                        const fileObj = new File([blobData], `photo_${Date.now()}.jpg`, { type: 'image/jpeg' });
+                                        const storagePath = `equipos/${centroId}/${payloadToSync.sistemaId || 'sist'}/${item.blockId}/${key}_${Date.now()}`;
+                                        const uploadedUrl = await uploadFile(fileObj, storagePath);
+                                        payloadToSync[key] = uploadedUrl;
+                                    } catch (photoErr) {
+                                        console.warn(`[SyncBlob] Error subiendo foto blob en ${key}:`, photoErr);
+                                    }
                                 }
                             }
+                            const targetCentroId = payloadToSync.centroId || centroId;
+                            const targetSistemaId = payloadToSync.sistemaId;
+                            await updateEquipoInstalado(item.blockId, payloadToSync, targetCentroId, targetSistemaId);
+                        } else if (item.blockType === 'parte') {
+                            const docId = (parte as any)?._docId || parte?.id;
+                            if (docId) {
+                                await updateParteFirestore(docId, item.payload);
+                            }
                         }
-                        const targetCentroId = payloadToSync.centroId || centroId;
-                        const targetSistemaId = payloadToSync.sistemaId;
-                        await updateEquipoInstalado(item.blockId, payloadToSync, targetCentroId, targetSistemaId);
-                    } else if (item.blockType === 'parte') {
-                        const docId = (parte as any)?._docId || parte?.id;
-                        if (docId) {
-                            await updateParteFirestore(docId, item.payload);
-                        }
+                        await markSyncItemDone(item.sync_item_uuid);
+                        successCount++;
+                    } catch (err: any) {
+                        console.warn(`[SyncBlock] Error en bloque transaccional ${item.sync_item_uuid}:`, err);
+                        await markSyncItemFailed(item.sync_item_uuid, err?.message || 'Error de red');
                     }
-                    await markSyncItemDone(item.sync_item_uuid);
-                    successCount++;
-                } catch (err: any) {
-                    console.warn(`[SyncBlock] Error en bloque transaccional ${item.sync_item_uuid}:`, err);
-                    await markSyncItemFailed(item.sync_item_uuid, err?.message || 'Error de red');
+                }
+            }
+
+            // Enviar cualquier cambio pendiente en pendingEquiposRef
+            await flushAllPendingSync();
+
+            // ── FASE 2: PULL (Descargar novedades frescas de Firestore de todos los sistemas) ──
+            let pullUpdatedCount = 0;
+            if (navigator.onLine && sistemasDelCentro.length > 0) {
+                const todosRemotos: EquipoInstalado[] = [];
+                for (const sist of sistemasDelCentro) {
+                    try {
+                        const remotosSist = await getEquiposInstalados(centroId, sist.id);
+                        remotosSist.forEach((item: any) => {
+                            if (!deletedEquiposIdsRef.current.has(item.id)) {
+                                const anoAct = evaluarAnomaliasPorFecha(item, sist);
+                                const obsAct = evaluarObservacionesPorFecha(item, sist);
+                                let res = item;
+                                if (anoAct !== item.anomalias) res = { ...res, anomalias: anoAct };
+                                if (obsAct !== item.observaciones) res = { ...res, observaciones: obsAct };
+                                todosRemotos.push(res);
+                            }
+                        });
+                    } catch (pullErr) {
+                        console.warn(`[SyncPull] Error descargando sistema ${sist.id}:`, pullErr);
+                    }
+                }
+
+                if (todosRemotos.length > 0) {
+                    setEquiposInstalados(prev => {
+                        const dirtyMap = pendingEquiposRef.current;
+                        const fusionados = todosRemotos.map(remoto => {
+                            const localDirty = dirtyMap.get(remoto.id);
+                            if (localDirty) {
+                                return { ...remoto, ...localDirty };
+                            }
+                            if (remoto.revisado) {
+                                setEqSyncStates(s => (s[remoto.id] === 'saved' ? s : { ...s, [remoto.id]: 'saved' }));
+                            }
+                            return remoto;
+                        });
+
+                        // Conservar nuevos equipos locales creados pendientes de subir
+                        const idsRemotos = new Set(todosRemotos.map(r => r.id));
+                        const nuevosLocales = prev.filter(e =>
+                            !idsRemotos.has(e.id) &&
+                            !deletedEquiposIdsRef.current.has(e.id) &&
+                            dirtyMap.has(e.id)
+                        );
+
+                        const totalActualizados = [...fusionados, ...nuevosLocales];
+
+                        // Mantener localStorage e IndexedDB actualizados
+                        try {
+                            const allEquiposStored = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
+                            const otrosCentros = allEquiposStored.filter((e: any) => e.centroId !== centroId);
+                            safeLocalStorageSet('firecheck_db_equipos_instalados', JSON.stringify([...otrosCentros, ...totalActualizados]));
+                        } catch {}
+
+                        if (parteId) {
+                            updateParteOfflineData(parteId, { equiposInstalados: totalActualizados, syncStatus: 'synced' }).catch(() => {});
+                        }
+
+                        pullUpdatedCount = fusionados.length;
+                        return totalActualizados;
+                    });
                 }
             }
 
@@ -1158,7 +1219,13 @@ export default function RevisionChecklist() {
             if (remaining.length === 0) {
                 await updateParteOfflineData(parteId, { syncStatus: 'synced' });
                 setSyncStatusText('synced');
-                showToast('✅ Sincronización completada con éxito.');
+                if (successCount > 0 && pullUpdatedCount > 0) {
+                    showToast(`✅ Sincronizado: ${successCount} cambios subidos y ${pullUpdatedCount} equipos al día.`);
+                } else if (successCount > 0) {
+                    showToast(`✅ Sincronizado: ${successCount} cambios subidos con éxito.`);
+                } else {
+                    showToast('✅ Todo al día. Datos actualizados desde la nube.');
+                }
             } else {
                 setSyncStatusText('error');
                 showToast(`⚠️ Sincronizados ${successCount} bloques. Quedan ${remaining.length} guardados localmente para reintento.`);
@@ -1369,13 +1436,23 @@ export default function RevisionChecklist() {
                     const itemsFiltrados = itemsEvaluados.filter(item => !deletedEquiposIdsRef.current.has(item.id));
 
                     const itemsFusionados = itemsFiltrados.map(itemFromFirestore => {
-                        const equipoLocalActual = actualesEsteSistema.find(e => e.id === itemFromFirestore.id);
+                        // Comprobar si este dispositivo tiene cambios pendientes no guardados en este equipo
+                        const localDirty = pendingEquiposRef.current.get(itemFromFirestore.id);
 
-                        let fusion = itemFromFirestore;
-                        if (equipoLocalActual) {
-                            // Preservar estado del técnico pero asegurando que las reglas de fecha de anomalías y observaciones se re-evalúan
-                            fusion = { ...itemFromFirestore, ...equipoLocalActual };
+                        let fusion: EquipoInstalado;
+                        if (!localDirty) {
+                            // Caso general: Este técnico NO está editando activamente este equipo en este instante.
+                            // Firestore es la fuente de verdad absoluta (cambios del compañero se reflejan inmediatamente).
+                            fusion = itemFromFirestore;
+                            if (itemFromFirestore.revisado) {
+                                setEqSyncStates(s => (s[itemFromFirestore.id] === 'saved' ? s : { ...s, [itemFromFirestore.id]: 'saved' }));
+                            }
+                        } else {
+                            // Caso de edición concurrente: Este técnico tiene cambios locales en curso en este equipo.
+                            // Preservamos las respuestas locales del técnico actual sobre los datos base remotos.
+                            fusion = { ...itemFromFirestore, ...localDirty };
                         }
+
                         const anoAct = evaluarAnomaliasPorFecha(fusion, sist);
                         const obsAct = evaluarObservacionesPorFecha(fusion, sist);
                         if (anoAct !== fusion.anomalias) fusion = { ...fusion, anomalias: anoAct };
@@ -1393,6 +1470,14 @@ export default function RevisionChecklist() {
                     );
 
                     const resultEquipos = [...otrosSistemas, ...itemsFusionados, ...nuevosLocales];
+
+                    // Mantener localStorage e IndexedDB permanentemente sincronizados con los datos de Firestore
+                    try {
+                        const allEquiposStored = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
+                        const otrosCentros = allEquiposStored.filter((e: any) => e.centroId !== centroId);
+                        safeLocalStorageSet('firecheck_db_equipos_instalados', JSON.stringify([...otrosCentros, ...resultEquipos]));
+                    } catch {}
+
                     if (parteId) {
                         updateParteOfflineData(parteId, { equiposInstalados: resultEquipos }).catch(() => {});
                     }
@@ -1404,20 +1489,29 @@ export default function RevisionChecklist() {
     }, [centroId, sistemasDelCentro.length, parte?.estado, parteId]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const saveEquiposProgress = async (currentEquipos: EquipoInstalado[] = equiposInstalados) => {
+        // 1. Enviar cualquier cambio pendiente registrado en este dispositivo
         await flushAllPendingSync();
+
+        // 2. Actualizar almacenamiento local unificado
         const allEquipos = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
         const equiposOtrosCentros = allEquipos.filter((eq: EquipoInstalado) => eq.centroId !== centroId);
         const updatedAllEquipos = [...equiposOtrosCentros, ...currentEquipos];
         safeLocalStorageSet('firecheck_db_equipos_instalados', JSON.stringify(updatedAllEquipos));
-        // Sincronizar con Firestore
+
+        // 3. Sincronizar en Firestore ÚNICAMENTE equipos pendientes o modificados en este dispositivo.
+        // NUNCA sobreescribir ciegamente todos los equipos del centro para evitar pisar el trabajo de otros técnicos.
+        const dirtyIds = new Set(pendingEquiposRef.current.keys());
         for (const eq of currentEquipos) {
             if (deletedEquiposIdsRef.current.has(eq.id)) continue;
-            try {
-                const cId = eq.centroId || centroId;
-                const sId = eq.sistemaId;
-                await updateEquipoInstalado(eq.id, eq as any, cId, sId);
-            } catch (err) {
-                console.error('Error sincronizando equipo en Firestore:', err);
+            if (dirtyIds.has(eq.id) || eqSyncStates[eq.id] === 'pending' || (eq as any)._esNuevoLocal) {
+                try {
+                    const cId = eq.centroId || centroId;
+                    const sId = eq.sistemaId;
+                    await updateEquipoInstalado(eq.id, eq as any, cId, sId);
+                    pendingEquiposRef.current.delete(eq.id);
+                } catch (err) {
+                    console.error('Error sincronizando equipo modificado en Firestore:', err);
+                }
             }
         }
         return updatedAllEquipos;
@@ -1568,10 +1662,10 @@ export default function RevisionChecklist() {
                 return updated;
             });
 
-            // Sincronización local-first por equipo (sin autoguardado a Firestore en segundo plano)
+            // Sincronización local-first por equipo con guardado manual explícito (botón azul "Equipo revisado")
             const equipoModificado = updatedEquipos.find(eq => eq.id === equipoId);
             if (equipoModificado) {
-                // Marcar estado local como pendiente (botón Azul "Equipo revisado")
+                // Marcar estado local como pendiente (botón azul "Equipo revisado")
                 setEqSyncStates(prev => ({ ...prev, [equipoId]: 'pending' }));
 
                 // Respaldar inmediatamente todo en localStorage para cero pérdida offline
@@ -2049,6 +2143,8 @@ export default function RevisionChecklist() {
             try {
                 if (navigator.onLine) {
                     await addEquipoInstalado(newEq as any);
+                    pendingEquiposRef.current.delete(newId);
+                    setEqSyncStates(prev => ({ ...prev, [newId]: 'saved' }));
                     showToast('Equipo copiado');
                 } else {
                     showToast('Equipo copiado en local (Offline)');
@@ -2149,6 +2245,8 @@ export default function RevisionChecklist() {
             try {
                 if (navigator.onLine) {
                     await addEquipoInstalado(newEq as any);
+                    pendingEquiposRef.current.delete(newId);
+                    setEqSyncStates(prev => ({ ...prev, [newId]: 'saved' }));
                     showToast('Equipo añadido');
                 } else {
                     showToast('Equipo añadido en local (Offline)');

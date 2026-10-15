@@ -1193,6 +1193,21 @@ if (fs.existsSync(pdfGenPath)) {
     }
   });
 
+  // 94. Verificación de Sincronización Multi-Técnico y Prevención de Sobreescrituras Concurrentes (AGENTS.md REGLA 94)
+  const revPath94 = path.join(__dirname, '../src/RevisionChecklist.tsx');
+  if (fs.existsSync(revPath94)) {
+    const revContent94 = fs.readFileSync(revPath94, 'utf8');
+    if (!revContent94.includes('pendingEquiposRef.current.get(itemFromFirestore.id)') || !revContent94.includes('guardado manual explícito')) {
+      errors.push('CRÍTICO: RevisionChecklist.tsx carece de dirty tracking por equipo o de guardado manual explícito (AGENTS.md REGLA 94).');
+    }
+    if (!revContent94.includes('getEquiposInstalados') || !revContent94.includes('FASE 2: PULL')) {
+      errors.push('CRÍTICO: RevisionChecklist.tsx carece de sincronización bidireccional PUSH + PULL con getEquiposInstalados (AGENTS.md REGLA 94).');
+    }
+    if (!revContent94.includes('NUNCA sobreescribir ciegamente todos los equipos')) {
+      errors.push('CRÍTICO: RevisionChecklist.tsx carece de la protección contra sobreescrituras masivas en saveEquiposProgress (AGENTS.md REGLA 94).');
+    }
+  }
+
 // Resultado de la verificación
 if (errors.length > 0) {
   console.error('\n❌ ERROR CRÍTICO DE BLINDAJE INTEGRAL (AGENTS.md):');

@@ -1337,6 +1337,23 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
 - **Sincronización Dual**:
   - Mantenido de forma idéntica en `src/pdfGenerator.ts` y en `src/recursos-compartidos/services/pdfGenerator.ts`.
 
+---
 
-
+## 94. Blindaje Inviolable de Sincronización Multi-Técnico y Prevención de Sobreescrituras Concurrentes (`RevisionChecklist.tsx`)
+- **Fusión Inteligente con Dirty Tracking en `subscribeEquiposInstalados`**:
+  - En la recepción de datos en tiempo real de Firestore, queda ESTRICTAMENTE PROHIBIDO sobreescribir los datos de Firestore con la copia local ciega (`{ ...itemFromFirestore, ...equipoLocalActual }`).
+  - Si el equipo NO está siendo editado activamente en este dispositivo (`!pendingEquiposRef.current.has(itemFromFirestore.id)`), Firestore ES la fuente de verdad absoluta y se adopta de inmediato (`fusion = itemFromFirestore`). Si el equipo remoto viene marcado como `revisado: true`, se refleja en estado `'saved'`.
+  - Si el equipo tiene cambios locales pendientes en este dispositivo (`pendingEquiposRef.current.has(...)`), se preservan los campos del técnico local sobre la base remota sin descartar campos no conflictivos.
+  - Al recibir datos de Firestore, DEBEN actualizarse síncronamente `localStorage` (`firecheck_db_equipos_instalados`) e IndexedDB (`updateParteOfflineData`) para mantener los cachés permanentemente frescos.
+- **Prevención de Sobreescritura Masiva en `saveEquiposProgress`**:
+  - Queda ESTRICTAMENTE PROHIBIDO que `saveEquiposProgress` envíe a Firestore la lista completa de todos los equipos del centro en un bucle ciego.
+  - `saveEquiposProgress` solo DEBE sincronizar con Firestore los equipos que contengan modificaciones locales pendientes (`pendingEquiposRef.current.has(eq.id)`, `eqSyncStates[eq.id] === 'pending'` o creados localmente).
+- **Sincronización Bidireccional (Push + Pull) en `handleSincronizarParteCompleto`**:
+  - El botón "Sincronizar parte" DEBE ejecutar un ciclo completo de dos vías:
+    1. **PUSH**: Sube fotos pendientes (Blob a Storage) y cambios pendientes a Firestore.
+    2. **PULL**: Descarga de Firestore (`getEquiposInstalados`) todos los equipos actualizados del centro para todos los sistemas, reconciliándolos con el estado local sin borrar ediciones en curso.
+    3. **FEEDBACK**: Muestra mensajes claros al técnico informando del número de cambios subidos y equipos actualizados desde la nube.
+- **Guardado Explícito y Controlado por el Técnico ("Equipo revisado")**:
+  - Al realizar cambios en checks o texto de un equipo, la sincronización a Firestore es 100% manual y consciente, ejecutándose al pulsar el botón azul **"Equipo revisado"** (`handleGuardarEquipoManual`), al pulsar **"Sincronizar parte"** o al finalizar con firmas.
+  - Se prescinde de temporizadores invisibles en segundo plano (debounce) para garantizar estabilidad total en zonas con cobertura intermitente (sótanos/parkings), evitando envíos a medio escribir o colisiones de teclado.
 
