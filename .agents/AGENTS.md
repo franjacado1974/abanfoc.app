@@ -1356,4 +1356,7 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
 - **Guardado Explícito y Controlado por el Técnico ("Equipo revisado")**:
   - Al realizar cambios en checks o texto de un equipo, la sincronización a Firestore es 100% manual y consciente, ejecutándose al pulsar el botón azul **"Equipo revisado"** (`handleGuardarEquipoManual`), al pulsar **"Sincronizar parte"** o al finalizar con firmas.
   - Se prescinde de temporizadores invisibles en segundo plano (debounce) para garantizar estabilidad total en zonas con cobertura intermitente (sótanos/parkings), evitando envíos a medio escribir o colisiones de teclado.
+- **Blindaje de Operaciones Masivas y Modales (`handleConfirmarRevisarTodo` y `EquipoFormulario`)**:
+  - En la acción "Revisar todo como ok" (`handleConfirmarRevisarTodo`), los equipos del sistema modificado se registran individualmente en `pendingEquiposRef.current`, se encolan en la cola offline (`addPendingSyncItem`) y se sincronizan concurrentemente con Firestore usando `await Promise.allSettled`, asegurando que no queden promesas flotantes ni colisiones con otros técnicos que trabajen en otros sistemas.
+  - En la edición modal de equipos (`EquipoFormulario.tsx`), el guardado (`onSave`) registra inmediatamente el equipo modificado en `pendingEquiposRef.current`, persiste en IndexedDB offline y actualiza individualmente en Firestore gestionando los estados `saving`, `saved` y `offline`.
 

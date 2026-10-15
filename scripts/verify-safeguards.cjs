@@ -1206,6 +1206,9 @@ if (fs.existsSync(pdfGenPath)) {
     if (!revContent94.includes('NUNCA sobreescribir ciegamente todos los equipos')) {
       errors.push('CRÍTICO: RevisionChecklist.tsx carece de la protección contra sobreescrituras masivas en saveEquiposProgress (AGENTS.md REGLA 94).');
     }
+    if (!revContent94.includes('Promise.allSettled(equiposDelSistema.map') || !revContent94.includes('pendingEquiposRef.current.set(targetId, fullMergedEq')) {
+      errors.push('CRÍTICO: RevisionChecklist.tsx carece del blindaje atómico en Revisar Todo o en guardado modal de equipos (AGENTS.md REGLA 94).');
+    }
   }
 
 // Resultado de la verificación

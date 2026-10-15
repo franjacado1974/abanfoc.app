@@ -2316,21 +2316,55 @@ export default function RevisionChecklist() {
 
         if (updatedCount > 0) {
             setEquiposInstalados(updatedEquipos);
-            saveEquiposProgress(updatedEquipos);
-            
-            // Guardar individualmente en Firestore para asegurar sincronía
-            updatedEquipos.filter(eq => eq.sistemaId === sistId).forEach(async (equipoModificado) => {
-                try {
-                    const cId = equipoModificado.centroId || centroId;
-                    const sId = equipoModificado.sistemaId || sistId;
-                    await updateEquipoInstalado(equipoModificado.id, equipoModificado as any, cId, sId);
-                    setEqSyncStates(prev => ({ ...prev, [equipoModificado.id]: 'saved' }));
-                } catch (err) {
-                    console.error('Error guardando en Firestore desde Revisar Todo:', err);
-                }
+
+            const equiposDelSistema = updatedEquipos.filter(eq => eq.sistemaId === sistId);
+
+            // 1. Registrar en memoria y cola local de cambios
+            equiposDelSistema.forEach(eqMod => {
+                pendingEquiposRef.current.set(eqMod.id, eqMod);
+                inFlightSyncRef.current.add(eqMod.id);
+                setEqSyncStates(prev => ({ ...prev, [eqMod.id]: 'saving' }));
             });
 
-            showToast('Guardado');
+            // 2. Guardar en almacenamiento local unificado e IndexedDB
+            try {
+                const allEquipos = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
+                const equiposOtrosCentros = allEquipos.filter((eq: EquipoInstalado) => eq.centroId !== centroId);
+                safeLocalStorageSet('firecheck_db_equipos_instalados', JSON.stringify([...equiposOtrosCentros, ...updatedEquipos]));
+            } catch (e) {}
+
+            if (parteId) {
+                updateParteOfflineData(parteId, { equiposInstalados: updatedEquipos }).catch(() => {});
+                equiposDelSistema.forEach(eqMod => {
+                    addPendingSyncItem(parteId, 'equipo', eqMod.id, eqMod).catch(() => {});
+                });
+            }
+
+            // 3. Sincronizar individualmente en Firestore esperando a que todas las operaciones finalicen
+            if (navigator.onLine) {
+                await Promise.allSettled(equiposDelSistema.map(async (equipoModificado) => {
+                    try {
+                        const cId = equipoModificado.centroId || centroId;
+                        const sId = equipoModificado.sistemaId || sistId;
+                        await updateEquipoInstalado(equipoModificado.id, equipoModificado as any, cId, sId);
+                        pendingEquiposRef.current.delete(equipoModificado.id);
+                        inFlightSyncRef.current.delete(equipoModificado.id);
+                        setEqSyncStates(prev => ({ ...prev, [equipoModificado.id]: 'saved' }));
+                    } catch (err) {
+                        console.error('Error guardando en Firestore desde Revisar Todo:', err);
+                        inFlightSyncRef.current.delete(equipoModificado.id);
+                        setEqSyncStates(prev => ({ ...prev, [equipoModificado.id]: 'offline' }));
+                    }
+                }));
+                showToast('✓ Sistema completo revisado y sincronizado');
+            } else {
+                equiposDelSistema.forEach(eqMod => {
+                    inFlightSyncRef.current.delete(eqMod.id);
+                    setEqSyncStates(prev => ({ ...prev, [eqMod.id]: 'offline' }));
+                });
+                showToast('✓ Sistema revisado en local (Modo offline)');
+            }
+
             if (parte?.estado === 'Planificado') {
                 updateParte({ estado: 'Abierto' });
                 const storedPartes = JSON.parse(localStorage.getItem('firecheck_db_partes') || '[]');
@@ -3177,31 +3211,61 @@ export default function RevisionChecklist() {
                     plantillaId={sistemasDelCentro.find(s => s.id === equiposInstalados.find(e => e.id === editEquipo)?.sistemaId)?.tipo || sistemasDelCentro.find(s => s.id === equiposInstalados.find(e => e.id === editEquipo)?.sistemaId)?.familia || ''}
                     equiposExistentes={equiposInstalados.filter(e => e.sistemaId === equiposInstalados.find(eq => eq.id === editEquipo)?.sistemaId)}
                     onSave={async (updatedEq) => {
+                        const targetId = updatedEq.id || editEquipo;
+                        const prevEq = equiposInstalados.find(e => e.id === targetId);
+                        const fullMergedEq = {
+                            ...(prevEq || {}),
+                            ...updatedEq
+                        };
                         const updated = equiposInstalados.map(eq =>
-                            eq.id === editEquipo ? { ...eq, ...updatedEq } as any : eq
+                            eq.id === targetId ? fullMergedEq as any : eq
                         );
                         setEquiposInstalados(updated);
-                        saveEquiposProgress(updated);
+
+                        // Registrar en memoria y marcar saving
+                        if (targetId) {
+                            pendingEquiposRef.current.set(targetId, fullMergedEq as any);
+                            inFlightSyncRef.current.add(targetId);
+                            setEqSyncStates(prev => ({ ...prev, [targetId]: 'saving' }));
+                        }
+
+                        // Guardar en almacenamiento local unificado e IndexedDB
+                        try {
+                            const allEquipos = JSON.parse(localStorage.getItem('firecheck_db_equipos_instalados') || '[]');
+                            const equiposOtrosCentros = allEquipos.filter((eq: EquipoInstalado) => eq.centroId !== centroId);
+                            safeLocalStorageSet('firecheck_db_equipos_instalados', JSON.stringify([...equiposOtrosCentros, ...updated]));
+                        } catch (e) {}
 
                         if (parteId) {
                             await updateParteOfflineData(parteId, { equiposInstalados: updated });
-                            if (updatedEq.id) {
-                                await addPendingSyncItem(parteId, 'equipo', updatedEq.id, updatedEq);
+                            if (targetId) {
+                                await addPendingSyncItem(parteId, 'equipo', targetId, fullMergedEq as any);
                             }
                         }
 
                         try {
-                            if (updatedEq.id && !updatedEq.id.startsWith('temp_') && navigator.onLine) {
-                                const targetCentroId = updatedEq.centroId || centroId;
-                                const targetSistemaId = updatedEq.sistemaId;
-                                await updateEquipoInstalado(updatedEq.id, updatedEq, targetCentroId, targetSistemaId);
-                                showToast('Equipo actualizado');
+                            if (targetId && !targetId.startsWith('temp_') && navigator.onLine) {
+                                const targetCentroId = fullMergedEq.centroId || centroId;
+                                const targetSistemaId = fullMergedEq.sistemaId;
+                                await updateEquipoInstalado(targetId, fullMergedEq as any, targetCentroId, targetSistemaId);
+                                pendingEquiposRef.current.delete(targetId);
+                                inFlightSyncRef.current.delete(targetId);
+                                setEqSyncStates(prev => ({ ...prev, [targetId]: 'saved' }));
+                                showToast('✓ Equipo actualizado');
                             } else {
-                                showToast('Equipo guardado en local (Offline)');
+                                if (targetId) {
+                                    inFlightSyncRef.current.delete(targetId);
+                                    setEqSyncStates(prev => ({ ...prev, [targetId]: 'offline' }));
+                                }
+                                showToast('✓ Equipo guardado en local (Offline)');
                             }
                         } catch (err) {
                             console.warn('Guardado offline para equipo actualizado:', err);
-                            showToast('Equipo guardado en local (Offline)');
+                            if (targetId) {
+                                inFlightSyncRef.current.delete(targetId);
+                                setEqSyncStates(prev => ({ ...prev, [targetId]: 'offline' }));
+                            }
+                            showToast('✓ Equipo guardado en local (Offline)');
                         }
                         
                         setEditEquipo(null);
