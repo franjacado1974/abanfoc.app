@@ -1187,6 +1187,9 @@ if (fs.existsSync(pdfGenPath)) {
       if (!pContent.includes('isCuadroControlPregunta')) {
         errors.push(`CRÍTICO: ${pName} carece de la definición de isCuadroControlPregunta para celdas combinadas de cuadro de control (AGENTS.md REGLA 93).`);
       }
+      if (!pContent.includes('isCheckOInspeccion')) {
+        errors.push(`CRÍTICO: ${pName} carece de la exclusión isCheckOInspeccion para preguntas operativas de inspección (AGENTS.md REGLA 93).`);
+      }
       if (!pContent.includes('220, 224, 230')) {
         errors.push(`CRÍTICO: ${pName} carece de la línea divisoria horizontal gris suave [220, 224, 230] entre anomalías (AGENTS.md REGLA 93).`);
       }

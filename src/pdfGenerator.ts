@@ -3037,6 +3037,14 @@ export const generarActaExtintoresPDF = async (
             }
           }
 
+          const isCheckOInspeccion = (lbl: string, it?: any) => {
+            const l = (lbl || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            if (l.includes('arranque') || l.includes('manual') || l.includes('automatic') || l.includes('prueba') || l.includes('comprobaci') || l.includes('maniobra') || l.includes('pulsador') || l.includes('paro') || l.includes('tension') || l.includes('fusible') || l.includes('alarma') || l.includes('presostato')) return true;
+            if (/^\s*[2-9]\.\d+/.test(l)) return true;
+            if (it && (it.tipoRespuesta === 'check' || (Array.isArray(it.opciones) && (it.opciones.includes('CORRECTO') || it.opciones.includes('CONFORME'))))) return true;
+            return false;
+          };
+
           if (secTitleNorm.includes('DATOS INSTALACIÓN') || secTitleNorm.includes('DATOS INSTALACION')) {
             // Renderizar Sección 1: Datos de instalación en 6 columnas (3 pares de datos)
             const datosRows: any[] = [];
@@ -3208,7 +3216,9 @@ export const generarActaExtintoresPDF = async (
                   if (itemForCol) {
                     const lblNorm = (itemForCol.label || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
                     const esBombaDieselNum = lblNorm.includes('esta es la bomba') && (lblNorm.includes('numero') || lblNorm.includes('nº') || lblNorm.includes('no.'));
-                    if (lblNorm.includes('cobertura') || esBombaDieselNum || lblNorm.includes('instalaciones que abastece') || lblNorm.includes('se alimenta') || (lblNorm.includes('cuadro') && (lblNorm.includes('control') || lblNorm.includes('mando')))) {
+                    const isCheckCol = isCheckOInspeccion(lblNorm, itemForCol);
+                    const esCuadroPregunta = !isCheckCol && ((lblNorm.includes('cuadro') && (lblNorm.includes('control') || lblNorm.includes('mando'))) || lblNorm.includes('ubicacion del cuadro') || lblNorm.includes('ubicacion cuadro'));
+                    if (!isCheckCol && (lblNorm.includes('cobertura') || esBombaDieselNum || lblNorm.includes('instalaciones que abastece') || lblNorm.includes('se alimenta') || esCuadroPregunta)) {
                       data.cell.styles.fillColor = [255, 249, 196]; // amarillo claro #FFF9C4
                       if (data.column.index % 2 === 1) {
                         data.cell.styles.fontStyle = 'bold';
@@ -3268,9 +3278,10 @@ export const generarActaExtintoresPDF = async (
                   itemLblNorm.includes('cobertura') ||
                   itemLblNorm.includes('planta')
                 );
-                const isAbastecePregunta = itemLblNorm.includes('instalaciones que abastece') || (itemLblNorm.includes('abastece') && !itemLblNorm.includes('quedo') && !itemLblNorm.includes('quedó') && !itemLblNorm.includes('comprobacion'));
-                const isCuadroControlPregunta = (itemLblNorm.includes('cuadro') && (itemLblNorm.includes('control') || itemLblNorm.includes('mando'))) || itemLblNorm.includes('ubicacion del cuadro') || itemLblNorm.includes('ubicacion cuadro');
-                const isAreaCobertura = itemLblNorm.includes('cobertura') || isManifoldRefOUbic || isAbastecePregunta || isCuadroControlPregunta;
+                const isCheckItem = isCheckOInspeccion(itemLblNorm, item);
+                const isAbastecePregunta = !isCheckItem && (itemLblNorm.includes('instalaciones que abastece') || (itemLblNorm.includes('abastece') && !itemLblNorm.includes('quedo') && !itemLblNorm.includes('quedó') && !itemLblNorm.includes('comprobacion')));
+                const isCuadroControlPregunta = !isCheckItem && ((itemLblNorm.includes('cuadro') && (itemLblNorm.includes('control') || itemLblNorm.includes('mando'))) || itemLblNorm.includes('ubicacion del cuadro') || itemLblNorm.includes('ubicacion cuadro'));
+                const isAreaCobertura = !isCheckItem && (itemLblNorm.includes('cobertura') || isManifoldRefOUbic || isAbastecePregunta || isCuadroControlPregunta);
 
                 if (isAreaCobertura) {
                   let labelText = (item.label || '').trim().replace(/[\.:\s]+$/, '') + ':';
@@ -3292,9 +3303,13 @@ export const generarActaExtintoresPDF = async (
                     }
                   ]);
                 } else {
+                  let labelPregunta = item.label || '';
+                  if (itemLblNorm.includes('5.7') && itemLblNorm.includes('arranque en manual')) {
+                    labelPregunta = labelPregunta.trim().replace(/[:\s]+$/, '') + ':';
+                  }
                   const val = getMark(rawVal);
                   checkRows.push([
-                    item.label || '',
+                    labelPregunta,
                     val
                   ]);
                 }
@@ -3341,8 +3356,9 @@ export const generarActaExtintoresPDF = async (
 
                     const itemNorm = normalItems[data.row.index];
                     const lblNorm = itemNorm ? (itemNorm.label || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") : '';
-                    const isCuadroControlPregunta = (lblNorm.includes('cuadro') && (lblNorm.includes('control') || lblNorm.includes('mando'))) || lblNorm.includes('ubicacion del cuadro') || lblNorm.includes('ubicacion cuadro');
-                    const isAreaCobertura = lblNorm.includes('cobertura') || data.cell.colSpan === 2 || isCuadroControlPregunta;
+                    const isCheckNorm = isCheckOInspeccion(lblNorm, itemNorm);
+                    const isCuadroControlPregunta = !isCheckNorm && ((lblNorm.includes('cuadro') && (lblNorm.includes('control') || lblNorm.includes('mando'))) || lblNorm.includes('ubicacion del cuadro') || lblNorm.includes('ubicacion cuadro'));
+                    const isAreaCobertura = !isCheckNorm && (lblNorm.includes('cobertura') || data.cell.colSpan === 2 || isCuadroControlPregunta);
 
                     if (isAreaCobertura) {
                       data.cell.styles.fillColor = [255, 249, 196]; // amarillo claro #FFF9C4
@@ -3365,7 +3381,7 @@ export const generarActaExtintoresPDF = async (
                         data.cell.styles.halign = 'center';
                         data.cell.styles.fontStyle = 'bold';
                       }
-                      if (esBombaDieselNum || lblNorm.includes('instalaciones que abastece') || lblNorm.includes('se alimenta') || (lblNorm.includes('cuadro') && (lblNorm.includes('control') || lblNorm.includes('mando')))) {
+                      if (!isCheckNorm && (esBombaDieselNum || lblNorm.includes('instalaciones que abastece') || lblNorm.includes('se alimenta') || isCuadroControlPregunta)) {
                         data.cell.styles.fillColor = [255, 249, 196]; // amarillo claro #FFF9C4
                         if (data.column.index === 1) {
                           data.cell.styles.fontStyle = 'bold';
@@ -3415,8 +3431,9 @@ export const generarActaExtintoresPDF = async (
                   if (data.section === 'body') {
                     const itemNorm = normalItems[data.row.index];
                     const lblNorm = itemNorm ? (itemNorm.label || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") : '';
-                    const isCuadroControlPregunta = (lblNorm.includes('cuadro') && (lblNorm.includes('control') || lblNorm.includes('mando'))) || lblNorm.includes('ubicacion del cuadro') || lblNorm.includes('ubicacion cuadro');
-                    const isAreaCobertura = lblNorm.includes('cobertura') || data.cell.colSpan === 2 || isCuadroControlPregunta;
+                    const isCheckNorm = isCheckOInspeccion(lblNorm, itemNorm);
+                    const isCuadroControlPregunta = !isCheckNorm && ((lblNorm.includes('cuadro') && (lblNorm.includes('control') || lblNorm.includes('mando'))) || lblNorm.includes('ubicacion del cuadro') || lblNorm.includes('ubicacion cuadro'));
+                    const isAreaCobertura = !isCheckNorm && (lblNorm.includes('cobertura') || data.cell.colSpan === 2 || isCuadroControlPregunta);
 
                     if (isAreaCobertura) {
                       const { x, y, height } = data.cell;

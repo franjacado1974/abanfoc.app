@@ -1331,6 +1331,7 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
   - Fondo amarillo suave reglamentario (`fillColor: [255, 249, 196]`).
   - La pregunta DEBE finalizar obligatoriamente con dos puntos (`:`).
   - La respuesta DEBE dibujarse a la izquierda inmediatamente tras los dos puntos en formato **MAYÚSCULAS** y **NEGRITA** (`fontStyle: 'bold'`).
+  - **Exclusión Estricta de Preguntas de Inspección Operativa**: Queda terminantemente prohibido aplicar celda combinada o fondo amarillo a preguntas de inspección operativa (ej. `5.7 Arranque en manual desde el cuadro de control:`). Estas filas se mantienen en color blanco convencional con separación de dos columnas: columna 0 con la pregunta y columna 1 con la respuesta en verde (si es correcto) o rojo (si es no correcto).
 - **Anomalías con Encabezado Formato Oración y Línea Divisoria Gris Suave**:
   - En las anomalías de equipos del Acta PDF, el título de equipo DEBE imprimirse como `EQUIPO Nº XX - (Ubicación en formato oración)` con solo la primera letra en mayúscula y entre paréntesis.
   - Separación entre anomalías de distintos equipos mediante una línea divisoria horizontal gris suave (`RGB: [220, 224, 230]`, grosor `0.25 mm`) con espacio simétrico para una legibilidad óptima.
