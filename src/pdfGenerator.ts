@@ -5739,156 +5739,27 @@ export const generarCertificadoPDF = async (
     const entries = Object.entries(equiposPorSistema);
     const systemsWithHeight: SystemWithHeight[] = entries.map(([sistId, eqs]) => {
       const sist = sistemas.find(s => s.id === sistId);
-      const nombreSistema = sist?.nombre || sist?.tipo || 'Sistema sin nombre';
-      
-      const conteoPorTipo: Record<string, number> = {};
-      eqs.forEach(eq => {
-        let fallbackName = 'Equipo';
-        const nsUpper = nombreSistema.toUpperCase();
-        const esExtintor = nsUpper.includes('EXTINTOR');
-        const esBie = nsUpper.includes('BIE') || nsUpper.includes('BOCA');
-        if (esExtintor) {
-          fallbackName = 'Extintor';
-        } else if (esBie) {
-          fallbackName = 'BIE';
-        } else if (nsUpper.includes('DETEC') || nsUpper.includes('HUMO')) {
-          fallbackName = 'Detector';
-        } else if (nsUpper.includes('PUERTA')) {
-          fallbackName = 'Puerta RF';
-        }
+      const nombreSistema = (sist?.nombre || sist?.tipo || 'Sistema sin nombre').toUpperCase();
 
-        // Escanear todas las claves de eq para detectar agente o capacidad implícitos
-        let detectedAgente = '';
-        let detectedCapacidad = '';
-        let allValuesString = '';
-        for (const k of Object.keys(eq)) {
-          const kLower = k.toLowerCase();
-          if (
-            kLower === 'id' ||
-            kLower === 'centroid' ||
-            kLower === 'sistemaid' ||
-            kLower === 'nombre' ||
-            kLower === 'clase' ||
-            kLower === 'codigo' ||
-            kLower === 'ubicacion'
-          ) continue;
-          const val = eq[k];
-          if (typeof val === 'string' && val.trim() !== '' && val.toLowerCase() !== 'true' && val.toLowerCase() !== 'false') {
-            allValuesString += ' ' + val.trim();
-            const valUpper = val.toUpperCase().trim();
-            if (!detectedAgente) {
-              if (valUpper.includes('POLVO ABC') || valUpper === 'POLVO') {
-                detectedAgente = 'Polvo ABC';
-              } else if (valUpper.includes('CO2')) {
-                detectedAgente = 'CO2';
-              } else if (valUpper.includes('AGUA')) {
-                detectedAgente = 'Agua';
-              } else if (valUpper.includes('ESPUMA')) {
-                detectedAgente = 'Espuma';
-              }
-            }
-            if (!detectedCapacidad) {
-              const match = valUpper.match(/(\d+\s*KG)/) || valUpper.match(/(\d+\s*L)/);
-              if (match) {
-                detectedCapacidad = match[1].toLowerCase().replace(/\s+/g, ' ');
-              }
-            }
-          }
-        }
-
-        const valName = (val: any) => typeof val === 'string' && val.trim() !== '' && val.toLowerCase() !== 'true' && val.toLowerCase() !== 'false' ? val.trim() : (typeof val === 'number' && !isNaN(val) ? String(val) : null);
-        
-        let tipoVal = valName(eq.tipo) || valName(eq.agente) || detectedAgente || valName(eq.nombre) || valName(eq.clase) || valName(eq.marca) || fallbackName;
-
-        let cleanTipo = tipoVal.trim();
-        if (esExtintor) {
-          cleanTipo = cleanTipo.replace(/\d+\s*(kg|l|kilos|litros)\.?/gi, '').replace(/\s+/g, ' ').trim();
-          cleanTipo = cleanTipo.replace(/\b(kg|l|kilos|litros)\b/gi, '').replace(/\s+/g, ' ').trim();
-          
-          const ctUpper = cleanTipo.toUpperCase();
-          if (ctUpper.includes('POLVO') || ctUpper.includes('ABC')) {
-            cleanTipo = 'Polvo ABC';
-          } else if (ctUpper.includes('CO2') || ctUpper.includes('ANHIDRIDO')) {
-            cleanTipo = 'CO2';
-          } else if (ctUpper.includes('AGUA')) {
-            cleanTipo = 'Agua';
-          } else if (ctUpper.includes('ESPUMA')) {
-            cleanTipo = 'Espuma';
-          } else if (!cleanTipo || cleanTipo.toLowerCase() === 'extintor') {
-            cleanTipo = detectedAgente || 'Polvo ABC';
-          }
-        } else if (esBie) {
-          const fullBieStr = `${cleanTipo} ${allValuesString}`.toUpperCase();
-          if (fullBieStr.includes('25')) {
-            cleanTipo = 'BIE 25 mm';
-          } else if (fullBieStr.includes('45')) {
-            cleanTipo = 'BIE 45 mm';
-          } else if (fullBieStr.includes('70')) {
-            cleanTipo = 'BIE 70 mm';
-          } else {
-            let formatted = cleanTipo;
-            if (!formatted.toUpperCase().startsWith('BIE')) {
-              formatted = `BIE ${formatted}`;
-            }
-            cleanTipo = formatted;
-          }
-        }
-
-        let capVal = '';
-        if (!esBie) {
-          if (eq.capacidad && typeof eq.capacidad === 'string' && eq.capacidad.toLowerCase() !== 'true' && eq.capacidad.toLowerCase() !== 'false') {
-            capVal = eq.capacidad;
-          } else if (eq.peso && typeof eq.peso === 'string' && eq.peso.toLowerCase() !== 'true' && eq.peso.toLowerCase() !== 'false') {
-            capVal = eq.peso;
-          } else {
-            capVal = detectedCapacidad;
-          }
-        }
-        let cleanCap = (capVal || '').trim();
-
-        if (cleanCap && cleanTipo.toLowerCase().includes(cleanCap.toLowerCase())) {
-          cleanCap = '';
-        }
-
-        let clave = cleanCap ? `${cleanTipo} ${cleanCap}.` : `${cleanTipo}.`;
-        clave = clave.replace(/\s+kg\.?/gi, ' Kg.');
-        clave = clave.replace(/\s+l\.?/gi, ' L.');
-        clave = clave.replace(/\.\.+$/, '.');
-
-        conteoPorTipo[clave] = (conteoPorTipo[clave] || 0) + 1;
-      });
-
-      // Ajuste exclusivo para EXTINTORES en el certificado:
-      // Mostrar recuento unificado: "• Extintores varios formatos: XX und."
-      const esExtintorCert = nombreSistema.toUpperCase().includes('EXTINTOR');
-      if (esExtintorCert) {
-        const totalExtintores = eqs.length;
-        Object.keys(conteoPorTipo).forEach(k => delete conteoPorTipo[k]);
-        conteoPorTipo['Extintores varios formatos'] = totalExtintores;
-      }
-
-      // Ajuste exclusivo para BOCAS DE INCENDIO (BIE) en el certificado:
-      // Mostrar recuento unificado: "• Bocas de incendios equipadas varios formatos: XX unds."
-      const esBieCert = nombreSistema.toUpperCase().includes('BIE') || nombreSistema.toUpperCase().includes('BOCA');
-      if (esBieCert) {
-        const totalBies = eqs.length;
-        Object.keys(conteoPorTipo).forEach(k => delete conteoPorTipo[k]);
-        conteoPorTipo['Bocas de incendios equipadas varios formatos'] = totalBies;
-      }
-
-      // Ajuste exclusivo para RED DE ROCIADORES Y PUESTO DE CONTROL:
-      // Lo que se suman son los puestos de control de la tabla de inventario, no los colectores individuales
+      // Recuento de equipos por sistema idéntico al Índice del Acta de Revisión
+      let totalEquipos = eqs.length;
       const esRociadoresPuestosCert = esSistemaRociadoresPuestosPDF(nombreSistema, sist?.tipo, sist?.familia);
       if (esRociadoresPuestosCert) {
         const recuentoPuestos = contarEquiposInventarioPuestosPDF(eqs);
         if (recuentoPuestos > 0) {
-          Object.keys(conteoPorTipo).forEach(k => delete conteoPorTipo[k]);
-          const labelPuesto = recuentoPuestos === 1 ? 'Puesto de control.' : 'Puestos de control.';
-          conteoPorTipo[labelPuesto] = recuentoPuestos;
+          totalEquipos = recuentoPuestos;
         }
       }
 
-      const linesCount = Object.keys(conteoPorTipo).length;
+      const subtituloEquipos = esInstalacion
+        ? `${totalEquipos} ${totalEquipos === 1 ? 'equipo instalado' : 'equipos instalados'}`
+        : `${totalEquipos} ${totalEquipos === 1 ? 'equipo revisado' : 'equipos revisados'}`;
+
+      const conteoPorTipo: Record<string, number> = {
+        [subtituloEquipos]: totalEquipos
+      };
+
+      const linesCount = 1;
       const height = 5 + linesCount * 4.5 + 2;
 
       return {
@@ -5898,41 +5769,6 @@ export const generarCertificadoPDF = async (
         height
       };
     });
-
-    // Función para ordenar las líneas de equipos dentro de un sistema (por tipo/agente y capacidad ascendente)
-    const ordenarClavesEquipos = (claves: string[]): string[] => {
-      const getPrioridadAgente = (k: string) => {
-        const u = k.toUpperCase();
-        if (u.includes('POLVO')) return 1;
-        if (u.includes('CO2')) return 2;
-        if (u.includes('AGUA')) return 3;
-        if (u.includes('ESPUMA')) return 4;
-        if (u.includes('BIE 25')) return 10;
-        if (u.includes('BIE 45')) return 11;
-        if (u.includes('BIE 70')) return 12;
-        return 50;
-      };
-
-      const getCapacidadNum = (k: string) => {
-        const m = k.match(/(\d+(?:[.,]\d+)?)\s*(?:kg|l|mm)\b/i);
-        if (m) {
-          return parseFloat(m[1].replace(',', '.'));
-        }
-        return 999;
-      };
-
-      return [...claves].sort((a, b) => {
-        const prioA = getPrioridadAgente(a);
-        const prioB = getPrioridadAgente(b);
-        if (prioA !== prioB) return prioA - prioB;
-
-        const capA = getCapacidadNum(a);
-        const capB = getCapacidadNum(b);
-        if (capA !== capB) return capA - capB;
-
-        return a.localeCompare(b, 'es', { numeric: true });
-      });
-    };
 
     // Ordenar de forma estricta según Regla 8: Extintores -> BIEs -> Detección -> Resto
     const sistemasExtintores: SystemWithHeight[] = [];
@@ -5987,61 +5823,38 @@ export const generarCertificadoPDF = async (
     const itemsCol0: ColumnaItem[] = [];
     const itemsCol1: ColumnaItem[] = [];
 
-    // Si solo hay 1 sistema pero tiene 4 o más tipos de equipos, dividimos sus líneas entre las 2 columnas
-    if (ordenSistemas.length === 1 && Object.keys(ordenSistemas[0].conteoPorTipo).length >= 4) {
-      const sist = ordenSistemas[0];
-      const clavesOrdenadas = ordenarClavesEquipos(Object.keys(sist.conteoPorTipo));
-      const mitad = Math.ceil(clavesOrdenadas.length / 2);
-      
-      const lineas0 = clavesOrdenadas.slice(0, mitad).map(c => ({ clave: c, cantidad: sist.conteoPorTipo[c] }));
-      const lineas1 = clavesOrdenadas.slice(mitad).map(c => ({ clave: c, cantidad: sist.conteoPorTipo[c] }));
+    let hAcum0 = 0;
+    let hAcum1 = 0;
 
-      itemsCol0.push({
-        nombreSistema: sist.nombreSistema,
-        lineas: lineas0,
-        height: 5 + lineas0.length * 4.5 + 2
-      });
-      itemsCol1.push({
-        nombreSistema: `${sist.nombreSistema} (cont.)`,
-        lineas: lineas1,
-        height: 5 + lineas1.length * 4.5 + 2
-      });
-    } else {
-      // Si hay varios sistemas o la columna derecha convencional quedaría vacía (ej. solo extintores y bies),
-      // balanceamos dinámicamente según la altura acumulada
-      let hAcum0 = 0;
-      let hAcum1 = 0;
+    ordenSistemas.forEach(s => {
+      const claves = Object.keys(s.conteoPorTipo);
+      const lineas = claves.map(c => ({ clave: c, cantidad: s.conteoPorTipo[c] }));
+      const sistH = 5 + lineas.length * 4.5 + 2;
 
-      ordenSistemas.forEach(s => {
-        const clavesOrdenadas = ordenarClavesEquipos(Object.keys(s.conteoPorTipo));
-        const lineas = clavesOrdenadas.map(c => ({ clave: c, cantidad: s.conteoPorTipo[c] }));
-        const sistH = 5 + lineas.length * 4.5 + 2;
-
-        // Si la columna 0 ya tiene peso y la columna 1 tiene menos, balancear hacia la columna 1
-        if (hAcum0 > 0 && hAcum1 + sistH <= hAcum0 + 4) {
-          itemsCol1.push({
-            nombreSistema: s.nombreSistema,
-            lineas,
-            height: sistH
-          });
-          hAcum1 += sistH;
-        } else if (hAcum0 <= hAcum1) {
-          itemsCol0.push({
-            nombreSistema: s.nombreSistema,
-            lineas,
-            height: sistH
-          });
-          hAcum0 += sistH;
-        } else {
-          itemsCol1.push({
-            nombreSistema: s.nombreSistema,
-            lineas,
-            height: sistH
-          });
-          hAcum1 += sistH;
-        }
-      });
-    }
+      // Si la columna 0 ya tiene peso y la columna 1 tiene menos, balancear hacia la columna 1
+      if (hAcum0 > 0 && hAcum1 + sistH <= hAcum0 + 4) {
+        itemsCol1.push({
+          nombreSistema: s.nombreSistema,
+          lineas,
+          height: sistH
+        });
+        hAcum1 += sistH;
+      } else if (hAcum0 <= hAcum1) {
+        itemsCol0.push({
+          nombreSistema: s.nombreSistema,
+          lineas,
+          height: sistH
+        });
+        hAcum0 += sistH;
+      } else {
+        itemsCol1.push({
+          nombreSistema: s.nombreSistema,
+          lineas,
+          height: sistH
+        });
+        hAcum1 += sistH;
+      }
+    });
 
     const h0 = itemsCol0.reduce((sum, s) => sum + s.height, 0);
     const h1 = itemsCol1.reduce((sum, s) => sum + s.height, 0);
@@ -6066,23 +5879,17 @@ export const generarCertificadoPDF = async (
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(8);
       doc.setTextColor(50, 70, 120);
-      doc.text(s.nombreSistema, margen + 8, col0_Y);
-      col0_Y += 5;
+      doc.text(s.nombreSistema.toUpperCase(), margen + 8, col0_Y);
+      col0_Y += 4.5;
 
-      s.lineas.forEach(({ clave, cantidad }) => {
+      s.lineas.forEach(({ clave }) => {
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(7.5);
         doc.setTextColor(80, 80, 80);
-        let textoLinea = `• ${clave} = ${cantidad} unidad${cantidad > 1 ? 'es' : ''}`;
-        if (clave === 'Extintores varios formatos') {
-          textoLinea = `• Extintores varios formatos: ${cantidad} und.`;
-        } else if (clave === 'Bocas de incendios equipadas varios formatos') {
-          textoLinea = `• Bocas de incendios equipadas varios formatos: ${cantidad} unds.`;
-        }
-        doc.text(textoLinea, margen + 14, col0_Y, { maxWidth: (pageWidth / 2) - margen - 14 });
+        doc.text(clave, margen + 8, col0_Y, { maxWidth: (pageWidth / 2) - margen - 14 });
         col0_Y += 4.5;
       });
-      col0_Y += 2;
+      col0_Y += 2.5;
     });
 
     // Dibujar Columna 1 (Derecha)
@@ -6091,23 +5898,17 @@ export const generarCertificadoPDF = async (
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(8);
       doc.setTextColor(50, 70, 120);
-      doc.text(s.nombreSistema, pageWidth / 2 + 4, col1_Y);
-      col1_Y += 5;
+      doc.text(s.nombreSistema.toUpperCase(), pageWidth / 2 + 4, col1_Y);
+      col1_Y += 4.5;
 
-      s.lineas.forEach(({ clave, cantidad }) => {
+      s.lineas.forEach(({ clave }) => {
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(7.5);
         doc.setTextColor(80, 80, 80);
-        let textoLinea = `• ${clave} = ${cantidad} unidad${cantidad > 1 ? 'es' : ''}`;
-        if (clave === 'Extintores varios formatos') {
-          textoLinea = `• Extintores varios formatos: ${cantidad} und.`;
-        } else if (clave === 'Bocas de incendios equipadas varios formatos') {
-          textoLinea = `• Bocas de incendios equipadas varios formatos: ${cantidad} unds.`;
-        }
-        doc.text(textoLinea, pageWidth / 2 + 10, col1_Y, { maxWidth: (pageWidth / 2) - margen - 14 });
+        doc.text(clave, pageWidth / 2 + 4, col1_Y, { maxWidth: (pageWidth / 2) - margen - 14 });
         col1_Y += 4.5;
       });
-      col1_Y += 2;
+      col1_Y += 2.5;
     });
 
     y += cardSistemasH + 4;

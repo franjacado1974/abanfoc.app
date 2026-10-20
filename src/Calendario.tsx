@@ -150,6 +150,19 @@ export default function Calendario() {
   const [selectedEvento, setSelectedEvento] = useState<EventoCalendario | null>(null);
   const [mostrarFinSemana, setMostrarFinSemana] = useState(false);
   const [guardandoResuelta, setGuardandoResuelta] = useState(false);
+  const [editEstado, setEditEstado] = useState<string>('Pendiente');
+  const [editNota, setEditNota] = useState<string>('');
+  const [guardandoCambios, setGuardandoCambios] = useState(false);
+
+  useEffect(() => {
+    if (selectedEvento) {
+      setEditEstado(selectedEvento.estado || 'Pendiente');
+      setEditNota(selectedEvento.detalles || '');
+    } else {
+      setEditEstado('Pendiente');
+      setEditNota('');
+    }
+  }, [selectedEvento]);
 
   // Filtros de visibilidad para tareas en el calendario (tachado al ocultar)
   const [filtrosVisibles, setFiltrosVisibles] = useState({
@@ -843,6 +856,64 @@ export default function Calendario() {
     }
   };
 
+  // Guardar Estado y Nota editados desde el modal del Calendario
+  const handleGuardarCambiosEvento = async (ev: EventoCalendario) => {
+    const { rawDocId, modulo, id: evId } = ev;
+    if (!rawDocId || modulo === 'Festivo') return;
+
+    const cleanId = (evId || '').replace(/^(parte|rep|inst|urg)-/, '');
+    const matchesItem = (it: any) => {
+      if (!it) return false;
+      return (
+        it._docId === rawDocId ||
+        it.id === rawDocId ||
+        (cleanId && (it.id === cleanId || it._docId === cleanId))
+      );
+    };
+
+    const notaTrimmed = editNota.trim();
+    const nuevoEstado = editEstado || ev.estado || 'Pendiente';
+
+    const persistLocal = (key: string, updater: (it: any) => any) => {
+      try {
+        const stored = JSON.parse(localStorage.getItem(key) || '[]');
+        if (Array.isArray(stored)) {
+          localStorage.setItem(key, JSON.stringify(stored.map((it: any) => (matchesItem(it) ? updater(it) : it))));
+        }
+      } catch {}
+    };
+
+    setGuardandoCambios(true);
+    try {
+      if (modulo === 'Reparaciones') {
+        const patch = { estado: nuevoEstado as any, nota: notaTrimmed, observaciones: notaTrimmed };
+        setReparaciones((prev) => prev.map((it) => (matchesItem(it) ? { ...it, ...patch } : it)));
+        persistLocal('firecheck_db_reparaciones', (it) => ({ ...it, ...patch }));
+        await updateReparacion(rawDocId, patch);
+      } else if (modulo === 'Instalaciones') {
+        const patch = { estado: nuevoEstado as any, nota: notaTrimmed, observaciones: notaTrimmed };
+        setInstalaciones((prev) => prev.map((it) => (matchesItem(it) ? { ...it, ...patch } : it)));
+        persistLocal('firecheck_db_instalaciones', (it) => ({ ...it, ...patch }));
+        await updateInstalacion(rawDocId, patch);
+      } else if (modulo === 'Urgencias') {
+        const patch = { estado: nuevoEstado as any, nota: notaTrimmed, observaciones: notaTrimmed };
+        setUrgencias((prev) => prev.map((it) => (matchesItem(it) ? { ...it, ...patch } : it)));
+        persistLocal('firecheck_db_urgencias', (it) => ({ ...it, ...patch }));
+        await updateUrgencia(rawDocId, patch);
+      } else if (modulo === 'Mantenimientos') {
+        const patch = { estado: nuevoEstado as any, observacionesTecnico: notaTrimmed };
+        setPartes((prev) => prev.map((it) => (matchesItem(it) ? { ...it, ...patch } : it)));
+        persistLocal('firecheck_db_partes', (it) => ({ ...it, ...patch }));
+        await updateParte(rawDocId, patch);
+      }
+    } catch (err) {
+      console.error('Error al guardar estado y nota desde el Calendario:', err);
+    } finally {
+      setGuardandoCambios(false);
+      setSelectedEvento(null);
+    }
+  };
+
   return (
     <div className="h-screen max-h-screen bg-[#F8FAFC] flex flex-col p-3 sm:p-4 lg:p-5 select-none overflow-hidden">
       {/* Barra de cabecera del Calendario */}
@@ -1109,7 +1180,7 @@ export default function Calendario() {
             </div>
 
             {/* Contenido del modal informativo */}
-            <div className="p-5 space-y-3.5 text-xs text-slate-600">
+            <div className="p-5 space-y-3.5 text-xs text-slate-600 max-h-[70vh] overflow-y-auto">
               <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-slate-50 border border-slate-100">
                 <CalendarDays className="w-4 h-4 text-red-500 shrink-0" />
                 <div>
@@ -1248,27 +1319,76 @@ export default function Calendario() {
                 </div>
               )}
 
-              {selectedEvento.estado && (
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                  <span className="text-[10px] text-slate-600 font-bold uppercase">Estado</span>
-                  <div className="flex items-center gap-1.5">
-                    {selectedEvento.completado && (
-                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-200 text-slate-700 border border-slate-300">
-                        {selectedEvento.resueltaManual ? 'Resuelta manualmente' : 'Albarán generado'}
+              {selectedEvento.modulo === 'Festivo' ? (
+                <>
+                  {selectedEvento.estado && (
+                    <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                      <span className="text-[10px] text-slate-600 font-bold uppercase">Estado</span>
+                      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-white border border-slate-200 text-slate-800 shadow-xs">
+                        {selectedEvento.estado}
                       </span>
-                    )}
-                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-white border border-slate-200 text-slate-800 shadow-xs">
-                      {selectedEvento.estado}
-                    </span>
+                    </div>
+                  )}
+                  {selectedEvento.detalles && (
+                    <div className="p-3 rounded-xl bg-amber-50/50 border border-amber-200/70 text-amber-900">
+                      <span className="text-[10px] text-amber-800 font-bold block uppercase mb-1">Notas / Observaciones</span>
+                      <p className="whitespace-pre-wrap font-medium">{selectedEvento.detalles}</p>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-slate-600 font-bold uppercase">Estado</span>
+                      {selectedEvento.completado && (
+                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-200 text-slate-700 border border-slate-300">
+                          {selectedEvento.resueltaManual ? 'Resuelta manualmente' : 'Albarán generado'}
+                        </span>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                      {(['Pendiente', 'En curso', 'Parado', 'Finalizado'] as const).map((est) => {
+                        const isSelected = editEstado === est;
+                        const activeColors =
+                          est === 'Pendiente'
+                            ? 'bg-slate-200 text-slate-900 border-slate-500 ring-2 ring-slate-400/30'
+                            : est === 'En curso'
+                            ? 'bg-amber-100 text-amber-900 border-amber-500 ring-2 ring-amber-400/30'
+                            : est === 'Parado'
+                            ? 'bg-red-100 text-red-900 border-red-500 ring-2 ring-red-400/30'
+                            : 'bg-emerald-100 text-emerald-900 border-emerald-500 ring-2 ring-emerald-400/30';
+                        const inactiveColors =
+                          'bg-white hover:bg-slate-100 text-slate-600 border-slate-200';
+                        return (
+                          <button
+                            key={est}
+                            type="button"
+                            onClick={() => setEditEstado(est)}
+                            className={`px-2.5 py-1.5 rounded-lg text-[11px] font-extrabold border transition-all cursor-pointer text-center ${
+                              isSelected ? activeColors : inactiveColors
+                            }`}
+                          >
+                            {est}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              )}
 
-              {selectedEvento.detalles && (
-                <div className="p-3 rounded-xl bg-amber-50/50 border border-amber-200/70 text-amber-900">
-                  <span className="text-[10px] text-amber-800 font-bold block uppercase mb-1">Notas / Observaciones</span>
-                  <p className="whitespace-pre-wrap font-medium">{selectedEvento.detalles}</p>
-                </div>
+                  <div className="p-3 rounded-xl bg-amber-50/50 border border-amber-200/80 text-amber-900 space-y-1.5">
+                    <span className="text-[10px] text-amber-800 font-bold block uppercase">
+                      Notas / Observaciones
+                    </span>
+                    <textarea
+                      rows={3}
+                      value={editNota}
+                      onChange={(e) => setEditNota(e.target.value)}
+                      placeholder="Escribe aquí cualquier nota o comentario sobre esta tarea..."
+                      className="w-full rounded-lg bg-white/90 border border-amber-300/80 focus:border-amber-500 focus:ring-2 focus:ring-amber-400/20 p-2.5 text-xs font-medium text-slate-800 placeholder:text-slate-400 outline-none resize-y"
+                    />
+                  </div>
+                </>
               )}
             </div>
 
@@ -1306,10 +1426,20 @@ export default function Calendario() {
               <button
                 type="button"
                 onClick={() => setSelectedEvento(null)}
-                className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs transition-all shadow-sm cursor-pointer"
+                className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs transition-all cursor-pointer"
               >
                 Cerrar
               </button>
+              {selectedEvento.modulo !== 'Festivo' && (
+                <button
+                  type="button"
+                  disabled={guardandoCambios}
+                  onClick={() => handleGuardarCambiosEvento(selectedEvento)}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-all shadow-sm cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {guardandoCambios ? 'Guardando...' : 'Guardar cambios'}
+                </button>
+              )}
             </div>
           </div>
         </div>

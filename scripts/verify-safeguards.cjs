@@ -1045,11 +1045,11 @@ if (fs.existsSync(pdfGenPath)) {
     }
   }
 
-  // 84. Verificación de tarjeta en 2 columnas y recuentos unificados de Extintores y BIEs (AGENTS.md REGLA 84)
+  // 84. Verificación de tarjeta en 2 columnas y formato unificado de sistemas y equipos revisados en Certificado (AGENTS.md REGLA 84)
   if (fs.existsSync(pdfGenPath)) {
     const pdfContent = fs.readFileSync(pdfGenPath, 'utf8');
-    if (!pdfContent.includes('Extintores varios formatos') || !pdfContent.includes('Bocas de incendios equipadas varios formatos')) {
-      errors.push('CRÍTICO: pdfGenerator.ts carece de los recuentos unificados de Extintores o BIEs en el Certificado Oficial (AGENTS.md REGLA 84).');
+    if (!pdfContent.includes('subtituloEquipos') || !pdfContent.includes('equipo revisado') || !pdfContent.includes('equipos revisados')) {
+      errors.push('CRÍTICO: pdfGenerator.ts carece del formato unificado de unidades y equipos revisados en el Certificado Oficial (AGENTS.md REGLA 84).');
     }
     if (!pdfContent.includes('itemsCol0') || !pdfContent.includes('itemsCol1')) {
       errors.push('CRÍTICO: pdfGenerator.ts carece del balanceo dinámico en 2 columnas de la tarjeta de sistemas en el Certificado Oficial (AGENTS.md REGLA 84).');
@@ -1214,6 +1214,34 @@ if (fs.existsSync(pdfGenPath)) {
     }
   }
 
+  // 95. Verificación de Edición Rápida Exclusiva de Estado y Notas en Tareas del Calendario (AGENTS.md REGLA 95)
+  const calPath95 = path.join(__dirname, '../src/Calendario.tsx');
+  if (fs.existsSync(calPath95)) {
+    const calContent95 = fs.readFileSync(calPath95, 'utf8');
+    if (
+      !calContent95.includes('handleGuardarCambiosEvento') ||
+      !calContent95.includes('editEstado') ||
+      !calContent95.includes('editNota') ||
+      !calContent95.includes('Guardar cambios')
+    ) {
+      errors.push('CRÍTICO: Calendario.tsx carece de la edición rápida de Estado y Notas o de handleGuardarCambiosEvento en el modal de detalle (AGENTS.md REGLA 95).');
+    }
+  }
+
+  // 96. Verificación de Blindaje contra Errores de Cuota de Almacenamiento Local (QuotaExceededError / b815) en main.tsx (AGENTS.md REGLA 96)
+  const mainPath96 = path.join(__dirname, '../src/main.tsx');
+  if (fs.existsSync(mainPath96)) {
+    const mainContent96 = fs.readFileSync(mainPath96, 'utf8');
+    if (
+      !mainContent96.includes('instalarBlindajeStorageQuota') ||
+      !mainContent96.includes('compactarPayloadMasivoLocalStorage') ||
+      !mainContent96.includes('EVICTABLE_CACHE_PRIORITY') ||
+      !mainContent96.includes('PROTECTED_STORAGE_KEYS')
+    ) {
+      errors.push('CRÍTICO: main.tsx carece del interceptor instalarBlindajeStorageQuota o de compactarPayloadMasivoLocalStorage contra errores b815 de Firestore (AGENTS.md REGLA 96).');
+    }
+  }
+
 // Resultado de la verificación
 if (errors.length > 0) {
   console.error('\n❌ ERROR CRÍTICO DE BLINDAJE INTEGRAL (AGENTS.md):');
@@ -1223,6 +1251,7 @@ if (errors.length > 0) {
 } else {
   console.log('✅ BLINDAJE INTEGRAL VERIFICADO CON ÉXITO: 100% de reglas y salvaguardas validadas.\n');
 }
+
 
 
 

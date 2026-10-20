@@ -1209,16 +1209,14 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
 
 ---
 
-## 84. Blindaje Inviolable de Tarjeta en 2 Columnas y Recuentos Unificados en Certificado PDF (pdfGenerator.ts)
-- **Recuentos Unificados Reglamentarios para Extintores y BIEs**:
-  - En la tarjeta "SISTEMAS Y EQUIPOS REVISADOS" del Certificado Oficial PDF:
-    - **Extintores**: Debe mostrar obligatoria y unificadamente la línea:
-      `• Extintores varios formatos: XX und.`
-    - **Bocas de Incendios Equipadas (BIE)**: Debe mostrar obligatoria y unificadamente la línea:
-      `• Bocas de incendios equipadas varios formatos: XX unds.`
-  - Queda **ESTRICTAMENTE PROHIBIDO** desglosar extintores o BIEs por agentes o capacidades ficticias que no coincidan con la realidad física del centro.
+## 84. Blindaje Inviolable de Tarjeta en 2 Columnas y Formato Unificado de Sistemas y Equipos Revisados en Certificado PDF (pdfGenerator.ts)
+- **Formato Unificado Homologado al Índice del Acta de Revisión**:
+  - En la tarjeta "SISTEMAS Y EQUIPOS REVISADOS" del Certificado Oficial PDF (`generarCertificadoPDF`):
+    - **1.ª Línea (Negrita y Mayúsculas)**: Nombre del sistema en mayúsculas (ej. `EXTINTORES`, `BOCAS DE INCENDIOS`, `DETECCIÓN DE INCENDIOS`).
+    - **2.ª Línea (Texto normal debajo)**: Recuento total de equipos del sistema con formato `${totalEquipos} ${totalEquipos === 1 ? 'equipo revisado' : 'equipos revisados'}` (o `equipo instalado` / `equipos instalados` si es instalación).
+  - Queda **ESTRICTAMENTE PROHIBIDO** desglosar subtipos o imprimir valores de campos internos del checklist (como `"• CORRECTO. = 1 unidad"` o `"• Extintores varios formatos: 5 und"`), garantizando coherencia absoluta con el Índice del Acta de Revisión.
 - **Distribución y Balanceo Dinámico en 2 Columnas**:
-  - La tarjeta de sistemas y equipos revisados DEBE balancear dinámicamente sus bloques en 2 columnas (Izquierda y Derecha) calculando la altura acumulada para que ambas mitades queden equilibradas y nunca sobrecarguen una sola columna vertical.
+  - La tarjeta de sistemas y equipos revisados DEBE balancear dinámicamente sus bloques en 2 columnas (`itemsCol0` e `itemsCol1`) calculando la altura acumulada para que ambas mitades queden equilibradas y nunca sobrecarguen una sola columna vertical.
   - Esto previene de forma permanente que la tarjeta empuje los bloques de firmas de conformidad hacia el límite inferior de la página.
 
 ---
@@ -1360,4 +1358,26 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
 - **Blindaje de Operaciones Masivas y Modales (`handleConfirmarRevisarTodo` y `EquipoFormulario`)**:
   - En la acción "Revisar todo como ok" (`handleConfirmarRevisarTodo`), los equipos del sistema modificado se registran individualmente en `pendingEquiposRef.current`, se encolan en la cola offline (`addPendingSyncItem`) y se sincronizan concurrentemente con Firestore usando `await Promise.allSettled`, asegurando que no queden promesas flotantes ni colisiones con otros técnicos que trabajen en otros sistemas.
   - En la edición modal de equipos (`EquipoFormulario.tsx`), el guardado (`onSave`) registra inmediatamente el equipo modificado en `pendingEquiposRef.current`, persiste en IndexedDB offline y actualiza individualmente en Firestore gestionando los estados `saving`, `saved` y `offline`.
+
+---
+
+## 95. Blindaje Inviolable de Edición Rápida Exclusiva de Estado y Notas en Tareas del Calendario (`Calendario.tsx`)
+- **Edición Exclusiva de `Estado` y `Notas / Observaciones` en el Modal de Detalle (`selectedEvento`)**:
+  - En el modal de detalle de tarea del calendario (`src/Calendario.tsx`), todos los datos de creación de la tarea (fecha, cliente, centro, técnico, comercial, concepto, etc.) permanecen en modo **solo lectura**, salvo el **Estado** y el campo de **Notas / Observaciones**, que DEBEN ser editables directamente desde el calendario.
+  - **Selector de Estado Interactivo (`editEstado`)**: Botones para alternar entre `Pendiente`, `En curso`, `Parado` y `Finalizado`.
+  - **Cuadro de Texto de Notas (`editNota`)**: `<textarea>` siempre visible y editable para añadir o modificar comentarios rápidamente.
+- **Guardado Directo y Sincronización Dual (`handleGuardarCambiosEvento`)**:
+  - El botón **"Guardar cambios"** en el pie del modal DEBE actualizar de forma inmediata tanto el estado local y `localStorage` (`firecheck_db_reparaciones`, `firecheck_db_instalaciones`, `firecheck_db_urgencias`, `firecheck_db_partes`) como el documento correspondiente en Cloud Firestore (`updateReparacion`, `updateInstalacion`, `updateUrgencia`, `updateParte`).
+
+---
+
+## 96. Blindaje Inviolable contra Errores de Cuota de Almacenamiento Local (`QuotaExceededError` / Firestore `ID: b815`) en `main.tsx`
+- **Interceptor Global de `Storage.prototype.setItem` (`instalarBlindajeStorageQuota`)**:
+  - En `src/main.tsx`, DEBE ejecutarse `instalarBlindajeStorageQuota()` antes de montar Firebase y la aplicación.
+  - Si cualquier escritura en `localStorage` (especialmente las claves internas `firestore_*` del SDK de Firestore con `persistentMultipleTabManager`) encuentra `QuotaExceededError`, el interceptor DEBE liberar progresivamente las cachés secundarias de `EVICTABLE_CACHE_PRIORITY` y reintentar la escritura de inmediato para que Firestore jamás aborte con `INTERNAL ASSERTION FAILED (ID: b815)`.
+- **Compactación Automática de Imágenes Base64 Masivas en `localStorage` (`compactarPayloadMasivoLocalStorage`)**:
+  - Las escrituras en claves espejo `firecheck_db_*` que superen los 250 KB y contengan imágenes/firmas Base64 (`data:image/...`) DEBEN recortar automáticamente dichas cadenas Base64 extensas en la copia de `localStorage`, preservando intactos los datos en Firestore e IndexedDB.
+- **Protección Estricta de Sesión (`PROTECTED_STORAGE_KEYS`) y Auto-Recuperación**:
+  - Jamás se debe eliminar `firecheck_logged_user` durante la liberación automática de espacio. Si se detecta un estado previo bloqueado por `QuotaExceededError` o `b815`, el sistema sanea las cachés secundarias y se recupera automáticamente sin cerrar la sesión del usuario.
+
 
