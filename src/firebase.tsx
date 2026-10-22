@@ -2851,6 +2851,7 @@ export interface ReparacionItem {
   pedidoId?: string;
   presupuestoId?: string;
   resueltaManual?: boolean;
+  fechaConfirmada?: boolean;
 }
 
 export function subscribeReparaciones(callback: (items: ReparacionItem[]) => void) {
@@ -2881,6 +2882,7 @@ export function subscribeReparaciones(callback: (items: ReparacionItem[]) => voi
           pedidoId: data?.pedidoId || '',
           presupuestoId: data?.presupuestoId || '',
           resueltaManual: !!data?.resueltaManual,
+          fechaConfirmada: !!data?.fechaConfirmada,
         } as ReparacionItem;
       });
       callback(items);
@@ -2961,6 +2963,7 @@ export interface InstalacionItem {
   pedidoId?: string;
   presupuestoId?: string;
   resueltaManual?: boolean;
+  fechaConfirmada?: boolean;
 }
 
 export function subscribeInstalaciones(callback: (items: InstalacionItem[]) => void) {
@@ -2991,6 +2994,7 @@ export function subscribeInstalaciones(callback: (items: InstalacionItem[]) => v
           pedidoId: data?.pedidoId || '',
           presupuestoId: data?.presupuestoId || '',
           resueltaManual: !!data?.resueltaManual,
+          fechaConfirmada: !!data?.fechaConfirmada,
         } as InstalacionItem;
       });
       callback(items);
@@ -3070,6 +3074,7 @@ export interface UrgenciaItem {
   facturado?: boolean;
   albaranId?: string;
   resueltaManual?: boolean;
+  fechaConfirmada?: boolean;
 }
 
 export function subscribeUrgencias(callback: (items: UrgenciaItem[]) => void) {
@@ -3099,6 +3104,7 @@ export function subscribeUrgencias(callback: (items: UrgenciaItem[]) => void) {
           facturado: !!data?.facturado,
           albaranId: data?.albaranId || '',
           resueltaManual: !!data?.resueltaManual,
+          fechaConfirmada: !!data?.fechaConfirmada,
         } as UrgenciaItem;
       });
       callback(items);

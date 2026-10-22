@@ -115,12 +115,15 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
 
 ---
 
-## 11. Blindaje Inviolable de Estado Retimbrando y Luz Roja Parpadeante (Partes.tsx)
-- **Luz Roja Parpadeante**:
+## 11. Blindaje Inviolable de Estado Retimbrando, Luz Roja Parpadeante Independiente y Confirmación de Devolución en 2 Pasos (Partes.tsx)
+- **Luz Roja Parpadeante Independiente al Lado del Estado**:
   - Si el usuario responde "Sí" a la pregunta de retimbrado, el parte registra `equiposRetirados: true`.
-  - En la tabla de partes (`Partes.tsx`), la luz de estado debe ser **ROJA PARPADEANTE** (`bg-red-600 shadow-[0_0_12px_rgba(220,38,38,0.9)] animate-pulse`).
+  - En la tabla de partes (`Partes.tsx`), la bola **ROJA PARPADEANTE** (`bg-red-600 shadow-[0_0_12px_rgba(220,38,38,0.9)] animate-pulse`) DEBE mostrarse **al lado** de la bola de estado del parte (`tieneRetimbrePendiente(parte)`), permaneciendo visible cuando el estado es `Finalizado` (azul), `Pre-Cerrado` (verde) y también cuando pasa a `Cerrado` (negro), hasta que se confirme la devolución de los extintores.
+- **Modal en 2 Pasos al Hacer Clic en la Bola Roja (`parteDevolucionRetimbre`)**:
+  - Al hacer clic en la bola roja, se abre una ventana modal preguntando *"¿Ya se han devuelto los extintores que se retiraron para retimbrar?"* (**"Sí"** / **"No"**).
+  - Si se selecciona **"Sí"**, solicita confirmación definitiva (`pasoConfirmacionRetimbre === 2`) y, al confirmar (`confirmarDevolucionRetimbre`), elimina por completo la bola roja actualizando `localStorage` y Firestore.
 - **Filtro de Estado "Retimbrando"**:
-  - El desplegable de filtro de estado debe incorporar la opción **Retimbrando** para filtrar los partes con equipos retirados.
+  - El desplegable de filtro de estado debe incorporar la opción **Retimbrando** para filtrar todos los partes con equipos retirados pendientes de devolver (incluidos los que ya estén en estado `Cerrado`).
 
 ---
 
@@ -1379,5 +1382,16 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
   - Las escrituras en claves espejo `firecheck_db_*` que superen los 250 KB y contengan imágenes/firmas Base64 (`data:image/...`) DEBEN recortar automáticamente dichas cadenas Base64 extensas en la copia de `localStorage`, preservando intactos los datos en Firestore e IndexedDB.
 - **Protección Estricta de Sesión (`PROTECTED_STORAGE_KEYS`) y Auto-Recuperación**:
   - Jamás se debe eliminar `firecheck_logged_user` durante la liberación automática de espacio. Si se detecta un estado previo bloqueado por `QuotaExceededError` o `b815`, el sistema sanea las cachés secundarias y se recupera automáticamente sin cerrar la sesión del usuario.
+
+---
+
+## 97. Blindaje Inviolable de Casilla "Fecha confirmada" y Prefijo de Asterisco (`* `) en Tareas del Calendario (`Calendario.tsx` y `firebase.tsx`)
+- **Casilla de Verificación en el Modal de Detalle (`editFechaConfirmada`)**:
+  - En el modal de detalle de tarea del calendario (`src/Calendario.tsx`), al lado de **"Fecha programada"** DEBE mostrarse el check interactivo **"Fecha confirmada"** para los 4 tipos de tareas (`Mantenimientos`, `Reparaciones`, `Instalaciones` y `Urgencias`).
+- **Prefijo Visual con Asterisco Destacado (`* `) en la Cuadrícula del Calendario**:
+  - Cuando una tarea tiene `fechaConfirmada: true`, DEBE mostrarse al principio de la etiqueta en la celda del calendario un asterisco ligeramente más grande seguido de un espacio antes de la sigla (`* Rev.`, `* Rep.`, `* Inst.`, `* Urg.`).
+- **Persistencia Dual y Suscripción en Tiempo Real (`firebase.tsx`)**:
+  - Al pulsar **"Guardar cambios"**, el estado `fechaConfirmada` se guarda en `localStorage` y en Firestore (`updateParte`, `updateReparacion`, `updateInstalacion`, `updateUrgencia`), y los listeners `subscribeReparaciones`, `subscribeInstalaciones` y `subscribeUrgencias` en `src/firebase.tsx` DEBEN mapear siempre `fechaConfirmada: Boolean(d.fechaConfirmada)`.
+
 
 

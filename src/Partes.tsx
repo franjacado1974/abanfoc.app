@@ -136,6 +136,9 @@ export default function Partes() {
   const [selectedParteToDownload, setSelectedParteToDownload] = useState<ParteItem | null>(null);
   const [parteAEliminar, setParteAEliminar] = useState<ParteItem | null>(null);
   const [isDeletingParte, setIsDeletingParte] = useState(false);
+  const [parteDevolucionRetimbre, setParteDevolucionRetimbre] = useState<ParteItem | null>(null);
+  const [pasoConfirmacionRetimbre, setPasoConfirmacionRetimbre] = useState<1 | 2>(1);
+  const [isUpdatingRetimbre, setIsUpdatingRetimbre] = useState(false);
   const [downloadOptions, setDownloadOptions] = useState({ acta: true, certificado: true, albaran: true, contrato: false });
   const [isGeneratingPDFs, setIsGeneratingPDFs] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
@@ -442,6 +445,45 @@ export default function Partes() {
       alert('Ocurrió un error al mover el parte a la papelera. Por favor, inténtalo de nuevo.');
     } finally {
       setIsDeletingParte(false);
+    }
+  };
+
+  const tieneRetimbrePendiente = (p: ParteItem) => {
+    return Boolean((p as any).equiposRetirados || (p as any).retimbrado || (p.retirarExtintoresRetimbrado && !p.retimbradoReiniciado));
+  };
+
+  const confirmarDevolucionRetimbre = async () => {
+    if (!parteDevolucionRetimbre) return;
+    setIsUpdatingRetimbre(true);
+    try {
+      const docId = (parteDevolucionRetimbre as any)._docId || parteDevolucionRetimbre.id;
+      const updates = {
+        equiposRetirados: false,
+        retimbrado: false,
+        retirarExtintoresRetimbrado: false,
+        retimbradoReiniciado: true,
+      };
+      await updateParte(docId, updates as any);
+      setPartes(prev => {
+        const actualizados = prev.map(p =>
+          ((p._docId || p.id) === docId || p.id === parteDevolucionRetimbre.id)
+            ? { ...p, ...updates }
+            : p
+        );
+        try {
+          localStorage.setItem('firecheck_db_partes', JSON.stringify(actualizados));
+        } catch (e) {
+          console.warn("[StorageQuota] Error guardando firecheck_db_partes tras devolver extintores:", e);
+        }
+        return actualizados;
+      });
+      setParteDevolucionRetimbre(null);
+      setPasoConfirmacionRetimbre(1);
+    } catch (err) {
+      console.error('Error al confirmar devolución de extintores:', err);
+      alert('Hubo un error al actualizar el estado de devolución de los extintores.');
+    } finally {
+      setIsUpdatingRetimbre(false);
     }
   };
 
@@ -990,9 +1032,9 @@ export default function Partes() {
     // 1. Filtro por tipo de estado
     if (estadoFilter !== 'TODOS') {
       const st = (p.estado || '').trim();
-      const esRetimbrando = Boolean((p as any).equiposRetirados || (p as any).retimbrado || st === 'Retimbrando');
+      const esRetimbrando = Boolean(tieneRetimbrePendiente(p) || st === 'Retimbrando');
       if (estadoFilter === 'Retimbrando') {
-        if (!esRetimbrando || st === 'Cerrado') return false;
+        if (!esRetimbrando) return false;
       } else if (estadoFilter === 'Abierto') {
         if (st !== 'Abierto' && st !== 'Planificado' && st !== '') return false;
       } else if (estadoFilter === 'En revisión') {
@@ -1389,41 +1431,41 @@ export default function Partes() {
                         </td>
                         <td className="px-4 py-4">
                           <div className="flex items-center justify-end gap-2">
-                             {parte.retirarExtintoresRetimbrado && !parte.retimbradoReiniciado && (
-                              <span 
-                                className="text-lg animate-pulse mr-2 shrink-0 select-none"
-                                title="Extintores retirados para retimbrado (Pendiente)"
-                              >
-                                🧯
-                              </span>
+                            {tieneRetimbrePendiente(parte) && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setParteDevolucionRetimbre(parte);
+                                  setPasoConfirmacionRetimbre(1);
+                                }}
+                                className="w-2.5 h-2.5 rounded-full mr-1 shrink-0 bg-red-600 shadow-[0_0_12px_rgba(220,38,38,0.9)] animate-pulse cursor-pointer hover:scale-125 transition-transform"
+                                title="Extintores retirados para retimbrar pendientes de devolver (Haz clic aquí cuando se hayan devuelto)"
+                              />
                             )}
                             {(parte.tecnicoId || parte.estado === 'En revisión' || parte.estado === 'Pre-Cerrado' || parte.estado === 'Finalizado' || parte.estado === 'Cerrado') && (
                               <div 
                                 className={`w-2.5 h-2.5 rounded-full mr-2 shrink-0 ${
                                   parte.estado === 'Cerrado'
                                     ? 'bg-black shadow-[0_0_8px_rgba(0,0,0,0.6)]'
-                                    : (parte as any).equiposRetirados || (parte as any).retimbrado
-                                      ? 'bg-red-600 shadow-[0_0_12px_rgba(220,38,38,0.9)] animate-pulse'
-                                      : parte.estado === 'Pre-Cerrado'
-                                        ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.8)]'
-                                        : parte.estado === 'Finalizado'
-                                          ? 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.8)]'
-                                          : parte.estado === 'En revisión' 
-                                            ? 'bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.8)]' 
-                                            : 'bg-zinc-400 shadow-[0_0_8px_rgba(161,161,170,0.8)]'
+                                    : parte.estado === 'Pre-Cerrado'
+                                      ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.8)]'
+                                      : parte.estado === 'Finalizado'
+                                        ? 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.8)]'
+                                        : parte.estado === 'En revisión' 
+                                          ? 'bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.8)]' 
+                                          : 'bg-zinc-400 shadow-[0_0_8px_rgba(161,161,170,0.8)]'
                                 }`} 
                                 title={
                                   parte.estado === 'Cerrado'
                                     ? "Revisión Cerrada"
-                                    : (parte as any).equiposRetirados || (parte as any).retimbrado
-                                      ? "Equipos retirados para retimbrar (Luz roja parpadeante)"
-                                      : parte.estado === 'Finalizado'
-                                        ? "Revisión Finalizada"
-                                        : parte.estado === 'Pre-Cerrado'
-                                          ? "Revisión Pre-Cerrada (Firmada)" 
-                                          : parte.estado === 'En revisión' 
-                                            ? "Revisión Empezada" 
-                                            : "Planificado"
+                                    : parte.estado === 'Finalizado'
+                                      ? "Revisión Finalizada"
+                                      : parte.estado === 'Pre-Cerrado'
+                                        ? "Revisión Pre-Cerrada (Firmada)" 
+                                        : parte.estado === 'En revisión' 
+                                          ? "Revisión Empezada" 
+                                          : "Planificado"
                                 }
                               ></div>
                             )}
@@ -1466,6 +1508,137 @@ export default function Partes() {
         <div className="mt-4 flex items-center justify-between text-xs text-zinc-400">
           <span>Total: {partesPlanificados.length} parte{partesPlanificados.length !== 1 ? 's' : ''} planificado{partesPlanificados.length !== 1 ? 's' : ''}</span>
         </div>
+
+      {/* Modal de Devolución de Extintores Retirados para Retimbrar (2 pasos) */}
+      {parteDevolucionRetimbre && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 border border-zinc-100">
+            {/* Cabecera */}
+            <div className="flex items-center justify-between p-5 border-b border-zinc-100 bg-red-50/60">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-red-100 flex items-center justify-center text-red-600 shadow-sm shrink-0">
+                  <span className="w-3.5 h-3.5 rounded-full bg-red-600 shadow-[0_0_12px_rgba(220,38,38,0.9)] animate-pulse" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-zinc-900 text-lg leading-tight">
+                    {pasoConfirmacionRetimbre === 1 ? 'Devolución de Extintores' : 'Confirmar Devolución'}
+                  </h3>
+                  <p className="text-xs text-zinc-500 mt-0.5">
+                    Parte: {(parteDevolucionRetimbre as any).numeroMantenimiento || parteDevolucionRetimbre.id}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!isUpdatingRetimbre) {
+                    setParteDevolucionRetimbre(null);
+                    setPasoConfirmacionRetimbre(1);
+                  }
+                }}
+                disabled={isUpdatingRetimbre}
+                className="p-2 -mr-2 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 rounded-full transition-colors disabled:opacity-50"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Cuerpo */}
+            <div className="p-6 space-y-4">
+              {(() => {
+                const cCentro = getCentro(parteDevolucionRetimbre.centroId);
+                const cCliente = getCliente(parteDevolucionRetimbre.clienteId);
+                return (
+                  <div className="bg-zinc-50 rounded-2xl p-4 border border-zinc-200/80 space-y-2 text-xs">
+                    <div>
+                      <span className="text-zinc-400 font-medium block">Cliente:</span>
+                      <span className="font-bold text-zinc-800 text-sm">{cCliente?.nombre || '—'}</span>
+                    </div>
+                    <div>
+                      <span className="text-zinc-400 font-medium block">Centro / Lugar:</span>
+                      <span className="font-semibold text-zinc-800">{cCentro?.nombre || parteDevolucionRetimbre.nombreCentro || '—'}</span>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {pasoConfirmacionRetimbre === 1 ? (
+                <div className="bg-red-50/70 border border-red-200 rounded-2xl p-4 text-center space-y-1.5">
+                  <p className="text-sm font-bold text-zinc-900">
+                    ¿Ya se han devuelto los extintores que se retiraron para retimbrar?
+                  </p>
+                  <p className="text-xs text-zinc-600">
+                    Si respondes <strong>Sí</strong>, se te pedirá confirmación antes de quitar el aviso rojo.
+                  </p>
+                </div>
+              ) : (
+                <div className="bg-amber-50 border border-amber-300 rounded-2xl p-4 text-center space-y-1.5">
+                  <p className="text-sm font-bold text-amber-950">
+                    ¿Confirmas que los extintores retimbrados ya han sido entregados al cliente?
+                  </p>
+                  <p className="text-xs text-amber-800">
+                    Al confirmar, se eliminará definitivamente la bola roja de aviso en este parte.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Botones */}
+            <div className="flex items-center justify-end gap-3 p-5 border-t border-zinc-100 bg-zinc-50/60">
+              {pasoConfirmacionRetimbre === 1 ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setParteDevolucionRetimbre(null);
+                      setPasoConfirmacionRetimbre(1);
+                    }}
+                    className="flex-1 px-5 py-2.5 rounded-xl border border-zinc-300 text-zinc-700 font-bold text-sm hover:bg-zinc-100 transition-colors cursor-pointer"
+                  >
+                    No
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPasoConfirmacionRetimbre(2)}
+                    className="flex-1 px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-sm transition-all shadow-md shadow-red-600/20 cursor-pointer"
+                  >
+                    Sí
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setPasoConfirmacionRetimbre(1)}
+                    disabled={isUpdatingRetimbre}
+                    className="flex-1 px-5 py-2.5 rounded-xl border border-zinc-300 text-zinc-700 font-bold text-sm hover:bg-zinc-100 transition-colors disabled:opacity-50 cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={confirmarDevolucionRetimbre}
+                    disabled={isUpdatingRetimbre}
+                    className="flex-1 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm transition-all shadow-md shadow-emerald-600/20 flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+                  >
+                    {isUpdatingRetimbre ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Confirmando...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-4 h-4" />
+                        <span>Confirmar</span>
+                      </>
+                    )}
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal de Confirmación para Mover Parte a Papelera */}
       {parteAEliminar && (

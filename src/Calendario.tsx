@@ -135,6 +135,7 @@ export interface EventoCalendario {
   detalles?: string;
   completado?: boolean;
   resueltaManual?: boolean;
+  fechaConfirmada?: boolean;
 }
 
 export default function Calendario() {
@@ -152,15 +153,18 @@ export default function Calendario() {
   const [guardandoResuelta, setGuardandoResuelta] = useState(false);
   const [editEstado, setEditEstado] = useState<string>('Pendiente');
   const [editNota, setEditNota] = useState<string>('');
+  const [editFechaConfirmada, setEditFechaConfirmada] = useState<boolean>(false);
   const [guardandoCambios, setGuardandoCambios] = useState(false);
 
   useEffect(() => {
     if (selectedEvento) {
       setEditEstado(selectedEvento.estado || 'Pendiente');
       setEditNota(selectedEvento.detalles || '');
+      setEditFechaConfirmada(!!selectedEvento.fechaConfirmada);
     } else {
       setEditEstado('Pendiente');
       setEditNota('');
+      setEditFechaConfirmada(false);
     }
   }, [selectedEvento]);
 
@@ -414,7 +418,8 @@ export default function Calendario() {
         colorBadge: completado ? COLOR_COMPLETADO_BADGE : 'bg-amber-50 text-amber-800 border-amber-200',
         icono: ClipboardCheck,
         detalles: p.observacionesTecnico || p.comentariosPrivados || undefined,
-        completado
+        completado,
+        fechaConfirmada: (p as any).fechaConfirmada === true
       });
     });
 
@@ -465,7 +470,8 @@ export default function Calendario() {
         icono: Wrench,
         detalles: r.nota || r.observaciones || undefined,
         completado,
-        resueltaManual
+        resueltaManual,
+        fechaConfirmada: (r as any).fechaConfirmada === true
       });
     });
 
@@ -515,7 +521,8 @@ export default function Calendario() {
         icono: HardHat,
         detalles: i.nota || i.observaciones || undefined,
         completado,
-        resueltaManual
+        resueltaManual,
+        fechaConfirmada: (i as any).fechaConfirmada === true
       });
     });
 
@@ -567,7 +574,8 @@ export default function Calendario() {
         icono: AlertTriangle,
         detalles: u.nota || u.observaciones || undefined,
         completado,
-        resueltaManual
+        resueltaManual,
+        fechaConfirmada: (u as any).fechaConfirmada === true
       });
     });
 
@@ -856,7 +864,7 @@ export default function Calendario() {
     }
   };
 
-  // Guardar Estado y Nota editados desde el modal del Calendario
+  // Guardar Estado, Nota y Fecha Confirmada editados desde el modal del Calendario
   const handleGuardarCambiosEvento = async (ev: EventoCalendario) => {
     const { rawDocId, modulo, id: evId } = ev;
     if (!rawDocId || modulo === 'Festivo') return;
@@ -873,6 +881,7 @@ export default function Calendario() {
 
     const notaTrimmed = editNota.trim();
     const nuevoEstado = editEstado || ev.estado || 'Pendiente';
+    const confirmadaVal = !!editFechaConfirmada;
 
     const persistLocal = (key: string, updater: (it: any) => any) => {
       try {
@@ -886,22 +895,22 @@ export default function Calendario() {
     setGuardandoCambios(true);
     try {
       if (modulo === 'Reparaciones') {
-        const patch = { estado: nuevoEstado as any, nota: notaTrimmed, observaciones: notaTrimmed };
+        const patch = { estado: nuevoEstado as any, nota: notaTrimmed, observaciones: notaTrimmed, fechaConfirmada: confirmadaVal } as any;
         setReparaciones((prev) => prev.map((it) => (matchesItem(it) ? { ...it, ...patch } : it)));
         persistLocal('firecheck_db_reparaciones', (it) => ({ ...it, ...patch }));
         await updateReparacion(rawDocId, patch);
       } else if (modulo === 'Instalaciones') {
-        const patch = { estado: nuevoEstado as any, nota: notaTrimmed, observaciones: notaTrimmed };
+        const patch = { estado: nuevoEstado as any, nota: notaTrimmed, observaciones: notaTrimmed, fechaConfirmada: confirmadaVal } as any;
         setInstalaciones((prev) => prev.map((it) => (matchesItem(it) ? { ...it, ...patch } : it)));
         persistLocal('firecheck_db_instalaciones', (it) => ({ ...it, ...patch }));
         await updateInstalacion(rawDocId, patch);
       } else if (modulo === 'Urgencias') {
-        const patch = { estado: nuevoEstado as any, nota: notaTrimmed, observaciones: notaTrimmed };
+        const patch = { estado: nuevoEstado as any, nota: notaTrimmed, observaciones: notaTrimmed, fechaConfirmada: confirmadaVal } as any;
         setUrgencias((prev) => prev.map((it) => (matchesItem(it) ? { ...it, ...patch } : it)));
         persistLocal('firecheck_db_urgencias', (it) => ({ ...it, ...patch }));
         await updateUrgencia(rawDocId, patch);
       } else if (modulo === 'Mantenimientos') {
-        const patch = { estado: nuevoEstado as any, observacionesTecnico: notaTrimmed };
+        const patch = { estado: nuevoEstado as any, observacionesTecnico: notaTrimmed, fechaConfirmada: confirmadaVal } as any;
         setPartes((prev) => prev.map((it) => (matchesItem(it) ? { ...it, ...patch } : it)));
         persistLocal('firecheck_db_partes', (it) => ({ ...it, ...patch }));
         await updateParte(rawDocId, patch);
@@ -1130,10 +1139,15 @@ export default function Calendario() {
                         title={
                           isFestivo
                             ? `${ev.tituloCompleto} (Festivo oficial en Barcelona / España)`
-                            : `${ev.sigla} ${ev.clienteResumido}${ev.poblacion ? ` [${ev.poblacion}]` : ''}${ev.completado ? ' · Completada (Albarán generado)' : ''} (Arrastra a otro día para reprogramar o haz clic para ver detalles)`
+                            : `${ev.fechaConfirmada ? '* ' : ''}${ev.sigla} ${ev.clienteResumido}${ev.poblacion ? ` [${ev.poblacion}]` : ''}${ev.fechaConfirmada ? ' · Fecha confirmada' : ''}${ev.completado ? ' · Completada (Albarán generado)' : ''} (Arrastra a otro día para reprogramar o haz clic para ver detalles)`
                         }
                       >
-                        <span className="font-extrabold tracking-tight shrink-0">{ev.sigla}</span>
+                        <span className="font-extrabold tracking-tight shrink-0 inline-flex items-center">
+                          {ev.fechaConfirmada && (
+                            <span className="text-[14px] leading-none font-black mr-1">*</span>
+                          )}
+                          <span>{ev.sigla}</span>
+                        </span>
                         <span className="truncate font-semibold">{ev.clienteResumido}</span>
                       </div>
                     );
@@ -1157,8 +1171,11 @@ export default function Calendario() {
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wider ${selectedEvento.colorTag}`}>
-                      {selectedEvento.sigla} {selectedEvento.modulo}
+                    <span className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wider inline-flex items-center ${selectedEvento.colorTag}`}>
+                      {editFechaConfirmada && (
+                        <span className="text-[13px] leading-none font-black mr-1">*</span>
+                      )}
+                      <span>{selectedEvento.sigla} {selectedEvento.modulo}</span>
                     </span>
                     <span className="text-[10px] font-bold text-slate-500">
                       {selectedEvento.tipoBadge}
@@ -1181,14 +1198,30 @@ export default function Calendario() {
 
             {/* Contenido del modal informativo */}
             <div className="p-5 space-y-3.5 text-xs text-slate-600 max-h-[70vh] overflow-y-auto">
-              <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                <CalendarDays className="w-4 h-4 text-red-500 shrink-0" />
-                <div>
-                  <span className="text-[10px] text-slate-600 font-bold block uppercase">Fecha programada</span>
-                  <span className="font-extrabold text-slate-800 text-sm">
-                    {selectedEvento.fecha.split('-').reverse().join('/')}
-                  </span>
+              <div className="flex items-center justify-between gap-2.5 p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                <div className="flex items-center gap-2.5">
+                  <CalendarDays className="w-4 h-4 text-red-500 shrink-0" />
+                  <div>
+                    <span className="text-[10px] text-slate-600 font-bold block uppercase">Fecha programada</span>
+                    <span className="font-extrabold text-slate-800 text-sm">
+                      {selectedEvento.fecha.split('-').reverse().join('/')}
+                    </span>
+                  </div>
                 </div>
+
+                {selectedEvento.modulo !== 'Festivo' && (
+                  <label className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border bg-white hover:bg-slate-50 border-slate-200 cursor-pointer select-none shadow-2xs transition-all">
+                    <input
+                      type="checkbox"
+                      checked={editFechaConfirmada}
+                      onChange={(e) => setEditFechaConfirmada(e.target.checked)}
+                      className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer accent-emerald-600"
+                    />
+                    <span className={`text-xs font-extrabold ${editFechaConfirmada ? 'text-emerald-700' : 'text-slate-700'}`}>
+                      Fecha confirmada
+                    </span>
+                  </label>
+                )}
               </div>
 
               {selectedEvento.tituloCompleto && selectedEvento.tituloCompleto !== selectedEvento.clienteResumido && (

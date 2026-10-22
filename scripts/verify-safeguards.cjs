@@ -1242,6 +1242,24 @@ if (fs.existsSync(pdfGenPath)) {
     }
   }
 
+  // 97. Verificación de Casilla "Fecha confirmada" y Bola Roja Independiente con Devolución en 2 Pasos (AGENTS.md REGLAS 11 y 97)
+  if (fs.existsSync(calPath95)) {
+    const calContent97 = fs.readFileSync(calPath95, 'utf8');
+    if (!calContent97.includes('editFechaConfirmada') || !calContent97.includes('Fecha confirmada')) {
+      errors.push('CRÍTICO: Calendario.tsx carece del check "Fecha confirmada" (editFechaConfirmada) (AGENTS.md REGLA 97).');
+    }
+  }
+  if (fs.existsSync(partesPath)) {
+    const partesContent11 = fs.readFileSync(partesPath, 'utf8');
+    if (
+      !partesContent11.includes('tieneRetimbrePendiente') ||
+      !partesContent11.includes('parteDevolucionRetimbre') ||
+      !partesContent11.includes('confirmarDevolucionRetimbre')
+    ) {
+      errors.push('CRÍTICO: Partes.tsx carece de la bola roja independiente (tieneRetimbrePendiente) o del modal en 2 pasos de devolución de extintores (parteDevolucionRetimbre / confirmarDevolucionRetimbre) (AGENTS.md REGLA 11).');
+    }
+  }
+
 // Resultado de la verificación
 if (errors.length > 0) {
   console.error('\n❌ ERROR CRÍTICO DE BLINDAJE INTEGRAL (AGENTS.md):');
