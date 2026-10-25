@@ -831,6 +831,9 @@ export default function Presupuestos() {
         const newRep: ReparacionItem = {
           id: newRepId,
           reparacion: tituloSeguro,
+          clienteId: p.clienteId || clienteObj?.id || '',
+          clienteNombre: nombreCliente,
+          centroId: p.centroId || centroObj?.id || '',
           lugar: lugar.trim(),
           tecnicoAsignado: '',
           comercial: '',
@@ -854,6 +857,9 @@ export default function Presupuestos() {
         const newIns: InstalacionItem = {
           id: newInsId,
           instalacion: tituloSeguro,
+          clienteId: p.clienteId || clienteObj?.id || '',
+          clienteNombre: nombreCliente,
+          centroId: p.centroId || centroObj?.id || '',
           lugar: lugar.trim(),
           tecnicoAsignado: '',
           comercial: '',

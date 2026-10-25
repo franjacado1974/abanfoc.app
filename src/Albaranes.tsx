@@ -191,6 +191,8 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
           empresaId: prefill.empresaId || '',
           clienteId: prefill.clienteId || '',
           centroId: prefill.centroId || '',
+          clienteNombreLibre: prefill.clienteNombreLibre || '',
+          centroNombreLibre: prefill.centroNombreLibre || '',
           tecnicoId: prefill.tecnicoId || '',
           fechaCreacion: prefill.fechaCreacion || new Date().toISOString(),
           items: prefill.items && prefill.items.length > 0
@@ -286,6 +288,25 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
         }
       }
     }
+  };
+
+  const handleOpenCrearFactura = (alb: Albaran) => {
+    navigate('/facturas', {
+      state: {
+        prefillFactura: {
+          albaranId: alb.id,
+          empresaId: alb.empresaId || '',
+          clienteId: alb.clienteId || '',
+          centroId: alb.centroId || '',
+          clienteNombreLibre: alb.clienteNombreLibre || '',
+          centroNombreLibre: alb.centroNombreLibre || '',
+          numeroPedido: alb.numeroPedido || '',
+          titulo: alb.titulo || `Factura de Albarán ${alb.id}`,
+          fechaCreacion: new Date().toISOString(),
+          items: alb.items || []
+        }
+      }
+    });
   };
 
   const handleEditAlbaran = (alb: any) => {
@@ -717,6 +738,24 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                           const centroParaPDF = centro || (alb.centroNombreLibre ? { nombre: alb.centroNombreLibre } : null);
                           await generarAlbaranPDF(clienteParaPDF as any, centroParaPDF as any, eqsDelCentro as any[], alb.numeroMantenimiento || alb.id, tecnicoNombre, alb.firmaCliente, alb.firmaTecnico, alb.nombreFirmante, alb.items, empresa as any, false, alb.titulo, alb.periodicidad, undefined, alb.numeroPedido, alb.fechaCreacion);
                         }} className="p-1.5 text-red-650 hover:bg-red-50 rounded-xl transition-colors" title="Descargar PDF"><Download className="w-4 h-4" /></button>
+                        {!isVisualizador && !isTecnicoMode && (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenCrearFactura(alb)}
+                            className={`p-1.5 rounded-xl transition-colors cursor-pointer ${
+                              alb.facturado
+                                ? 'text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50'
+                                : 'text-zinc-500 hover:text-blue-600 hover:bg-blue-50'
+                            }`}
+                            title={alb.facturado ? `Facturado - Clic para ver/crear factura` : 'Crear Factura desde este Albarán'}
+                          >
+                            <svg className="w-4 h-4 inline-block" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                              <polyline points="14 2 14 8 20 8" />
+                              <text x="12" y="19" textAnchor="middle" fill="currentColor" stroke="none" fontSize="11.5" fontWeight="900" fontFamily="system-ui, -apple-system, sans-serif">F</text>
+                            </svg>
+                          </button>
+                        )}
                         {!isVisualizador && <button onClick={() => handleEditAlbaran(alb)} className="p-1.5 text-black hover:bg-zinc-100 rounded-xl transition-colors" title="Editar"><Edit className="w-4 h-4" /></button>}
                         {!isVisualizador && !isTecnicoMode && <button onClick={() => handleDuplicateAlbaran(alb)} className="p-1.5 text-violet-600 hover:bg-violet-50 rounded-xl transition-colors" title="Duplicar"><Copy className="w-4 h-4" /></button>}
                         {!isVisualizador && !isTecnicoMode && <button onClick={() => handleDeleteAlbaran(alb.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded-xl transition-colors" title="Eliminar"><Trash2 className="w-4 h-4" /></button>}
@@ -901,6 +940,24 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                               const centroParaPDF = centro || (alb.centroNombreLibre ? { nombre: alb.centroNombreLibre } : null);
                               await generarAlbaranPDF(clienteParaPDF as any, centroParaPDF as any, eqsDelCentro as any[], alb.numeroMantenimiento || alb.id, tecnicoNombre, alb.firmaCliente, alb.firmaTecnico, alb.nombreFirmante, alb.items, empresa as any, false, alb.titulo, alb.periodicidad, undefined, alb.numeroPedido, alb.fechaCreacion);
                             }} className="p-1.5 text-red-650 hover:bg-red-50 rounded-xl transition-colors cursor-pointer" title="Descargar PDF"><Download className="w-4 h-4" /></button>
+                            {!isVisualizador && !isTecnicoMode && (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenCrearFactura(alb)}
+                                className={`p-1.5 rounded-xl transition-colors cursor-pointer ${
+                                  alb.facturado
+                                    ? 'text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50'
+                                    : 'text-zinc-500 hover:text-blue-600 hover:bg-blue-50'
+                                }`}
+                                title={alb.facturado ? `Facturado - Clic para ver/crear factura` : 'Crear Factura desde este Albarán'}
+                              >
+                                <svg className="w-4 h-4 inline-block" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                  <polyline points="14 2 14 8 20 8" />
+                                  <text x="12" y="19" textAnchor="middle" fill="currentColor" stroke="none" fontSize="11.5" fontWeight="900" fontFamily="system-ui, -apple-system, sans-serif">F</text>
+                                </svg>
+                              </button>
+                            )}
                             {!isVisualizador && <button onClick={() => handleEditAlbaran(alb)} className="p-1.5 text-black hover:bg-zinc-100 rounded-xl transition-colors cursor-pointer" title="Editar"><Edit className="w-4 h-4" /></button>}
                             {!isVisualizador && !isTecnicoMode && <button onClick={() => handleDuplicateAlbaran(alb)} className="p-1.5 text-violet-600 hover:bg-violet-50 rounded-xl transition-colors cursor-pointer" title="Duplicar"><Copy className="w-4 h-4" /></button>}
                             {!isVisualizador && !isTecnicoMode && <button onClick={() => handleDeleteAlbaran(alb.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded-xl transition-colors cursor-pointer" title="Eliminar"><Trash2 className="w-4 h-4" /></button>}
@@ -922,10 +979,10 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
     );
   }
 
-  const selectedEmpresa = empresas.find(e => e._docId === form.empresaId); // Removed type assertion
-  const selectedCliente = clientes.find(c => c.id === form.clienteId); // Removed type assertion
+  const selectedEmpresa = empresas.find(e => e._docId === form.empresaId || e.id === form.empresaId); // Removed type assertion
+  const selectedCliente = clientes.find(c => c.id === form.clienteId || (c as any)._docId === form.clienteId); // Removed type assertion
   const selectedCentro = centros.find(c => c._docId === form.centroId || c.id === form.centroId); // Removed type assertion
-  const filteredCentros = centros.filter(c => c.clienteId === form.clienteId);
+  const filteredCentros = centros.filter(c => c.clienteId === form.clienteId || (selectedCliente && (c.clienteId === selectedCliente.id || c.clienteId === (selectedCliente as any)._docId)));
 
   return (
     <div className="min-h-screen bg-zinc-50 p-4 md:p-8">
@@ -979,10 +1036,10 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                       <input
                         type="text"
                         placeholder="Escribe para buscar o añade uno nuevo..."
-                        value={showClienteDropdown ? clienteSearchTerm : (form.clienteNombreLibre || clientes.find(c => c.id === form.clienteId)?.nombre || '')}
+                        value={showClienteDropdown ? clienteSearchTerm : (form.clienteNombreLibre || selectedCliente?.nombre || clientes.find(c => c.id === form.clienteId)?.nombre || '')}
                         onFocus={() => {
                           setShowClienteDropdown(true);
-                          setClienteSearchTerm(form.clienteNombreLibre || clientes.find(c => c.id === form.clienteId)?.nombre || '');
+                          setClienteSearchTerm(form.clienteNombreLibre || selectedCliente?.nombre || clientes.find(c => c.id === form.clienteId)?.nombre || '');
                         }}
                         onChange={(e) => {
                           setClienteSearchTerm(e.target.value);

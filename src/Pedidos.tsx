@@ -1,20 +1,24 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Search, X, Plus, Building2, Calendar, Clock, CheckCircle, FileText, Trash2, Edit, Save, ChevronDown, ArrowLeft, Wrench, HardHat, ReceiptText } from 'lucide-react';
+import {
+  Search, X, Plus, Clock, CheckCircle, FileText, Trash2, Edit, Save,
+  ChevronDown, ArrowLeft, Wrench, HardHat, ReceiptText, Gauge,
+  ArrowUp, ArrowDown, ArrowUpDown
+} from 'lucide-react';
 import { 
   subscribePedidos, addPedido, updatePedido, deletePedido, 
   subscribeClientes, subscribeCentros, subscribePresupuestos,
-  subscribeEmpresas, subscribeTecnicos,
+  subscribeEmpresas, subscribeTecnicos, subscribeAlbaranes,
   addReparacion, addInstalacion,
   type Pedido, type Presupuesto, type Cliente, type Centro,
-  type Empresa, type Tecnico,
+  type Empresa, type Tecnico, type Albaran,
   type ReparacionItem, type InstalacionItem
 } from './firebase';
 import { generarPresupuestoPDF } from './pdfGenerator';
 
 const ESTADOS = [
   { valor: 'Pendiente' as const, color: 'bg-amber-100 text-amber-700 border-amber-200', icono: Clock },
-  { valor: 'En Proceso' as const, color: 'bg-sky-100 text-sky-700 border-zinc-300', icono: Clock },
+  { valor: 'En Proceso' as const, color: 'bg-sky-100 text-sky-700 border-sky-200', icono: Clock },
   { valor: 'Completado' as const, color: 'bg-emerald-100 text-emerald-700 border-emerald-200', icono: CheckCircle },
 ];
 
@@ -36,11 +40,19 @@ const getMonthFromDate = (dateStr?: string): string => {
 const formatMoneda = (valor: number) =>
   new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(valor || 0);
 
+const formatFecha = (iso: string | undefined) => {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
+};
+
 export default function Pedidos() {
   const navigate = useNavigate();
   const location = useLocation();
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
   const [presupuestos, setPresupuestos] = useState<Presupuesto[]>([]);
+  const [albaranes, setAlbaranes] = useState<Albaran[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [centros, setCentros] = useState<Centro[]>([]);
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
@@ -50,6 +62,17 @@ export default function Pedidos() {
   const [view, setView] = useState<'list' | 'form'>('list');
   const [openStatusMenuId, setOpenStatusMenuId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [sortField, setSortField] = useState<'referencia' | 'fecha' | 'estado'>('fecha');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+
+  const handleSort = (field: 'referencia' | 'fecha' | 'estado') => {
+    if (sortField === field) {
+      setSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortOrder(field === 'fecha' ? 'desc' : 'asc');
+    }
+  };
 
   const [form, setForm] = useState<Pedido>({
     id: '',
@@ -73,6 +96,7 @@ export default function Pedidos() {
     const unsubPresupuestos = subscribePresupuestos(setPresupuestos);
     const unsubEmpresas = subscribeEmpresas(setEmpresas);
     const unsubTecnicos = subscribeTecnicos(setTecnicos);
+    const unsubAlbaranes = subscribeAlbaranes(setAlbaranes);
     return () => { 
       unsubPedidos(); 
       unsubClientes(); 
@@ -80,6 +104,7 @@ export default function Pedidos() {
       unsubPresupuestos(); 
       unsubEmpresas();
       unsubTecnicos();
+      unsubAlbaranes();
     };
   }, []);
 
@@ -96,23 +121,54 @@ export default function Pedidos() {
   }, [location.search, presupuestos]);
 
   const presupuestosAprobados = useMemo(() =>
-    presupuestos.filter(p => p.estado === 'Aprobado' && !pedidos.some(ped => ped.presupuestoId === p.id)),
+    presupuestos.filter(p =>
+      p.estado === 'Aprobado' &&
+      !pedidos.some(ped =>
+        ped.presupuestoId === p.id ||
+        ped.presupuestoId === (p as any)._docId ||
+        (p.pedidoId && ped.numeroPedido === p.pedidoId)
+      )
+    ),
     [presupuestos, pedidos]
   );
 
   const filteredPedidos = useMemo(() => {
-    let result = pedidos;
+    let result = [...pedidos];
     if (statusFilter !== 'Todos') {
       result = result.filter(p => p.estado === statusFilter);
     }
-    if (!searchTerm.trim()) return result;
-    const term = searchTerm.toLowerCase();
-    return result.filter(p =>
-      p.titulo.toLowerCase().includes(term) ||
-      (p.numeroPedido || '').toLowerCase().includes(term) ||
-      clientes.find(c => c.id === p.clienteId)?.nombre?.toLowerCase().includes(term)
-    );
-  }, [pedidos, searchTerm, clientes, statusFilter]);
+    if (searchTerm.trim()) {
+      const term = searchTerm.toLowerCase();
+      result = result.filter(p => {
+        const cliNombre = clientes.find(c => c.id === p.clienteId || (c as any)._docId === p.clienteId)?.nombre || (p as any).nombreCliente || '';
+        const cenNombre = centros.find(c => c.id === p.centroId || (c as any)._docId === p.centroId)?.nombre || (p as any).nombreCentro || '';
+        return (
+          (p.titulo || '').toLowerCase().includes(term) ||
+          (p.numeroPedido || '').toLowerCase().includes(term) ||
+          cliNombre.toLowerCase().includes(term) ||
+          cenNombre.toLowerCase().includes(term)
+        );
+      });
+    }
+
+    result.sort((a, b) => {
+      let cmp = 0;
+      if (sortField === 'referencia') {
+        const refA = (a.numeroPedido || a.id || '').toLowerCase();
+        const refB = (b.numeroPedido || b.id || '').toLowerCase();
+        cmp = refA.localeCompare(refB, 'es', { numeric: true });
+      } else if (sortField === 'estado') {
+        cmp = (a.estado || '').localeCompare(b.estado || '', 'es');
+      } else {
+        const dateA = new Date(a.fechaCreacion || 0).getTime();
+        const dateB = new Date(b.fechaCreacion || 0).getTime();
+        cmp = dateA - dateB;
+      }
+      return sortOrder === 'asc' ? cmp : -cmp;
+    });
+
+    return result;
+  }, [pedidos, searchTerm, clientes, centros, statusFilter, sortField, sortOrder]);
 
   const getEstadoInfo = (estado: string) => ESTADOS.find(e => e.valor === estado) || ESTADOS[0];
 
@@ -130,7 +186,7 @@ export default function Pedidos() {
       items: [{ cantidad: 1, concepto: 'Trabajo', descripcion: '', precioUnidad: 0, subtotal: 0 }],
       estado: 'Pendiente',
       presupuestoId: '',
-      numeroPedido: `PED-${new Date().getFullYear().toString().slice(-2)}-${String(pedidos.length + 1).padStart(3, '0')}`,
+      numeroPedido: `PDV ${new Date().getFullYear().toString().slice(-2)}${String(pedidos.length + 1).padStart(3, '0')}`,
       notas: '',
     });
     setView('form');
@@ -138,6 +194,8 @@ export default function Pedidos() {
 
   const handleCrearDesdePresupuesto = (p: Presupuesto) => {
     setEditingId(null);
+    const numBase = (p.numeroPresupuesto || p.id || '').replace(/^(PDV|PRV|PRE|PED)[-\s]*/i, '').trim();
+    const codigoPDV = numBase ? `PDV ${numBase}` : `PDV ${new Date().getFullYear().toString().slice(-2)}${String(pedidos.length + 1).padStart(3, '0')}`;
     setForm({
       id: '',
       empresaId: (p as any).empresaId || '',
@@ -146,11 +204,11 @@ export default function Pedidos() {
       titulo: p.titulo,
       fechaCreacion: new Date().toISOString(),
       fechaPrevista: new Date().toISOString().slice(0, 10),
-      tipoPedido: '',
+      tipoPedido: (p as any).tipoTrabajo || '',
       items: p.lineas.map(l => ({ cantidad: l.cantidad, concepto: l.concepto, descripcion: l.descripcion || '', precioUnidad: l.precioUnidad, subtotal: l.subtotal })),
       estado: 'Pendiente',
       presupuestoId: p.id,
-      numeroPedido: `PED-${new Date().getFullYear().toString().slice(-2)}-${String(pedidos.length + 1).padStart(3, '0')}`,
+      numeroPedido: codigoPDV,
       notas: `Pedido creado desde presupuesto: ${p.numeroPresupuesto || p.id}`,
     });
     setView('form');
@@ -177,7 +235,7 @@ export default function Pedidos() {
         const mesUso = getMonthFromDate(fechaUso);
 
         const centroObj = centros.find(c => (c._docId || c.id) === form.centroId);
-        const clienteObj = clientes.find(c => c.id === form.clienteId);
+        const clienteObj = clientes.find(c => c.id === form.clienteId || (c as any)._docId === form.clienteId);
         let lugar = '';
         if (centroObj && clienteObj) {
           lugar = `${centroObj.nombre} (${clienteObj.nombre})`;
@@ -194,6 +252,9 @@ export default function Pedidos() {
           const newRep: ReparacionItem = {
             id: newRepId,
             reparacion: form.titulo.trim(),
+            clienteId: form.clienteId,
+            clienteNombre: clienteObj?.nombre || '',
+            centroId: form.centroId || '',
             lugar: lugar.trim(),
             tecnicoAsignado: '',
             comercial: '',
@@ -203,6 +264,8 @@ export default function Pedidos() {
             mes: mesUso,
             observaciones: notaInicial,
             nota: notaInicial,
+            pedidoId: form.numeroPedido || '',
+            presupuestoId: form.presupuestoId || ''
           };
           await addReparacion(newRep);
           savedForm.tareaGeneradaId = newRepId;
@@ -217,6 +280,9 @@ export default function Pedidos() {
           const newIns: InstalacionItem = {
             id: newInsId,
             instalacion: form.titulo.trim(),
+            clienteId: form.clienteId,
+            clienteNombre: clienteObj?.nombre || '',
+            centroId: form.centroId || '',
             lugar: lugar.trim(),
             tecnicoAsignado: '',
             comercial: '',
@@ -226,6 +292,8 @@ export default function Pedidos() {
             mes: mesUso,
             observaciones: notaInicial,
             nota: notaInicial,
+            pedidoId: form.numeroPedido || '',
+            presupuestoId: form.presupuestoId || ''
           };
           await addInstalacion(newIns);
           savedForm.tareaGeneradaId = newInsId;
@@ -265,15 +333,6 @@ export default function Pedidos() {
 
   // Abrir Albaranes directamente con los datos precargados desde el pedido de ventas
   const handleOpenCrearAlbaran = (ped: Pedido) => {
-    // Intentar encontrar el centro asociado
-    const matchCentro = centros.find(c => 
-      (ped.centroId && (c.id === ped.centroId || (c as any)._docId === ped.centroId)) ||
-      (c.clienteId === ped.clienteId)
-    );
-
-    let clienteId = ped.clienteId || matchCentro?.clienteId || (clientes.length > 0 ? clientes[0].id : '');
-    let centroId = ped.centroId || matchCentro?.id || '';
-    let empresaId = ped.empresaId || matchCentro?.empresaId || (empresas.length > 0 ? (empresas[0].id || '') : '');
     let numeroPedido = ped.numeroPedido || (ped.id ? `PDV ${ped.id.replace(/^(PDV|PRV|PRE|PED)[-\s]*/i, '')}` : '');
     let titulo = ped.titulo || 'Trabajo de Pedido';
 
@@ -286,11 +345,27 @@ export default function Pedidos() {
       ))
     );
 
-    if (matchPresupuesto) {
-      if (matchPresupuesto.clienteId) clienteId = matchPresupuesto.clienteId;
-      if (matchPresupuesto.centroId) centroId = matchPresupuesto.centroId;
-      if ((matchPresupuesto as any).empresaId) empresaId = (matchPresupuesto as any).empresaId;
-      if (matchPresupuesto.titulo) titulo = matchPresupuesto.titulo;
+    const matchCentro = centros.find(c => 
+      (ped.centroId && (c.id === ped.centroId || (c as any)._docId === ped.centroId)) ||
+      (matchPresupuesto?.centroId && (c.id === matchPresupuesto.centroId || (c as any)._docId === matchPresupuesto.centroId)) ||
+      (ped.clienteId && c.clienteId === ped.clienteId)
+    );
+
+    const rawClienteId = ped.clienteId || matchPresupuesto?.clienteId || matchCentro?.clienteId || '';
+    const rawClienteNombre = (ped as any).nombreCliente || matchPresupuesto?.nombreCliente || '';
+    const matchCliente = clientes.find(c =>
+      (rawClienteId && (c.id === rawClienteId || (c as any)._docId === rawClienteId)) ||
+      (rawClienteNombre && c.nombre.trim().toLowerCase() === rawClienteNombre.trim().toLowerCase())
+    );
+
+    let clienteId = matchCliente?.id || rawClienteId || '';
+    let clienteNombreLibre = !clienteId && rawClienteNombre ? rawClienteNombre : '';
+    let centroId = ped.centroId || matchPresupuesto?.centroId || matchCentro?._docId || matchCentro?.id || '';
+    let centroNombreLibre = !centroId && (ped as any).nombreCentro ? (ped as any).nombreCentro : '';
+    let empresaId = ped.empresaId || (matchPresupuesto as any)?.empresaId || matchCentro?.empresaId || (empresas.length > 0 ? (empresas[0]._docId || empresas[0].id || '') : '');
+
+    if (matchPresupuesto?.titulo) {
+      titulo = matchPresupuesto.titulo;
     }
 
     // Cargar artículos de la caché local para obtener la familia
@@ -304,29 +379,31 @@ export default function Pedidos() {
     let items: { cantidad: number; concepto: string; descripcion: string; precioUnidad: number; subtotal: number }[] = [];
 
     if (matchPresupuesto?.lineas && matchPresupuesto.lineas.length > 0) {
-      items = matchPresupuesto.lineas.map(l => {
-        const art = articulosList.find(a => 
-          (l.codigo && a.codigo && a.codigo === l.codigo) ||
-          (a.nombre && l.concepto && a.nombre.toLowerCase().trim() === l.concepto.toLowerCase().trim())
-        );
-        const familia = art?.familia || l.concepto || ped.tipoPedido || 'Trabajo';
-        const descripcion = l.descripcion || l.concepto || '';
-        const cantidad = Number(l.cantidad) || 1;
-        const precioUnidad = Number(l.precioUnidad) || 0;
-        return {
-          cantidad,
-          concepto: familia,
-          descripcion,
-          precioUnidad,
-          subtotal: cantidad * precioUnidad
-        };
-      });
+      items = matchPresupuesto.lineas
+        .filter(l => l.tipo !== 'capitulo')
+        .map(l => {
+          const art = articulosList.find(a => 
+            (l.codigo && a.codigo && a.codigo === l.codigo) ||
+            (a.nombre && l.concepto && a.nombre.toLowerCase().trim() === l.concepto.toLowerCase().trim())
+          );
+          const familia = l.familia || art?.familia || l.concepto || ped.tipoPedido || 'Trabajo';
+          const descripcion = l.descripcion || l.concepto || '';
+          const cantidad = Number(l.cantidad) || 1;
+          const precioUnidad = Number(l.precioUnidad) || 0;
+          return {
+            cantidad,
+            concepto: familia,
+            descripcion,
+            precioUnidad,
+            subtotal: cantidad * precioUnidad
+          };
+        });
     } else if (ped.items && ped.items.length > 0) {
       items = ped.items.map(l => {
         const art = articulosList.find(a => 
           (a.nombre && l.concepto && a.nombre.toLowerCase().trim() === l.concepto.toLowerCase().trim())
         );
-        const familia = art?.familia || l.concepto || ped.tipoPedido || 'Trabajo';
+        const familia = (l as any).familia || art?.familia || l.concepto || ped.tipoPedido || 'Trabajo';
         const descripcion = l.descripcion || l.concepto || '';
         const cantidad = Number(l.cantidad) || 1;
         const precioUnidad = Number(l.precioUnidad) || 0;
@@ -356,6 +433,8 @@ export default function Pedidos() {
           empresaId,
           clienteId,
           centroId,
+          clienteNombreLibre,
+          centroNombreLibre,
           tecnicoId: tecnicos.length > 0 ? tecnicos[0].id : '',
           numeroPedido,
           titulo,
@@ -406,7 +485,7 @@ export default function Pedidos() {
     }
 
     // Líneas del pedido
-    let lineasPDF: { concepto: string; codigo?: string; fotoUrl?: string; cantidad: number; precioUnidad: number; subtotal: number }[] = [];
+    let lineasPDF: { familia?: string; concepto: string; descripcion?: string; codigo?: string; fotoUrl?: string; cantidad: number; precioUnidad: number; subtotal: number }[] = [];
 
     if (matchPresupuesto?.lineas && matchPresupuesto.lineas.length > 0) {
       lineasPDF = matchPresupuesto.lineas.map(l => ({
@@ -484,223 +563,387 @@ export default function Pedidos() {
 
   if (view === 'list') {
     return (
-      <div className="min-h-screen bg-[#F8FAFC] px-8 py-6">
-        {/* Header */}
-        <div className="mb-6 text-center sm:text-left flex flex-col items-center sm:items-start">
-          <button 
-            onClick={() => navigate('/')} 
-            className="flex items-center gap-1.5 text-xs font-semibold text-zinc-500 hover:text-zinc-900 mb-3 transition-colors cursor-pointer"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" /> Volver al panel
-          </button>
-          <h1 className="text-2xl font-black text-zinc-950 tracking-tight">Pedidos de Clientes</h1>
-          <p className="text-xs font-semibold text-zinc-500 mt-1">Gestión y control de pedidos y trabajos aprobados en ejecución.</p>
-        </div>
-
-        {/* Pestañas + botones */}
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
-          {/* Pestañas */}
-          <div className="flex flex-wrap items-center gap-1.5 bg-zinc-100 p-1.5 rounded-2xl w-fit border border-zinc-200/40">
-            <button
-              onClick={() => setStatusFilter('Todos')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 cursor-pointer ${
-                statusFilter === 'Todos'
-                  ? 'bg-white text-zinc-950 shadow-sm border border-zinc-200/20 font-extrabold'
-                  : 'text-zinc-500 hover:text-zinc-900 hover:bg-white/50'
-              }`}
+      <div className="min-h-screen bg-[#F8FAFC] px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
+        <div className="w-full">
+          {/* Header */}
+          <div className="mb-6 text-center sm:text-left flex flex-col items-center sm:items-start">
+            <button 
+              onClick={() => navigate('/')} 
+              className="flex items-center gap-1.5 text-xs font-semibold text-zinc-500 hover:text-zinc-900 mb-3 transition-colors cursor-pointer"
             >
-              <FileText className={`w-4 h-4 ${statusFilter === 'Todos' ? 'text-red-600' : 'text-zinc-400'}`} />
-              Todos
-              <span className={`text-[10px] font-black font-sans px-2 py-0.5 rounded-md transition-colors ${
-                statusFilter === 'Todos' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-zinc-200 text-zinc-500'
-              }`}>
-                {pedidos.length}
-              </span>
+              <ArrowLeft className="w-3.5 h-3.5" /> Volver al panel
             </button>
-            <button
-              onClick={() => setStatusFilter('Pendiente')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 cursor-pointer ${
-                statusFilter === 'Pendiente'
-                  ? 'bg-white text-zinc-950 shadow-sm border border-zinc-200/20 font-extrabold'
-                  : 'text-zinc-500 hover:text-zinc-900 hover:bg-white/50'
-              }`}
-            >
-              <Clock className={`w-4 h-4 ${statusFilter === 'Pendiente' ? 'text-red-600' : 'text-zinc-400'}`} />
-              Pendientes
-              <span className={`text-[10px] font-black font-sans px-2 py-0.5 rounded-md transition-colors ${
-                statusFilter === 'Pendiente' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-zinc-250 text-zinc-500'
-              }`}>
-                {pedidos.filter(p => p.estado === 'Pendiente').length}
-              </span>
-            </button>
-            <button
-              onClick={() => setStatusFilter('En Proceso')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 cursor-pointer ${
-                statusFilter === 'En Proceso'
-                  ? 'bg-white text-zinc-950 shadow-sm border border-zinc-200/20 font-extrabold'
-                  : 'text-zinc-500 hover:text-zinc-900 hover:bg-white/50'
-              }`}
-            >
-              <Clock className={`w-4 h-4 ${statusFilter === 'En Proceso' ? 'text-red-650' : 'text-zinc-400'}`} />
-              En Proceso
-              <span className={`text-[10px] font-black font-sans px-2 py-0.5 rounded-md transition-colors ${
-                statusFilter === 'En Proceso' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-zinc-250 text-zinc-500'
-              }`}>
-                {pedidos.filter(p => p.estado === 'En Proceso').length}
-              </span>
-            </button>
-            <button
-              onClick={() => setStatusFilter('Completado')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 cursor-pointer ${
-                statusFilter === 'Completado'
-                  ? 'bg-white text-zinc-950 shadow-sm border border-zinc-200/20 font-extrabold'
-                  : 'text-zinc-500 hover:text-zinc-900 hover:bg-white/50'
-              }`}
-            >
-              <CheckCircle className={`w-4 h-4 ${statusFilter === 'Completado' ? 'text-red-600' : 'text-zinc-400'}`} />
-              Completados
-              <span className={`text-[10px] font-black font-sans px-2 py-0.5 rounded-md transition-colors ${
-                statusFilter === 'Completado' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-zinc-250 text-zinc-500'
-              }`}>
-                {pedidos.filter(p => p.estado === 'Completado').length}
-              </span>
-            </button>
+            <h1 className="text-2xl font-black text-zinc-950 tracking-tight">Pedidos de Venta</h1>
+            <p className="text-xs font-semibold text-zinc-500 mt-1">Registro de presupuestos aceptados convertidos en pedido, listos para pasar a trabajo y albarán.</p>
           </div>
 
-          {/* Botón de nuevo */}
-          <button 
-            onClick={handleNuevo} 
-            className="flex items-center justify-center gap-1.5 bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-xl font-bold shadow-md shadow-red-500/10 hover:shadow-lg hover:shadow-red-500/20 active:scale-95 transition-all text-xs cursor-pointer w-full lg:w-auto"
-          >
-            <Plus className="w-3.5 h-3.5" /> Nuevo Pedido
-          </button>
-        </div>
+          {/* Pestañas + buscador y botón */}
+          <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4 mb-6">
+            {/* Pestañas */}
+            <div className="flex flex-wrap items-center gap-1.5 bg-zinc-100 p-1.5 rounded-2xl w-fit border border-zinc-200/40">
+              <button
+                onClick={() => setStatusFilter('Todos')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
+                  statusFilter === 'Todos'
+                    ? 'bg-white text-zinc-950 shadow-sm border border-zinc-200/20 font-extrabold'
+                    : 'text-zinc-500 hover:text-zinc-900 hover:bg-white/50'
+                }`}
+              >
+                <FileText className={`w-3.5 h-3.5 ${statusFilter === 'Todos' ? 'text-red-600' : 'text-zinc-400'}`} />
+                Todos
+                <span className={`text-[10px] font-black font-sans px-1.5 py-0.5 rounded transition-colors ${
+                  statusFilter === 'Todos' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-zinc-200 text-zinc-500'
+                }`}>
+                  {pedidos.length}
+                </span>
+              </button>
+              <button
+                onClick={() => setStatusFilter('Pendiente')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
+                  statusFilter === 'Pendiente'
+                    ? 'bg-white text-zinc-950 shadow-sm border border-zinc-200/20 font-extrabold'
+                    : 'text-zinc-500 hover:text-zinc-900 hover:bg-white/50'
+                }`}
+              >
+                <Clock className={`w-3.5 h-3.5 ${statusFilter === 'Pendiente' ? 'text-red-600' : 'text-zinc-400'}`} />
+                Pendientes
+                <span className={`text-[10px] font-black font-sans px-1.5 py-0.5 rounded transition-colors ${
+                  statusFilter === 'Pendiente' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-zinc-200 text-zinc-500'
+                }`}>
+                  {pedidos.filter(p => p.estado === 'Pendiente').length}
+                </span>
+              </button>
+              <button
+                onClick={() => setStatusFilter('En Proceso')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
+                  statusFilter === 'En Proceso'
+                    ? 'bg-white text-zinc-950 shadow-sm border border-zinc-200/20 font-extrabold'
+                    : 'text-zinc-500 hover:text-zinc-900 hover:bg-white/50'
+                }`}
+              >
+                <Clock className={`w-3.5 h-3.5 ${statusFilter === 'En Proceso' ? 'text-red-600' : 'text-zinc-400'}`} />
+                En Proceso
+                <span className={`text-[10px] font-black font-sans px-1.5 py-0.5 rounded transition-colors ${
+                  statusFilter === 'En Proceso' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-zinc-200 text-zinc-500'
+                }`}>
+                  {pedidos.filter(p => p.estado === 'En Proceso').length}
+                </span>
+              </button>
+              <button
+                onClick={() => setStatusFilter('Completado')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
+                  statusFilter === 'Completado'
+                    ? 'bg-white text-zinc-950 shadow-sm border border-zinc-200/20 font-extrabold'
+                    : 'text-zinc-500 hover:text-zinc-900 hover:bg-white/50'
+                }`}
+              >
+                <CheckCircle className={`w-3.5 h-3.5 ${statusFilter === 'Completado' ? 'text-red-600' : 'text-zinc-400'}`} />
+                Completados
+                <span className={`text-[10px] font-black font-sans px-1.5 py-0.5 rounded transition-colors ${
+                  statusFilter === 'Completado' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-zinc-200 text-zinc-500'
+                }`}>
+                  {pedidos.filter(p => p.estado === 'Completado').length}
+                </span>
+              </button>
+            </div>
 
-        {presupuestosAprobados.length > 0 && (
-          <div className="mb-6 p-4 bg-emerald-50 rounded-xl border border-emerald-200">
-            <p className="text-xs font-bold text-emerald-700 uppercase mb-3 flex items-center gap-2">
-              <FileText className="w-3.5 h-3.5" /> Presupuestos aprobados pendientes de pedido
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-              {presupuestosAprobados.map(p => (
-                <button key={p.id} onClick={() => handleCrearDesdePresupuesto(p)} className="flex items-center justify-between p-3 bg-white rounded-xl border border-emerald-200 hover:border-emerald-400 hover:bg-emerald-50/50 transition-all text-left">
-                  <div className="min-w-0">
-                    <p className="text-sm font-bold text-zinc-800 truncate">{p.titulo}</p>
-                    <p className="text-[10px] text-zinc-500">{p.nombreCliente} — {formatMoneda(p.total)}</p>
-                  </div>
-                  <Plus className="w-4 h-4 text-emerald-600 shrink-0 ml-2" />
-                </button>
-              ))}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full xl:w-auto">
+              <div className="relative flex-1 sm:flex-none sm:w-64">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                <input
+                  type="text"
+                  className="w-full pl-10 pr-4 py-2.5 bg-white rounded-xl border border-zinc-200/80 focus:border-red-500 focus:ring-2 focus:ring-red-500/10 outline-none text-sm text-zinc-950 shadow-sm"
+                  placeholder="Buscar pedidos..."
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                />
+              </div>
+              <button 
+                onClick={handleNuevo} 
+                className="flex items-center justify-center gap-1.5 bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-xl font-bold shadow-md shadow-red-500/10 hover:shadow-lg hover:shadow-red-500/20 active:scale-95 transition-all text-xs cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" /> Nuevo Pedido
+              </button>
             </div>
           </div>
-        )}
 
-        <div className="relative mb-5">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-          <input type="text" className="w-full pl-10 pr-4 py-2.5 bg-white rounded-xl border border-zinc-200 focus:border-red-500 focus:ring-2 focus:ring-red-500/10 outline-none text-sm" placeholder="Buscar..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-        </div>
-
-        {filteredPedidos.length === 0 ? (
-          <div className="bg-white rounded-3xl border border-zinc-200 p-16 text-center">
-            <FileText className="w-16 h-16 text-zinc-200 mx-auto mb-4" />
-            <h3 className="text-lg font-bold text-zinc-900 mb-2">{searchTerm ? 'Sin resultados' : 'No hay pedidos'}</h3>
-            <p className="text-zinc-500 text-sm">Crea un nuevo pedido o convierte un presupuesto aprobado.</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {filteredPedidos.map(ped => {
-              const estadoInfo = getEstadoInfo(ped.estado);
-              const EstadoIcono = estadoInfo.icono;
-              const cliente = clientes.find(c => c.id === ped.clienteId);
-              const subtotal = ped.items.reduce((s, i) => s + i.subtotal, 0);
-              return (
-                <div key={ped.id || ped._docId} className="bg-white rounded-xl border border-zinc-200 p-4 hover:shadow-sm transition-all">
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h3 className="text-sm font-bold text-zinc-900 truncate">{ped.titulo}</h3>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border inline-flex items-center gap-1 ${estadoInfo.color}`}>
-                          <EstadoIcono className="w-3 h-3" /> {estadoInfo.valor}
-                        </span>
-                        {ped.tipoPedido && (
-                          <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border inline-flex items-center gap-1 ${
-                            ped.tipoPedido === 'Reparación'
-                              ? 'bg-amber-50 text-amber-800 border-amber-300'
-                              : 'bg-indigo-50 text-indigo-800 border-indigo-300'
-                          }`}>
-                            {ped.tipoPedido === 'Reparación' ? <Wrench className="w-3 h-3 text-amber-600" /> : <HardHat className="w-3 h-3 text-indigo-600" />}
-                            {ped.tipoPedido}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-zinc-500">
-                        <span className="font-mono font-bold text-zinc-400">{ped.numeroPedido || ped.id}</span>
-                        <span className="flex items-center gap-1"><Building2 className="w-3 h-3" />{cliente?.nombre || 'Cliente'}</span>
-                        <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{new Date(ped.fechaCreacion).toLocaleDateString()}</span>
-                      </div>
-                      <div className="mt-1 text-xs text-zinc-600">{ped.items.length} línea(s) — <span className="font-bold">{formatMoneda(subtotal)}</span></div>
+          {presupuestosAprobados.length > 0 && (
+            <div className="mb-6 p-4 bg-emerald-50 rounded-xl border border-emerald-200">
+              <p className="text-xs font-bold text-emerald-700 uppercase mb-3 flex items-center gap-2">
+                <FileText className="w-3.5 h-3.5" /> Presupuestos aprobados pendientes de pedido
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                {presupuestosAprobados.map(p => (
+                  <button key={p.id} onClick={() => handleCrearDesdePresupuesto(p)} className="flex items-center justify-between p-3 bg-white rounded-xl border border-emerald-200 hover:border-emerald-400 hover:bg-emerald-50/50 transition-all text-left cursor-pointer">
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-zinc-800 truncate">{p.titulo}</p>
+                      <p className="text-[10px] text-zinc-500">{p.nombreCliente} — {formatMoneda(p.total)}</p>
                     </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      {ped.estado !== 'Completado' && (
-                        <div className="relative">
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setOpenStatusMenuId(openStatusMenuId === (ped.id || ped._docId || '') ? null : (ped.id || ped._docId || ''));
-                            }}
-                            className="p-1.5 text-zinc-400 hover:text-red-650 hover:bg-red-50 rounded-xl"
-                          >
-                            <ChevronDown className="w-4 h-4" />
-                          </button>
-                          {openStatusMenuId === (ped.id || ped._docId || '') && (
-                            <>
-                              <div className="fixed inset-0 z-40" onClick={() => setOpenStatusMenuId(null)} />
-                              <div className="absolute right-0 top-full mt-1 bg-white rounded-xl shadow-xl border border-zinc-200 py-1 min-w-[130px] z-50 animate-in fade-in zoom-in-95 duration-100">
-                                {ESTADOS.filter(e => e.valor !== ped.estado).map(e => {
-                                  const Icono = e.icono;
-                                  return (
-                                    <button 
-                                      key={e.valor} 
-                                      onClick={() => {
-                                        handleCambiarEstado(ped, e.valor);
-                                        setOpenStatusMenuId(null);
-                                      }} 
-                                      className="w-full flex items-center gap-2 px-3 py-1.5 text-xs font-medium hover:bg-zinc-50"
-                                    >
-                                      <Icono className="w-3.5 h-3.5" /> {e.valor}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            </>
+                    <Plus className="w-4 h-4 text-emerald-600 shrink-0 ml-2" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* TABLA DE PEDIDOS */}
+          {filteredPedidos.length === 0 ? (
+            <div className="bg-white rounded-3xl border border-zinc-200 border-dashed p-16 text-center">
+              <FileText className="w-16 h-16 text-zinc-200 mx-auto mb-4" />
+              <h3 className="text-lg font-bold text-zinc-900 mb-2">{searchTerm ? 'Sin resultados' : 'No hay pedidos registrados'}</h3>
+              <p className="text-zinc-500 text-sm">Cuando aceptes un presupuesto y lo marques como pedido, aparecerá registrado en esta tabla.</p>
+            </div>
+          ) : (
+            <div className="bg-white rounded-xl border border-zinc-200 shadow-sm overflow-hidden">
+              <div className="overflow-x-auto w-full">
+                <table className="w-full text-sm min-w-[860px]">
+                  <thead>
+                    <tr className="bg-zinc-200/90 text-zinc-700 font-extrabold uppercase tracking-wider text-xs border-b border-zinc-300">
+                      <th
+                        onClick={() => handleSort('referencia')}
+                        className="px-4 py-3 text-left cursor-pointer hover:bg-zinc-300/80 transition-colors select-none group whitespace-nowrap"
+                        title="Ordenar por número de pedido"
+                      >
+                        <div className="inline-flex items-center gap-1.5">
+                          <span>Nº Pedido</span>
+                          {sortField === 'referencia' ? (
+                            sortOrder === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-red-600 stroke-[2.5]" /> : <ArrowDown className="w-3.5 h-3.5 text-red-600 stroke-[2.5]" />
+                          ) : (
+                            <ArrowUpDown className="w-3.5 h-3.5 text-zinc-400 group-hover:text-zinc-600 transition-colors" />
                           )}
                         </div>
-                      )}
-                      <button 
-                        type="button" 
-                        onClick={() => handleDescargarPDV(ped)} 
-                        className="p-1.5 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-xl transition-colors cursor-pointer" 
-                        title="Ver / Descargar Pedido de Venta (PDV)"
+                      </th>
+                      <th
+                        onClick={() => handleSort('fecha')}
+                        className="px-4 py-3 text-left cursor-pointer hover:bg-zinc-300/80 transition-colors select-none group whitespace-nowrap"
+                        title="Ordenar por fecha"
                       >
-                        <Search className="w-4 h-4" />
-                      </button>
-                      <button 
-                        type="button" 
-                        onClick={() => handleOpenCrearAlbaran(ped)} 
-                        className="p-1.5 text-zinc-500 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-colors cursor-pointer" 
-                        title="Crear Albarán"
+                        <div className="inline-flex items-center gap-1.5">
+                          <span>Fecha</span>
+                          {sortField === 'fecha' ? (
+                            sortOrder === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-red-600 stroke-[2.5]" /> : <ArrowDown className="w-3.5 h-3.5 text-red-600 stroke-[2.5]" />
+                          ) : (
+                            <ArrowUpDown className="w-3.5 h-3.5 text-zinc-400 group-hover:text-zinc-600 transition-colors" />
+                          )}
+                        </div>
+                      </th>
+                      <th className="px-4 py-3 text-left">Cliente</th>
+                      <th className="px-4 py-3 text-left">Centro</th>
+                      <th className="px-4 py-3 text-left">Título / Trabajo</th>
+                      <th
+                        onClick={() => handleSort('estado')}
+                        className="px-4 py-3 text-left cursor-pointer hover:bg-zinc-300/80 transition-colors select-none group whitespace-nowrap"
+                        title="Ordenar por estado"
                       >
-                        <ReceiptText className="w-4 h-4" />
-                      </button>
-                      <button onClick={() => handleEdit(ped)} className="p-1.5 text-zinc-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl"><Edit className="w-4 h-4" /></button>
-                      <button onClick={() => handleDelete(ped)} className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-xl"><Trash2 className="w-4 h-4" /></button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+                        <div className="inline-flex items-center gap-1.5">
+                          <span>Estado</span>
+                          {sortField === 'estado' ? (
+                            sortOrder === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-red-600 stroke-[2.5]" /> : <ArrowDown className="w-3.5 h-3.5 text-red-600 stroke-[2.5]" />
+                          ) : (
+                            <ArrowUpDown className="w-3.5 h-3.5 text-zinc-400 group-hover:text-zinc-600 transition-colors" />
+                          )}
+                        </div>
+                      </th>
+                      <th className="px-4 py-3 text-right whitespace-nowrap">Importe</th>
+                      <th className="px-4 py-3 text-center whitespace-nowrap">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-100">
+                    {filteredPedidos.map(ped => {
+                      const estadoInfo = getEstadoInfo(ped.estado);
+                      const EstadoIcono = estadoInfo.icono;
+                      const matchPresupuesto = presupuestos.find(p =>
+                        (ped.presupuestoId && (p.id === ped.presupuestoId || (p as any)._docId === ped.presupuestoId)) ||
+                        (ped.numeroPedido && p.pedidoId === ped.numeroPedido)
+                      );
+                      const cliente = clientes.find(c => c.id === ped.clienteId || (c as any)._docId === ped.clienteId);
+                      const centro = centros.find(c => c.id === ped.centroId || (c as any)._docId === ped.centroId);
+                      const nombreCliente = cliente?.nombre || (ped as any).nombreCliente || matchPresupuesto?.nombreCliente || 'Cliente';
+                      const nombreCentro = centro?.nombre || (ped as any).nombreCentro || '—';
+
+                      const codigoPDV = ped.numeroPedido || (ped.id ? `PDV ${ped.id.replace(/^(PDV|PRV|PRE|PED)[-\s]*/i, '')}` : 'PDV');
+                      const codigoPRV = matchPresupuesto?.numeroPresupuesto || (ped.presupuestoId ? `PRV ${ped.presupuestoId.replace(/^(PDV|PRV|PRE)[-\s]*/i, '')}` : '');
+
+                      const albaranAsociado = albaranes.find(alb =>
+                        (ped.numeroPedido && alb.numeroPedido === ped.numeroPedido) ||
+                        (codigoPDV && alb.numeroPedido === codigoPDV)
+                      );
+
+                      const importeTotal = (ped as any).total || matchPresupuesto?.total || ped.items.reduce((s, i) => s + (Number(i.subtotal) || 0), 0);
+                      const rowKey = ped.id || (ped as any)._docId || codigoPDV;
+
+                      return (
+                        <tr key={rowKey} className="hover:bg-zinc-50/80 transition-colors">
+                          {/* Nº Pedido / Presupuesto */}
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <div className="flex flex-col items-start gap-1">
+                              <span className="text-xs font-mono font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200/80">
+                                {codigoPDV}
+                              </span>
+                              {codigoPRV && (
+                                <span className="text-[10px] font-mono font-semibold text-zinc-500">
+                                  Origen: {codigoPRV}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+
+                          {/* Fecha */}
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <p className="text-xs font-semibold text-zinc-600">{formatFecha(ped.fechaCreacion)}</p>
+                          </td>
+
+                          {/* Cliente */}
+                          <td className="px-4 py-3">
+                            <p className="text-sm text-zinc-800 font-medium">{nombreCliente}</p>
+                          </td>
+
+                          {/* Centro */}
+                          <td className="px-4 py-3">
+                            <p className="text-sm text-zinc-600">{nombreCentro}</p>
+                          </td>
+
+                          {/* Título y Tipo de Trabajo */}
+                          <td className="px-4 py-3">
+                            <div className="flex flex-col items-start gap-1">
+                              <p className="text-sm font-bold text-zinc-900 truncate max-w-[220px]" title={ped.titulo}>
+                                {ped.titulo}
+                              </p>
+                              {ped.tipoPedido && (
+                                <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border inline-flex items-center gap-1 ${
+                                  ped.tipoPedido === 'Reparación'
+                                    ? 'bg-amber-50 text-amber-800 border-amber-300'
+                                    : ped.tipoPedido === 'Instalación'
+                                    ? 'bg-indigo-50 text-indigo-800 border-indigo-300'
+                                    : 'bg-sky-50 text-sky-800 border-sky-300'
+                                }`}>
+                                  {ped.tipoPedido === 'Reparación' ? (
+                                    <Wrench className="w-2.5 h-2.5 text-amber-600" />
+                                  ) : ped.tipoPedido === 'Instalación' ? (
+                                    <HardHat className="w-2.5 h-2.5 text-indigo-600" />
+                                  ) : (
+                                    <Gauge className="w-2.5 h-2.5 text-sky-600" />
+                                  )}
+                                  {ped.tipoPedido}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+
+                          {/* Estado + Albarán vinculado */}
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <div className="flex flex-col items-start gap-1">
+                              <div className="relative inline-flex items-center gap-1">
+                                <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border inline-flex items-center gap-1 uppercase tracking-wider ${estadoInfo.color}`}>
+                                  <EstadoIcono className="w-3 h-3" /> {estadoInfo.valor}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setOpenStatusMenuId(openStatusMenuId === rowKey ? null : rowKey);
+                                  }}
+                                  className="p-1 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded-lg transition-colors cursor-pointer"
+                                  title="Cambiar estado del pedido"
+                                >
+                                  <ChevronDown className="w-3.5 h-3.5" />
+                                </button>
+                                {openStatusMenuId === rowKey && (
+                                  <>
+                                    <div className="fixed inset-0 z-40" onClick={() => setOpenStatusMenuId(null)} />
+                                    <div className="absolute left-0 top-full mt-1 bg-white rounded-xl shadow-xl border border-zinc-200 py-1 min-w-[140px] z-50 animate-in fade-in zoom-in-95 duration-100">
+                                      {ESTADOS.filter(e => e.valor !== ped.estado).map(e => {
+                                        const Icono = e.icono;
+                                        return (
+                                          <button
+                                            key={e.valor}
+                                            type="button"
+                                            onClick={() => {
+                                              handleCambiarEstado(ped, e.valor);
+                                              setOpenStatusMenuId(null);
+                                            }}
+                                            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs font-medium hover:bg-zinc-50 cursor-pointer"
+                                          >
+                                            <Icono className="w-3.5 h-3.5" /> {e.valor}
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+
+                              {albaranAsociado && (
+                                <span
+                                  className="text-[10px] font-mono font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-md border border-emerald-200 inline-flex items-center gap-1"
+                                  title={`Albarán generado: ${albaranAsociado.id}`}
+                                >
+                                  <ReceiptText className="w-2.5 h-2.5" /> {albaranAsociado.id}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+
+                          {/* Importe */}
+                          <td className="px-4 py-3 text-right whitespace-nowrap">
+                            <p className="font-black text-zinc-900">{formatMoneda(importeTotal)}</p>
+                            <p className="text-[10px] text-zinc-400">{ped.items.length} partida(s)</p>
+                          </td>
+
+                          {/* Acciones */}
+                          <td className="px-4 py-3 text-center whitespace-nowrap">
+                            <div className="inline-flex items-center justify-center gap-1">
+                              <button 
+                                type="button" 
+                                onClick={() => handleDescargarPDV(ped)} 
+                                className="p-1.5 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-xl transition-colors cursor-pointer" 
+                                title="Ver / Descargar Pedido de Venta (PDV)"
+                              >
+                                <Search className="w-4 h-4" />
+                              </button>
+                              <button 
+                                type="button" 
+                                onClick={() => handleOpenCrearAlbaran(ped)} 
+                                className={`p-1.5 rounded-xl transition-colors cursor-pointer ${
+                                  albaranAsociado
+                                    ? 'text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50'
+                                    : 'text-zinc-500 hover:text-blue-600 hover:bg-blue-50'
+                                }`}
+                                title={albaranAsociado ? `Albarán creado (${albaranAsociado.id}) - Clic para generar otro` : 'Crear Albarán desde este Pedido'}
+                              >
+                                <svg className="w-4 h-4 inline-block" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                  <polyline points="14 2 14 8 20 8" />
+                                  <text x="12" y="19" textAnchor="middle" fill="currentColor" stroke="none" fontSize="11.5" fontWeight="900" fontFamily="system-ui, -apple-system, sans-serif">A</text>
+                                </svg>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleEdit(ped)}
+                                className="p-1.5 text-zinc-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-colors cursor-pointer"
+                                title="Editar Pedido"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDelete(ped)}
+                                className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors cursor-pointer"
+                                title="Eliminar Pedido"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     );
   }

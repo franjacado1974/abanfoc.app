@@ -16,6 +16,7 @@ import Catalogo from './Catalogo';
 import Articulos from './Articulos';
 import Servicios from './Servicios';
 import Albaranes from './Albaranes';
+import Facturas from './Facturas';
 import Certificados from './Certificados';
 import ConfiguracionEmpresa from './ConfiguracionEmpresa';
 import Pedidos from './Pedidos';
@@ -1002,7 +1003,7 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
   );
 }
 
-function PlaceholderPage(props: { title: string; [key: string]: any }) {
+export function PlaceholderPage(props: { title: string; [key: string]: any }) {
   const { title } = props;
   const navigate = useNavigate();
   return (
@@ -1350,7 +1351,7 @@ export default function App() {
         } />
         <Route path="/facturas" element={
           <ProtectedRoute allowedRoles={['super-administrador', 'administrador']} user={loggedUser}>
-            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><PlaceholderPage title="Facturacion" bgColor="bg-zinc-50" /></PageLayout>
+            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Facturas /></PageLayout>
           </ProtectedRoute>
         } />
         <Route path="/partes" element={

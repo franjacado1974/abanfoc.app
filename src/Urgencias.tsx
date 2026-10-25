@@ -317,14 +317,63 @@ export default function Urgencias() {
 
   // Abrir Albaranes directamente con los datos precargados desde la urgencia
   const handleOpenCrearAlbaran = (item: UrgenciaItem) => {
-    const matchCentro = centros.find(c => 
-      (c.nombre && item.lugar && c.nombre.toLowerCase().trim() === item.lugar.toLowerCase().trim()) ||
-      (c.direccion && item.lugar && c.direccion.toLowerCase().includes(item.lugar.toLowerCase()))
+    const norm = (s?: string) => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+    const lugarNorm = norm(item.lugar);
+    const parenMatch = (item.lugar || '').match(/^(.+?)\s*\((.+)\)\s*$/);
+    const lugarCentroPart = parenMatch ? norm(parenMatch[1]) : lugarNorm;
+    const lugarClientePart = parenMatch ? norm(parenMatch[2]) : '';
+
+    const targetClienteId = item.clienteId || '';
+    const targetClienteNombre = item.clienteNombre || '';
+
+    let matchCliente = clientes.find(c =>
+      (targetClienteId && (c.id === targetClienteId || (c as any)._docId === targetClienteId || norm(c.nombre) === norm(targetClienteId))) ||
+      (targetClienteNombre && norm(c.nombre) === norm(targetClienteNombre)) ||
+      (lugarClientePart && norm(c.nombre) === lugarClientePart) ||
+      (lugarNorm && norm(c.nombre) === lugarNorm)
     );
 
-    const clienteId = matchCentro?.clienteId || (clientes.length > 0 ? clientes[0].id : '');
-    const centroId = matchCentro?.id || '';
-    const empresaId = matchCentro?.empresaId || (empresas.length > 0 ? (empresas[0].id || '') : '');
+    if (!matchCliente && (targetClienteNombre || lugarNorm)) {
+      const searchName = norm(targetClienteNombre) || lugarClientePart || lugarNorm;
+      if (searchName) {
+        matchCliente = clientes.find(c => norm(c.nombre).includes(searchName) || searchName.includes(norm(c.nombre)));
+      }
+    }
+
+    const targetCentroId = item.centroId || '';
+    const matchCentro =
+      centros.find(c => targetCentroId && ((c as any)._docId === targetCentroId || c.id === targetCentroId)) ||
+      (matchCliente ? centros.find(c =>
+        (c.clienteId === matchCliente!.id || c.clienteId === (matchCliente as any)._docId) && (
+          (c.nombre && (norm(c.nombre) === lugarNorm || norm(c.nombre) === lugarCentroPart)) ||
+          (c.direccion && lugarNorm && norm(c.direccion).includes(lugarNorm))
+        )
+      ) : undefined) ||
+      centros.find(c =>
+        (c.nombre && (norm(c.nombre) === lugarNorm || norm(c.nombre) === lugarCentroPart)) ||
+        (c.direccion && lugarNorm && norm(c.direccion).includes(lugarNorm))
+      );
+
+    if (!matchCliente && matchCentro?.clienteId) {
+      matchCliente = clientes.find(c => c.id === matchCentro.clienteId || (c as any)._docId === matchCentro.clienteId);
+    }
+
+    let clienteId = matchCliente?.id || matchCentro?.clienteId || '';
+    let centroId = (matchCentro as any)?._docId || matchCentro?.id || '';
+
+    if (clienteId && !centroId) {
+      const centrosDelCliente = centros.filter(c => c.clienteId === clienteId || (matchCliente && c.clienteId === (matchCliente as any)._docId));
+      if (centrosDelCliente.length === 1) {
+        centroId = (centrosDelCliente[0] as any)._docId || centrosDelCliente[0].id || '';
+      }
+    }
+
+    const clienteNombreLibre = !clienteId
+      ? (targetClienteNombre || targetClienteId || item.lugar || '')
+      : '';
+    const centroNombreLibre = !centroId ? (item.lugar || '') : '';
+
+    const empresaId = matchCentro?.empresaId || (empresas.length > 0 ? ((empresas[0] as any)._docId || empresas[0].id || '') : '');
 
     const matchTecnico = tecnicos.find(t => 
       `${t.nombre || ''} ${t.apellidos || ''}`.toLowerCase().trim() === (item.tecnicoAsignado || '').toLowerCase().trim() ||
@@ -338,7 +387,9 @@ export default function Urgencias() {
         prefillAlbaran: {
           empresaId,
           clienteId,
+          clienteNombreLibre,
           centroId,
+          centroNombreLibre,
           tecnicoId: matchTecnico?.id || (tecnicos.length > 0 ? tecnicos[0].id : ''),
           numeroPedido: '',
           titulo: `Urgencia: ${item.urgencia || 'Atención urgente'}`,

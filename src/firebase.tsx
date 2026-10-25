@@ -3751,6 +3751,161 @@ export async function deleteInventarioItem(docId: string) {
   }
 }
 
+// ─── FACTURAS ───────────────────────────────────────────────────────────────
+export interface FacturaLinea {
+  codigo?: string;
+  familia?: string;
+  concepto: string;
+  descripcion: string;
+  cantidad: number;
+  precioUnidad: number;
+  subtotal: number;
+}
+
+export interface Factura {
+  id: string;
+  _docId?: string;
+  numeroFactura: string;
+  empresaId: string;
+  clienteId: string;
+  centroId?: string;
+  clienteNombreLibre?: string;
+  centroNombreLibre?: string;
+  nombreCliente?: string;
+  cifCliente?: string;
+  direccionCliente?: string;
+  cpCliente?: string;
+  poblacionCliente?: string;
+  provinciaCliente?: string;
+  albaranId?: string;
+  albaranesIds?: string[];
+  numeroPedido?: string;
+  presupuestoId?: string;
+  titulo: string;
+  fechaCreacion: string;
+  fechaVencimiento?: string;
+  formaPago?: string;
+  iban?: string;
+  estado: 'Pendiente' | 'Cobrada' | 'Vencida' | 'Borrador';
+  items: FacturaLinea[];
+  descuentoPorcentaje?: number;
+  descuentoImporte?: number;
+  subtotal: number;
+  iva: number;
+  total: number;
+  notas?: string;
+}
+
+export function subscribeFacturas(callback: (items: Factura[]) => void) {
+  try {
+    const col = collection(db, 'facturas');
+    const unsub = onSnapshot(col, (snap) => {
+      const items = snap.docs.map(d => {
+        const data = d.data() as any;
+        return {
+          _docId: d.id,
+          id: data?.id || d.id,
+          numeroFactura: data?.numeroFactura || data?.id || d.id,
+          empresaId: data?.empresaId || '',
+          clienteId: data?.clienteId || '',
+          centroId: data?.centroId || '',
+          clienteNombreLibre: data?.clienteNombreLibre || '',
+          centroNombreLibre: data?.centroNombreLibre || '',
+          nombreCliente: data?.nombreCliente || '',
+          cifCliente: data?.cifCliente || '',
+          direccionCliente: data?.direccionCliente || '',
+          cpCliente: data?.cpCliente || '',
+          poblacionCliente: data?.poblacionCliente || '',
+          provinciaCliente: data?.provinciaCliente || '',
+          albaranId: data?.albaranId || '',
+          albaranesIds: Array.isArray(data?.albaranesIds) ? data.albaranesIds : [],
+          numeroPedido: data?.numeroPedido || '',
+          presupuestoId: data?.presupuestoId || '',
+          titulo: data?.titulo || 'Factura',
+          fechaCreacion: data?.fechaCreacion || new Date().toISOString(),
+          fechaVencimiento: data?.fechaVencimiento || '',
+          formaPago: data?.formaPago || 'Transferencia bancaria',
+          iban: data?.iban || '',
+          estado: data?.estado || 'Pendiente',
+          items: Array.isArray(data?.items) ? data.items : [],
+          descuentoPorcentaje: Number(data?.descuentoPorcentaje || 0),
+          descuentoImporte: Number(data?.descuentoImporte || 0),
+          subtotal: Number(data?.subtotal || 0),
+          iva: data?.iva !== undefined ? Number(data.iva) : 21,
+          total: Number(data?.total || 0),
+          notas: data?.notas || '',
+        } as Factura;
+      });
+      try {
+        localStorage.setItem('firecheck_db_facturas', JSON.stringify(items));
+      } catch {}
+      callback(items);
+    }, (err) => {
+      console.error('subscribeFacturas error:', err);
+      try {
+        const cached = localStorage.getItem('firecheck_db_facturas');
+        if (cached) callback(JSON.parse(cached));
+      } catch {}
+    });
+    return unsub;
+  } catch (e) {
+    console.error('subscribeFacturas error:', e);
+    return () => {};
+  }
+}
+
+export async function addFactura(data: Factura) {
+  try {
+    const col = collection(db, 'facturas');
+    const dataToSave = cleanUndefinedForFirestore({
+      ...data,
+      fechaCreacion: data.fechaCreacion || new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+    const docRef = await addDoc(col, dataToSave);
+    return { ...dataToSave, _docId: docRef.id, id: data.id || docRef.id };
+  } catch (e) {
+    console.error('addFactura error:', e);
+    throw e;
+  }
+}
+
+export async function updateFactura(docId: string, data: Partial<Factura>) {
+  try {
+    const docRef = doc(db, 'facturas', docId);
+    const dataToSave = cleanUndefinedForFirestore({
+      ...data,
+      updatedAt: new Date().toISOString()
+    });
+    await updateDoc(docRef, dataToSave as any);
+  } catch (e) {
+    console.error('updateFactura error:', e);
+    throw e;
+  }
+}
+
+export async function deleteFactura(docId: string) {
+  try {
+    const docRef = doc(db, 'facturas', docId);
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      const data = snap.data() as any;
+      await moverAPapelera({
+        coleccion: 'facturas',
+        originalDocId: docId,
+        tipo: 'Factura',
+        titulo: `${data.numeroFactura || docId} - ${data.titulo || 'Factura'}`,
+        clienteNombre: data.nombreCliente || data.clienteNombreLibre || 'Cliente',
+        datos: data
+      });
+    }
+    await deleteDoc(docRef);
+  } catch (e) {
+    console.error('deleteFactura error:', e);
+    throw e;
+  }
+}
+
 export {app, storage, db, analytics};
 
 

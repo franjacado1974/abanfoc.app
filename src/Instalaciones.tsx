@@ -326,20 +326,13 @@ export default function Instalaciones() {
 
   // Abrir Albaranes directamente con los datos precargados desde la instalación / presupuesto (albaranModalItem reemplazado por redirección completa a Albaranes)
   const handleOpenCrearAlbaran = (item: InstalacionItem) => {
-    // Intentar encontrar el centro y cliente por el nombre de lugar
-    const matchCentro = centros.find(c => 
-      (c.nombre && item.lugar && c.nombre.toLowerCase().trim() === item.lugar.toLowerCase().trim()) ||
-      (c.direccion && item.lugar && c.direccion.toLowerCase().includes(item.lugar.toLowerCase()))
-    );
+    const norm = (s?: string) => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+    const lugarNorm = norm(item.lugar);
+    const parenMatch = (item.lugar || '').match(/^(.+?)\s*\((.+)\)\s*$/);
+    const lugarCentroPart = parenMatch ? norm(parenMatch[1]) : lugarNorm;
+    const lugarClientePart = parenMatch ? norm(parenMatch[2]) : '';
 
-    let clienteId = matchCentro?.clienteId || (clientes.length > 0 ? clientes[0].id : '');
-    let centroId = matchCentro?.id || '';
-    let empresaId = matchCentro?.empresaId || (empresas.length > 0 ? (empresas[0].id || '') : '');
-    const existingAlbaran = albaranes.find(a => a.id === item.albaranId || a.instalacionId === (item._docId || item.id));
-    let numeroPedido = item.pedidoId || existingAlbaran?.numeroPedido || '';
-    let titulo = `Instalación: ${item.instalacion || 'Trabajo realizado'}`;
-
-    // Buscar si proviene de un presupuesto vinculado
+    // 1. Buscar si proviene de un presupuesto o pedido vinculado
     const matchPresupuesto = presupuestos.find(p => 
       (item.presupuestoId && (p.id === item.presupuestoId || (p as any)._docId === item.presupuestoId)) ||
       (item.pedidoId && (
@@ -349,14 +342,74 @@ export default function Instalaciones() {
       ))
     );
 
-    if (matchPresupuesto) {
-      if (matchPresupuesto.clienteId) clienteId = matchPresupuesto.clienteId;
-      if (matchPresupuesto.centroId) centroId = matchPresupuesto.centroId;
-      if ((matchPresupuesto as any).empresaId) empresaId = (matchPresupuesto as any).empresaId;
-      if (matchPresupuesto.titulo) titulo = matchPresupuesto.titulo;
-      if (!numeroPedido && matchPresupuesto.numeroPresupuesto) {
-        numeroPedido = `PDV ${matchPresupuesto.numeroPresupuesto.replace(/^(PDV|PRV|PRE)[-\s]*/i, '')}`;
+    const matchPedido = pedidos.find(ped =>
+      (item.pedidoId && (ped.numeroPedido === item.pedidoId || ped.id === item.pedidoId || (ped as any)._docId === item.pedidoId)) ||
+      (item.presupuestoId && ped.presupuestoId === item.presupuestoId)
+    );
+
+    // 2. Resolver el cliente desde la propia tarea (clienteId, clienteNombre, presupuesto, pedido o texto en lugar)
+    const targetClienteId = item.clienteId || matchPresupuesto?.clienteId || matchPedido?.clienteId || '';
+    const targetClienteNombre = item.clienteNombre || matchPresupuesto?.nombreCliente || (matchPedido as any)?.nombreCliente || '';
+
+    let matchCliente = clientes.find(c =>
+      (targetClienteId && (c.id === targetClienteId || (c as any)._docId === targetClienteId || norm(c.nombre) === norm(targetClienteId))) ||
+      (targetClienteNombre && norm(c.nombre) === norm(targetClienteNombre)) ||
+      (lugarClientePart && norm(c.nombre) === lugarClientePart) ||
+      (lugarNorm && norm(c.nombre) === lugarNorm)
+    );
+
+    if (!matchCliente && (targetClienteNombre || lugarNorm)) {
+      const searchName = norm(targetClienteNombre) || lugarClientePart || lugarNorm;
+      if (searchName) {
+        matchCliente = clientes.find(c => norm(c.nombre).includes(searchName) || searchName.includes(norm(c.nombre)));
       }
+    }
+
+    // 3. Intentar encontrar el centro por centroId, presupuesto, pedido o nombre de lugar
+    const targetCentroId = item.centroId || matchPresupuesto?.centroId || matchPedido?.centroId || '';
+    const matchCentro =
+      centros.find(c => targetCentroId && ((c as any)._docId === targetCentroId || c.id === targetCentroId)) ||
+      (matchCliente ? centros.find(c =>
+        (c.clienteId === matchCliente!.id || c.clienteId === (matchCliente as any)._docId) && (
+          (c.nombre && (norm(c.nombre) === lugarNorm || norm(c.nombre) === lugarCentroPart)) ||
+          (c.direccion && lugarNorm && norm(c.direccion).includes(lugarNorm))
+        )
+      ) : undefined) ||
+      centros.find(c =>
+        (c.nombre && (norm(c.nombre) === lugarNorm || norm(c.nombre) === lugarCentroPart)) ||
+        (c.direccion && lugarNorm && norm(c.direccion).includes(lugarNorm))
+      );
+
+    if (!matchCliente && matchCentro?.clienteId) {
+      matchCliente = clientes.find(c => c.id === matchCentro.clienteId || (c as any)._docId === matchCentro.clienteId);
+    }
+
+    let clienteId = matchCliente?.id || matchCentro?.clienteId || '';
+    let centroId = (matchCentro as any)?._docId || matchCentro?.id || '';
+
+    if (clienteId && !centroId) {
+      const centrosDelCliente = centros.filter(c => c.clienteId === clienteId || (matchCliente && c.clienteId === (matchCliente as any)._docId));
+      if (centrosDelCliente.length === 1) {
+        centroId = (centrosDelCliente[0] as any)._docId || centrosDelCliente[0].id || '';
+      }
+    }
+
+    const clienteNombreLibre = !clienteId
+      ? (targetClienteNombre || targetClienteId || item.lugar || '')
+      : '';
+    const centroNombreLibre = !centroId ? (item.lugar || '') : '';
+
+    let empresaId =
+      (matchPresupuesto as any)?.empresaId ||
+      matchPedido?.empresaId ||
+      matchCentro?.empresaId ||
+      (empresas.length > 0 ? ((empresas[0] as any)._docId || empresas[0].id || '') : '');
+    const existingAlbaran = albaranes.find(a => a.id === item.albaranId || a.instalacionId === (item._docId || item.id));
+    let numeroPedido = item.pedidoId || existingAlbaran?.numeroPedido || '';
+    let titulo = matchPresupuesto?.titulo || `Instalación: ${item.instalacion || 'Trabajo realizado'}`;
+
+    if (matchPresupuesto && !numeroPedido && matchPresupuesto.numeroPresupuesto) {
+      numeroPedido = `PDV ${matchPresupuesto.numeroPresupuesto.replace(/^(PDV|PRV|PRE)[-\s]*/i, '')}`;
     }
 
     // Intentar encontrar el técnico asignado
@@ -415,7 +468,9 @@ export default function Instalaciones() {
         prefillAlbaran: {
           empresaId,
           clienteId,
+          clienteNombreLibre,
           centroId,
+          centroNombreLibre,
           tecnicoId: matchTecnico?.id || (tecnicos.length > 0 ? tecnicos[0].id : ''),
           numeroPedido,
           titulo,
