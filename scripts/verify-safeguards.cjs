@@ -1141,15 +1141,19 @@ if (fs.existsSync(pdfGenPath)) {
     }
   }
 
-  // 91. Verificación del Logotipo del Gremio (GRIMEC) en Cabecera del Acta PDF (AGENTS.md REGLA 91)
+  // 91. Verificación del Logotipo de GRIMEC en la Esquina Superior Izquierda de Todas las Hojas del Acta PDF (AGENTS.md REGLA 91)
   const pdfGenPath91 = path.join(__dirname, '../src/pdfGenerator.ts');
   const sharedPdfGenPath91 = path.join(__dirname, '../src/recursos-compartidos/services/pdfGenerator.ts');
   [pdfGenPath91, sharedPdfGenPath91].forEach(pPath => {
     if (fs.existsSync(pPath)) {
       const pContent = fs.readFileSync(pPath, 'utf8');
       const pName = path.basename(pPath);
-      if (!pContent.includes('logoGrimecBase64') || !pContent.includes('gremioLogoData')) {
-        errors.push(`CRÍTICO: ${pName} carece de la carga y renderizado del logotipo del gremio (logoGrimecBase64 / gremioLogoData) (AGENTS.md REGLA 91).`);
+      if (
+        !pContent.includes('logoGrimecBase64') ||
+        !pContent.includes('gremioLogoData') ||
+        !pContent.includes('doc.addImage(gremioLogoData, gremioFormat, 14,')
+      ) {
+        errors.push(`CRÍTICO: ${pName} carece de la carga y renderizado del logotipo de GRIMEC en la esquina superior izquierda de todas las páginas (AGENTS.md REGLA 91).`);
       }
     }
   });
@@ -1257,6 +1261,179 @@ if (fs.existsSync(pdfGenPath)) {
       !partesContent11.includes('confirmarDevolucionRetimbre')
     ) {
       errors.push('CRÍTICO: Partes.tsx carece de la bola roja independiente (tieneRetimbrePendiente) o del modal en 2 pasos de devolución de extintores (parteDevolucionRetimbre / confirmarDevolucionRetimbre) (AGENTS.md REGLA 11).');
+    }
+  }
+
+  // 98. Verificación del Flujo Comercial Completo (Pedidos -> Albaranes -> Facturación) y PDF Oficial con VERI*FACTU (AGENTS.md REGLA 98)
+  const pedidosPath98 = path.join(__dirname, '../src/Pedidos.tsx');
+  if (!fs.existsSync(pedidosPath98)) {
+    errors.push('CRÍTICO: Falta el módulo src/Pedidos.tsx (AGENTS.md REGLA 98).');
+  } else {
+    const pedContent98 = fs.readFileSync(pedidosPath98, 'utf8');
+    if (!pedContent98.includes('prefillAlbaran') || !pedContent98.includes('sortField')) {
+      errors.push('CRÍTICO: Pedidos.tsx carece de la tabla ordenable o del botón "A" (prefillAlbaran) para crear albarán (AGENTS.md REGLA 98).');
+    }
+  }
+
+  const albaranesPath98 = path.join(__dirname, '../src/Albaranes.tsx');
+  if (fs.existsSync(albaranesPath98)) {
+    const albContent98 = fs.readFileSync(albaranesPath98, 'utf8');
+    if (!albContent98.includes('handleOpenCrearFactura')) {
+      errors.push('CRÍTICO: Albaranes.tsx carece del botón "F" de conexión directa con Facturación (handleOpenCrearFactura) (AGENTS.md REGLA 98).');
+    }
+  }
+
+  const facturasPath98 = path.join(__dirname, '../src/Facturas.tsx');
+  if (!fs.existsSync(facturasPath98)) {
+    errors.push('CRÍTICO: Falta el módulo src/Facturas.tsx (AGENTS.md REGLA 98).');
+  } else {
+    const facContent98 = fs.readFileSync(facturasPath98, 'utf8');
+    if (
+      !facContent98.includes('generarFacturaOficialPDF') ||
+      !facContent98.includes('generarQRVerifactuDataUrl') ||
+      !facContent98.includes('VERI*FACTU') ||
+      !facContent98.includes('max-h-[142px] overflow-y-auto')
+    ) {
+      errors.push('CRÍTICO: Facturas.tsx carece de generarFacturaOficialPDF, del código QR tributario VERI*FACTU (generarQRVerifactuDataUrl) o del contenedor desplazable de albaranes pendientes (max-h-[142px] overflow-y-auto) (AGENTS.md REGLA 98).');
+    }
+  }
+
+  // 99. Verificación del Formulario de Albarán Unificado en Avisos, Reparaciones e Instalaciones (AGENTS.md REGLA 99)
+  const urgenciasPath99 = path.join(__dirname, '../src/Urgencias.tsx');
+  const reparacionesPath99 = path.join(__dirname, '../src/Reparaciones.tsx');
+  const instalacionesPath99 = path.join(__dirname, '../src/Instalaciones.tsx');
+
+  [
+    { name: 'Reparaciones.tsx', path: reparacionesPath99 },
+    { name: 'Instalaciones.tsx', path: instalacionesPath99 },
+    { name: 'Urgencias.tsx', path: urgenciasPath99 }
+  ].forEach(({ name, path: filePath }) => {
+    if (!fs.existsSync(filePath)) {
+      errors.push(`CRÍTICO: Falta el módulo src/${name} (AGENTS.md REGLA 99).`);
+    } else {
+      const content = fs.readFileSync(filePath, 'utf8');
+      if (
+        !content.includes('Líneas del Trabajo / Albarán') ||
+        !content.includes('empresaId') ||
+        !content.includes('numeroPedido') ||
+        !content.includes('precioUnidad') ||
+        !content.includes('subtotal')
+      ) {
+        errors.push(`CRÍTICO: ${name} carece de la estructura unificada de formulario de albarán (líneas de trabajo, empresaId, numeroPedido, precioUnidad, subtotal) (AGENTS.md REGLA 99).`);
+      }
+    }
+  });
+
+  // 100. Verificación de Numeración Secuencial Unificada y No Duplicable (AGENTS.md REGLA 100)
+  const firebasePath100 = path.join(__dirname, '../src/firebase.tsx');
+  if (fs.existsSync(firebasePath100)) {
+    const fbContent = fs.readFileSync(firebasePath100, 'utf8');
+    if (
+      !fbContent.includes('obtenerSiguienteNumeroPedido') ||
+      !fbContent.includes('obtenerSiguienteNumeroAlbaran') ||
+      !fbContent.includes('extraerSufijoSecuencia') ||
+      !fbContent.includes('contadores/pedidos_secuencia')
+    ) {
+      errors.push('CRÍTICO: firebase.tsx carece del sistema unificado de recuento y anti-duplicidad de pedidos/albaranes (obtenerSiguienteNumeroPedido, obtenerSiguienteNumeroAlbaran, extraerSufijoSecuencia, contadores/pedidos_secuencia) (AGENTS.md REGLA 100).');
+    }
+  }
+  const facturasPath100 = path.join(__dirname, '../src/Facturas.tsx');
+  if (fs.existsSync(facturasPath100)) {
+    const facContent = fs.readFileSync(facturasPath100, 'utf8');
+    if (!facContent.includes('limpiarNotasFactura')) {
+      errors.push('CRÍTICO: Facturas.tsx carece de la función limpiarNotasFactura para asegurar que observaciones solo haga referencia al albarán (AGENTS.md REGLA 100).');
+    }
+    if (facContent.includes("drawLeftRow('Ref. Pedido'")) {
+      errors.push('CRÍTICO: Facturas.tsx imprime Ref. Pedido en el PDF de la factura (AGENTS.md REGLA 100).');
+    }
+  }
+
+  // 101. Verificación de Empresa Mantenedora Predeterminada ABANFOC (AGENTS.md REGLA 101)
+  if (fs.existsSync(firebasePath100)) {
+    const fbContent = fs.readFileSync(firebasePath100, 'utf8');
+    if (!fbContent.includes('obtenerEmpresaPorDefecto') || !fbContent.includes('abanfoc')) {
+      errors.push('CRÍTICO: firebase.tsx carece de obtenerEmpresaPorDefecto priorizando ABANFOC (AGENTS.md REGLA 101).');
+    }
+  }
+
+  [
+    { name: 'Reparaciones.tsx', path: reparacionesPath99 },
+    { name: 'Instalaciones.tsx', path: instalacionesPath99 },
+    { name: 'Urgencias.tsx', path: urgenciasPath99 },
+    { name: 'Albaranes.tsx', path: path.join(__dirname, '../src/Albaranes.tsx') },
+    { name: 'Pedidos.tsx', path: path.join(__dirname, '../src/Pedidos.tsx') }
+  ].forEach(({ name, path: filePath }) => {
+    if (fs.existsSync(filePath)) {
+      const content = fs.readFileSync(filePath, 'utf8');
+      if (!content.includes('obtenerEmpresaPorDefecto')) {
+        errors.push(`CRÍTICO: ${name} no utiliza obtenerEmpresaPorDefecto para predeterminar ABANFOC como empresa mantenedora (AGENTS.md REGLA 101).`);
+      }
+    }
+  });
+
+  // 102. Verificación de Reordenación de Líneas con Drag & Drop y Botones Subir/Bajar (AGENTS.md REGLA 102)
+  const albaranesPath102 = path.join(__dirname, '../src/Albaranes.tsx');
+  if (fs.existsSync(albaranesPath102)) {
+    const albContent = fs.readFileSync(albaranesPath102, 'utf8');
+    if (
+      !albContent.includes('handleDragStart') ||
+      !albContent.includes('handleDrop') ||
+      !albContent.includes('handleMoverLinea') ||
+      !albContent.includes('GripVertical') ||
+      !albContent.includes('ChevronUp') ||
+      !albContent.includes('ChevronDown')
+    ) {
+      errors.push('CRÍTICO: Albaranes.tsx carece del sistema completo de reordenación de líneas (GripVertical, ChevronUp, ChevronDown, handleDragStart, handleDrop, handleMoverLinea) (AGENTS.md REGLA 102).');
+    }
+  }
+
+  // 103. Verificación de Fecha Creación en Presupuestos (AGENTS.md REGLA 103)
+  const presupuestosPath103 = path.join(__dirname, '../src/Presupuestos.tsx');
+  if (fs.existsSync(presupuestosPath103)) {
+    const preContent = fs.readFileSync(presupuestosPath103, 'utf8');
+    if (!preContent.includes('Fecha creación')) {
+      errors.push('CRÍTICO: Presupuestos.tsx carece de la etiqueta "Fecha creación" en el campo de fecha del formulario (AGENTS.md REGLA 103).');
+    }
+  }
+
+  // 104. Verificación de Controles Compactos en Cabecera, Tablas Gris Neutro y Paginación en Avisos, Reparaciones, Instalaciones y Revisiones (AGENTS.md REGLA 104)
+  const modulosOperaciones = [
+    { name: 'Urgencias.tsx', path: path.join(__dirname, '../src/Urgencias.tsx'), limitKey: 'limiteUrgencias' },
+    { name: 'Reparaciones.tsx', path: path.join(__dirname, '../src/Reparaciones.tsx'), limitKey: 'limiteReparaciones' },
+    { name: 'Instalaciones.tsx', path: path.join(__dirname, '../src/Instalaciones.tsx'), limitKey: 'limiteInstalaciones' },
+    { name: 'Revisiones.tsx', path: path.join(__dirname, '../src/Revisiones.tsx'), limitKey: 'limiteRevisiones' }
+  ];
+
+  modulosOperaciones.forEach(({ name, path: mPath, limitKey }) => {
+    if (fs.existsSync(mPath)) {
+      const mContent = fs.readFileSync(mPath, 'utf8');
+      if (!mContent.includes(limitKey)) {
+        errors.push(`CRÍTICO: ${name} carece del estado de paginación ${limitKey} (AGENTS.md REGLA 104).`);
+      }
+      if (!mContent.includes('bg-zinc-200/90') || !mContent.includes('border-zinc-300')) {
+        errors.push(`CRÍTICO: ${name} carece de la cabecera gris neutro en la tabla (AGENTS.md REGLA 104).`);
+      }
+      if (!mContent.includes('hover:bg-amber-100/90')) {
+        errors.push(`CRÍTICO: ${name} carece del resaltado ámbar en filas de la tabla (AGENTS.md REGLA 104).`);
+      }
+      if (!mContent.includes('window.scrollTo(0, 0)')) {
+        errors.push(`CRÍTICO: ${name} carece del scroll al inicio window.scrollTo(0, 0) al montar (AGENTS.md REGLA 104).`);
+      }
+    }
+  });
+
+  // 105. Verificación del Calendario y Columna Lateral de Tareas en Planificación (AGENTS.md REGLA 105)
+  const planificacionPath105 = path.join(__dirname, '../src/Planificacion.tsx');
+  if (fs.existsSync(planificacionPath105)) {
+    const planContent = fs.readFileSync(planificacionPath105, 'utf8');
+    if (!planContent.includes('bg-zinc-200/90') || !planContent.includes('border-zinc-300')) {
+      errors.push('CRÍTICO: Planificacion.tsx carece de la cabecera gris en el calendario (AGENTS.md REGLA 105).');
+    }
+    if (!planContent.includes('Tareas a Planificar')) {
+      errors.push('CRÍTICO: Planificacion.tsx carece de la cabecera "Tareas a Planificar" en la columna lateral (AGENTS.md REGLA 105).');
+    }
+    if (!planContent.includes('border-l-amber-500') || !planContent.includes('border-l-sky-500') || !planContent.includes('border-l-emerald-500')) {
+      errors.push('CRÍTICO: Planificacion.tsx carece de los acentos cromáticos por periodicidad en las tarjetas (AGENTS.md REGLA 105).');
     }
   }
 

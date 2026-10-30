@@ -10,6 +10,7 @@ import {
   subscribeClientes, subscribeCentros, subscribePresupuestos,
   subscribeEmpresas, subscribeTecnicos, subscribeAlbaranes,
   addReparacion, addInstalacion,
+  obtenerSiguienteNumeroPedido, extraerSufijoSecuencia, obtenerEmpresaPorDefecto,
   type Pedido, type Presupuesto, type Cliente, type Centro,
   type Empresa, type Tecnico, type Albaran,
   type ReparacionItem, type InstalacionItem
@@ -64,6 +65,7 @@ export default function Pedidos() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [sortField, setSortField] = useState<'referencia' | 'fecha' | 'estado'>('fecha');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [limitePedidos, setLimitePedidos] = useState<number | 'todos'>(10);
 
   const handleSort = (field: 'referencia' | 'fecha' | 'estado') => {
     if (sortField === field) {
@@ -90,6 +92,7 @@ export default function Pedidos() {
   });
 
   useEffect(() => {
+    window.scrollTo(0, 0);
     const unsubPedidos = subscribePedidos(setPedidos);
     const unsubClientes = subscribeClientes(setClientes);
     const unsubCentros = subscribeCentros(setCentros);
@@ -170,13 +173,19 @@ export default function Pedidos() {
     return result;
   }, [pedidos, searchTerm, clientes, centros, statusFilter, sortField, sortOrder]);
 
+  const pedidosAMostrar = limitePedidos === 'todos'
+    ? filteredPedidos
+    : filteredPedidos.slice(0, Number(limitePedidos));
+
   const getEstadoInfo = (estado: string) => ESTADOS.find(e => e.valor === estado) || ESTADOS[0];
 
-  const handleNuevo = () => {
+  const handleNuevo = async () => {
     setEditingId(null);
+    const nextPedido = await obtenerSiguienteNumeroPedido();
+    const defaultEmpresaId = obtenerEmpresaPorDefecto(empresas);
     setForm({
       id: '',
-      empresaId: '',
+      empresaId: defaultEmpresaId,
       clienteId: '',
       centroId: '',
       titulo: '',
@@ -186,7 +195,7 @@ export default function Pedidos() {
       items: [{ cantidad: 1, concepto: 'Trabajo', descripcion: '', precioUnidad: 0, subtotal: 0 }],
       estado: 'Pendiente',
       presupuestoId: '',
-      numeroPedido: `PDV ${new Date().getFullYear().toString().slice(-2)}${String(pedidos.length + 1).padStart(3, '0')}`,
+      numeroPedido: nextPedido,
       notas: '',
     });
     setView('form');
@@ -194,8 +203,8 @@ export default function Pedidos() {
 
   const handleCrearDesdePresupuesto = (p: Presupuesto) => {
     setEditingId(null);
-    const numBase = (p.numeroPresupuesto || p.id || '').replace(/^(PDV|PRV|PRE|PED)[-\s]*/i, '').trim();
-    const codigoPDV = numBase ? `PDV ${numBase}` : `PDV ${new Date().getFullYear().toString().slice(-2)}${String(pedidos.length + 1).padStart(3, '0')}`;
+    const sufijo = extraerSufijoSecuencia(p.numeroPresupuesto || p.id);
+    const codigoPDV = sufijo ? `PDV.${sufijo}` : `PDV.${new Date().getFullYear().toString().slice(-2)}${String(pedidos.length + 1).padStart(3, '0')}`;
     setForm({
       id: '',
       empresaId: (p as any).empresaId || '',
@@ -205,7 +214,7 @@ export default function Pedidos() {
       fechaCreacion: new Date().toISOString(),
       fechaPrevista: new Date().toISOString().slice(0, 10),
       tipoPedido: (p as any).tipoTrabajo || '',
-      items: p.lineas.map(l => ({ cantidad: l.cantidad, concepto: l.concepto, descripcion: l.descripcion || '', precioUnidad: l.precioUnidad, subtotal: l.subtotal })),
+      items: p.lineas ? p.lineas.filter(l => l.tipo !== 'capitulo').map(l => ({ cantidad: l.cantidad, concepto: l.concepto, descripcion: l.descripcion || '', precioUnidad: l.precioUnidad, subtotal: l.subtotal })) : [],
       estado: 'Pendiente',
       presupuestoId: p.id,
       numeroPedido: codigoPDV,
@@ -227,7 +236,8 @@ export default function Pedidos() {
       return;
     }
     try {
-      let savedForm: Pedido = { ...form };
+      const finalPedido = form.numeroPedido?.trim() || (!editingId ? await obtenerSiguienteNumeroPedido() : '');
+      let savedForm: Pedido = { ...form, numeroPedido: finalPedido };
 
       // Si se especificó un tipo de pedido y es un pedido nuevo (o no tenía tarea previa generada)
       if (form.tipoPedido && !form.tareaGeneradaId && !editingId) {
@@ -245,7 +255,7 @@ export default function Pedidos() {
           lugar = clienteObj.nombre;
         }
 
-        const notaInicial = form.notas ? form.notas.trim() : `Pedido: ${form.numeroPedido || form.titulo}`;
+        const notaInicial = form.notas ? form.notas.trim() : `Pedido: ${finalPedido || form.titulo}`;
 
         if (form.tipoPedido === 'Reparación') {
           const newRepId = `REP-${Date.now().toString().slice(-6)}`;
@@ -264,7 +274,8 @@ export default function Pedidos() {
             mes: mesUso,
             observaciones: notaInicial,
             nota: notaInicial,
-            pedidoId: form.numeroPedido || '',
+            pedidoId: finalPedido,
+            numeroPedido: finalPedido,
             presupuestoId: form.presupuestoId || ''
           };
           await addReparacion(newRep);
@@ -292,7 +303,8 @@ export default function Pedidos() {
             mes: mesUso,
             observaciones: notaInicial,
             nota: notaInicial,
-            pedidoId: form.numeroPedido || '',
+            pedidoId: finalPedido,
+            numeroPedido: finalPedido,
             presupuestoId: form.presupuestoId || ''
           };
           await addInstalacion(newIns);
@@ -567,12 +579,6 @@ export default function Pedidos() {
         <div className="w-full">
           {/* Header */}
           <div className="mb-6 text-center sm:text-left flex flex-col items-center sm:items-start">
-            <button 
-              onClick={() => navigate('/')} 
-              className="flex items-center gap-1.5 text-xs font-semibold text-zinc-500 hover:text-zinc-900 mb-3 transition-colors cursor-pointer"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" /> Volver al panel
-            </button>
             <h1 className="text-2xl font-black text-zinc-950 tracking-tight">Pedidos de Venta</h1>
             <p className="text-xs font-semibold text-zinc-500 mt-1">Registro de presupuestos aceptados convertidos en pedido, listos para pasar a trabajo y albarán.</p>
           </div>
@@ -749,7 +755,7 @@ export default function Pedidos() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-100">
-                    {filteredPedidos.map(ped => {
+                    {pedidosAMostrar.map((ped, index) => {
                       const estadoInfo = getEstadoInfo(ped.estado);
                       const EstadoIcono = estadoInfo.icono;
                       const matchPresupuesto = presupuestos.find(p =>
@@ -773,9 +779,12 @@ export default function Pedidos() {
                       const rowKey = ped.id || (ped as any)._docId || codigoPDV;
 
                       return (
-                        <tr key={rowKey} className="hover:bg-zinc-50/80 transition-colors">
+                        <tr 
+                          key={rowKey} 
+                          className={`transition-all duration-150 group ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100/80'} hover:bg-amber-100/90 hover:shadow-xs`}
+                        >
                           {/* Nº Pedido / Presupuesto */}
-                          <td className="px-4 py-3 whitespace-nowrap">
+                          <td className="px-4 py-2.5 whitespace-nowrap">
                             <div className="flex flex-col items-start gap-1">
                               <span className="text-xs font-mono font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200/80">
                                 {codigoPDV}
@@ -789,22 +798,22 @@ export default function Pedidos() {
                           </td>
 
                           {/* Fecha */}
-                          <td className="px-4 py-3 whitespace-nowrap">
+                          <td className="px-4 py-2.5 whitespace-nowrap">
                             <p className="text-xs font-semibold text-zinc-600">{formatFecha(ped.fechaCreacion)}</p>
                           </td>
 
                           {/* Cliente */}
-                          <td className="px-4 py-3">
+                          <td className="px-4 py-2.5">
                             <p className="text-sm text-zinc-800 font-medium">{nombreCliente}</p>
                           </td>
 
                           {/* Centro */}
-                          <td className="px-4 py-3">
+                          <td className="px-4 py-2.5">
                             <p className="text-sm text-zinc-600">{nombreCentro}</p>
                           </td>
 
                           {/* Título y Tipo de Trabajo */}
-                          <td className="px-4 py-3">
+                          <td className="px-4 py-2.5">
                             <div className="flex flex-col items-start gap-1">
                               <p className="text-sm font-bold text-zinc-900 truncate max-w-[220px]" title={ped.titulo}>
                                 {ped.titulo}
@@ -831,7 +840,7 @@ export default function Pedidos() {
                           </td>
 
                           {/* Estado + Albarán vinculado */}
-                          <td className="px-4 py-3 whitespace-nowrap">
+                          <td className="px-4 py-2.5 whitespace-nowrap">
                             <div className="flex flex-col items-start gap-1">
                               <div className="relative inline-flex items-center gap-1">
                                 <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border inline-flex items-center gap-1 uppercase tracking-wider ${estadoInfo.color}`}>
@@ -885,13 +894,13 @@ export default function Pedidos() {
                           </td>
 
                           {/* Importe */}
-                          <td className="px-4 py-3 text-right whitespace-nowrap">
+                          <td className="px-4 py-2.5 text-right whitespace-nowrap">
                             <p className="font-black text-zinc-900">{formatMoneda(importeTotal)}</p>
                             <p className="text-[10px] text-zinc-400">{ped.items.length} partida(s)</p>
                           </td>
 
                           {/* Acciones */}
-                          <td className="px-4 py-3 text-center whitespace-nowrap">
+                          <td className="px-4 py-2.5 text-center whitespace-nowrap">
                             <div className="inline-flex items-center justify-center gap-1">
                               <button 
                                 type="button" 
@@ -940,6 +949,43 @@ export default function Pedidos() {
                     })}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          )}
+
+          {filteredPedidos.length > 0 && (
+            <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-zinc-600 bg-white px-5 py-3.5 rounded-2xl border border-zinc-200/80 shadow-xs">
+              <div className="font-bold text-zinc-800 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-red-500 shrink-0"></span>
+                {limitePedidos === 'todos' ? (
+                  <span>Mostrando todos los pedidos ({filteredPedidos.length} en total)</span>
+                ) : (
+                  <span>
+                    Mostrando los {Math.min(Number(limitePedidos), filteredPedidos.length)} últimos pedidos
+                    {filteredPedidos.length > Number(limitePedidos) && (
+                      <span className="text-zinc-400 font-normal ml-1">
+                        (de {filteredPedidos.length} pedidos en total)
+                      </span>
+                    )}
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2.5">
+                <span className="text-zinc-500 font-semibold uppercase text-[11px] tracking-wider">Mostrar:</span>
+                <select
+                  value={limitePedidos}
+                  onChange={(e) => setLimitePedidos(e.target.value === 'todos' ? 'todos' : Number(e.target.value))}
+                  className="bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 text-zinc-800 text-xs font-bold rounded-xl px-3.5 py-1.5 outline-none focus:border-red-500 focus:bg-white cursor-pointer transition-colors shadow-2xs"
+                >
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                  <option value={200}>200</option>
+                  <option value={500}>500</option>
+                  <option value="todos">Mostrar todos</option>
+                </select>
               </div>
             </div>
           )}

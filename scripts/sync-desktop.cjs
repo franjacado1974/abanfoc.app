@@ -23,17 +23,21 @@ if (!targetDesktop) {
 }
 
 // 1. Limpiar carpetas anteriores de SALAMANDRA en el escritorio
-const entries = fs.readdirSync(targetDesktop);
-for (const entry of entries) {
-  if (entry.toUpperCase().startsWith('SALAMANDRA')) {
-    const fullOld = path.join(targetDesktop, entry);
-    try {
-      fs.rmSync(fullOld, { recursive: true, force: true });
-      console.log('Eliminada versión anterior:', entry);
-    } catch (e) {
-      console.warn('No se pudo borrar:', entry, e.message);
+try {
+  const entries = fs.readdirSync(targetDesktop);
+  for (const entry of entries) {
+    if (entry.toUpperCase().startsWith('SALAMANDRA')) {
+      const fullOld = path.join(targetDesktop, entry);
+      try {
+        fs.rmSync(fullOld, { recursive: true, force: true });
+        console.log('Eliminada versión anterior:', entry);
+      } catch (e) {
+        console.warn('No se pudo borrar:', entry, e.message);
+      }
     }
   }
+} catch (e) {
+  console.warn('⚠️ No se pudo listar el escritorio:', e.message);
 }
 
 // 2. Crear nueva carpeta con la versión actual
@@ -45,8 +49,12 @@ if (!fs.existsSync(distDir)) {
   process.exit(1);
 }
 
-fs.cpSync(distDir, targetDir, { recursive: true });
-console.log('✅ Copiado con éxito dist ->', targetDir);
+try {
+  fs.cpSync(distDir, targetDir, { recursive: true });
+  console.log('✅ Copiado con éxito dist ->', targetDir);
+} catch (e) {
+  console.warn('⚠️ No se pudo copiar a Escritorio:', e.message);
+}
 
 // También mantener C:\Users\canci\Desktop\dist actualizado
 const classicDist = path.join(process.env.USERPROFILE || 'C:\\Users\\canci', 'Desktop', 'dist');

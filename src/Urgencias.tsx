@@ -5,13 +5,22 @@ import {
   AlertTriangle, Plus, Search, Filter, Edit, Trash2, CheckCircle2, 
   Clock, PauseCircle, User, MapPin, 
   X, Save, ChevronDown, StickyNote, Calendar,
-  ShieldAlert
+  ShieldAlert, Building2, Maximize2, Trash, FileText, GripVertical, ChevronUp
 } from 'lucide-react';
 import { 
   subscribeUrgencias, addUrgencia, updateUrgencia, deleteUrgencia, 
-  subscribeTecnicos, subscribeCentros, subscribeClientes, subscribeEmpresas,
-  type UrgenciaItem, type Cliente, type Centro, type Empresa 
+  subscribeTecnicos, subscribeCentros, subscribeClientes, subscribeEmpresas, subscribeTrabajos,
+  obtenerSiguienteNumeroPedido, obtenerEmpresaPorDefecto,
+  type UrgenciaItem, type Cliente, type Centro, type Empresa, type TrabajoConfig 
 } from './firebase';
+
+const formatMoneda = (valor: any) => {
+  const num = typeof valor === 'string' ? parseFloat(valor.replace(',', '.')) : Number(valor);
+  if (isNaN(num)) return '0,00 €';
+  const parts = num.toFixed(2).split('.');
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return `${parts.join(',')} €`;
+};
 
 const MESES = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 
@@ -109,17 +118,22 @@ export default function Urgencias() {
   const [estadoFilter, setEstadoFilter] = useState<string>('TODOS');
   const [prioridadFilter, setPrioridadFilter] = useState<string>('TODAS');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [limiteUrgencias, setLimiteUrgencias] = useState<number | 'todos'>(10);
 
   // Listas para desplegables de ayuda
   const [tecnicos, setTecnicos] = useState<any[]>([]);
   const [centros, setCentros] = useState<Centro[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [empresas, setEmpresas] = useState<Empresa[]>([]);
+  const [empresas, setEmpresas] = useState<Empresa[]>(() => { try { return JSON.parse(localStorage.getItem('firecheck_db_empresas') || '[]'); } catch { return []; } });
+  const [trabajosConfig, setTrabajosConfig] = useState<TrabajoConfig[]>(() => { try { return JSON.parse(localStorage.getItem('firecheck_db_trabajos') || '[]'); } catch { return []; } });
 
   // Modales
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<UrgenciaItem | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<{ id: string; docId?: string } | null>(null);
+  const [editingDescriptionIndex, setEditingDescriptionIndex] = useState<number | null>(null);
+  const [draggedLineIndex, setDraggedLineIndex] = useState<number | null>(null);
+  const [dragOverLineIndex, setDragOverLineIndex] = useState<number | null>(null);
 
   // Modal rápido de Nota / Notificación
   const [notaModalItem, setNotaModalItem] = useState<UrgenciaItem | null>(null);
@@ -128,18 +142,99 @@ export default function Urgencias() {
   // Formulario de edición/creación
   const [formData, setFormData] = useState({
     titulo: '',
+    empresaId: '',
     clienteId: '',
     clienteNombre: '',
+    clienteNombreLibre: '',
     centroId: '',
+    centroNombreLibre: '',
     urgencia: '',
     lugar: '',
+    numeroPedido: '',
     tecnicoAsignado: '',
     comercial: '',
     prioridad: 'Alta' as 'Baja' | 'Media' | 'Alta',
     fecha: new Date().toISOString().slice(0, 10),
     estado: 'Pendiente' as 'Pendiente' | 'En curso' | 'Parado' | 'Finalizado',
-    observaciones: ''
+    observaciones: '',
+    items: [
+      { cantidad: 1, concepto: 'Aviso', descripcion: '', precioUnidad: 0, subtotal: 0 }
+    ]
   });
+
+  const addItem = () => {
+    setFormData(prev => ({
+      ...prev,
+      items: [
+        ...prev.items,
+        { cantidad: 1, concepto: 'Aviso', descripcion: '', precioUnidad: 0, subtotal: 0 }
+      ]
+    }));
+  };
+
+  const removeItem = (index: number) => {
+    setFormData(prev => ({
+      ...prev,
+      items: prev.items.length > 1 ? prev.items.filter((_, i) => i !== index) : prev.items
+    }));
+  };
+
+  const updateItem = (index: number, field: string, value: any) => {
+    setFormData(prev => {
+      const newItems = [...prev.items];
+      const item = { ...newItems[index], [field]: value };
+      if (field === 'cantidad' || field === 'precioUnidad') {
+        const cant = field === 'cantidad' ? (Number(value) || 0) : (Number(item.cantidad) || 0);
+        const pUnidad = field === 'precioUnidad' ? (Number(value) || 0) : (Number(item.precioUnidad) || 0);
+        item.subtotal = cant * pUnidad;
+      }
+      newItems[index] = item;
+      return { ...prev, items: newItems };
+    });
+  };
+
+  // Reordenar líneas (arrastrar y soltar)
+  const handleDragStart = (index: number) => {
+    setDraggedLineIndex(index);
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    if (draggedLineIndex === null || draggedLineIndex === index) return;
+    setDragOverLineIndex(index);
+  };
+
+  const handleDrop = (index: number) => {
+    if (draggedLineIndex === null || draggedLineIndex === index) {
+      setDraggedLineIndex(null);
+      setDragOverLineIndex(null);
+      return;
+    }
+    const updated = [...formData.items];
+    const [movedItem] = updated.splice(draggedLineIndex, 1);
+    updated.splice(index, 0, movedItem);
+    setFormData(prev => ({ ...prev, items: updated }));
+    setDraggedLineIndex(null);
+    setDragOverLineIndex(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedLineIndex(null);
+    setDragOverLineIndex(null);
+  };
+
+  // Mover línea hacia arriba o hacia abajo
+  const handleMoverLinea = (index: number, direccion: 'up' | 'down') => {
+    const targetIndex = direccion === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= formData.items.length) return;
+    const updated = [...formData.items];
+    const temp = updated[index];
+    updated[index] = updated[targetIndex];
+    updated[targetIndex] = temp;
+    setFormData(prev => ({ ...prev, items: updated }));
+    if (editingDescriptionIndex === index) setEditingDescriptionIndex(targetIndex);
+    else if (editingDescriptionIndex === targetIndex) setEditingDescriptionIndex(index);
+  };
 
   const clienteOptions = useMemo(() => {
     return clientes
@@ -192,6 +287,11 @@ export default function Urgencias() {
     return dateStr;
   };
 
+  // Scroll arriba al montar la vista
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+
   // Cargar datos locales y suscribir a Firebase
   useEffect(() => {
     try {
@@ -226,6 +326,7 @@ export default function Urgencias() {
     const unsubCen = subscribeCentros((items) => setCentros(items));
     const unsubCli = subscribeClientes((items) => setClientes(items));
     const unsubEmp = subscribeEmpresas((items) => setEmpresas(items));
+    const unsubTrab = subscribeTrabajos((items) => setTrabajosConfig(items));
 
     return () => {
       clearTimeout(loadingSafetyTimer);
@@ -234,8 +335,16 @@ export default function Urgencias() {
       unsubCen();
       unsubCli();
       unsubEmp();
+      unsubTrab();
     };
   }, []);
+
+  // Si las empresas se cargan y en el formulario de creación aún no hay empresa seleccionada, asignar ABANFOC por defecto
+  useEffect(() => {
+    if (isModalOpen && !editingItem && !formData.empresaId && empresas.length > 0) {
+      setFormData(prev => ({ ...prev, empresaId: obtenerEmpresaPorDefecto(empresas) }));
+    }
+  }, [empresas, isModalOpen, editingItem, formData.empresaId]);
 
   // Guardar en localStorage cuando cambien
   const updateLocalAndState = (newItems: UrgenciaItem[]) => {
@@ -248,21 +357,29 @@ export default function Urgencias() {
   };
 
   // Abrir modal para crear
-  const handleOpenCreateModal = () => {
+  const handleOpenCreateModal = async () => {
     setEditingItem(null);
+    const nextPedido = await obtenerSiguienteNumeroPedido();
     setFormData({
       titulo: '',
+      empresaId: obtenerEmpresaPorDefecto(empresas),
       clienteId: '',
       clienteNombre: '',
+      clienteNombreLibre: '',
       centroId: '',
+      centroNombreLibre: '',
       urgencia: '',
       lugar: '',
+      numeroPedido: nextPedido,
       tecnicoAsignado: '',
       comercial: '',
       prioridad: 'Alta',
       fecha: new Date().toISOString().slice(0, 10),
       estado: 'Pendiente',
-      observaciones: ''
+      observaciones: '',
+      items: [
+        { cantidad: 1, concepto: 'Aviso', descripcion: '', precioUnidad: 0, subtotal: 0 }
+      ]
     });
     setIsModalOpen(true);
   };
@@ -272,17 +389,32 @@ export default function Urgencias() {
     setEditingItem(item);
     setFormData({
       titulo: item.titulo || item.urgencia || '',
+      empresaId: item.empresaId || obtenerEmpresaPorDefecto(empresas),
       clienteId: item.clienteId || '',
       clienteNombre: item.clienteNombre || '',
+      clienteNombreLibre: item.clienteNombreLibre || '',
       centroId: item.centroId || '',
+      centroNombreLibre: item.centroNombreLibre || '',
       urgencia: item.urgencia || item.titulo || '',
       lugar: item.lugar || '',
+      numeroPedido: item.numeroPedido || '',
       tecnicoAsignado: item.tecnicoAsignado || '',
       comercial: item.comercial || '',
       prioridad: item.prioridad || 'Media',
       fecha: item.fecha || (item.fechaCreacion ? item.fechaCreacion.slice(0, 10) : new Date().toISOString().slice(0, 10)),
       estado: item.estado || 'Pendiente',
-      observaciones: item.nota || item.observaciones || ''
+      observaciones: item.nota || item.observaciones || '',
+      items: item.items && item.items.length > 0
+        ? item.items
+        : [
+            {
+              cantidad: 1,
+              concepto: 'Aviso',
+              descripcion: item.titulo || item.urgencia || item.nota || item.observaciones || '',
+              precioUnidad: item.total || 0,
+              subtotal: item.total || 0
+            }
+          ]
     });
     setIsModalOpen(true);
   };
@@ -373,7 +505,9 @@ export default function Urgencias() {
       : '';
     const centroNombreLibre = !centroId ? (item.lugar || '') : '';
 
-    const empresaId = matchCentro?.empresaId || (empresas.length > 0 ? ((empresas[0] as any)._docId || empresas[0].id || '') : '');
+    const defaultEmpresaId = matchCentro?.empresaId || obtenerEmpresaPorDefecto(empresas);
+    const finalEmpresaId = item.empresaId || defaultEmpresaId;
+    const finalNumeroPedido = item.numeroPedido || '';
 
     const matchTecnico = tecnicos.find(t => 
       `${t.nombre || ''} ${t.apellidos || ''}`.toLowerCase().trim() === (item.tecnicoAsignado || '').toLowerCase().trim() ||
@@ -381,29 +515,32 @@ export default function Urgencias() {
     );
 
     const urgDocId = item._docId || item.id;
+    const finalItems = item.items && item.items.length > 0
+      ? item.items
+      : [
+          {
+            cantidad: 1,
+            concepto: 'Aviso',
+            descripcion: item.titulo || item.urgencia || item.nota || item.observaciones || `Intervención de urgencia realizada en ${item.lugar || 'instalación'}.`,
+            precioUnidad: item.total || 0,
+            subtotal: item.total || 0
+          }
+        ];
 
     navigate('/albaranes', {
       state: {
         prefillAlbaran: {
-          empresaId,
+          empresaId: finalEmpresaId,
           clienteId,
           clienteNombreLibre,
           centroId,
           centroNombreLibre,
           tecnicoId: matchTecnico?.id || (tecnicos.length > 0 ? tecnicos[0].id : ''),
-          numeroPedido: '',
-          titulo: `Urgencia: ${item.urgencia || 'Atención urgente'}`,
+          numeroPedido: finalNumeroPedido,
+          titulo: `Urgencia: ${item.titulo || item.urgencia || 'Atención urgente'}`,
           urgenciaId: urgDocId,
           fechaCreacion: item.fecha ? `${item.fecha}T10:00:00.000Z` : new Date().toISOString(),
-          items: [
-            {
-              cantidad: 1,
-              concepto: 'Aviso',
-              descripcion: item.titulo || item.urgencia || item.nota || item.observaciones || `Intervención de urgencia realizada en ${item.lugar || 'instalación'}.`,
-              precioUnidad: 0,
-              subtotal: 0
-            }
-          ]
+          items: finalItems
         }
       }
     });
@@ -413,16 +550,21 @@ export default function Urgencias() {
   const handleSaveForm = async (e: React.FormEvent) => {
     e.preventDefault();
     const calculatedMes = getMonthFromDateStr(formData.fecha);
+    const totalCalc = (formData.items || []).reduce((acc, it) => acc + (Number(it.subtotal) || 0), 0);
 
     if (editingItem) {
       const docId = editingItem._docId || editingItem.id;
       const updatedItem: Partial<UrgenciaItem> = {
         titulo: formData.titulo?.trim() || '',
+        empresaId: formData.empresaId || obtenerEmpresaPorDefecto(empresas),
         clienteId: formData.clienteId?.trim() || '',
         clienteNombre: formData.clienteNombre?.trim() || '',
+        clienteNombreLibre: formData.clienteNombreLibre?.trim() || '',
         centroId: formData.centroId?.trim() || '',
+        centroNombreLibre: formData.centroNombreLibre?.trim() || '',
         urgencia: formData.titulo?.trim() || '',
         lugar: formData.lugar.trim(),
+        numeroPedido: formData.numeroPedido?.trim() || '',
         tecnicoAsignado: formData.tecnicoAsignado.trim(),
         comercial: formData.comercial.trim(),
         prioridad: formData.prioridad,
@@ -430,7 +572,9 @@ export default function Urgencias() {
         mes: calculatedMes,
         estado: formData.estado,
         observaciones: formData.observaciones.trim(),
-        nota: formData.observaciones.trim()
+        nota: formData.observaciones.trim(),
+        items: formData.items || [],
+        total: totalCalc
       };
 
       const updatedList = urgencias.map(u => 
@@ -446,15 +590,20 @@ export default function Urgencias() {
         console.error('Error al actualizar urgencia en Firebase:', err);
       }
     } else {
+      const finalPedido = formData.numeroPedido?.trim() || await obtenerSiguienteNumeroPedido();
       const newId = `URG-${Date.now().toString().slice(-6)}`;
       const newItem: UrgenciaItem = {
         id: newId,
         titulo: formData.titulo?.trim() || '',
+        empresaId: formData.empresaId || obtenerEmpresaPorDefecto(empresas),
         clienteId: formData.clienteId?.trim() || '',
         clienteNombre: formData.clienteNombre?.trim() || '',
+        clienteNombreLibre: formData.clienteNombreLibre?.trim() || '',
         centroId: formData.centroId?.trim() || '',
+        centroNombreLibre: formData.centroNombreLibre?.trim() || '',
         urgencia: formData.titulo?.trim() || '',
         lugar: formData.lugar.trim(),
+        numeroPedido: finalPedido,
         tecnicoAsignado: formData.tecnicoAsignado.trim(),
         comercial: formData.comercial.trim(),
         prioridad: formData.prioridad,
@@ -463,6 +612,8 @@ export default function Urgencias() {
         estado: formData.estado,
         observaciones: formData.observaciones.trim(),
         nota: formData.observaciones.trim(),
+        items: formData.items || [],
+        total: totalCalc,
         fechaCreacion: new Date().toISOString()
       };
 
@@ -519,6 +670,12 @@ export default function Urgencias() {
     }
     return true;
   });
+
+  // Paginación de avisos a mostrar
+  const urgenciasAMostrar = useMemo(() => {
+    if (limiteUrgencias === 'todos') return urgenciasFiltradas;
+    return urgenciasFiltradas.slice(0, Number(limiteUrgencias));
+  }, [urgenciasFiltradas, limiteUrgencias]);
 
   // Estadísticas del mes activo
   const totalCount = urgenciasDelMes.length;
@@ -599,19 +756,19 @@ export default function Urgencias() {
   };
 
   const opcionesEstado = [
-    { value: 'TODOS', label: 'Todos los estados', colorClass: '' },
-    { value: 'Pendiente', label: 'Pendiente (Gris)', colorClass: 'bg-slate-400' },
-    { value: 'En curso', label: 'En curso (Amarillo)', colorClass: 'bg-amber-400' },
-    { value: 'Parado', label: 'Parado (Rojo)', colorClass: 'bg-red-500' },
-    { value: 'Finalizado', label: 'Finalizado (Verde)', colorClass: 'bg-emerald-500' },
+    { value: 'TODOS', label: `Todos los estados (${totalCount})`, colorClass: '' },
+    { value: 'Pendiente', label: `Pendientes (${pendientesCount})`, colorClass: 'bg-slate-400' },
+    { value: 'En curso', label: `En curso (${enCursoCount})`, colorClass: 'bg-amber-400' },
+    { value: 'Parado', label: `Parados (${paradosCount})`, colorClass: 'bg-red-500' },
+    { value: 'Finalizado', label: `Finalizados (${finalizadosCount})`, colorClass: 'bg-emerald-500' },
   ];
 
   return (
     <div className="p-4 sm:p-8 max-w-[1600px] mx-auto min-h-screen">
-      {/* Header & Title */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-        <div>
-          <div className="flex flex-col sm:flex-row items-center gap-2.5 text-center sm:text-left">
+      {/* Header & Title + Controles (Búsqueda, Filtros y Nuevo Aviso) */}
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 mb-6">
+        <div className="shrink-0">
+          <div className="flex items-center gap-2.5">
             <div className="w-10 h-10 rounded-xl bg-red-100 border border-red-200 flex items-center justify-center text-red-600 shadow-sm shrink-0">
               <AlertTriangle className="w-5 h-5 stroke-[2.25]" />
             </div>
@@ -622,12 +779,84 @@ export default function Urgencias() {
           </div>
         </div>
 
+        {/* Controles entre el título y el botón: Búsqueda, Prioridad y Estados */}
+        <div className="flex flex-wrap items-center gap-2.5 flex-1 justify-start xl:justify-center">
+          {/* Campo de búsqueda pequeño */}
+          <div className="relative w-44 sm:w-48 lg:w-52 shrink-0">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar aviso..."
+              className="w-full pl-8 pr-3 py-2 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all bg-white shadow-2xs"
+            />
+          </div>
+
+          {/* Filtro Prioridad */}
+          <select
+            value={prioridadFilter}
+            onChange={(e) => setPrioridadFilter(e.target.value)}
+            className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-red-500/20 shadow-2xs cursor-pointer shrink-0"
+          >
+            <option value="TODAS">Todas las prioridades</option>
+            <option value="Alta">Alta (Roja)</option>
+            <option value="Media">Media (Ámbar)</option>
+            <option value="Baja">Baja (Gris)</option>
+          </select>
+
+          {/* Dropdown Filtro por Estado con Cantidades */}
+          <div className="relative shrink-0">
+            <button
+              type="button"
+              onClick={() => setIsFilterOpen(!isFilterOpen)}
+              className="px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold flex items-center justify-between gap-2.5 text-slate-800 hover:bg-slate-50 transition-all cursor-pointer shadow-2xs"
+            >
+              <div className="flex items-center gap-2">
+                <Filter className="w-3.5 h-3.5 text-slate-400" />
+                <span>{opcionesEstado.find(o => o.value === estadoFilter)?.label || 'Todos los estados'}</span>
+              </div>
+              <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform ${isFilterOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {isFilterOpen && (
+              <div className="absolute right-0 top-full mt-1.5 w-60 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 py-1.5 overflow-hidden animate-in fade-in duration-150">
+                {opcionesEstado.map((op) => (
+                  <button
+                    key={op.value}
+                    type="button"
+                    onClick={() => {
+                      setEstadoFilter(op.value);
+                      setIsFilterOpen(false);
+                    }}
+                    className={`w-full px-3 py-2 text-left text-xs font-semibold flex items-center justify-between gap-3 transition-colors cursor-pointer ${
+                      estadoFilter === op.value
+                        ? 'bg-red-50 text-red-700 font-bold'
+                        : 'text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      {op.colorClass ? (
+                        <span className={`w-2.5 h-2.5 rounded-full ${op.colorClass}`} />
+                      ) : (
+                        <span className="w-2.5 h-2.5 rounded-full border border-slate-300" />
+                      )}
+                      <span>{op.label}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Botón Nueva Urgencia */}
         <button
           onClick={handleOpenCreateModal}
-          className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-sm shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer"
+          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs sm:text-sm shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer shrink-0"
         >
-          <Plus className="w-5 h-5" />
-          Nueva Urgencia
+          <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
+          <span>Nueva Urgencia</span>
         </button>
       </div>
 
@@ -660,113 +889,19 @@ export default function Urgencias() {
         </div>
       </div>
 
-      {/* Counter Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
-        <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col justify-between">
-          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Urgencias</span>
-          <span className="text-2xl font-black text-slate-900 mt-2">{totalCount}</span>
-        </div>
-        <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
-          <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">Pendientes</span>
-          <span className="text-2xl font-black text-slate-700 mt-2">{pendientesCount}</span>
-        </div>
-        <div className="bg-amber-50/70 p-4 rounded-2xl border border-amber-200 shadow-sm flex flex-col justify-between">
-          <span className="text-xs font-bold text-amber-800 uppercase tracking-wider">En curso</span>
-          <span className="text-2xl font-black text-amber-700 mt-2">{enCursoCount}</span>
-        </div>
-        <div className="bg-red-50/70 p-4 rounded-2xl border border-red-200 shadow-sm flex flex-col justify-between">
-          <span className="text-xs font-bold text-red-800 uppercase tracking-wider">Paradas</span>
-          <span className="text-2xl font-black text-red-700 mt-2">{paradosCount}</span>
-        </div>
-        <div className="bg-emerald-50/70 p-4 rounded-2xl border border-emerald-200 shadow-sm flex flex-col justify-between">
-          <span className="text-xs font-bold text-emerald-800 uppercase tracking-wider">Finalizadas</span>
-          <span className="text-2xl font-black text-emerald-700 mt-2">{finalizadosCount}</span>
-        </div>
-      </div>
-
-      {/* Controls: Search & Filter */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm mb-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-        <div className="relative w-full sm:w-96">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por urgencia, lugar, técnico, nota..."
-            className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all bg-slate-50/50"
-          />
-        </div>
-
-        <div className="flex items-center gap-3 w-full sm:w-auto">
-          {/* Filtro Prioridad */}
-          <select
-            value={prioridadFilter}
-            onChange={(e) => setPrioridadFilter(e.target.value)}
-            className="px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-red-500/20 shadow-sm cursor-pointer"
-          >
-            <option value="TODAS">Todas las prioridades</option>
-            <option value="Alta">Alta (Roja)</option>
-            <option value="Media">Media (Ámbar)</option>
-            <option value="Baja">Baja (Gris)</option>
-          </select>
-
-          {/* Dropdown Filtro por Estado */}
-          <div className="relative w-full sm:w-auto">
-            <button
-              type="button"
-              onClick={() => setIsFilterOpen(!isFilterOpen)}
-              className="w-full sm:w-auto px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium flex items-center justify-between gap-3 text-slate-800 hover:bg-slate-50 transition-all cursor-pointer shadow-sm"
-            >
-              <div className="flex items-center gap-2">
-                <Filter className="w-4 h-4 text-slate-400" />
-                <span>{opcionesEstado.find(o => o.value === estadoFilter)?.label || 'Todos los estados'}</span>
-              </div>
-              <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isFilterOpen ? 'rotate-180' : ''}`} />
-            </button>
-
-            {isFilterOpen && (
-              <div className="absolute right-0 top-full mt-1.5 w-56 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 py-1.5 overflow-hidden animate-in fade-in duration-150">
-                {opcionesEstado.map((op) => (
-                  <button
-                    key={op.value}
-                    type="button"
-                    onClick={() => {
-                      setEstadoFilter(op.value);
-                      setIsFilterOpen(false);
-                    }}
-                    className={`w-full px-3 py-2 text-left text-xs font-semibold flex items-center gap-3 transition-colors cursor-pointer ${
-                      estadoFilter === op.value
-                        ? 'bg-red-50 text-red-700 font-bold'
-                        : 'text-slate-700 hover:bg-slate-50'
-                    }`}
-                  >
-                    {op.colorClass ? (
-                      <span className={`w-2.5 h-2.5 rounded-full ${op.colorClass}`} />
-                    ) : (
-                      <span className="w-2.5 h-2.5 rounded-full border border-slate-300" />
-                    )}
-                    {op.label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
       {/* Main Table */}
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-slate-50/80 border-b border-slate-200 text-[11px] font-black text-slate-600 uppercase tracking-wider">
-                <th className="px-6 py-4">URGENCIA</th>
-                <th className="px-6 py-4">LUGAR</th>
-                <th className="px-6 py-4">TÉCNICO ASIGNADO</th>
-                <th className="px-6 py-4">PRIORIDAD</th>
-                <th className="px-6 py-4">ESTADO</th>
-                <th className="px-4 py-4 text-center">NOTA</th>
-                <th className="px-6 py-4 text-right">ACCIONES</th>
+              <tr className="bg-zinc-200/90 border-b border-zinc-300 text-[11px] font-extrabold uppercase tracking-wider text-zinc-700">
+                <th className="px-6 py-3">URGENCIA</th>
+                <th className="px-6 py-3">LUGAR</th>
+                <th className="px-6 py-3">TÉCNICO ASIGNADO</th>
+                <th className="px-6 py-3">PRIORIDAD</th>
+                <th className="px-6 py-3">ESTADO</th>
+                <th className="px-4 py-3 text-center">NOTA</th>
+                <th className="px-6 py-3 text-right">ACCIONES</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm">
@@ -785,14 +920,17 @@ export default function Urgencias() {
                   </td>
                 </tr>
               ) : (
-                urgenciasFiltradas.map((item) => {
+                urgenciasAMostrar.map((item, index) => {
                   const noteContent = (item.nota || item.observaciones || '').trim();
                   const hasNote = noteContent.length > 0;
 
                   return (
-                    <tr key={item.id} className="hover:bg-slate-50/60 transition-colors">
+                    <tr 
+                      key={item.id} 
+                      className={`transition-all duration-150 group ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100/80'} hover:bg-amber-100/90 hover:shadow-xs`}
+                    >
                       {/* URGENCIA */}
-                      <td className="px-6 py-4">
+                      <td className="px-6 py-2.5">
                         <div className="flex items-start gap-3">
                           <div className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 mt-0.5 ${
                             item.prioridad === 'Alta' 
@@ -810,6 +948,11 @@ export default function Urgencias() {
                                   {formatearFecha(item.fecha)}
                                 </span>
                               )}
+                              {item.numeroPedido && (
+                                <span className="text-[11px] font-mono font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200/80 shadow-xs">
+                                  {item.numeroPedido}
+                                </span>
+                              )}
                               <span className="text-[10px] font-mono text-slate-400">
                                 {item.id}
                               </span>
@@ -819,7 +962,7 @@ export default function Urgencias() {
                       </td>
 
                       {/* LUGAR */}
-                      <td className="px-6 py-4 font-medium text-slate-700">
+                      <td className="px-6 py-2.5 font-medium text-slate-700">
                         <div className="flex items-center gap-2">
                           <MapPin className="w-4 h-4 text-slate-400 shrink-0" />
                           <span>{item.lugar || '—'}</span>
@@ -827,7 +970,7 @@ export default function Urgencias() {
                       </td>
 
                       {/* TÉCNICO ASIGNADO */}
-                      <td className="px-6 py-4 font-medium text-slate-700">
+                      <td className="px-6 py-2.5 font-medium text-slate-700">
                         <div className="flex items-center gap-2">
                           <User className="w-4 h-4 text-slate-400 shrink-0" />
                           <span>{item.tecnicoAsignado || 'Sin asignar'}</span>
@@ -835,21 +978,21 @@ export default function Urgencias() {
                       </td>
 
                       {/* PRIORIDAD */}
-                      <td className="px-6 py-4">
+                      <td className="px-6 py-2.5">
                         {renderPrioridadBadge(item.prioridad || 'Media')}
                       </td>
 
                       {/* ESTADO */}
-                      <td className="px-6 py-4">
+                      <td className="px-6 py-2.5">
                         {renderEstadoBadge(item.estado)}
                       </td>
 
                       {/* NOTA CON ICONO Y NOTIFICACIÓN SI EXISTE */}
-                      <td className="px-4 py-4 text-center">
+                      <td className="px-4 py-2.5 text-center">
                         <button
                           type="button"
                           onClick={() => handleOpenNotaModal(item)}
-                          className={`relative inline-flex items-center justify-center p-2.5 rounded-xl transition-all cursor-pointer ${
+                          className={`relative inline-flex items-center justify-center p-2 rounded-xl transition-all cursor-pointer ${
                             hasNote
                               ? 'bg-amber-100 text-amber-900 border border-amber-300 shadow-sm hover:bg-amber-200'
                               : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100 border border-transparent'
@@ -868,7 +1011,7 @@ export default function Urgencias() {
                       </td>
 
                       {/* ACCIONES */}
-                      <td className="px-6 py-4 text-right">
+                      <td className="px-6 py-2.5 text-right">
                         <div className="flex items-center justify-end gap-1.5">
                           <button
                             type="button"
@@ -910,6 +1053,43 @@ export default function Urgencias() {
           </table>
         </div>
       </div>
+
+      {/* Selector de paginación */}
+      {urgenciasFiltradas.length > 0 && (
+        <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-zinc-600 bg-white px-5 py-3.5 rounded-2xl border border-zinc-200/80 shadow-xs">
+          <div className="font-bold text-zinc-800 flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-red-500 shrink-0"></span>
+            {limiteUrgencias === 'todos' ? (
+              <span>Mostrando todos los avisos ({urgenciasFiltradas.length} en total)</span>
+            ) : (
+              <span>
+                Mostrando los {Math.min(Number(limiteUrgencias), urgenciasFiltradas.length)} últimos avisos
+                {urgenciasFiltradas.length > Number(limiteUrgencias) && (
+                  <span className="text-zinc-400 font-normal ml-1">
+                    (de {urgenciasFiltradas.length} avisos en total)
+                  </span>
+                )}
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2.5">
+            <span className="text-zinc-500 font-semibold uppercase text-[11px] tracking-wider">Mostrar:</span>
+            <select
+              value={limiteUrgencias}
+              onChange={(e) => setLimiteUrgencias(e.target.value === 'todos' ? 'todos' : Number(e.target.value))}
+              className="bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 text-zinc-800 text-xs font-bold rounded-xl px-3.5 py-1.5 outline-none focus:border-red-500 focus:bg-white cursor-pointer transition-colors shadow-2xs"
+            >
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+              <option value={200}>200</option>
+              <option value="todos">Mostrar todos</option>
+            </select>
+          </div>
+        </div>
+      )}
 
       {/* MODAL FLOTANTE RÁPIDO DE NOTA */}
       {notaModalItem && (
@@ -985,207 +1165,507 @@ export default function Urgencias() {
         </div>
       )}
 
-      {/* MODAL CREAR / EDITAR URGENCIA */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[9999] animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl w-full max-w-xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-100">
-            <div className="px-6 py-5 bg-slate-900 text-white flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-red-500/20 border border-red-500/30 flex items-center justify-center text-red-400">
-                  <AlertTriangle className="w-5 h-5" />
+      {/* MODAL CREAR / EDITAR COMPLETO */}
+      {isModalOpen && (() => {
+        const selectedEmpresa = empresas.find(e => (e as any)._docId === formData.empresaId || e.id === formData.empresaId);
+        const selectedCliente = clientes.find(c => c.id === formData.clienteId || (c as any)._docId === formData.clienteId);
+        const selectedCentro = centros.find(c => (c as any)._docId === formData.centroId || c.id === formData.centroId);
+        const filteredCentros = centros.filter(c => c.clienteId === formData.clienteId || (selectedCliente && (c.clienteId === selectedCliente.id || c.clienteId === (selectedCliente as any)._docId)));
+        const totalCalc = formData.items.reduce((s, it) => s + (Number(it.subtotal) || 0), 0);
+
+        return (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 md:p-6 z-[9999] animate-in fade-in duration-200">
+            <div className="bg-white rounded-3xl w-full max-w-4xl max-h-[92vh] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+              {/* Cabecera */}
+              <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-red-600/20 border border-red-500/30 flex items-center justify-center text-red-500">
+                    <AlertTriangle className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-base">
+                      {editingItem ? 'Editar Aviso de Urgencia' : 'Nuevo Aviso de Urgencia'}
+                    </h3>
+                    <p className="text-xs text-slate-400">Introduce los datos comerciales, técnicos y partidas del aviso.</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-black text-lg text-white tracking-tight">
-                    {editingItem ? 'Editar Aviso de Urgencia' : 'Nueva Urgencia'}
-                  </h3>
-                  <p className="text-xs text-slate-400">
-                    {editingItem ? 'Actualiza los datos de la intervención.' : 'Registra un nuevo aviso urgente en el sistema.'}
-                  </p>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="p-2 text-slate-400 hover:text-white rounded-xl transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
               </div>
+
+              {/* Formulario scrollable */}
+              <form onSubmit={handleSaveForm} className="p-6 md:p-8 flex flex-col gap-6 overflow-y-auto">
+                {/* 1. Empresa Mantenedora y Logo */}
+                <div className="flex flex-col md:flex-row gap-6 items-start justify-between border-b border-zinc-100 pb-6">
+                  <div className="flex-1 space-y-2 w-full">
+                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1.5">
+                      <Building2 className="w-3.5 h-3.5 text-red-500" />
+                      Empresa Mantenedora *
+                    </label>
+                    <select
+                      required
+                      value={formData.empresaId}
+                      onChange={e => setFormData({ ...formData, empresaId: e.target.value })}
+                      className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-2xl outline-none focus:ring-2 focus:ring-red-500/20 font-semibold text-sm text-zinc-900"
+                    >
+                      <option value="">Selecciona Empresa...</option>
+                      {empresas.map(emp => (
+                        <option key={(emp as any)._docId || emp.id} value={(emp as any)._docId || emp.id}>
+                          {emp.nombre}
+                        </option>
+                      ))}
+                    </select>
+                    {selectedEmpresa && (
+                      <div className="p-3 bg-zinc-50 rounded-xl border border-zinc-200 text-xs text-zinc-600 space-y-0.5">
+                        <p className="font-bold text-zinc-900">{selectedEmpresa.nombre}</p>
+                        <p>{selectedEmpresa.direccion}, {selectedEmpresa.localidad}</p>
+                        <p className="font-mono">CIF: {selectedEmpresa.cif}</p>
+                      </div>
+                    )}
+                  </div>
+                  <div className="w-full md:w-44 h-28 bg-zinc-50 rounded-2xl border-2 border-dashed border-zinc-200 flex items-center justify-center overflow-hidden p-3 shrink-0">
+                    {selectedEmpresa?.logoUrl ? (
+                      <img src={selectedEmpresa.logoUrl} alt="Logo" className="max-w-full max-h-full object-contain" />
+                    ) : (
+                      <Building2 className="w-8 h-8 text-zinc-300" />
+                    )}
+                  </div>
+                </div>
+
+                {/* 2. Cliente y Centro de Trabajo con Ubicación */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">
+                        Cliente *
+                      </label>
+                      <SearchableSelect
+                        value={formData.clienteId}
+                        onChange={(val, opt) => {
+                          const matchCentros = centros.filter(c => c.clienteId === val);
+                          const autoCentro = matchCentros.length === 1 ? ((matchCentros[0] as any)._docId || matchCentros[0].id) : '';
+                          const autoLugar = matchCentros.length === 1 ? (matchCentros[0].nombre || '') : (opt ? opt.label : '');
+                          setFormData({
+                            ...formData,
+                            clienteId: val,
+                            clienteNombre: opt ? opt.label : '',
+                            clienteNombreLibre: '',
+                            centroId: autoCentro,
+                            lugar: autoLugar
+                          });
+                        }}
+                        options={clienteOptions}
+                        placeholder="Buscar o seleccionar cliente..."
+                        emptyMessage="No se encontraron clientes"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">
+                        Centro de Trabajo
+                      </label>
+                      <select
+                        value={formData.centroId}
+                        onChange={e => {
+                          const cId = e.target.value;
+                          const cenObj = centros.find(c => (c as any)._docId === cId || c.id === cId);
+                          setFormData({
+                            ...formData,
+                            centroId: cId,
+                            lugar: cenObj ? cenObj.nombre : (formData.clienteNombre || '')
+                          });
+                        }}
+                        className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl outline-none text-sm font-semibold text-zinc-900"
+                      >
+                        <option value="">Sin centro (Usar datos cliente)</option>
+                        {filteredCentros.map(cen => (
+                          <option key={(cen as any)._docId || cen.id} value={(cen as any)._docId || cen.id}>
+                            {cen.nombre}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Tarjeta de ubicación */}
+                  <div className="p-4 bg-zinc-50 rounded-2xl border border-zinc-200/80 space-y-2 flex flex-col justify-center">
+                    <div className="flex items-center gap-2 text-red-600 mb-0.5">
+                      <MapPin className="w-4 h-4 shrink-0" />
+                      <span className="text-[11px] font-bold uppercase tracking-wider">Datos de Ubicación</span>
+                    </div>
+                    {selectedCentro || selectedCliente ? (
+                      <div className="text-xs space-y-1 text-zinc-600">
+                        <p className="font-bold text-zinc-900 text-sm">{selectedCentro?.nombre || selectedCliente?.nombre}</p>
+                        <p>{selectedCentro?.direccion || selectedCliente?.direccion || 'Sin dirección registrada'}</p>
+                        <p>{selectedCentro?.poblacion || selectedCliente?.poblacion || ''} {selectedCentro?.provincia || selectedCliente?.provincia ? `(${selectedCentro?.provincia || selectedCliente?.provincia})` : ''}</p>
+                        {(selectedCentro?.telefono || selectedCliente?.telefono) && (
+                          <p className="font-mono text-zinc-500">Tel: {selectedCentro?.telefono || selectedCliente?.telefono}</p>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-zinc-400 italic">Selecciona un cliente para visualizar los datos de ubicación.</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* 3. Título, Número de Pedido, Fecha, Estado, Prioridad, Técnico y Comercial */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 border-t border-zinc-100">
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">
+                      TITULO OBLIGATORIO A MOSTRAR EN EL AVISO <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.titulo}
+                      onChange={e => setFormData({ ...formData, titulo: e.target.value })}
+                      placeholder="Ej: Fallo gotera en bazar chino"
+                      className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-semibold text-zinc-900 outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">
+                      Número de Pedido
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.numeroPedido}
+                      onChange={e => setFormData({ ...formData, numeroPedido: e.target.value.toUpperCase() })}
+                      placeholder="Ej: PDV 26001 (Opcional)"
+                      className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-mono font-bold text-zinc-800 outline-none focus:ring-2 focus:ring-red-500/20"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5 text-red-500" />
+                      Fecha de Urgencia <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={formData.fecha}
+                      onChange={e => setFormData({ ...formData, fecha: e.target.value })}
+                      className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-semibold text-zinc-900 outline-none focus:ring-2 focus:ring-red-500/20"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">
+                      Técnico Asignado
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.tecnicoAsignado}
+                      onChange={e => setFormData({ ...formData, tecnicoAsignado: e.target.value })}
+                      placeholder="Ej: Juan Pérez"
+                      list="urg-tecnicos-list"
+                      className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-semibold text-zinc-900 outline-none focus:ring-2 focus:ring-red-500/20"
+                    />
+                    <datalist id="urg-tecnicos-list">
+                      {tecnicos.map((t: any) => (
+                        <option key={t.id || t._docId} value={`${t.nombre} ${t.apellidos}`.trim()} />
+                      ))}
+                    </datalist>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">
+                      Comercial / Responsable
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.comercial}
+                      onChange={e => setFormData({ ...formData, comercial: e.target.value })}
+                      placeholder="Ej: Carlos Gómez"
+                      className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-semibold text-zinc-900 outline-none focus:ring-2 focus:ring-red-500/20"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                      <ShieldAlert className="w-3.5 h-3.5 text-red-500" />
+                      Prioridad
+                    </label>
+                    <select
+                      value={formData.prioridad}
+                      onChange={e => setFormData({ ...formData, prioridad: e.target.value as any })}
+                      className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-semibold text-zinc-900 outline-none focus:ring-2 focus:ring-red-500/20"
+                    >
+                      <option value="Alta">Alta (Roja)</option>
+                      <option value="Media">Media (Ámbar)</option>
+                      <option value="Baja">Baja (Gris)</option>
+                    </select>
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">
+                      Estado de la Tarea
+                    </label>
+                    <select
+                      value={formData.estado}
+                      onChange={e => setFormData({ ...formData, estado: e.target.value as any })}
+                      className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-semibold text-zinc-900 outline-none focus:ring-2 focus:ring-red-500/20"
+                    >
+                      <option value="Pendiente">Pendiente (Gris)</option>
+                      <option value="En curso">En curso (Amarillo)</option>
+                      <option value="Parado">Parado (Rojo)</option>
+                      <option value="Finalizado">Finalizado (Verde)</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* 4. Tabla de Líneas / Partidas (idéntica a Albarán) */}
+                <div className="space-y-3 pt-2 border-t border-zinc-100">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-zinc-700 uppercase tracking-wider flex items-center gap-1.5">
+                      <FileText className="w-4 h-4 text-red-500" />
+                      Líneas del Trabajo / Albarán
+                    </label>
+                    <button
+                      type="button"
+                      onClick={addItem}
+                      className="text-xs font-bold text-red-600 hover:text-red-700 flex items-center gap-1 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Añadir partida
+                    </button>
+                  </div>
+
+                  <div className="border border-zinc-200 rounded-2xl overflow-hidden bg-white shadow-sm">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="bg-zinc-900 text-white text-[11px] uppercase font-bold tracking-wider">
+                            <th className="px-2 py-2.5 text-center w-14" title="Posición y orden">Orden</th>
+                            <th className="px-3 py-2.5 text-center w-16">Cant.</th>
+                            <th className="px-3 py-2.5 text-left w-52">Concepto</th>
+                            <th className="px-3 py-2.5 text-left">Descripción</th>
+                            <th className="px-3 py-2.5 text-right w-28">P. Unidad</th>
+                            <th className="px-3 py-2.5 text-right w-28">Subtotal</th>
+                            <th className="px-2 py-2.5 text-center w-10"></th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-zinc-100">
+                          {formData.items.map((item, index) => (
+                            <tr
+                              key={index}
+                              draggable
+                              onDragStart={() => handleDragStart(index)}
+                              onDragOver={(e) => handleDragOver(e, index)}
+                              onDrop={() => handleDrop(index)}
+                              onDragEnd={handleDragEnd}
+                              className={`transition-colors group ${
+                                draggedLineIndex === index
+                                  ? 'opacity-40 bg-red-100'
+                                  : dragOverLineIndex === index
+                                  ? 'border-t-2 border-red-500 bg-red-50'
+                                  : 'hover:bg-zinc-50/70'
+                              }`}
+                            >
+                              <td className="p-1.5 text-center">
+                                <div className="flex items-center justify-center gap-0.5">
+                                  <div
+                                    className="cursor-grab active:cursor-grabbing p-1 text-zinc-400 hover:text-zinc-700 rounded transition-colors"
+                                    title="Arrastra para mover la partida hacia arriba o hacia abajo"
+                                  >
+                                    <GripVertical className="w-3.5 h-3.5" />
+                                  </div>
+                                  <div className="flex flex-col items-center">
+                                    <button
+                                      type="button"
+                                      disabled={index === 0}
+                                      onClick={() => handleMoverLinea(index, 'up')}
+                                      className="p-0.5 text-zinc-400 hover:text-red-700 disabled:opacity-20 transition-colors cursor-pointer disabled:cursor-not-allowed"
+                                      title="Subir partida"
+                                    >
+                                      <ChevronUp className="w-3 h-3" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={index === formData.items.length - 1}
+                                      onClick={() => handleMoverLinea(index, 'down')}
+                                      className="p-0.5 text-zinc-400 hover:text-red-700 disabled:opacity-20 transition-colors cursor-pointer disabled:cursor-not-allowed"
+                                      title="Bajar partida"
+                                    >
+                                      <ChevronDown className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="p-2">
+                                <input
+                                  type="number"
+                                  min="1"
+                                  value={item.cantidad}
+                                  onChange={e => updateItem(index, 'cantidad', parseInt(e.target.value) || 1)}
+                                  className="w-full bg-zinc-50 border border-zinc-200 rounded-lg p-1.5 text-center font-bold text-xs outline-none focus:ring-1 focus:ring-red-500"
+                                />
+                              </td>
+                              <td className="p-2">
+                                <select
+                                  value={item.concepto}
+                                  onChange={e => updateItem(index, 'concepto', e.target.value)}
+                                  className="w-full bg-zinc-50 border border-zinc-200 rounded-lg p-1.5 text-xs font-semibold text-zinc-900 outline-none focus:ring-1 focus:ring-red-500"
+                                >
+                                  <option value="">Seleccionar concepto...</option>
+                                  {item.concepto && !trabajosConfig.some(tc => tc.opciones.includes(item.concepto)) && !['Nuevo', 'Revisión', 'Reparación', 'Instalación', 'Suministro', 'Visita técnica', '*Desplazamientos', 'Aviso'].includes(item.concepto) && (
+                                    <option value={item.concepto}>{item.concepto}</option>
+                                  )}
+                                  {trabajosConfig.length > 0 ? (
+                                    trabajosConfig.map(tc => (
+                                      <optgroup key={tc.id} label={tc.id}>
+                                        {tc.opciones.map(opt => <option key={`${tc.id}-${opt}`} value={opt}>{opt}</option>)}
+                                      </optgroup>
+                                    ))
+                                  ) : (
+                                    ['Aviso', 'Reparación', 'Nuevo', 'Revisión', 'Instalación', 'Suministro', 'Visita técnica', '*Desplazamientos'].map(opt => (
+                                      <option key={opt} value={opt}>{opt}</option>
+                                    ))
+                                  )}
+                                </select>
+                              </td>
+                              <td className="p-2">
+                                <div className="flex items-center gap-1">
+                                  <input
+                                    type="text"
+                                    value={item.descripcion}
+                                    onChange={e => updateItem(index, 'descripcion', e.target.value)}
+                                    placeholder="Detalle de la partida o intervención..."
+                                    className="w-full bg-zinc-50 border border-zinc-200 rounded-lg p-1.5 text-xs outline-none focus:ring-1 focus:ring-red-500"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditingDescriptionIndex(index)}
+                                    className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer shrink-0"
+                                    title="Ampliar descripción"
+                                  >
+                                    <Maximize2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </td>
+                              <td className="p-2">
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  value={item.precioUnidad === 0 ? '' : item.precioUnidad}
+                                  onChange={e => updateItem(index, 'precioUnidad', parseFloat(e.target.value) || 0)}
+                                  placeholder="0,00"
+                                  className="w-full bg-zinc-50 border border-zinc-200 rounded-lg p-1.5 text-right font-mono text-xs outline-none focus:ring-1 focus:ring-red-500"
+                                />
+                              </td>
+                              <td className="px-3 py-2 text-right font-bold text-zinc-900 font-mono text-xs whitespace-nowrap">
+                                {formatMoneda(item.subtotal)}
+                              </td>
+                              <td className="p-2 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => removeItem(index)}
+                                  disabled={formData.items.length <= 1}
+                                  className="p-1 text-zinc-300 hover:text-red-500 transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                                  title="Eliminar partida"
+                                >
+                                  <Trash className="w-4 h-4" />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Resumen de Total */}
+                    <div className="px-4 py-3 bg-zinc-50 border-t border-zinc-200 flex items-center justify-between text-xs font-bold text-zinc-700">
+                      <span>Total Partidas: {formData.items.length}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-zinc-500 uppercase tracking-wider text-[11px]">Total Aviso:</span>
+                        <span className="text-base text-zinc-900 font-mono font-black">
+                          {formatMoneda(totalCalc)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 5. Nota / Observaciones */}
+                <div className="pt-2 border-t border-zinc-100">
+                  <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                    <StickyNote className="w-3.5 h-3.5 text-amber-500" />
+                    Nota / Observaciones notificables
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={formData.observaciones}
+                    onChange={e => setFormData({ ...formData, observaciones: e.target.value })}
+                    placeholder="Detalles sobre avería, horario de atención o notas que encenderán la notificación..."
+                    className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-semibold text-zinc-900 outline-none focus:ring-2 focus:ring-red-500/20 resize-none"
+                  />
+                </div>
+
+                {/* Botones de acción */}
+                <div className="pt-4 flex items-center justify-end gap-3 border-t border-zinc-100">
+                  <button
+                    type="button"
+                    onClick={() => setIsModalOpen(false)}
+                    className="px-5 py-2.5 rounded-xl border border-zinc-200 text-zinc-700 font-bold text-xs hover:bg-zinc-50 transition-colors cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-6 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs shadow-md transition-all active:scale-95 cursor-pointer inline-flex items-center gap-2"
+                  >
+                    <Save className="w-4 h-4" />
+                    {editingItem ? 'Guardar Cambios' : 'Crear Urgencia'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* MODAL DE DESCRIPCIÓN AMPLIADA */}
+      {editingDescriptionIndex !== null && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[10000] animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="px-5 py-4 bg-zinc-900 text-white flex items-center justify-between">
+              <h3 className="font-bold text-sm flex items-center gap-2">
+                <FileText className="w-4 h-4 text-red-500" />
+                Descripción Detallada de la Partida #{editingDescriptionIndex + 1}
+              </h3>
               <button
                 type="button"
-                onClick={() => setIsModalOpen(false)}
-                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+                onClick={() => setEditingDescriptionIndex(null)}
+                className="text-zinc-400 hover:text-white"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
-
-            <form onSubmit={handleSaveForm} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
-              {/* TÍTULO */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  TITULO OBLIGATORIO A MOSTRAR EN EL AVISO <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.titulo}
-                  onChange={(e) => setFormData({ ...formData, titulo: e.target.value })}
-                  placeholder="Ej: Fallo gotera en bazar chino"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
-                />
-              </div>
-
-              {/* CLIENTE */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Cliente
-                </label>
-                <SearchableSelect
-                  options={clienteOptions}
-                  value={formData.clienteId}
-                  onChange={(val, opt) => {
-                    setFormData({
-                      ...formData,
-                      clienteId: val,
-                      clienteNombre: opt?.label || '',
-                      centroId: '',
-                      lugar: ''
-                    });
-                  }}
-                  placeholder="-- Buscar o seleccionar cliente --"
-                />
-              </div>
-
-
-              {/* LUGAR */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Lugar / Centro / Ubicación
-                </label>
-                <input
-                  type="text"
-                  value={formData.lugar}
-                  onChange={(e) => setFormData({ ...formData, lugar: e.target.value })}
-                  placeholder="Ej: Centro Logístico Nave 4"
-                  list="urg-centros-list"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
-                />
-                <datalist id="urg-centros-list">
-                  {centros.map((c: any) => (
-                    <option key={c.id} value={c.nombre || c.id} />
-                  ))}
-                </datalist>
-              </div>
-
-              {/* TÉCNICO Y COMERCIAL */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                    Técnico Asignado
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.tecnicoAsignado}
-                    onChange={(e) => setFormData({ ...formData, tecnicoAsignado: e.target.value })}
-                    placeholder="Ej: Juan Pérez"
-                    list="urg-tecnicos-list"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
-                  />
-                  <datalist id="urg-tecnicos-list">
-                    {tecnicos.map((t: any) => (
-                      <option key={t.id || t._docId} value={`${t.nombre} ${t.apellidos}`.trim()} />
-                    ))}
-                  </datalist>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                    Comercial / Responsable
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.comercial}
-                    onChange={(e) => setFormData({ ...formData, comercial: e.target.value })}
-                    placeholder="Ej: Carlos Gómez"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
-                  />
-                </div>
-              </div>
-
-              {/* PRIORIDAD, FECHA Y ESTADO */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5 flex items-center gap-1">
-                    <ShieldAlert className="w-3.5 h-3.5 text-red-500" />
-                    Prioridad
-                  </label>
-                  <select
-                    value={formData.prioridad}
-                    onChange={(e) => setFormData({ ...formData, prioridad: e.target.value as any })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 bg-white"
-                  >
-                    <option value="Alta">Alta (Roja)</option>
-                    <option value="Media">Media (Ámbar)</option>
-                    <option value="Baja">Baja (Gris)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                    <Calendar className="w-3.5 h-3.5 text-red-500" />
-                    Fecha <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={formData.fecha}
-                    onChange={(e) => setFormData({ ...formData, fecha: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 bg-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                    Estado
-                  </label>
-                  <select
-                    value={formData.estado}
-                    onChange={(e) => setFormData({ ...formData, estado: e.target.value as any })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 bg-white"
-                  >
-                    <option value="Pendiente">Pendiente (Gris)</option>
-                    <option value="En curso">En curso (Amarillo)</option>
-                    <option value="Parado">Parado (Rojo)</option>
-                    <option value="Finalizado">Finalizado (Verde)</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* OBSERVACIONES */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Observaciones / Notas
-                </label>
-                <textarea
-                  rows={3}
-                  value={formData.observaciones}
-                  onChange={(e) => setFormData({ ...formData, observaciones: e.target.value })}
-                  placeholder="Detalles sobre avería, materiales necesarios, horario de atención..."
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 resize-none"
-                />
-              </div>
-
-              {/* Botones */}
-              <div className="pt-4 flex items-center justify-end gap-3 border-t border-slate-100">
+            <div className="p-5 flex flex-col gap-4">
+              <textarea
+                rows={6}
+                value={formData.items[editingDescriptionIndex]?.descripcion || ''}
+                onChange={e => updateItem(editingDescriptionIndex, 'descripcion', e.target.value)}
+                placeholder="Escribe la descripción completa o extendida de la partida..."
+                className="w-full p-3 bg-zinc-50 border border-zinc-200 rounded-xl text-xs font-medium text-zinc-900 outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 resize-none"
+              />
+              <div className="flex justify-end">
                 <button
                   type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-bold text-xs hover:bg-slate-50 transition-colors cursor-pointer"
+                  onClick={() => setEditingDescriptionIndex(null)}
+                  className="px-5 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs shadow-sm transition-all"
                 >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="px-6 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs shadow-md transition-all active:scale-95 cursor-pointer inline-flex items-center gap-2"
-                >
-                  <Save className="w-4 h-4" />
-                  {editingItem ? 'Guardar Cambios' : 'Crear Urgencia'}
+                  Listo
                 </button>
               </div>
-            </form>
+            </div>
           </div>
         </div>
       )}

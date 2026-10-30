@@ -980,7 +980,7 @@ export const generarActaExtintoresPDF = async (
   const firmaIngenieroBase64Raw = await fetchImageToBase64(empData?.ingenieroFirmaUrl || empData?.firmaIngenieroBase64 || empData?.firmaUrl);
   const logoDataRaw = await fetchImageToBase64(empData?.logoUrl);
   const selloEmpresaBase64Raw = await fetchImageToBase64(empData?.selloUrl);
-  const gremioLogoRaw = await fetchImageToBase64(empData?.gremioLogoUrl || logoGrimecBase64);
+  const gremioLogoRaw = await fetchImageToBase64(logoGrimecBase64 || empData?.gremioLogoUrl);
 
   const { base64: logoData } = await optimizarImagenParaPDF(logoDataRaw, 800, 0.75);
   const { base64: firmaIngenieroBase64 } = await optimizarImagenParaPDF(firmaIngenieroBase64Raw, 600, 0.7, true);
@@ -1026,18 +1026,17 @@ export const generarActaExtintoresPDF = async (
       }
     }
 
-    // ── Logo del Gremio (esquina superior izquierda) ──
+    // ── Logo GRIMEC (esquina superior izquierda en portada) ──
     if (gremioLogoData) {
       try {
         const gremioProps = doc.getImageProperties(gremioLogoData);
-        const maxGremioWidth = 18;
-        const maxGremioHeight = 18;
-        const gremioRatio = gremioProps.width / gremioProps.height;
+        const maxGremioWidth = 22;
+        const maxGremioHeight = 22;
+        const gremioRatio = (gremioProps.width && gremioProps.height) ? (gremioProps.width / gremioProps.height) : 1;
         const gremioWidth = Math.min(maxGremioWidth, maxGremioHeight * gremioRatio);
         const gremioHeight = gremioWidth / gremioRatio;
         const gremioFormat = getImageFormat(gremioLogoData);
-        const gremioY = Math.max(5, 22 - (gremioHeight / 2) - 5);
-        doc.addImage(gremioLogoData, gremioFormat, 14, gremioY, gremioWidth, gremioHeight);
+        doc.addImage(gremioLogoData, gremioFormat, 14, 10, gremioWidth, gremioHeight);
       } catch (err) {
         console.error("Error drawing gremio logo on cover page:", err);
       }
@@ -1049,11 +1048,11 @@ export const generarActaExtintoresPDF = async (
     doc.setTextColor(30, 30, 30);
     doc.text('ACTA DE REVISIÓN', pageWidth / 2, 22, { align: 'center' });
 
+    // ── Número de acta y fecha (debajo del título) ──
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(8.0);
-    doc.setTextColor(100, 100, 100);
-    const subtitleText = 'Mantenimientos realizados según el programa de mantenimiento preventivo establecido por la norma en el reglamento de instalaciones contra incendios aprobado por el Real Decreto 513/2017 del 22 de mayo.';
-    doc.text(subtitleText, pageWidth / 2, 32, { align: 'center' });
+    doc.setFontSize(9.5);
+    doc.setTextColor(80, 80, 80);
+    doc.text(`N.º Acta: ${numeroMantenimiento || '—'}  -  Fecha: ${fechaRevisionDoc}`, pageWidth / 2, 30, { align: 'center' });
 
     // ── Línea decorativa doble ──
     doc.setDrawColor(128, 0, 32);
@@ -1063,11 +1062,12 @@ export const generarActaExtintoresPDF = async (
     doc.setLineWidth(0.2);
     doc.line(14, 37.5, pageWidth - 14, 37.5);
 
-    // ── Número de acta y fecha (barra superior centrada) ──
+    // ── Texto normativo Real Decreto 513/2017 (bajo la línea decorativa) ──
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(9.5);
-    doc.setTextColor(80, 80, 80);
-    doc.text(`N.º Acta: ${numeroMantenimiento || '—'}  -  Fecha: ${fechaRevisionDoc}`, pageWidth / 2, 44, { align: 'center' });
+    doc.setFontSize(8.0);
+    doc.setTextColor(100, 100, 100);
+    const subtitleText = 'Mantenimientos realizados según el programa de mantenimiento preventivo establecido por la norma en el reglamento de instalaciones contra incendios aprobado por el Real Decreto 513/2017 del 22 de mayo.';
+    doc.text(subtitleText, pageWidth / 2, 44, { align: 'center' });
 
     // ── SECCIÓN: DATOS DEL CLIENTE Y CENTRO (dos columnas) ──
     let y = 52;
@@ -1318,6 +1318,8 @@ export const generarActaExtintoresPDF = async (
       }
     }
 
+
+
     // ── Sello / firma digital (esquina inferior derecha) ──
     doc.setFont("helvetica", "italic");
     doc.setFontSize(7.5);
@@ -1365,17 +1367,17 @@ export const generarActaExtintoresPDF = async (
       }
     }
 
-    // ── Logo del Gremio (esquina superior izquierda) ──
+    // ── Logo de GRIMEC (esquina superior izquierda en páginas interiores) ──
     if (gremioLogoData) {
       try {
         const gremioProps = doc.getImageProperties(gremioLogoData);
-        const maxGremioWidth = 18;
-        const maxGremioHeight = 18;
-        const gremioRatio = gremioProps.width / gremioProps.height;
+        const maxGremioWidth = 20;
+        const maxGremioHeight = 20;
+        const gremioRatio = (gremioProps.width && gremioProps.height) ? (gremioProps.width / gremioProps.height) : 1;
         const gremioWidth = Math.min(maxGremioWidth, maxGremioHeight * gremioRatio);
         const gremioHeight = gremioWidth / gremioRatio;
         const gremioFormat = getImageFormat(gremioLogoData);
-        const gremioY = 6;
+        const gremioY = 4.0;
         doc.addImage(gremioLogoData, gremioFormat, 14, gremioY, gremioWidth, gremioHeight);
       } catch (err) {
         console.error("Error drawing gremio logo in header:", err);

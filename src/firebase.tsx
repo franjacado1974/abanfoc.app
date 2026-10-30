@@ -1,6 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, getDocs, getDoc, query, where, orderBy, addDoc, doc, updateDoc, setDoc, deleteDoc, onSnapshot, documentId } from "firebase/firestore";
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, getDocs, getDoc, query, where, orderBy, addDoc, doc, updateDoc, setDoc, deleteDoc, onSnapshot } from "firebase/firestore";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { generarAlbaranPDF } from "./pdfGenerator";
 
@@ -503,8 +503,36 @@ export const subscribeEmpresas = (onUpdate: (data: Empresa[]) => void) => {
       _docId: doc.id, 
       ...doc.data() 
     })) as Empresa[];
+    try {
+      localStorage.setItem('firecheck_db_empresas', JSON.stringify(data));
+    } catch {
+      // ignore
+    }
     onUpdate(data);
   });
+};
+
+/**
+ * Devuelve el ID de la empresa mantenedora por defecto priorizando siempre 'ABANFOC'.
+ */
+export const obtenerEmpresaPorDefecto = (listaEmpresas?: Empresa[]): string => {
+  let arr = listaEmpresas;
+  if (!arr || arr.length === 0) {
+    try {
+      const local = JSON.parse(localStorage.getItem('firecheck_db_empresas') || localStorage.getItem('firecheck_db_empresa') || '[]');
+      if (Array.isArray(local) && local.length > 0) {
+        arr = local;
+      }
+    } catch {
+      // ignore
+    }
+  }
+  if (!arr || arr.length === 0) return '';
+  const abanfoc = arr.find(e => e && e.nombre && typeof e.nombre === 'string' && /abanfoc/i.test(e.nombre));
+  if (abanfoc) {
+    return (abanfoc as any)._docId || abanfoc.id || '';
+  }
+  return (arr[0] as any)._docId || arr[0].id || '';
 };
 
 export const subscribeTrabajos = (onUpdate: (data: TrabajoConfig[]) => void) => {
@@ -1431,53 +1459,220 @@ async function enviarCorreoAlbaran(albaran: Albaran) {
 }
 
 /**
- * Obtiene el siguiente código correlativo único para un albarán consultando directamente Firestore
- * Formato: ALB-YY-XXX (ej. ALB-26-001, ALB-26-002...)
+ * Extrae la base secuencial (ej: '26001') de cualquier código de documento
+ * (PRE.26001, PDV.26001, ALB.26001, PDV 26001, ALB-26-001, 26.001, etc.)
  */
-export async function obtenerSiguienteNumeroAlbaran(): Promise<string> {
-  const year = new Date().getFullYear().toString().slice(-2);
-  const prefix = `ALB-${year}-`;
-  let maxNum = 0;
+export function extraerSufijoSecuencia(codigo?: string): string {
+  if (!codigo) return '';
+  const clean = String(codigo).trim();
 
-  try {
-    const col = collection(db, 'albaranes');
-    const q = query(
-      col,
-      where(documentId(), '>=', prefix),
-      where(documentId(), '<=', prefix + '\uf8ff')
-    );
-    const snap = await getDocs(q);
-    snap.forEach((docSnap) => {
-      const id = docSnap.id;
-      if (id.startsWith(prefix)) {
-        const parts = id.split('-');
-        const num = parseInt(parts[parts.length - 1], 10);
-        if (!isNaN(num) && num > maxNum) {
-          maxNum = num;
-        }
-      }
-    });
-  } catch (err) {
-    console.error('Error al consultar Firestore para correlativo de albaranes:', err);
+  // Formato tipo ALB-26-001 o PDV-26-001
+  const matchHyphen = clean.match(/^[A-Z]+-(\d{2})-(\d+)$/i);
+  if (matchHyphen) {
+    const num = parseInt(matchHyphen[2], 10);
+    return `${matchHyphen[1]}${String(num).padStart(3, '0')}`;
   }
 
-  // Comprobar también contra la caché local como respaldo
+  // Formato tipo PRE.26001, PDV.26001, ALB.26001, PDV 26001, PRE-26001
+  const matchPrefixed = clean.match(/^[A-Z]+[.\-\s]+(\d{2})(\d+)$/i);
+  if (matchPrefixed) {
+    const num = parseInt(matchPrefixed[2], 10);
+    return `${matchPrefixed[1]}${String(num).padStart(3, '0')}`;
+  }
+
+  // Formato año.numero ej: 26.001 o 26.3300
+  const matchDot = clean.match(/^(\d{2})\.(\d+)$/);
+  if (matchDot) {
+    const num = parseInt(matchDot[2], 10);
+    return `${matchDot[1]}${String(num).padStart(3, '0')}`;
+  }
+
+  // Dígitos directos como 26001 o 260001
+  const matchDigits = clean.match(/^(\d{2})(\d{3,})$/);
+  if (matchDigits) {
+    const num = parseInt(matchDigits[2], 10);
+    return `${matchDigits[1]}${String(num).padStart(3, '0')}`;
+  }
+
+  return '';
+}
+
+/**
+ * Obtiene el siguiente número correlativo único para un Pedido (ej. PDV.26001)
+ * Garantiza que NO SE PUEDA DUPLICAR:
+ * 1. Inspecciona el contador central en Firestore (`contadores/pedidos_secuencia`).
+ * 2. Compara con los números existentes en pedidos, albaranes, presupuestos, reparaciones, instalaciones y urgencias
+ *    (tanto en Firebase como en localStorage).
+ * 3. Asigna de forma atómica y reserva el nuevo número en Firestore y en caché local para evitar colisiones.
+ */
+export async function obtenerSiguienteNumeroPedido(): Promise<string> {
+  const currentYear = new Date().getFullYear();
+  const yy = currentYear.toString().slice(-2);
+  let maxCorrelativo = 0;
+
+  // 1. Escanear cachés locales inmediatas para asegurar latencia cero y evitar colisiones offline
   try {
-    const localAlbaranes: Albaran[] = JSON.parse(localStorage.getItem('firecheck_db_albaranes') || '[]');
-    localAlbaranes.forEach((alb) => {
-      if (alb.id && alb.id.startsWith(prefix)) {
-        const parts = alb.id.split('-');
-        const num = parseInt(parts[parts.length - 1], 10);
-        if (!isNaN(num) && num > maxNum) {
-          maxNum = num;
-        }
-      }
+    const coleccionesLocales = [
+      'firecheck_db_pedidos',
+      'firecheck_db_reparaciones',
+      'firecheck_db_instalaciones',
+      'firecheck_db_urgencias',
+      'firecheck_db_albaranes',
+      'firecheck_db_presupuestos'
+    ];
+    coleccionesLocales.forEach(key => {
+      try {
+        const raw = localStorage.getItem(key);
+        if (!raw) return;
+        const list = JSON.parse(raw);
+        if (!Array.isArray(list)) return;
+        list.forEach((item: any) => {
+          const codigos = [
+            item.numeroPedido,
+            item.pedidoId,
+            item.numeroPresupuesto,
+            item.id,
+            item.numeroMantenimiento
+          ];
+          codigos.forEach(cod => {
+            const suf = extraerSufijoSecuencia(cod);
+            if (suf && suf.startsWith(yy)) {
+              const num = parseInt(suf.slice(2), 10);
+              if (!isNaN(num) && num > maxCorrelativo && num < 20000) {
+                maxCorrelativo = num;
+              }
+            }
+          });
+        });
+      } catch {}
     });
+
+    const cachedLast = parseInt(localStorage.getItem('firecheck_ultimo_pedido_secuencia') || '0', 10);
+    if (!isNaN(cachedLast) && cachedLast > maxCorrelativo && cachedLast < 20000) {
+      maxCorrelativo = cachedLast;
+    }
   } catch {}
 
-  const nextNum = maxNum + 1;
-  const numDigits = Math.max(3, String(nextNum).length);
-  return `${prefix}${String(nextNum).padStart(numDigits, '0')}`;
+  // 2. Transacción o consulta atómica en Firestore para sincronización multi-dispositivo
+  try {
+    const counterDocRef = doc(db, 'contadores', 'pedidos_secuencia');
+    const { runTransaction } = await import('firebase/firestore');
+    const nextNum = await runTransaction(db, async (transaction) => {
+      const docSnap = await transaction.get(counterDocRef);
+      let numToSet = maxCorrelativo + 1;
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        const anoGuardado = data?.año || 0;
+        const ultimoNumFirestore = Number(data?.ultimoNumero) || 0;
+        if ((anoGuardado === currentYear || anoGuardado === Number(yy)) && ultimoNumFirestore < 20000) {
+          if (ultimoNumFirestore >= numToSet) {
+            numToSet = ultimoNumFirestore + 1;
+          }
+        }
+        transaction.set(counterDocRef, { año: currentYear, ultimoNumero: numToSet, updatedAt: new Date().toISOString() }, { merge: true });
+      } else {
+        transaction.set(counterDocRef, { año: currentYear, ultimoNumero: numToSet, updatedAt: new Date().toISOString() });
+      }
+      return numToSet;
+    });
+
+    localStorage.setItem('firecheck_ultimo_pedido_secuencia', String(nextNum));
+    const padded = String(nextNum).padStart(Math.max(3, String(nextNum).length), '0');
+    return `PDV.${yy}${padded}`;
+  } catch (err) {
+    console.warn('[obtenerSiguienteNumeroPedido] Fallback offline/local:', err);
+    const nextNum = maxCorrelativo + 1;
+    localStorage.setItem('firecheck_ultimo_pedido_secuencia', String(nextNum));
+    const padded = String(nextNum).padStart(Math.max(3, String(nextNum).length), '0');
+    return `PDV.${yy}${padded}`;
+  }
+}
+
+/**
+ * Obtiene el siguiente código correlativo único para un albarán consultando directamente Firestore
+ * Formato: ALB.YYXXX (ej. ALB.26001, ALB.26002...)
+ */
+export async function obtenerSiguienteNumeroAlbaran(): Promise<string> {
+  const currentYear = new Date().getFullYear();
+  const yy = currentYear.toString().slice(-2);
+  let maxCorrelativo = 0;
+
+  // 1. Escanear colecciones locales
+  try {
+    const coleccionesLocales = [
+      'firecheck_db_albaranes',
+      'firecheck_db_pedidos',
+      'firecheck_db_reparaciones',
+      'firecheck_db_instalaciones',
+      'firecheck_db_urgencias',
+      'firecheck_db_presupuestos'
+    ];
+    coleccionesLocales.forEach(key => {
+      try {
+        const raw = localStorage.getItem(key);
+        if (!raw) return;
+        const list = JSON.parse(raw);
+        if (!Array.isArray(list)) return;
+        list.forEach((item: any) => {
+          const codigos = [
+            item.id,
+            item.numeroMantenimiento,
+            item.numeroPedido,
+            item.pedidoId,
+            item.numeroPresupuesto
+          ];
+          codigos.forEach(cod => {
+            const suf = extraerSufijoSecuencia(cod);
+            if (suf && suf.startsWith(yy)) {
+              const num = parseInt(suf.slice(2), 10);
+              if (!isNaN(num) && num > maxCorrelativo && num < 20000) {
+                maxCorrelativo = num;
+              }
+            }
+          });
+        });
+      } catch {}
+    });
+
+    const cachedLast = parseInt(localStorage.getItem('firecheck_ultimo_pedido_secuencia') || '0', 10);
+    if (!isNaN(cachedLast) && cachedLast > maxCorrelativo && cachedLast < 20000) {
+      maxCorrelativo = cachedLast;
+    }
+  } catch {}
+
+  // 2. Transacción atómica en Firestore usando el contador compartido
+  try {
+    const counterDocRef = doc(db, 'contadores', 'pedidos_secuencia');
+    const { runTransaction } = await import('firebase/firestore');
+    const nextNum = await runTransaction(db, async (transaction) => {
+      const docSnap = await transaction.get(counterDocRef);
+      let numToSet = maxCorrelativo + 1;
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        const anoGuardado = data?.año || 0;
+        const ultimoNumFirestore = Number(data?.ultimoNumero) || 0;
+        if ((anoGuardado === currentYear || anoGuardado === Number(yy)) && ultimoNumFirestore < 20000) {
+          if (ultimoNumFirestore >= numToSet) {
+            numToSet = ultimoNumFirestore + 1;
+          }
+        }
+        transaction.set(counterDocRef, { año: currentYear, ultimoNumero: numToSet, updatedAt: new Date().toISOString() }, { merge: true });
+      } else {
+        transaction.set(counterDocRef, { año: currentYear, ultimoNumero: numToSet, updatedAt: new Date().toISOString() });
+      }
+      return numToSet;
+    });
+
+    localStorage.setItem('firecheck_ultimo_pedido_secuencia', String(nextNum));
+    const padded = String(nextNum).padStart(Math.max(3, String(nextNum).length), '0');
+    return `ALB.${yy}${padded}`;
+  } catch (err) {
+    console.warn('[obtenerSiguienteNumeroAlbaran] Fallback offline/local:', err);
+    const nextNum = maxCorrelativo + 1;
+    localStorage.setItem('firecheck_ultimo_pedido_secuencia', String(nextNum));
+    const padded = String(nextNum).padStart(Math.max(3, String(nextNum).length), '0');
+    return `ALB.${yy}${padded}`;
+  }
 }
 
 export async function addAlbaran(albaran: Albaran) {
@@ -1498,7 +1693,8 @@ export async function addAlbaran(albaran: Albaran) {
           const esMismoDocumento = (
             (albaran.parteId && existingData.parteId === albaran.parteId) ||
             (albaran.reparacionId && existingData.reparacionId === albaran.reparacionId) ||
-            (albaran.instalacionId && existingData.instalacionId === albaran.instalacionId)
+            (albaran.instalacionId && existingData.instalacionId === albaran.instalacionId) ||
+            (albaran.urgenciaId && existingData.urgenciaId === albaran.urgenciaId)
           );
 
           if (!esMismoDocumento) {
@@ -1507,12 +1703,7 @@ export async function addAlbaran(albaran: Albaran) {
             // Asegurar que el nuevo ID no colisione
             let recheck = await getDoc(doc(db, 'albaranes', targetId));
             while (recheck.exists()) {
-              const parts = targetId.split('-');
-              const curNum = parseInt(parts[parts.length - 1], 10) || 1;
-              const year = new Date().getFullYear().toString().slice(-2);
-              const next = curNum + 1;
-              const numDigits = Math.max(3, String(next).length);
-              targetId = `ALB-${year}-${String(next).padStart(numDigits, '0')}`;
+              targetId = await obtenerSiguienteNumeroAlbaran();
               recheck = await getDoc(doc(db, 'albaranes', targetId));
             }
           }
@@ -2007,37 +2198,65 @@ export function subscribePartes(callback: (partes: ParteFirestore[]) => void) {
 // PRESUPUESTOS - Firestore CRUD
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Genera un número de presupuesto correlativo con formato año.contador (ej: 26.3300)
- *  El contador se almacena en Firestore en un documento de la colección "contadores" */
+/** Genera un número de presupuesto correlativo con formato PRE.YYXXX (ej: PRE.26001) */
 async function getNextPresupuestoNumero(): Promise<string> {
-  const ano = new Date().getFullYear().toString().slice(-2); // "26" para 2026
-  const counterDocRef = doc(db, 'contadores', 'presupuestos');
-  
+  const currentYear = new Date().getFullYear();
+  const yy = currentYear.toString().slice(-2);
+  let maxCorrelativo = 0;
+
   try {
-    const { runTransaction } = await import('firebase/firestore');
-    const result = await runTransaction(db, async (transaction) => {
-      const docSnap = await transaction.get(counterDocRef);
-      let nextNum: number;
-      if (!docSnap.exists()) {
-        nextNum = 3300;
-        transaction.set(counterDocRef, { año: Number(ano), ultimoNumero: nextNum });
-      } else {
-        const data = docSnap.data();
-        const añoGuardado = data?.año || 0;
-        if (añoGuardado < Number(ano)) {
-          nextNum = 0;
-          transaction.update(counterDocRef, { año: Number(ano), ultimoNumero: nextNum });
-        } else {
-          nextNum = (data?.ultimoNumero || 0) + 1;
-          transaction.update(counterDocRef, { ultimoNumero: nextNum });
-        }
+    const raw = localStorage.getItem('firecheck_db_presupuestos');
+    if (raw) {
+      const list = JSON.parse(raw);
+      if (Array.isArray(list)) {
+        list.forEach((p: any) => {
+          const suf = extraerSufijoSecuencia(p.numeroPresupuesto || p.id);
+          if (suf && suf.startsWith(yy)) {
+            const num = parseInt(suf.slice(2), 10);
+            if (!isNaN(num) && num > maxCorrelativo && num < 20000) {
+              maxCorrelativo = num;
+            }
+          }
+        });
       }
-      return nextNum;
+    }
+    const cachedLast = parseInt(localStorage.getItem('firecheck_ultimo_pedido_secuencia') || '0', 10);
+    if (!isNaN(cachedLast) && cachedLast > maxCorrelativo && cachedLast < 20000) {
+      maxCorrelativo = cachedLast;
+    }
+  } catch {}
+
+  try {
+    const counterDocRef = doc(db, 'contadores', 'pedidos_secuencia');
+    const { runTransaction } = await import('firebase/firestore');
+    const nextNum = await runTransaction(db, async (transaction) => {
+      const docSnap = await transaction.get(counterDocRef);
+      let numToSet = maxCorrelativo + 1;
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        const anoGuardado = data?.año || 0;
+        const ultimoNumFirestore = Number(data?.ultimoNumero) || 0;
+        if ((anoGuardado === currentYear || anoGuardado === Number(yy)) && ultimoNumFirestore < 20000) {
+          if (ultimoNumFirestore >= numToSet) {
+            numToSet = ultimoNumFirestore + 1;
+          }
+        }
+        transaction.set(counterDocRef, { año: currentYear, ultimoNumero: numToSet, updatedAt: new Date().toISOString() }, { merge: true });
+      } else {
+        transaction.set(counterDocRef, { año: currentYear, ultimoNumero: numToSet, updatedAt: new Date().toISOString() });
+      }
+      return numToSet;
     });
-    return `${ano}.${String(result).padStart(4, '0')}`;
+
+    localStorage.setItem('firecheck_ultimo_pedido_secuencia', String(nextNum));
+    const padded = String(nextNum).padStart(Math.max(3, String(nextNum).length), '0');
+    return `PRE.${yy}${padded}`;
   } catch (e) {
     console.error('Error generando número de presupuesto:', e);
-    return `${ano}.${String(Date.now()).slice(-4)}`;
+    const nextNum = maxCorrelativo + 1;
+    localStorage.setItem('firecheck_ultimo_pedido_secuencia', String(nextNum));
+    const padded = String(nextNum).padStart(Math.max(3, String(nextNum).length), '0');
+    return `PRE.${yy}${padded}`;
   }
 }
 
@@ -2833,9 +3052,12 @@ export interface ReparacionItem {
   id: string;
   _docId?: string;
   titulo?: string;
+  empresaId?: string;
   clienteId?: string;
   clienteNombre?: string;
+  clienteNombreLibre?: string;
   centroId?: string;
+  centroNombreLibre?: string;
   reparacion: string;
   lugar: string;
   tecnicoAsignado: string;
@@ -2849,9 +3071,12 @@ export interface ReparacionItem {
   facturado?: boolean;
   albaranId?: string;
   pedidoId?: string;
+  numeroPedido?: string;
   presupuestoId?: string;
   resueltaManual?: boolean;
   fechaConfirmada?: boolean;
+  items?: { cantidad: number; concepto: string; descripcion: string; precioUnidad: number; subtotal: number; }[];
+  total?: number;
 }
 
 export function subscribeReparaciones(callback: (items: ReparacionItem[]) => void) {
@@ -2864,9 +3089,12 @@ export function subscribeReparaciones(callback: (items: ReparacionItem[]) => voi
           _docId: d.id,
           id: data?.id ?? d.id,
           titulo: data?.titulo || '',
+          empresaId: data?.empresaId || '',
           clienteId: data?.clienteId || '',
           clienteNombre: data?.clienteNombre || '',
+          clienteNombreLibre: data?.clienteNombreLibre || '',
           centroId: data?.centroId || '',
+          centroNombreLibre: data?.centroNombreLibre || '',
           reparacion: data?.reparacion || '',
           lugar: data?.lugar || '',
           tecnicoAsignado: data?.tecnicoAsignado || '',
@@ -2880,9 +3108,12 @@ export function subscribeReparaciones(callback: (items: ReparacionItem[]) => voi
           facturado: !!data?.facturado,
           albaranId: data?.albaranId || '',
           pedidoId: data?.pedidoId || '',
+          numeroPedido: data?.numeroPedido || data?.pedidoId || '',
           presupuestoId: data?.presupuestoId || '',
           resueltaManual: !!data?.resueltaManual,
           fechaConfirmada: !!data?.fechaConfirmada,
+          items: Array.isArray(data?.items) ? data.items : [],
+          total: Number(data?.total) || 0,
         } as ReparacionItem;
       });
       callback(items);
@@ -2945,9 +3176,12 @@ export interface InstalacionItem {
   id: string;
   _docId?: string;
   titulo?: string;
+  empresaId?: string;
   clienteId?: string;
   clienteNombre?: string;
+  clienteNombreLibre?: string;
   centroId?: string;
+  centroNombreLibre?: string;
   instalacion: string;
   lugar: string;
   tecnicoAsignado: string;
@@ -2961,9 +3195,12 @@ export interface InstalacionItem {
   facturado?: boolean;
   albaranId?: string;
   pedidoId?: string;
+  numeroPedido?: string;
   presupuestoId?: string;
   resueltaManual?: boolean;
   fechaConfirmada?: boolean;
+  items?: { cantidad: number; concepto: string; descripcion: string; precioUnidad: number; subtotal: number; }[];
+  total?: number;
 }
 
 export function subscribeInstalaciones(callback: (items: InstalacionItem[]) => void) {
@@ -2976,9 +3213,12 @@ export function subscribeInstalaciones(callback: (items: InstalacionItem[]) => v
           _docId: d.id,
           id: data?.id ?? d.id,
           titulo: data?.titulo || '',
+          empresaId: data?.empresaId || '',
           clienteId: data?.clienteId || '',
           clienteNombre: data?.clienteNombre || '',
+          clienteNombreLibre: data?.clienteNombreLibre || '',
           centroId: data?.centroId || '',
+          centroNombreLibre: data?.centroNombreLibre || '',
           instalacion: data?.instalacion || '',
           lugar: data?.lugar || '',
           tecnicoAsignado: data?.tecnicoAsignado || '',
@@ -2992,9 +3232,12 @@ export function subscribeInstalaciones(callback: (items: InstalacionItem[]) => v
           facturado: !!data?.facturado,
           albaranId: data?.albaranId || '',
           pedidoId: data?.pedidoId || '',
+          numeroPedido: data?.numeroPedido || data?.pedidoId || '',
           presupuestoId: data?.presupuestoId || '',
           resueltaManual: !!data?.resueltaManual,
           fechaConfirmada: !!data?.fechaConfirmada,
+          items: Array.isArray(data?.items) ? data.items : [],
+          total: Number(data?.total) || 0,
         } as InstalacionItem;
       });
       callback(items);
@@ -3057,9 +3300,12 @@ export interface UrgenciaItem {
   id: string;
   _docId?: string;
   titulo?: string;
+  empresaId?: string;
   clienteId?: string;
   clienteNombre?: string;
+  clienteNombreLibre?: string;
   centroId?: string;
+  centroNombreLibre?: string;
   urgencia: string;
   lugar: string;
   tecnicoAsignado: string;
@@ -3073,8 +3319,12 @@ export interface UrgenciaItem {
   nota?: string;
   facturado?: boolean;
   albaranId?: string;
+  pedidoId?: string;
+  numeroPedido?: string;
   resueltaManual?: boolean;
   fechaConfirmada?: boolean;
+  items?: { cantidad: number; concepto: string; descripcion: string; precioUnidad: number; subtotal: number; }[];
+  total?: number;
 }
 
 export function subscribeUrgencias(callback: (items: UrgenciaItem[]) => void) {
@@ -3087,9 +3337,12 @@ export function subscribeUrgencias(callback: (items: UrgenciaItem[]) => void) {
           _docId: d.id,
           id: data?.id ?? d.id,
           titulo: data?.titulo || '',
+          empresaId: data?.empresaId || '',
           clienteId: data?.clienteId || '',
           clienteNombre: data?.clienteNombre || '',
+          clienteNombreLibre: data?.clienteNombreLibre || '',
           centroId: data?.centroId || '',
+          centroNombreLibre: data?.centroNombreLibre || '',
           urgencia: data?.urgencia || '',
           lugar: data?.lugar || '',
           tecnicoAsignado: data?.tecnicoAsignado || '',
@@ -3103,8 +3356,12 @@ export function subscribeUrgencias(callback: (items: UrgenciaItem[]) => void) {
           nota: data?.nota || data?.observaciones || '',
           facturado: !!data?.facturado,
           albaranId: data?.albaranId || '',
+          pedidoId: data?.pedidoId || '',
+          numeroPedido: data?.numeroPedido || data?.pedidoId || '',
           resueltaManual: !!data?.resueltaManual,
           fechaConfirmada: !!data?.fechaConfirmada,
+          items: Array.isArray(data?.items) ? data.items : [],
+          total: Number(data?.total) || 0,
         } as UrgenciaItem;
       });
       callback(items);

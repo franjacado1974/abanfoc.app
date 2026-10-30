@@ -5,6 +5,7 @@ import {
   registrarVisitaPresupuesto, 
   registrarDescargaPresupuesto, 
   firmarPresupuestoPublico,
+  extraerSufijoSecuencia,
   type Presupuesto 
 } from './firebase';
 import { generarPresupuestoPDF } from './pdfGenerator';
@@ -32,10 +33,12 @@ function formatFecha(fecha?: string): string {
 }
 
 function formatCodigoPresupuesto(numero?: string, fallbackId?: string): string {
-  if (!numero && !fallbackId) return 'PRV —';
+  if (!numero && !fallbackId) return 'PRE. —';
+  const sufijo = extraerSufijoSecuencia(numero || fallbackId);
+  if (sufijo) return `PRE.${sufijo}`;
   const raw = (numero || fallbackId || '').trim();
-  const clean = raw.replace(/^(PDV|PRV|PRE)[-\s]*/i, '');
-  return `PRV ${clean}`;
+  const clean = raw.replace(/^(PDV|PRV|PRE)[-.\s]*/i, '').replace(/^\./, '');
+  return `PRE.${clean}`;
 }
 
 export default function PortalPresupuesto({ token }: PortalPresupuestoProps) {

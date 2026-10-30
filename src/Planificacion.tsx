@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Calendar, ChevronLeft, ChevronRight, Building2, FileText, AlertTriangle, CheckCheck, ArrowLeft } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, Building2, FileText, AlertTriangle, CheckCheck, MapPin } from 'lucide-react';
 import { addParte, updateParte, subscribePartes } from './firebase';
 
 const MESES = [
@@ -34,7 +33,6 @@ interface Parte {
 
 
 export default function Planificacion() {
-  const navigate = useNavigate();
   const [partes, setPartes] = useState<Parte[]>([]);
   const [tecnicos, setTecnicos] = useState<any[]>([]);
   const [centros, setCentros] = useState<any[]>([]);
@@ -245,13 +243,13 @@ export default function Planificacion() {
   const getRevisionBadge = (type: string) => {
     switch (type) {
       case 'Anual':
-        return { color: 'bg-amber-100 text-amber-800 border-amber-200', label: 'Revisión Anual', icon: CheckCheck };
+        return { color: 'bg-amber-100 text-amber-900 border-amber-300', label: 'Revisión Anual', icon: CheckCheck };
       case 'Trimestral':
-        return { color: 'bg-sky-100 text-sky-800 border-zinc-300', label: 'Revisión Trimestral', icon: AlertTriangle };
+        return { color: 'bg-sky-100 text-sky-900 border-sky-300', label: 'Revisión Trimestral', icon: AlertTriangle };
       case 'Mensual':
-        return { color: 'bg-emerald-100 text-emerald-800 border-emerald-200', label: 'Revisión Mensual', icon: Calendar };
+        return { color: 'bg-emerald-100 text-emerald-900 border-emerald-300', label: 'Revisión Mensual', icon: Calendar };
       default:
-        return { color: 'bg-zinc-100 text-zinc-600 border-zinc-200', label: type, icon: FileText };
+        return { color: 'bg-zinc-100 text-zinc-700 border-zinc-300', label: type, icon: FileText };
     }
   };
 
@@ -260,12 +258,6 @@ export default function Planificacion() {
       <div className="max-w-[1600px] mx-auto">
         {/* Header */}
         <div className="mb-6 flex flex-col items-center sm:items-start text-center sm:text-left">
-          <button 
-            onClick={() => navigate('/')} 
-            className="flex items-center gap-1.5 text-xs font-semibold text-zinc-500 hover:text-zinc-900 mb-3 transition-colors cursor-pointer"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" /> Volver al panel
-          </button>
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 w-full">
             <div>
               <h1 className="text-2xl font-black text-zinc-950 tracking-tight flex items-center justify-center sm:justify-start gap-2">
@@ -286,17 +278,51 @@ export default function Planificacion() {
         </div>
 
         <div className="flex flex-col lg:flex-row gap-6 lg:h-[calc(100vh-180px)]">
-          {/* BARRA LATERAL IZQUIERDA */}
-          <div onDragOver={onDragOver} onDrop={onDropSidebar} className="w-full lg:w-80 bg-white rounded-3xl p-6 shadow-xl border border-zinc-200/85 flex flex-col shrink-0 h-[400px] lg:h-full">
-            {/* FILTRO DE BÚSQUEDA POR MES */}
-            <div className="mb-5">
-              <div className="relative">
+          {/* BARRA LATERAL IZQUIERDA: Selector de Meses y Tareas a Planificar */}
+          <div 
+            onDragOver={onDragOver} 
+            onDrop={onDropSidebar} 
+            className="w-full lg:w-80 xl:w-88 bg-white rounded-3xl shadow-xl border border-zinc-200/85 flex flex-col overflow-hidden shrink-0 h-[500px] lg:h-full"
+          >
+            {/* Cabecera del panel lateral: alineada con la cabecera del calendario */}
+            <div className="px-5 py-3.5 border-b border-zinc-300 flex items-center justify-between bg-zinc-200/90">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-xl bg-red-600 text-white flex items-center justify-center shadow-xs">
+                  <Calendar className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-black uppercase tracking-wider text-zinc-800 leading-tight">
+                    Tareas a Planificar
+                  </h3>
+                  <p className="text-[10px] font-semibold text-zinc-500 leading-none mt-0.5">
+                    Arrastra centros al calendario
+                  </p>
+                </div>
+              </div>
+
+              {searchMonth && (
+                <span 
+                  className={`px-2.5 py-0.5 rounded-full text-[11px] font-black shadow-xs ${
+                    centrosConRevision.length > 0 
+                      ? 'bg-red-600 text-white' 
+                      : 'bg-emerald-600 text-white'
+                  }`}
+                  title={`${centrosConRevision.length} pendientes`}
+                >
+                  {centrosConRevision.length}
+                </span>
+              )}
+            </div>
+
+            {/* Selector de Mes con Toque de Color */}
+            <div className="px-4 py-2.5 border-b border-zinc-300 bg-zinc-100 flex items-center gap-2">
+              <div className="relative flex-1">
                 <select
                   value={searchMonth}
                   onChange={e => setSearchMonth(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all text-zinc-900"
+                  className="w-full px-3 py-1.5 bg-white border border-zinc-300 hover:border-red-400 focus:border-red-600 rounded-xl text-xs font-bold text-zinc-800 focus:outline-none focus:ring-2 focus:ring-red-500/20 transition-all shadow-2xs cursor-pointer"
                 >
-                  <option value="">-- Seleccionar mes --</option>
+                  <option value="">-- Seleccionar mes a revisar --</option>
                   {MESES.map(m => (
                     <option key={m} value={m}>{m}</option>
                   ))}
@@ -304,64 +330,110 @@ export default function Planificacion() {
               </div>
             </div>
 
-            {/* RESULTADOS DE BÚSQUEDA */}
-            {searchMonth && (
-              <div className="flex flex-col flex-1 min-h-0 overflow-hidden pt-3">
-                <div className="space-y-3 flex-1 overflow-y-auto custom-scrollbar pr-1">
-                  {centrosConRevision.length === 0 ? (
-                    <div className="text-center py-6 bg-zinc-50 rounded-xl border border-zinc-100">
-                      <Calendar className="w-8 h-8 text-zinc-300 mx-auto mb-2" />
-                      <p className="text-sm text-zinc-400">No hay centros pendientes de programar en {searchMonth.toLowerCase()}</p>
-                    </div>
-                  ) : (
-                    centrosConRevision.map(({ centro, cliente, revisionType }) => {
-                      const badge = getRevisionBadge(revisionType);
-                      const BadgeIcon = badge.icon;
-                      return (
-                        <div key={centro._docId || centro.id} draggable onDragStart={(e) => onDragStartCentro(e, centro._docId || centro.id, revisionType)} className="p-3.5 bg-white border-2 border-red-200 rounded-3xl shadow-md hover:shadow-xl transition-all cursor-grab active:cursor-grabbing">
-                          <div className="flex flex-col gap-2 mb-3">
-                            <span className={`w-fit px-2 py-1 text-[10px] font-bold rounded-full border ${badge.color} flex items-center gap-1`}>
-                              <BadgeIcon className="w-3 h-3" /> {badge.label}
-                            </span>
-                            <div className="flex-1 min-w-0">
-                              <p className="font-bold text-zinc-900 text-sm truncate">{centro.nombre}</p>
-                              <p className="text-[10px] text-zinc-400 font-mono mt-0.5">{centro.id}</p>
-                            </div>
-                          </div>
-                          {cliente && (
-                            <p className="text-xs text-zinc-500 flex items-center gap-1.5">
-                              <Building2 className="w-3 h-3" /> {cliente.nombre}
-                            </p>
-                          )}
-                          {centro.direccion && (
-                            <p className="text-xs text-zinc-400 mt-1 truncate">{centro.direccion}, {centro.poblacion || ''}</p>
-                          )}
-                        </div>
-                      );
-                    })
-                  )}
+            {/* LISTA VERTICAL DE TAREAS A PLANIFICAR */}
+            <div className="flex-1 bg-slate-100/70 p-3.5 overflow-y-auto space-y-2.5">
+              {!searchMonth ? (
+                <div className="h-full flex flex-col items-center justify-center text-center p-6 text-zinc-400">
+                  <div className="w-12 h-12 rounded-2xl bg-white border border-zinc-200 shadow-sm flex items-center justify-center mb-3 text-red-500">
+                    <Calendar className="w-6 h-6" />
+                  </div>
+                  <p className="text-xs font-bold text-zinc-700">Selecciona un mes arriba</p>
+                  <p className="text-[11px] text-zinc-400 mt-1 max-w-[210px]">
+                    Elige el mes para ver los centros pendientes de programar este año.
+                  </p>
                 </div>
-              </div>
-            )}
+              ) : centrosConRevision.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-center p-6">
+                  <div className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-200 shadow-sm flex items-center justify-center mb-3 text-emerald-600">
+                    <CheckCheck className="w-6 h-6" />
+                  </div>
+                  <p className="text-xs font-bold text-emerald-800">¡Todo programado!</p>
+                  <p className="text-[11px] text-emerald-600/80 mt-1 max-w-[210px]">
+                    No quedan centros pendientes de programar en {searchMonth.toLowerCase()}.
+                  </p>
+                </div>
+              ) : (
+                centrosConRevision.map(({ centro, cliente, revisionType }) => {
+                  const badge = getRevisionBadge(revisionType);
+                  const BadgeIcon = badge.icon;
+                  const isAnual = revisionType === 'Anual';
+                  const isTrim = revisionType === 'Trimestral';
+
+                  const cardAccent = isAnual
+                    ? 'border-l-amber-500 bg-gradient-to-br from-amber-50/80 via-white to-amber-50/20 border-amber-200/90 hover:border-amber-400 shadow-amber-500/5'
+                    : isTrim
+                    ? 'border-l-sky-500 bg-gradient-to-br from-sky-50/80 via-white to-sky-50/20 border-sky-200/90 hover:border-sky-400 shadow-sky-500/5'
+                    : 'border-l-emerald-500 bg-gradient-to-br from-emerald-50/80 via-white to-emerald-50/20 border-emerald-200/90 hover:border-emerald-400 shadow-emerald-500/5';
+
+                  return (
+                    <div 
+                      key={centro._docId || centro.id} 
+                      draggable 
+                      onDragStart={(e) => onDragStartCentro(e, centro._docId || centro.id, revisionType)} 
+                      className={`p-3 bg-white border border-l-4 rounded-2xl shadow-xs hover:shadow-md hover:-translate-y-0.5 transition-all cursor-grab active:cursor-grabbing select-none ${cardAccent}`}
+                    >
+                      <div className="flex items-center justify-between gap-1.5 mb-1.5">
+                        <span className={`px-2 py-0.5 text-[10px] font-extrabold rounded-md border ${badge.color} inline-flex items-center gap-1 shadow-2xs`}>
+                          <BadgeIcon className="w-3 h-3" /> {badge.label}
+                        </span>
+                        <span className="text-[10px] text-zinc-500 font-mono font-bold bg-white/90 px-1.5 py-0.5 rounded border border-zinc-200/70 shadow-2xs">
+                          {centro.customIdPart || centro.id}
+                        </span>
+                      </div>
+
+                      <p className="font-extrabold text-zinc-900 text-xs truncate leading-snug">
+                        {centro.nombre}
+                      </p>
+
+                      {cliente && (
+                        <p className="text-[11px] font-medium text-zinc-600 flex items-center gap-1.5 mt-1 truncate">
+                          <Building2 className="w-3 h-3 text-zinc-400 shrink-0" />
+                          <span className="truncate">{cliente.nombre}</span>
+                        </p>
+                      )}
+
+                      {(centro.poblacion || centro.localidad || centro.direccion) && (
+                        <p className="text-[10px] font-normal text-zinc-400 mt-1 truncate flex items-center gap-1">
+                          <MapPin className="w-2.5 h-2.5 text-zinc-400 shrink-0" />
+                          <span className="truncate">{[centro.direccion, centro.poblacion || centro.localidad].filter(Boolean).join(', ')}</span>
+                        </p>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
 
             {/* CALENDARIO */}
           <div className="flex-1 bg-white rounded-3xl shadow-xl border border-zinc-200/85 flex flex-col overflow-hidden h-[600px] lg:h-full">
             {/* Navegación del mes */}
-            <div className="px-6 py-4 border-b border-sky-50 flex items-center justify-center gap-4 bg-sky-50/20">
-              <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))} className="p-1 hover:bg-white rounded-full transition-all border border-transparent hover:border-zinc-200/85"><ChevronLeft/></button>
-              <h2 className="text-lg md:text-xl font-bold text-zinc-950 min-w-[120px] md:min-w-[150px] text-center capitalize">
+            <div className="px-6 py-3.5 border-b border-zinc-300 flex items-center justify-center gap-4 bg-zinc-200/90">
+              <button 
+                onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))} 
+                className="p-1.5 hover:bg-white text-zinc-700 hover:text-zinc-950 rounded-full transition-all border border-transparent hover:border-zinc-300 cursor-pointer shadow-2xs"
+                title="Mes anterior"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+              <h2 className="text-base md:text-lg font-black text-zinc-800 min-w-[140px] md:min-w-[180px] text-center capitalize tracking-tight select-none">
                 {new Intl.DateTimeFormat('es-ES', { month: 'long', year: 'numeric' }).format(currentDate)}
               </h2>
-              <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))} className="p-1 hover:bg-white rounded-full transition-all border border-transparent hover:border-zinc-200/85"><ChevronRight/></button>
+              <button 
+                onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))} 
+                className="p-1.5 hover:bg-white text-zinc-700 hover:text-zinc-950 rounded-full transition-all border border-transparent hover:border-zinc-300 cursor-pointer shadow-2xs"
+                title="Mes siguiente"
+              >
+                <ChevronRight className="w-5 h-5" />
+              </button>
             </div>
             {/* Encabezados de días de la semana - alineados con las columnas del calendario */}
-            <div className={`px-2 border-b border-sky-50 ${showWeekends ? 'grid grid-cols-7' : 'grid grid-cols-5'}`}>
+            <div className={`px-2 border-b border-zinc-300 bg-zinc-100 ${showWeekends ? 'grid grid-cols-7' : 'grid grid-cols-5'}`}>
               {(showWeekends
                 ? ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
                 : ['Lun', 'Mar', 'Mié', 'Jue', 'Vie']
               ).map(d => (
-                <div key={d} className="py-2 text-center text-[10px] md:text-xs font-bold text-sky-400">
+                <div key={d} className="py-2.5 text-center text-[11px] font-extrabold uppercase tracking-wider text-zinc-700">
                   {d}
                 </div>
               ))}
@@ -372,7 +444,7 @@ export default function Planificacion() {
                 .map(({ date, currentMonth }, idx) => {
                 const dateStr = formatDate(date);
                 return (
-                  <div key={dateStr + idx} onDragOver={onDragOver} onDrop={(e) => onDrop(e, dateStr)} className={`min-h-[80px] md:min-h-[100px] p-1 md:p-2 border border-sky-50 flex flex-col ${currentMonth ? 'bg-amber-50/20' : 'bg-white opacity-40'}`}>
+                  <div key={dateStr + idx} onDragOver={onDragOver} onDrop={(e) => onDrop(e, dateStr)} className={`min-h-[80px] md:min-h-[100px] p-1 md:p-2 border border-zinc-100 flex flex-col ${currentMonth ? 'bg-amber-50/20' : 'bg-white opacity-40'}`}>
                     <span className="text-xs font-bold text-zinc-400 mb-1">{date.getDate()}</span>
                     <div className="flex-1 space-y-1">
                       {partes.filter(p => p.fechaProgramada === dateStr && p.estado !== 'Cerrado').map(p => {

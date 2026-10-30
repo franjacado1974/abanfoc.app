@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import {
   ArrowLeft, Receipt, Download, Search, CheckCircle2, Clock, AlertCircle,
   FileText, Trash2, Plus, Building2, Save, Edit, Copy, X,
@@ -259,6 +259,38 @@ const generarQRVerifactuDataUrl = (urlText = 'https://www.abanfoc.es'): string =
   return canvas.toDataURL('image/jpeg', 0.85);
 };
 
+// Función para sanear y formatear las observaciones de factura, garantizando que solo haga referencia al Albarán
+export const limpiarNotasFactura = (notas?: string, albaranId?: string): string => {
+  if (!notas && !albaranId) return '';
+  let txt = (notas || '').trim();
+
+  // 1. Eliminar referencias a pedido / pedido de venta entre paréntesis: (Pedido ...), (Ref. Pedido ...), (Pedido de Venta ...)
+  txt = txt.replace(/\s*\(\s*(?:Ref\.?\s*)?(?:N[ºo°]\s*)?[Pp]edido(?:\s+de\s+[Vv]enta)?(?:\s*[:\-]?\s*[^)]*)?\)/gi, '');
+
+  // 2. Eliminar conectores como ' y pedido de venta ...', ' y pedido ...', ', pedido de venta ...', ', pedido ...'
+  txt = txt.replace(/(?:[\s,]+y|\s*,)\s*(?:el\s*)?(?:ref\.?\s*)?(?:n[ºo°]\s*)?pedido(?:\s+de\s+venta)?(?:\s*[:\-]?\s*[A-Z0-9.\-\/]+)?/gi, '');
+
+  // 3. Eliminar oraciones o fragmentos independientes que hablen de Pedido de venta o Pedido
+  txt = txt.replace(/(?:^|\n|\.\s+)(?:[-–•]\s*)?(?:Ref\.?\s*)?(?:N[ºo°]\s*)?[Pp]edido(?:\s+de\s+[Vv]enta)?(?:\s*[:\-]?\s*[A-Z0-9.\-\/]+)?\.?/gi, (match) => {
+    return match.startsWith('\n') ? '\n' : (match.startsWith('.') ? '.' : '');
+  });
+
+  // 4. Limpiar espacios duplicados o puntos repetidos
+  txt = txt.replace(/\s+\./g, '.').replace(/\.{2,}/g, '.').replace(/[ \t]+/g, ' ').trim();
+
+  // 5. Si después de limpiar el texto queda vacío pero tenemos albaranId
+  if (!txt && albaranId) {
+    return `Factura emitida conforme al Albarán firmado ${albaranId}.`;
+  }
+
+  // 6. Asegurar punto final
+  if (txt && !txt.endsWith('.')) {
+    txt += '.';
+  }
+
+  return txt;
+};
+
 // Generador de PDF oficial de Factura con estética corporativa ABANFOC S.L.
 async function generarFacturaOficialPDF(
   factura: Factura,
@@ -390,9 +422,6 @@ async function generarFacturaOficialPDF(
   drawLeftRow('Vencimiento: ', fechaVencStr);
   if (factura.albaranId) {
     drawLeftRow('Ref. Albarán: ', factura.albaranId);
-  }
-  if (factura.numeroPedido) {
-    drawLeftRow('Ref. Pedido: ', factura.numeroPedido);
   }
   drawLeftRow('Forma de pago: ', formaPagoStr);
   drawLeftRow('Cuenta IBAN: ', ibanStr);
@@ -721,11 +750,12 @@ async function generarFacturaOficialPDF(
   doc.setLineWidth(0.2);
   doc.line(notasX + 4, boxY + 6.5, notasX + notasW - 4, boxY + 6.5);
 
-  if (factura.notas) {
+  const notasParaPDF = limpiarNotasFactura(factura.notas, factura.albaranId);
+  if (notasParaPDF) {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(6.8);
     doc.setTextColor(85, 90, 100);
-    const notasSplit = doc.splitTextToSize(factura.notas, notasW - 8);
+    const notasSplit = doc.splitTextToSize(notasParaPDF, notasW - 8);
     let nty = boxY + 11;
     notasSplit.forEach((line: string) => {
       if (nty < boxY + boxH - 2) {
@@ -773,7 +803,6 @@ async function generarFacturaOficialPDF(
 }
 
 export default function Facturas() {
-  const navigate = useNavigate();
   const location = useLocation();
 
   const [facturas, setFacturas] = useState<Factura[]>(() => {
@@ -804,6 +833,8 @@ export default function Facturas() {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [showCatalogoModal, setShowCatalogoModal] = useState(false);
   const [catalogoSearch, setCatalogoSearch] = useState('');
+  const [limiteFacturas, setLimiteFacturas] = useState<number | 'todos'>(10);
+  const [showModalAlbaranesPendientes, setShowModalAlbaranesPendientes] = useState(false);
 
   const calcularSiguienteNumeroFactura = (lista: Factura[]) => {
     const yy = new Date().getFullYear().toString().slice(-2);
@@ -853,7 +884,15 @@ export default function Facturas() {
   });
 
   useEffect(() => {
-    const uFac = subscribeFacturas(setFacturas);
+    window.scrollTo(0, 0);
+    const uFac = subscribeFacturas(items => {
+      const sanitized = items.map(f => ({
+        ...f,
+        numeroPedido: '',
+        notas: f.notas ? limpiarNotasFactura(f.notas, f.albaranId) : (f.albaranId ? `Factura emitida conforme al Albarán firmado ${f.albaranId}.` : f.notas)
+      }));
+      setFacturas(sanitized);
+    });
     const uAlb = subscribeAlbaranes(setAlbaranes);
     const uCli = subscribeClientes(setClientes);
     const uCen = subscribeCentros(setCentros);
@@ -916,7 +955,7 @@ export default function Facturas() {
       poblacionCliente: cli?.poblacion || cen?.poblacion || '',
       provinciaCliente: cli?.provincia || cen?.provincia || '',
       albaranId: albData.albaranId || albData.id || '',
-      numeroPedido: albData.numeroPedido || '',
+      numeroPedido: '',
       titulo: albData.titulo || `Trabajos realizados según Albarán ${albData.albaranId || albData.id || ''}`,
       fechaCreacion: hoy.toISOString().slice(0, 10),
       fechaVencimiento: venc.toISOString().slice(0, 10),
@@ -929,7 +968,7 @@ export default function Facturas() {
       subtotal: sub,
       iva: ivaPorc,
       total: tot,
-      notas: `Factura emitida conforme al Albarán firmado ${albData.albaranId || albData.id || ''}${albData.numeroPedido ? ` (Pedido ${albData.numeroPedido})` : ''}.`
+      notas: limpiarNotasFactura(albData.notas, albData.albaranId || albData.id) || `Factura emitida conforme al Albarán firmado ${albData.albaranId || albData.id || ''}.`
     });
     setView('form');
   };
@@ -1011,6 +1050,11 @@ export default function Facturas() {
 
     return list;
   }, [facturas, statusFilter, searchTerm, clientes, centros, sortField, sortOrder]);
+
+  const facturasAMostrar = useMemo(() => {
+    if (limiteFacturas === 'todos') return filteredFacturas;
+    return filteredFacturas.slice(0, Number(limiteFacturas));
+  }, [filteredFacturas, limiteFacturas]);
 
   // Recalcular totales del formulario
   const recalcularFormulario = (
@@ -1152,6 +1196,8 @@ export default function Facturas() {
         ...form,
         id: form.numeroFactura || form.id || calcularSiguienteNumeroFactura(facturas),
         numeroFactura: form.numeroFactura || form.id || calcularSiguienteNumeroFactura(facturas),
+        numeroPedido: '',
+        notas: limpiarNotasFactura(form.notas, form.albaranId),
         nombreCliente: form.nombreCliente || cli?.nombre || form.clienteNombreLibre || 'Cliente',
       };
 
@@ -1193,6 +1239,8 @@ export default function Facturas() {
     setEditingId(fac._docId || fac.id);
     setForm({
       ...fac,
+      numeroPedido: '',
+      notas: limpiarNotasFactura(fac.notas, fac.albaranId),
       fechaCreacion: (fac.fechaCreacion || '').slice(0, 10),
       fechaVencimiento: (fac.fechaVencimiento || '').slice(0, 10)
     });
@@ -1207,6 +1255,8 @@ export default function Facturas() {
       _docId: undefined,
       id: nextNum,
       numeroFactura: nextNum,
+      numeroPedido: '',
+      notas: limpiarNotasFactura(fac.notas, fac.albaranId),
       estado: 'Pendiente',
       fechaCreacion: new Date().toISOString().slice(0, 10)
     });
@@ -1242,159 +1292,101 @@ export default function Facturas() {
     return (
       <div className="min-h-screen bg-[#F8FAFC] px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
         <div className="w-full">
-          {/* Header */}
-          <div className="mb-6 text-center sm:text-left flex flex-col items-center sm:items-start">
-            <button
-              onClick={() => navigate('/')}
-              className="flex items-center gap-1.5 text-xs font-semibold text-zinc-500 hover:text-zinc-900 mb-3 transition-colors cursor-pointer"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" /> Volver al panel
-            </button>
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2.5">
-              <h1 className="text-2xl font-black text-zinc-950 tracking-tight">Facturación de Clientes</h1>
-              <span className="inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-zinc-900 text-white w-fit mx-auto sm:mx-0">
-                <Receipt className="w-3 h-3 text-red-400" /> Presupuesto ➔ Pedido ➔ Albarán ➔ Factura
-              </span>
-            </div>
-            <p className="text-xs font-semibold text-zinc-500 mt-1">
-              Emisión de facturas oficiales a partir de los albaranes firmados y control de cobros.
-            </p>
-          </div>
-
-          {/* 4 Tarjetas KPI Financieras */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 mb-6">
-            <div className="bg-white rounded-2xl border border-zinc-200/90 p-4 shadow-xs flex items-center justify-between">
-              <div>
-                <p className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Total Facturado</p>
-                <p className="text-xl font-black text-zinc-950 mt-1">{formatMoneda(kpis.totalFacturado)}</p>
-                <p className="text-[11px] text-zinc-500 mt-0.5">{facturas.filter(f => f.estado !== 'Borrador').length} factura(s) emitidas</p>
-              </div>
-              <div className="w-11 h-11 rounded-2xl bg-zinc-900 text-white flex items-center justify-center shrink-0">
-                <Receipt className="w-5 h-5" />
-              </div>
+          {/* Header con Título a la izquierda y 4 mini casillas KPI a la derecha */}
+          <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4 mb-6">
+            <div className="text-center sm:text-left">
+              <h1 className="text-2xl font-black text-zinc-950 tracking-tight">Facturación</h1>
+              <p className="text-xs font-semibold text-zinc-500 mt-0.5">
+                Emisión de facturas oficiales a partir de los albaranes firmados y control de cobros.
+              </p>
             </div>
 
-            <div className="bg-white rounded-2xl border border-emerald-200/90 p-4 shadow-xs flex items-center justify-between">
-              <div>
-                <p className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider">Cobrado</p>
-                <p className="text-xl font-black text-emerald-700 mt-1">{formatMoneda(kpis.totalCobrado)}</p>
-                <p className="text-[11px] text-emerald-600/80 mt-0.5">{facturas.filter(f => f.estado === 'Cobrada').length} cobrada(s)</p>
+            {/* 4 Casillas KPI Adaptadas y Ampliadas */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 w-full xl:w-auto flex-1 xl:max-w-4xl xl:ml-8">
+              <div className="bg-white rounded-2xl border border-zinc-200/90 px-4 py-3 shadow-xs flex items-center gap-3.5 min-w-[160px] sm:min-w-[185px]">
+                <div className="w-10 h-10 rounded-2xl bg-zinc-900 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <Receipt className="w-5 h-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider leading-none">Facturado</p>
+                  <p className="text-base sm:text-lg font-black text-zinc-950 leading-tight mt-1 truncate">{formatMoneda(kpis.totalFacturado)}</p>
+                </div>
               </div>
-              <div className="w-11 h-11 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
-                <CheckCircle2 className="w-5 h-5" />
-              </div>
-            </div>
 
-            <div className="bg-white rounded-2xl border border-amber-200/90 p-4 shadow-xs flex items-center justify-between">
-              <div>
-                <p className="text-[11px] font-bold text-amber-700 uppercase tracking-wider">Pendiente de Cobro</p>
-                <p className="text-xl font-black text-amber-700 mt-1">{formatMoneda(kpis.totalPendiente)}</p>
-                <p className="text-[11px] text-amber-600/80 mt-0.5">{facturas.filter(f => f.estado === 'Pendiente').length} pendiente(s)</p>
+              <div className="bg-white rounded-2xl border border-emerald-200/90 px-4 py-3 shadow-xs flex items-center gap-3.5 min-w-[160px] sm:min-w-[185px]">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 shadow-xs">
+                  <CheckCircle2 className="w-5 h-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider leading-none">Cobrado</p>
+                  <p className="text-base sm:text-lg font-black text-emerald-700 leading-tight mt-1 truncate">{formatMoneda(kpis.totalCobrado)}</p>
+                </div>
               </div>
-              <div className="w-11 h-11 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
-                <Clock className="w-5 h-5" />
-              </div>
-            </div>
 
-            <div className="bg-white rounded-2xl border border-red-200/90 p-4 shadow-xs flex items-center justify-between">
-              <div>
-                <p className="text-[11px] font-bold text-red-700 uppercase tracking-wider">Vencido</p>
-                <p className="text-xl font-black text-red-600 mt-1">{formatMoneda(kpis.totalVencido)}</p>
-                <p className="text-[11px] text-red-500 mt-0.5">{facturas.filter(f => f.estado === 'Vencida').length} vencida(s)</p>
+              <div className="bg-white rounded-2xl border border-amber-200/90 px-4 py-3 shadow-xs flex items-center gap-3.5 min-w-[160px] sm:min-w-[185px]">
+                <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 shadow-xs">
+                  <Clock className="w-5 h-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] font-bold text-amber-700 uppercase tracking-wider leading-none">Pendiente</p>
+                  <p className="text-base sm:text-lg font-black text-amber-700 leading-tight mt-1 truncate">{formatMoneda(kpis.totalPendiente)}</p>
+                </div>
               </div>
-              <div className="w-11 h-11 rounded-2xl bg-red-100 text-red-600 flex items-center justify-center shrink-0">
-                <AlertCircle className="w-5 h-5" />
-              </div>
-            </div>
-          </div>
 
-          {/* Bandeja Rápida: Albaranes pendientes de pasar a Factura */}
-          {albaranesPendientesFacturar.length > 0 && (
-            <div className="mb-6 p-3.5 bg-gradient-to-r from-emerald-50/90 via-teal-50/60 to-white rounded-2xl border border-emerald-200/90 shadow-xs">
-              <div className="flex items-center justify-between mb-2.5">
-                <p className="text-[11px] font-black text-emerald-900 uppercase tracking-wider flex items-center gap-2">
-                  <Signature className="w-3.5 h-3.5 text-emerald-600" />
-                  Albaranes pendientes de facturar ({albaranesPendientesFacturar.length}) — Haz clic para generar su Factura
-                </p>
-                {albaranesPendientesFacturar.length > 8 && (
-                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full border border-emerald-200">
-                    Desliza para ver los {albaranesPendientesFacturar.length} albaranes ↕
-                  </span>
-                )}
-              </div>
-              <div className="max-h-[142px] overflow-y-auto pr-1.5 scrollbar-thin">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-                  {albaranesPendientesFacturar.map(alb => {
-                    const cli = clientes.find(c => c.id === alb.clienteId || (c as any)._docId === alb.clienteId);
-                    const cen = centros.find(c => c._docId === alb.centroId || c.id === alb.centroId);
-                    const firmado = isFirmaValida(alb.firmaCliente);
-                    const baseAlb = (alb.items || []).reduce((s, i) => s + (Number(i.subtotal) || ((Number(i.cantidad) || 1) * (Number(i.precioUnidad) || 0))), 0);
-                    return (
-                      <button
-                        key={alb.id}
-                        type="button"
-                        onClick={() => iniciarFacturaDesdeAlbaran(alb)}
-                        className="flex items-center justify-between px-2.5 py-2 bg-white rounded-xl border border-emerald-200 hover:border-emerald-500 hover:shadow-sm transition-all text-left group cursor-pointer"
-                      >
-                        <div className="min-w-0 flex-1 pr-2">
-                          <div className="flex items-center gap-1 mb-0.5">
-                            <span className="text-[9px] font-mono font-bold text-zinc-700 bg-zinc-100 px-1.5 py-0.2 rounded border border-zinc-200">
-                              {alb.id}
-                            </span>
-                            {firmado && (
-                              <span className="text-[8px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.2 rounded-full inline-flex items-center gap-0.5">
-                                <Check className="w-2 h-2" /> Firmado
-                              </span>
-                            )}
-                            {alb.numeroPedido && (
-                              <span className="text-[8px] font-mono font-bold text-indigo-700 bg-indigo-50 px-1 py-0.2 rounded">
-                                {alb.numeroPedido}
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-[11px] font-bold text-zinc-900 truncate leading-tight">
-                            {cli?.nombre || alb.clienteNombreLibre || cen?.nombre || 'Cliente'}
-                          </p>
-                          <p className="text-[10px] text-zinc-500 truncate leading-tight mt-0.5">
-                            {alb.titulo || cen?.nombre || 'Albarán'} — <strong className="text-zinc-800">{formatMoneda(baseAlb)}</strong> <span className="text-[8px]">+ IVA</span>
-                          </p>
-                        </div>
-                        <div className="w-6 h-6 rounded-lg bg-emerald-50 group-hover:bg-emerald-600 text-emerald-700 group-hover:text-white flex items-center justify-center transition-colors shrink-0">
-                          <Plus className="w-3.5 h-3.5" />
-                        </div>
-                      </button>
-                    );
-                  })}
+              <div className="bg-white rounded-2xl border border-red-200/90 px-4 py-3 shadow-xs flex items-center gap-3.5 min-w-[160px] sm:min-w-[185px]">
+                <div className="w-10 h-10 rounded-2xl bg-red-100 text-red-600 flex items-center justify-center shrink-0 shadow-xs">
+                  <AlertCircle className="w-5 h-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] font-bold text-red-700 uppercase tracking-wider leading-none">Vencido</p>
+                  <p className="text-base sm:text-lg font-black text-red-600 leading-tight mt-1 truncate">{formatMoneda(kpis.totalVencido)}</p>
                 </div>
               </div>
             </div>
-          )}
+          </div>
 
-          {/* Pestañas + Buscador + Botón Nueva Factura */}
-          <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4 mb-6">
-            <div className="flex flex-wrap items-center gap-1.5 bg-zinc-100 p-1.5 rounded-2xl w-fit border border-zinc-200/40">
-              {(['Todos', 'Pendiente', 'Cobrada', 'Vencida', 'Borrador'] as const).map(tab => {
-                const count = tab === 'Todos' ? facturas.length : facturas.filter(f => f.estado === tab).length;
-                const active = statusFilter === tab;
-                return (
-                  <button
-                    key={tab}
-                    onClick={() => setStatusFilter(tab)}
-                    className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      active
-                        ? 'bg-white text-zinc-950 shadow-sm border border-zinc-200/20 font-extrabold'
-                        : 'text-zinc-500 hover:text-zinc-900 hover:bg-white/50'
-                    }`}
-                  >
-                    <span>{tab === 'Todos' ? 'Todas' : `${tab}s`}</span>
-                    <span className={`text-[10px] font-black px-1.5 py-0.5 rounded ${
-                      active ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-zinc-200 text-zinc-500'
-                    }`}>
-                      {count}
-                    </span>
-                  </button>
-                );
-              })}
+          {/* Pestañas + Botón Albaranes Pendientes + Buscador + Botón Nueva Factura */}
+          <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3 mb-6">
+            <div className="flex flex-col md:flex-row md:items-center gap-3">
+              {/* Pestañas de estado */}
+              <div className="flex flex-wrap items-center gap-1.5 bg-zinc-100 p-1.5 rounded-2xl w-fit border border-zinc-200/40">
+                {(['Todos', 'Pendiente', 'Cobrada', 'Vencida', 'Borrador'] as const).map(tab => {
+                  const count = tab === 'Todos' ? facturas.length : facturas.filter(f => f.estado === tab).length;
+                  const active = statusFilter === tab;
+                  return (
+                    <button
+                      key={tab}
+                      onClick={() => setStatusFilter(tab)}
+                      className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        active
+                          ? 'bg-white text-zinc-950 shadow-sm border border-zinc-200/20 font-extrabold'
+                          : 'text-zinc-500 hover:text-zinc-900 hover:bg-white/50'
+                      }`}
+                    >
+                      <span>{tab === 'Todos' ? 'Todas' : `${tab}s`}</span>
+                      <span className={`text-[10px] font-black px-1.5 py-0.5 rounded ${
+                        active ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-zinc-200 text-zinc-500'
+                      }`}>
+                        {count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Botón Listado de Albaranes Firmados */}
+              <button
+                type="button"
+                onClick={() => setShowModalAlbaranesPendientes(true)}
+                className="flex items-center gap-2 px-3.5 py-2.5 rounded-2xl text-xs font-bold bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-xs hover:shadow transition-all cursor-pointer"
+                title="Ver albaranes listos para facturar"
+              >
+                <Signature className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span className="whitespace-nowrap">Lista de albaranes para facturar</span>
+                <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-600 text-white shadow-2xs shrink-0">
+                  {albaranesPendientesFacturar.length}
+                </span>
+              </button>
             </div>
 
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full xl:w-auto">
@@ -1410,7 +1402,7 @@ export default function Facturas() {
               </div>
               <button
                 onClick={handleNuevaFactura}
-                className="flex items-center justify-center gap-2 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold shadow-md shadow-red-500/10 hover:shadow-lg active:scale-95 transition-all text-xs cursor-pointer"
+                className="flex items-center justify-center gap-2 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold shadow-md shadow-red-500/10 hover:shadow-lg active:scale-95 transition-all text-xs cursor-pointer shrink-0"
               >
                 <Plus className="w-3.5 h-3.5" /> Nueva Factura
               </button>
@@ -1492,7 +1484,7 @@ export default function Facturas() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-100">
-                    {filteredFacturas.map(fac => {
+                    {facturasAMostrar.map((fac, index) => {
                       const cli = clientes.find(c => c.id === fac.clienteId || (c as any)._docId === fac.clienteId);
                       const cen = centros.find(c => c._docId === fac.centroId || c.id === fac.centroId);
                       const emp = empresas.find(e => e._docId === fac.empresaId || e.id === fac.empresaId);
@@ -1502,9 +1494,12 @@ export default function Facturas() {
                       const baseImp = Math.max(0, (Number(fac.subtotal) || 0) - (Number(fac.descuentoImporte) || 0));
 
                       return (
-                        <tr key={rowKey} className="hover:bg-zinc-50/80 transition-colors">
+                        <tr 
+                          key={rowKey} 
+                          className={`transition-all duration-150 group ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100/80'} hover:bg-amber-100/90 hover:shadow-xs`}
+                        >
                           {/* Nº Factura + Albarán/Pedido */}
-                          <td className="px-4 py-3 whitespace-nowrap">
+                          <td className="px-4 py-2.5 whitespace-nowrap">
                             <div className="flex flex-col items-start gap-1">
                               <span className="text-xs font-mono font-black text-zinc-900 bg-zinc-100 px-2.5 py-0.5 rounded-md border border-zinc-300">
                                 {fac.numeroFactura || fac.id}
@@ -1515,17 +1510,12 @@ export default function Facturas() {
                                     Alb: {fac.albaranId}
                                   </span>
                                 )}
-                                {fac.numeroPedido && (
-                                  <span className="text-[10px] font-mono font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200">
-                                    {fac.numeroPedido}
-                                  </span>
-                                )}
                               </div>
                             </div>
                           </td>
 
                           {/* Fecha Emisión / Vencimiento */}
-                          <td className="px-4 py-3 whitespace-nowrap">
+                          <td className="px-4 py-2.5 whitespace-nowrap">
                             <p className="text-xs font-bold text-zinc-800">{formatFecha(fac.fechaCreacion)}</p>
                             {fac.fechaVencimiento && (
                               <p className="text-[10px] text-zinc-500 mt-0.5">
@@ -1535,7 +1525,7 @@ export default function Facturas() {
                           </td>
 
                           {/* Cliente */}
-                          <td className="px-4 py-3">
+                          <td className="px-4 py-2.5">
                             <p className="text-sm font-bold text-zinc-900">
                               {fac.nombreCliente || cli?.nombre || fac.clienteNombreLibre || 'Cliente'}
                             </p>
@@ -1547,7 +1537,7 @@ export default function Facturas() {
                           </td>
 
                           {/* Centro y Título */}
-                          <td className="px-4 py-3">
+                          <td className="px-4 py-2.5">
                             <p className="text-xs font-bold text-zinc-800 truncate max-w-[230px]" title={fac.titulo}>
                               {fac.titulo || 'Factura de servicios'}
                             </p>
@@ -1557,7 +1547,7 @@ export default function Facturas() {
                           </td>
 
                           {/* Estado con selector rápido */}
-                          <td className="px-4 py-3 whitespace-nowrap">
+                          <td className="px-4 py-2.5 whitespace-nowrap">
                             <div className="relative inline-flex items-center gap-1">
                               <button
                                 type="button"
@@ -1597,7 +1587,7 @@ export default function Facturas() {
                           </td>
 
                           {/* Importe Total + Base + IVA */}
-                          <td className="px-4 py-3 text-right whitespace-nowrap">
+                          <td className="px-4 py-2.5 text-right whitespace-nowrap">
                             <p className="text-sm font-black text-zinc-950">{formatMoneda(fac.total)}</p>
                             <p className="text-[10px] text-zinc-500">
                               Base: {formatMoneda(baseImp)} {fac.iva === 0 ? '(Exento)' : `+ ${fac.iva}% IVA`}
@@ -1605,7 +1595,7 @@ export default function Facturas() {
                           </td>
 
                           {/* Acciones */}
-                          <td className="px-4 py-3 text-center whitespace-nowrap">
+                          <td className="px-4 py-2.5 text-center whitespace-nowrap">
                             <div className="inline-flex items-center justify-center gap-1">
                               <button
                                 type="button"
@@ -1646,6 +1636,142 @@ export default function Facturas() {
                     })}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          )}
+
+          {filteredFacturas.length > 0 && (
+            <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-zinc-600 bg-white px-5 py-3.5 rounded-2xl border border-zinc-200/80 shadow-xs">
+              <div className="font-bold text-zinc-800 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-red-500 shrink-0"></span>
+                {limiteFacturas === 'todos' ? (
+                  <span>Mostrando todas las facturas ({filteredFacturas.length} en total)</span>
+                ) : (
+                  <span>
+                    Mostrando las {Math.min(Number(limiteFacturas), filteredFacturas.length)} últimas facturas
+                    {filteredFacturas.length > Number(limiteFacturas) && (
+                      <span className="text-zinc-400 font-normal ml-1">
+                        (de {filteredFacturas.length} facturas en total)
+                      </span>
+                    )}
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2.5">
+                <span className="text-zinc-500 font-semibold uppercase text-[11px] tracking-wider">Mostrar:</span>
+                <select
+                  value={limiteFacturas}
+                  onChange={(e) => setLimiteFacturas(e.target.value === 'todos' ? 'todos' : Number(e.target.value))}
+                  className="bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 text-zinc-800 text-xs font-bold rounded-xl px-3.5 py-1.5 outline-none focus:border-red-500 focus:bg-white cursor-pointer transition-colors shadow-2xs"
+                >
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                  <option value={200}>200</option>
+                  <option value={500}>500</option>
+                  <option value="todos">Mostrar todas</option>
+                </select>
+              </div>
+            </div>
+          )}
+
+          {/* MODAL: Albaranes firmados listos para facturar */}
+          {showModalAlbaranesPendientes && (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+              <div className="bg-white rounded-3xl w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in fade-in zoom-in-95 duration-200">
+                <div className="px-6 py-4 border-b border-zinc-100 flex items-center justify-between bg-gradient-to-r from-emerald-50/80 via-teal-50/40 to-white shrink-0">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-xs">
+                      <Signature className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h2 className="text-base font-black text-zinc-900 leading-tight">
+                        Albaranes firmados listos para facturar
+                      </h2>
+                      <p className="text-xs text-zinc-500">
+                        Haz clic en cualquier albarán para generar su factura oficial correspondiente.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowModalAlbaranesPendientes(false)}
+                    className="p-2 text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100 rounded-xl transition-colors cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Contenedor desplazable de albaranes pendientes: max-h-[142px] overflow-y-auto optimizado en modal flotante */}
+                <div className="p-6 overflow-y-auto space-y-3">
+                  {albaranesPendientesFacturar.length === 0 ? (
+                    <div className="py-12 text-center">
+                      <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
+                      <p className="text-sm font-bold text-zinc-800">No hay albaranes pendientes de facturar</p>
+                      <p className="text-xs text-zinc-500 mt-1">Todos los albaranes registrados ya han sido facturados.</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {albaranesPendientesFacturar.map(alb => {
+                        const cli = clientes.find(c => c.id === alb.clienteId || (c as any)._docId === alb.clienteId);
+                        const cen = centros.find(c => c._docId === alb.centroId || c.id === alb.centroId);
+                        const firmado = isFirmaValida(alb.firmaCliente);
+                        const baseAlb = (alb.items || []).reduce((s, i) => s + (Number(i.subtotal) || ((Number(i.cantidad) || 1) * (Number(i.precioUnidad) || 0))), 0);
+                        return (
+                          <button
+                            key={alb.id}
+                            type="button"
+                            onClick={() => {
+                              setShowModalAlbaranesPendientes(false);
+                              iniciarFacturaDesdeAlbaran(alb);
+                            }}
+                            className="flex items-center justify-between p-3.5 bg-zinc-50/70 hover:bg-emerald-50/50 rounded-2xl border border-zinc-200 hover:border-emerald-400 hover:shadow-md transition-all text-left group cursor-pointer"
+                          >
+                            <div className="min-w-0 flex-1 pr-3">
+                              <div className="flex items-center gap-1.5 mb-1">
+                                <span className="text-[10px] font-mono font-bold text-zinc-700 bg-white px-2 py-0.5 rounded-md border border-zinc-200">
+                                  {alb.id}
+                                </span>
+                                {firmado && (
+                                  <span className="text-[9px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full inline-flex items-center gap-0.5">
+                                    <Check className="w-2.5 h-2.5" /> Firmado
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs font-bold text-zinc-900 truncate leading-snug">
+                                {cli?.nombre || alb.clienteNombreLibre || cen?.nombre || 'Cliente'}
+                              </p>
+                              <p className="text-[11px] text-zinc-500 truncate mt-0.5">
+                                {alb.titulo || cen?.nombre || 'Albarán'}
+                              </p>
+                              <p className="text-xs font-black text-zinc-900 mt-1.5">
+                                {formatMoneda(baseAlb)} <span className="text-[9px] font-semibold text-zinc-500">+ IVA</span>
+                              </p>
+                            </div>
+                            <div className="w-8 h-8 rounded-xl bg-white group-hover:bg-emerald-600 text-emerald-700 group-hover:text-white flex items-center justify-center transition-colors shrink-0 shadow-2xs border border-zinc-200 group-hover:border-emerald-600">
+                              <Plus className="w-4 h-4" />
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                <div className="px-6 py-3.5 bg-zinc-50 border-t border-zinc-100 flex items-center justify-between shrink-0">
+                  <span className="text-xs font-semibold text-zinc-500">
+                    Total: {albaranesPendientesFacturar.length} albarán(es) listo(s) para facturar
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowModalAlbaranesPendientes(false)}
+                    className="px-4 py-2 rounded-xl text-xs font-bold text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200/70 transition-colors cursor-pointer"
+                  >
+                    Cerrar
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -1747,8 +1873,7 @@ export default function Facturas() {
                 <div className="flex items-center gap-2.5 text-xs font-bold text-emerald-900">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                   <span>
-                    Datos y partidas importados del Albarán <strong>{form.albaranId}</strong>
-                    {form.numeroPedido ? ` (Pedido ${form.numeroPedido})` : ''}. Al guardar, el albarán quedará marcado como Facturado.
+                    Datos y partidas importados del Albarán <strong>{form.albaranId}</strong>. Al guardar, el albarán quedará marcado como Facturado.
                   </span>
                 </div>
               </div>
@@ -1920,17 +2045,6 @@ export default function Facturas() {
                       onChange={e => setForm({ ...form, albaranId: e.target.value })}
                       placeholder="Ej: ALB-26-001"
                       className="w-full px-3.5 py-2 bg-white border border-zinc-200 rounded-xl text-sm font-mono font-bold text-emerald-700 outline-none focus:border-red-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-bold text-zinc-500 uppercase mb-1">Ref. Nº Pedido (PDV)</label>
-                    <input
-                      type="text"
-                      value={form.numeroPedido || ''}
-                      onChange={e => setForm({ ...form, numeroPedido: e.target.value })}
-                      placeholder="Ej: PDV 26300"
-                      className="w-full px-3.5 py-2 bg-white border border-zinc-200 rounded-xl text-sm font-mono font-bold text-indigo-700 outline-none focus:border-red-500"
                     />
                   </div>
 

@@ -1297,15 +1297,13 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
 
 ---
 
-## 91. Blindaje Inviolable del Logotipo del Gremio (GRIMEC) en la Cabecera Izquierda del Acta PDF (`pdfGenerator.ts`)
-- **Presencia Obligatoria en Todas las Páginas del Acta PDF**:
-  - En el documento Acta de Revisión (`generarActaExtintoresPDF`), DEBE incluirse en la esquina superior izquierda de **todas las hojas** (tanto en la portada `drawInfoPage` como en todas las hojas siguientes `drawTableHeader`: índice, tablas de sistemas, inventario y firmas) la imagen oficial del gremio al que pertenece la empresa (**GRIMEC** - *Gremi d'Instal·ladors i Mantenidors d'Extintors de Catalunya*).
-- **Disposición y Balance Simétrico de la Cabecera**:
-  - **Izquierda**: Logotipo del Gremio (`x = 14`, alineado y proporcionado).
-  - **Centro**: Título del Acta y datos descriptivos del centro/cliente centrados (`pageWidth / 2`).
-  - **Derecha**: Logotipo de la Empresa Mantenedora (`pageWidth - 14 - logoWidth`).
-- **Optimización Obligatoria de Imagen**:
-  - La imagen del gremio (`logoGrimecBase64` / `empData?.gremioLogoUrl`) DEBE procesarse incondicionalmente mediante `optimizarImagenParaPDF(gremioLogoRaw, 800, 0.75)` antes de insertarse en el documento, garantizando soporte 100% offline y peso ligero del PDF.
+## 91. Blindaje Inviolable del Logotipo de GRIMEC en la Esquina Superior Izquierda de Todas las Hojas del Acta PDF (`pdfGenerator.ts`)
+- **Ubicación en la Esquina Superior Izquierda de Todas las Hojas**:
+  - En el documento Acta de Revisión (`generarActaExtintoresPDF`), se incluye **únicamente el logotipo de GRIMEC** (sin AERME, almacenado en `logoGrimecBase64`) en la **esquina superior izquierda de todas las hojas**:
+    1. **Página 1 (Portada — `drawInfoPage`)**: Se coloca en la **esquina superior izquierda** (`x = 14`, `gremioY = 10`, `maxGremioWidth = 22`, `maxGremioHeight = 22`), alineado con el logotipo de la empresa mantenedora a la derecha (`pageWidth - 14 - logoWidth`) y por encima de la línea divisoria (`y = 36`).
+    2. **Páginas 2 en adelante (`drawTableHeader`: índice, tablas de sistemas, inventario y firmas)**: Se coloca en la **esquina superior izquierda** (`x = 14`, `gremioY = 4.0`, `maxGremioWidth = 20`, `maxGremioHeight = 20`), por encima de la línea divisoria (`y = 26`) y en simetría con el logotipo de la empresa mantenedora a la derecha (`pageWidth - 14 - logoWidth`).
+- **Prioridad y Optimización Obligatoria de Imagen**:
+  - La carga de la imagen (`logoGrimecBase64 || empData?.gremioLogoUrl`) DEBE priorizar `logoGrimecBase64` y procesarse incondicionalmente mediante `optimizarImagenParaPDF(gremioLogoRaw, 800, 0.75)` antes de insertarse en el documento, garantizando soporte 100% offline y peso ligero del PDF.
 - **Sincronización Dual**:
   - Mantenido de forma idéntica en `src/pdfGenerator.ts` y en `src/recursos-compartidos/services/pdfGenerator.ts`.
 
@@ -1392,6 +1390,120 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
   - Cuando una tarea tiene `fechaConfirmada: true`, DEBE mostrarse al principio de la etiqueta en la celda del calendario un asterisco ligeramente más grande seguido de un espacio antes de la sigla (`* Rev.`, `* Rep.`, `* Inst.`, `* Urg.`).
 - **Persistencia Dual y Suscripción en Tiempo Real (`firebase.tsx`)**:
   - Al pulsar **"Guardar cambios"**, el estado `fechaConfirmada` se guarda en `localStorage` y en Firestore (`updateParte`, `updateReparacion`, `updateInstalacion`, `updateUrgencia`), y los listeners `subscribeReparaciones`, `subscribeInstalaciones` y `subscribeUrgencias` en `src/firebase.tsx` DEBEN mapear siempre `fechaConfirmada: Boolean(d.fechaConfirmada)`.
+
+---
+
+## 98. Blindaje Inviolable del Flujo Comercial Completo (`Presupuestos ➔ Pedidos ➔ Albaranes ➔ Facturación`) y Factura Oficial PDF con `VERI*FACTU` (`Pedidos.tsx`, `Albaranes.tsx`, `Facturas.tsx`)
+- **Submenú Comercial en `Sidebar.tsx` y Rutas en `App.tsx`**:
+  - El menú desplegable `Comercial` DEBE listar en orden: `Presupuestos` (`/presupuestos`), `Pedidos` (`/pedidos`) y `Facturación` (`/facturas`).
+- **Módulo de Pedidos (`src/Pedidos.tsx`)**:
+  - Vista principal en formato **Tabla** ordenable por columnas (`sortField`, `sortDirection`) con buscador y filtros de estado.
+  - En la columna `Acciones`, botón de icono de hoja con la letra **"A"** (`handleCrearAlbaranDesdePedido`) para generar directamente el Albarán vinculado al pedido.
+- **Conexión Directa Albaranes ➔ Facturación (`src/Albaranes.tsx`)**:
+  - En la columna `Acciones` de la tabla de Albaranes, DEBE mantenerse el botón con el icono de hoja y la letra **"F"** que redirige a `/facturas?fromAlbaran=...` precargando todos los datos e importes del albarán (o abriendo la factura ya emitida si el albarán ya está facturado).
+- **Módulo de Facturación y PDF Oficial ABANFOC S.L. (`src/Facturas.tsx` y `src/firebase.tsx`)**:
+  - **Panel KPI y Bandeja de Albaranes Pendientes**: 4 tarjetas superiores de resumen (`Total Facturado`, `Cobrado`, `Pendiente de Cobro`, `Albaranes por Facturar`) y bandeja compacta de **"Albaranes pendientes de facturar"** con contenedor desplazable (`max-h-[142px] overflow-y-auto`) que muestra todos los albaranes pendientes sin recortar la lista (8 visibles de un vistazo en cuadrícula de 4 columnas y scroll vertical para el resto).
+  - **PDF Oficial de Factura (`generarFacturaOficialPDF`) y Código QR `VERI*FACTU`**:
+    - Maquetación corporativa de **ABANFOC S.L.** con cabecera, datos de emisor y cliente, centro de trabajo, tabla de líneas de facturación, resumen de Base Imponible, IVA y Total Factura, condiciones de pago / IBAN y pie registral.
+    - A la izquierda del bloque de totales (tanto en el PDF generado como en la vista previa del modal) DEBE incluirse el bloque **`QR tributario:`** con el código QR escaneable generado localmente (`generarQRVerifactuDataUrl('https://www.abanfoc.es')` optimizado en JPEG) y la leyenda **`VERI*FACTU`** debajo.
+  - **Sincronización Cruzada en Firestore y LocalStorage**:
+    - Al guardar una factura vinculada a un albarán (`albaranId`), DEBE marcarse automáticamente dicho albarán como `facturado: true` y vincularse con `facturaId` y `facturaNumero` en Firestore y `localStorage`.
+
+---
+
+## 99. Blindaje Inviolable del Formulario de Albarán Unificado en Avisos, Reparaciones e Instalaciones (`Urgencias.tsx`, `Reparaciones.tsx`, `Instalaciones.tsx`)
+- **Estructura idéntica al Albarán**: Al crear o editar un Aviso (Urgencia), una Reparación o una Instalación, el modal DEBE contener la misma estructura completa de datos que el albarán:
+  - **Empresa Mantenedora**: Selector obligatorio con vista previa de nombre, CIF, dirección y logotipo oficial.
+  - **Cliente y Centro**: Selector con buscador integrado (`SearchableSelect`) y compatibilidad para clientes y centros no registrados (`clienteNombreLibre`, `centroNombreLibre`).
+  - **Número de Pedido**: Campo autogenerado de forma correlativa e indeleble (`PDV.YYXXX`), no duplicable.
+  - **Fecha y Título**: Campos obligatorios con fecha del día por defecto y título descriptivo del trabajo.
+  - **Tabla de Partidas / Líneas**: Tabla de desglose con columnas para `Orden`, `Cant.` (mínimo 1), `Concepto` (con categorías dinámicas `trabajosConfig`), `Descripción` (con modal flotante para ampliar texto largo), `P. Unidad` y `Subtotal` calculado automáticamente.
+- **Persistencia y Vinculación**: Toda tarea guarda sus líneas (`items`), `total`, `empresaId`, `clienteId`, `centroId` y `numeroPedido`, permitiendo transferir los datos al 100% sin pérdida hacia albaranes, pedidos o facturas.
+
+---
+
+## 100. Blindaje Inviolable de Numeración Secuencial Unificada y No Duplicable (`PRE.YYXXX` ➔ `PDV.YYXXX` ➔ `ALB.YYXXX` / `contadores/pedidos_secuencia`) y Referencia en Facturación (`firebase.tsx`, `Facturas.tsx`)
+- **Cadena Numérica Compartida e Identificador Universal**:
+  - Toda propuesta o trabajo que avanza por el ciclo comercial mantiene el mismo sufijo correlativo del año (`YYXXX`, ej. `26001`):
+    - **Presupuesto**: `PRE.YYXXX` (ej. `PRE.26001`).
+    - **Pedido**: `PDV.YYXXX` (ej. `PDV.26001`).
+    - **Albarán**: `ALB.YYXXX` (ej. `ALB.26001`).
+- **Prevención Absoluta de Duplicados (`obtenerSiguienteNumeroPedido` y `obtenerSiguienteNumeroAlbaran`)**:
+  - Contador centralizado en Firestore `contadores/pedidos_secuencia` ejecutado bajo transacción atómica.
+  - Escaneo preventivo multi-colección (`pedidos`, `albaranes`, `reparaciones`, `instalaciones`, `urgencias`, `presupuestos`) tanto en Firestore como en `localStorage` (`firecheck_ultimo_pedido_secuencia`) para determinar el número más alto existente y prevenir colisiones.
+  - Extractor universal de sufijo (`extraerSufijoSecuencia`) para compatibilidad total con formatos históricos (`ALB-26-001`, `PDV 26001`, `PRE.26001`, etc.).
+- **Facturación Independiente con Referencia Exclusiva a Albarán (`Facturas.tsx`)**:
+  - Las facturas mantienen su serie y numeración legal correlativa independiente (`FAC-2026-XXX`), pero DEBEN mostrar e imprimir explícitamente en el cuerpo y PDF únicamente la referencia del albarán:
+    - `Ref. Albarán: ALB.YYXXX` (quedando excluida la referencia del pedido en la factura emitida y su PDF).
+  - **Exclusión Absoluta de Referencia a Pedido en Observaciones (`limpiarNotasFactura`)**:
+    - En el recuadro inferior de **"OBSERVACIONES"** del PDF oficial y en el campo de notas del formulario, queda estrictamente prohibido incluir o mantener menciones a "pedido", "pedido de venta" o "(Pedido PDV.XXXXX)".
+    - La referencia debe ser única y exclusivamente al albarán: `Factura emitida conforme al Albarán firmado ALB.YYXXX.`, saneando tanto facturas nuevas como existentes mediante la función `limpiarNotasFactura`.
+
+---
+
+## 101. Blindaje Inviolable de Empresa Mantenedora Predeterminada ABANFOC (`obtenerEmpresaPorDefecto` en `firebase.tsx`, `Reparaciones.tsx`, `Instalaciones.tsx`, `Urgencias.tsx`, `Albaranes.tsx`, `Pedidos.tsx`)
+- **Prioridad Absoluta a ABANFOC S.L.**:
+  - Al abrir un nuevo formulario de Aviso, Reparación, Instalación, Albarán o Pedido, la empresa mantenedora seleccionada por defecto DEBE ser incondicionalmente **ABANFOC** mediante `obtenerEmpresaPorDefecto(empresas)`.
+  - Queda estrictamente prohibido asignar como valor por defecto la primera empresa alfabética (como ocurría con Sertec) cuando exista ABANFOC registrada.
+- **Acceso Inmediato y Respaldo Local**:
+  - `obtenerEmpresaPorDefecto` inspecciona la lista en memoria y, de estar vacía durante la inicialización, recurre a `firecheck_db_empresas` / `firecheck_db_empresa` en `localStorage` para garantizar respuesta síncrona sin retardo visual.
+  - Sincronización reactiva mediante `useEffect` en formularios abiertos para actualizar la empresa a ABANFOC en cuanto los datos de Firestore se confirmen.
+
+---
+
+## 102. Blindaje Inviolable de Reordenación de Líneas de Artículos con Drag & Drop y Botones Subir/Bajar (`Albaranes.tsx`, `Reparaciones.tsx`, `Instalaciones.tsx`, `Urgencias.tsx`)
+- **Doble Mecanismo de Reordenamiento**:
+  - Todas las tablas de partidas de albaranes y tareas asociadas DEBEN permitir reordenar sus líneas mediante:
+    1. **Arrastrar y soltar (Drag & Drop)**: Icono de agarre `GripVertical` (`⋮⋮`) con atributo `draggable`, manejadores `onDragStart`, `onDragOver`, `onDrop`, `onDragEnd` y retroalimentación visual (`bg-violet-50` / `border-violet-500` o `bg-red-50` / `border-red-500`).
+    2. **Botones de desplazamiento paso a paso**: Botones `ChevronUp` (`▲ Subir`) y `ChevronDown` (`▼ Bajar`) con control de límites deshabilitados en primer y último elemento (`disabled={index === 0}`, `disabled={index === length - 1}`).
+- **Soporte Completo en Escritorio y Móvil**:
+  - En escritorio: Columna dedicada **"Orden"** en la cabecera `<thead>` de la tabla.
+  - En móvil: Bloque compacto de controles de orden integrado en la tarjeta de cada partida.
+- **Integridad de Datos**: El intercambio de posiciones (`handleMoverLinea` / `handleDrop`) preserva íntegros los conceptos, descripciones, cantidades, precios y subtotales sin recalcular erróneamente ni perder datos.
+
+---
+
+## 103. Blindaje Inviolable de Campo Fecha Creación en Presupuestos (`Presupuestos.tsx`)
+- **Etiqueta Reglamentaria "Fecha creación"**:
+  - En el formulario de creación, edición y duplicación de presupuestos (`Presupuestos.tsx`), el campo del calendario selector de fecha DEBE etiquetarse de forma permanente e incondicional como **"Fecha creación"** (sustituyendo la antigua etiqueta "Fecha de validez").
+- **Precarga Automática del Día en Curso**:
+  - Al abrir un presupuesto nuevo (`handleNuevo`), el campo de fecha debe precargarse automáticamente con la fecha actual del sistema (`new Date().toISOString().slice(0, 10)`).
+- **Mapeo Bidireccional y Compatibilidad Absoluta**:
+  - El valor seleccionado se persiste tanto en `fechaCreacion` como en `fechaValidez` para mantener 100% de compatibilidad con presupuestos históricos y los generadores de PDF oficiales de presupuestos y pedidos de venta.
+
+---
+
+## 104. Blindaje Inviolable de Controles Compactos en Cabecera, Tablas Gris Neutro y Paginación en Avisos, Reparaciones, Instalaciones y Revisiones (`Urgencias.tsx`, `Reparaciones.tsx`, `Instalaciones.tsx`, `Revisiones.tsx`)
+- **Cabecera y Controles Reubicados**:
+  - En los cuatro módulos de operaciones (`Urgencias.tsx`, `Reparaciones.tsx`, `Instalaciones.tsx` y `Revisiones.tsx`), se eliminan las 5 tarjetas métricas intermedias y las barras separadas de filtros inferiores.
+  - El campo de búsqueda compacto (`w-44 sm:w-48 lg:w-52`) y los desplegables de filtrado DEBEN ubicarse exclusivamente en la barra superior de cabecera junto al título de la vista.
+  - El desplegable de estado DEBE incluir el recuento en tiempo real de cada estado: `Todos los estados (X)`, `Pendientes (X)` (o `Planificado (X)`), `En curso (X)`, `Parados (X)`, `Finalizados (X)`.
+  - En `Revisiones.tsx`, el desplegable de tipos de revisión DEBE incluir el recuento en tiempo real: `Todos los tipos (X)`, `Anual (X)`, `Trimestral (X)`, `Semestral (X)`, `Mensual (X)`.
+- **Estilizado de Tablas Gris Neutro y Filas Cebra**:
+  - Las cabeceras `<thead> <tr ...>` DEBEN utilizar el estilo gris uniforme: `bg-zinc-200/90 border-b border-zinc-300 text-[11px] font-extrabold uppercase tracking-wider text-zinc-700` con espaciado vertical compacto (`py-3`).
+  - Las filas del cuerpo `<tbody>` DEBEN alternar color cebra (`index % 2 === 0 ? 'bg-white' : 'bg-slate-100/80'`), resaltar en tono ámbar al posar el cursor (`hover:bg-amber-100/90 hover:shadow-xs`) y tener un padding de celda optimizado (`py-2.5`).
+- **Paginación y Límite Inicial de 10 Elementos**:
+  - Todas las tablas deben mostrar inicialmente las **10** tareas más recientes o prioritarias mediante su respectivo estado (`limiteUrgencias`, `limiteReparaciones`, `limiteInstalaciones`, `limiteRevisiones`).
+  - Debajo de cada tabla DEBE ubicarse una barra de selector de límite permitiendo elegir entre **10, 20, 50, 100, 200 o Mostrar todos**.
+  - Al ingresar o montar la vista, DEBE ejecutarse incondicionalmente `window.scrollTo(0, 0)`.
+
+---
+
+## 105. Blindaje Inviolable del Calendario y Columna Lateral de Tareas en Planificación (`Planificacion.tsx`)
+- **Cabecera del Calendario en Gris Neutro Cohesivo**:
+  - La barra superior del mes en el calendario DEBE lucir el estilo gris corporativo de las tablas: `px-6 py-3.5 border-b border-zinc-300 bg-zinc-200/90` con tipografía negra `font-black text-zinc-800`.
+  - La fila de encabezados de días de la semana (`Lun`, `Mar`, `Mié`, `Jue`, `Vie`, etc.) DEBE lucir en gris suave `bg-zinc-100 border-b border-zinc-300` con texto en mayúsculas `text-[11px] font-extrabold uppercase tracking-wider text-zinc-700`.
+- **Columna Lateral de Tareas a Planificar Simétrica y con Toques de Color**:
+  - El panel lateral izquierdo (`w-full lg:w-80 xl:w-88`) DEBE estructurarse con `overflow-hidden` y una cabecera superior en `bg-zinc-200/90 border-b border-zinc-300` con título **"Tareas a Planificar"**, icono `Calendar` en rojo y distintivo contador con el número de centros pendientes de programar.
+  - La subcabecera del selector de mes DEBE ubicarse en `bg-zinc-100 border-b border-zinc-300`, alineada en altura con los días del calendario.
+  - Las tarjetas de centros en la lista vertical DEBEN diferenciarse visualmente con bordes y acentos cromáticos según su periodicidad:
+    - **Revisión Anual**: `border-l-4 border-l-amber-500 bg-gradient-to-br from-amber-50/80 via-white to-amber-50/20 border-amber-200/90`.
+    - **Revisión Trimestral**: `border-l-4 border-l-sky-500 bg-gradient-to-br from-sky-50/80 via-white to-sky-50/20 border-sky-200/90`.
+    - **Revisión Mensual**: `border-l-4 border-l-emerald-500 bg-gradient-to-br from-emerald-50/80 via-white to-emerald-50/20 border-emerald-200/90`.
+  - Conservación íntegra de la interactividad Drag & Drop bidireccional (`onDragOver={onDragOver}`, `onDrop={onDropSidebar}`).
+
+
+
 
 
 

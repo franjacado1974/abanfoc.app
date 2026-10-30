@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Search, X, Download, Edit, Send, Trash2, Save, Package, PackagePlus, Wrench, Type, Calculator, CheckCircle, Clock, Ban, ChevronDown, ChevronUp, GripVertical, FileText, ArrowLeft, Plus, HardHat, Gauge, Check, Mail, Eye, Copy, ExternalLink, Activity, ShieldCheck, ArrowUp, ArrowDown, ArrowUpDown, Layers } from 'lucide-react';
+import { Search, X, Download, Edit, Send, Trash2, Save, Package, PackagePlus, Wrench, Type, Calculator, CheckCircle, Clock, Ban, ChevronDown, ChevronUp, GripVertical, FileText, Plus, HardHat, Gauge, Check, Mail, Eye, Copy, ExternalLink, Activity, ShieldCheck, ArrowUp, ArrowDown, ArrowUpDown, Layers } from 'lucide-react';
 import { 
   subscribePresupuestos, addPresupuesto, updatePresupuesto, deletePresupuesto, 
   subscribeClientes, subscribeArticulos, subscribeCentros, subscribeImpuestos, subscribeEmpresas,
-  addPedido, addReparacion, addInstalacion, db
+  addPedido, addReparacion, addInstalacion, db,
+  extraerSufijoSecuencia
 } from './firebase';
 import { collection, addDoc } from 'firebase/firestore';
 import type { Presupuesto, PresupuestoLinea, Cliente, Articulo, Centro, ReparacionItem, InstalacionItem } from './firebase';
@@ -12,17 +12,21 @@ import { generarPresupuestoPDF } from './pdfGenerator';
 import { APP_VERSION } from './constants';
 
 export function formatCodigoPresupuesto(numero?: string, fallbackId?: string): string {
-  if (!numero && !fallbackId) return 'PRV —';
+  if (!numero && !fallbackId) return 'PRE. —';
+  const sufijo = extraerSufijoSecuencia(numero || fallbackId);
+  if (sufijo) return `PRE.${sufijo}`;
   const raw = (numero || fallbackId || '').trim();
-  const clean = raw.replace(/^(PDV|PRV|PRE)[-\s]*/i, '');
-  return `PRV ${clean}`;
+  const clean = raw.replace(/^(PDV|PRV|PRE)[-.\s]*/i, '').replace(/^\./, '');
+  return `PRE.${clean}`;
 }
 
 export function formatCodigoPedido(numero?: string, fallbackId?: string): string {
-  if (!numero && !fallbackId) return 'PDV —';
+  if (!numero && !fallbackId) return 'PDV. —';
+  const sufijo = extraerSufijoSecuencia(numero || fallbackId);
+  if (sufijo) return `PDV.${sufijo}`;
   const raw = (numero || fallbackId || '').trim();
-  const clean = raw.replace(/^(PDV|PRV|PRE)[-\s]*/i, '');
-  return `PDV ${clean}`;
+  const clean = raw.replace(/^(PDV|PRV|PRE)[-.\s]*/i, '').replace(/^\./, '');
+  return `PDV.${clean}`;
 }
 
 const ESTADOS: { valor: Presupuesto['estado']; etiqueta: string; color: string; bg: string; icono: React.ElementType }[] = [
@@ -78,7 +82,6 @@ export function getCapituloSubtotal(lineas: PresupuestoLinea[], capIndex: number
 
 
 export default function Presupuestos() {
-  const navigate = useNavigate();
   const [presupuestos, setPresupuestos] = useState<Presupuesto[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [articulos, setArticulos] = useState<Articulo[]>([]);
@@ -91,6 +94,7 @@ export default function Presupuestos() {
   const [showCatalogo, setShowCatalogo] = useState<'articulo' | 'servicio' | null>(null);
   const [presupuestoParaAcciones, setPresupuestoParaAcciones] = useState<Presupuesto | null>(null);
   const [catalogoSearch, setCatalogoSearch] = useState('');
+  const [limitePresupuestos, setLimitePresupuestos] = useState<number | 'todos'>(10);
 
   // Estados para ordenación de la tabla
   const [sortField, setSortField] = useState<'fecha' | 'referencia' | 'estado'>('fecha');
@@ -183,6 +187,7 @@ export default function Presupuestos() {
 
   // Cargar datos
   useEffect(() => {
+    window.scrollTo(0, 0);
     const unsub1 = subscribePresupuestos(items => {
       setPresupuestos(items);
       localStorage.setItem('firecheck_db_presupuestos', JSON.stringify(items));
@@ -257,6 +262,11 @@ export default function Presupuestos() {
     });
   }, [presupuestos, searchTerm, statusFilter, sortField, sortOrder]);
 
+  const presupuestosAMostrar = useMemo(() => {
+    if (limitePresupuestos === 'todos') return filteredPresupuestos;
+    return filteredPresupuestos.slice(0, Number(limitePresupuestos));
+  }, [filteredPresupuestos, limitePresupuestos]);
+
   // Calcular totales del formulario
   const formSubtotal = useMemo(() =>
     formLineas.filter(l => l.tipo !== 'capitulo').reduce((sum, l) => sum + (l.cantidad * l.precioUnidad), 0),
@@ -287,7 +297,7 @@ export default function Presupuestos() {
     setEditingPresupuesto(null);
     setFormTitulo('');
     setFormClienteId('');
-    setFormFechaValidez('');
+    setFormFechaValidez(new Date().toISOString().slice(0, 10));
     setFormNotas('');
     setFormIva(getDefaultIva());
     setFormIvaExento(false);
@@ -305,7 +315,7 @@ export default function Presupuestos() {
     setFormTitulo(p.titulo);
     setFormClienteId(p.clienteId);
     setFormCentroId(p.centroId || '');
-    setFormFechaValidez(p.fechaValidez || '');
+    setFormFechaValidez(p.fechaCreacion ? p.fechaCreacion.slice(0, 10) : (p.fechaValidez || new Date().toISOString().slice(0, 10)));
     setFormNotas(p.notas || '');
     setFormIva(p.iva);
     setFormIvaExento(p.iva === 0);
@@ -336,7 +346,7 @@ export default function Presupuestos() {
     setFormTitulo(nuevoTitulo);
     setFormClienteId(p.clienteId);
     setFormCentroId(p.centroId || '');
-    setFormFechaValidez(p.fechaValidez || '');
+    setFormFechaValidez(new Date().toISOString().slice(0, 10));
     setFormNotas(p.notas || '');
     setFormIva(p.iva);
     setFormIvaExento(p.iva === 0);
@@ -543,7 +553,9 @@ export default function Presupuestos() {
       titulo: formTitulo.trim(),
       clienteId: formClienteId,
       nombreCliente: cliente?.nombre || 'Cliente',
-      fechaCreacion: editingPresupuesto?.fechaCreacion || new Date().toISOString(),
+      fechaCreacion: formFechaValidez
+        ? (formFechaValidez.includes('T') ? formFechaValidez : `${formFechaValidez}T10:00:00.000Z`)
+        : (editingPresupuesto?.fechaCreacion || new Date().toISOString()),
       estado: editingPresupuesto?.estado || 'Borrador',
       lineas: lineasSanitizadas,
       subtotal,
@@ -844,6 +856,7 @@ export default function Presupuestos() {
           observaciones: notaPedido,
           nota: notaPedido,
           pedidoId: codigoPedido,
+          numeroPedido: codigoPedido,
           presupuestoId: p.id || docId
         };
         await addReparacion(newRep);
@@ -870,6 +883,7 @@ export default function Presupuestos() {
           observaciones: notaPedido,
           nota: notaPedido,
           pedidoId: codigoPedido,
+          numeroPedido: codigoPedido,
           presupuestoId: p.id || docId
         };
         await addInstalacion(newIns);
@@ -962,12 +976,6 @@ export default function Presupuestos() {
       <div className="w-full">
         {/* Header */}
         <div className="mb-6 text-center sm:text-left flex flex-col items-center sm:items-start">
-          <button 
-            onClick={() => navigate('/')} 
-            className="flex items-center gap-1.5 text-xs font-semibold text-zinc-500 hover:text-zinc-900 mb-3 transition-colors cursor-pointer"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" /> Volver al panel
-          </button>
           <h1 className="text-2xl font-black text-zinc-950 tracking-tight">Presupuestos Comerciales</h1>
           <p className="text-xs font-semibold text-zinc-500 mt-1">Creación, envío y control de ofertas y presupuestos comerciales.</p>
         </div>
@@ -1156,28 +1164,31 @@ export default function Presupuestos() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
-                {filteredPresupuestos.map(p => {
+                {presupuestosAMostrar.map((p, index) => {
                   const estadoInfo = getEstadoInfo(p.estado);
                   const EstadoIcono = estadoInfo.icono;
                   const nombreCentro = centros.find(c => c._docId === p.centroId || c.id === p.centroId)?.nombre || '';
                   return (
-                    <tr key={p.id} className="hover:bg-zinc-50/80 transition-colors">
-                      <td className="px-4 py-3">
+                    <tr 
+                      key={p.id} 
+                      className={`transition-all duration-150 group ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100/80'} hover:bg-amber-100/90 hover:shadow-xs`}
+                    >
+                      <td className="px-4 py-2.5">
                         <p className="text-xs font-mono font-bold text-zinc-800">{formatCodigoPresupuesto(p.numeroPresupuesto, p.id)}</p>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-2.5">
                         <p className="text-xs font-semibold text-zinc-600">{formatFecha(p.fechaCreacion)}</p>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-2.5">
                         <p className="text-sm text-zinc-800 font-medium">{p.nombreCliente || 'Cliente'}</p>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-2.5">
                         <p className="text-sm text-zinc-600">{nombreCentro || '—'}</p>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-2.5">
                         <p className="text-sm font-bold text-zinc-900 truncate max-w-[180px]">{p.titulo}</p>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-2.5">
                         <div className="flex flex-col items-start gap-1">
                           <span className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wider inline-flex items-center gap-1 ${estadoInfo.bg} ${estadoInfo.color}`}>
                             <EstadoIcono className="w-3 h-3" />
@@ -1199,7 +1210,7 @@ export default function Presupuestos() {
                           ) : null}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-right">
+                      <td className="px-4 py-2.5 text-right">
                         <p className="font-black text-zinc-900">{formatMoneda(p.total)}</p>
                         {p.descuentoPorcentaje && Number(p.descuentoPorcentaje) > 0 ? (
                           <span className="inline-block text-[10px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded border border-red-200/60 mt-0.5">
@@ -1207,7 +1218,7 @@ export default function Presupuestos() {
                           </span>
                         ) : null}
                       </td>
-                      <td className="px-4 py-3 text-center">
+                      <td className="px-4 py-2.5 text-center">
                         <button
                           onClick={() => setPresupuestoParaAcciones(p)}
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 hover:text-zinc-900 rounded-xl text-xs font-bold transition-all border border-zinc-200/80 shadow-xs hover:shadow cursor-pointer"
@@ -1225,6 +1236,44 @@ export default function Presupuestos() {
             </div>
           </div>
         )}
+
+        {filteredPresupuestos.length > 0 && (
+          <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-zinc-600 bg-white px-5 py-3.5 rounded-2xl border border-zinc-200/80 shadow-xs">
+            <div className="font-bold text-zinc-800 flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-red-500 shrink-0"></span>
+              {limitePresupuestos === 'todos' ? (
+                <span>Mostrando todos los presupuestos ({filteredPresupuestos.length} en total)</span>
+              ) : (
+                <span>
+                  Mostrando los {Math.min(Number(limitePresupuestos), filteredPresupuestos.length)} últimos presupuestos
+                  {filteredPresupuestos.length > Number(limitePresupuestos) && (
+                    <span className="text-zinc-400 font-normal ml-1">
+                      (de {filteredPresupuestos.length} presupuestos en total)
+                    </span>
+                  )}
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2.5">
+              <span className="text-zinc-500 font-semibold uppercase text-[11px] tracking-wider">Mostrar:</span>
+              <select
+                value={limitePresupuestos}
+                onChange={(e) => setLimitePresupuestos(e.target.value === 'todos' ? 'todos' : Number(e.target.value))}
+                className="bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 text-zinc-800 text-xs font-bold rounded-xl px-3.5 py-1.5 outline-none focus:border-red-500 focus:bg-white cursor-pointer transition-colors shadow-2xs"
+              >
+                <option value={10}>10</option>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+                <option value={200}>200</option>
+                <option value={500}>500</option>
+                <option value="todos">Mostrar todos</option>
+              </select>
+            </div>
+          </div>
+        )}
+
       </div>
 
       {/* MODAL DETALLE */}
@@ -1481,7 +1530,7 @@ export default function Presupuestos() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-zinc-500 uppercase">Fecha de validez</label>
+                  <label className="text-xs font-bold text-zinc-500 uppercase">Fecha creación</label>
                   <input
                     type="date"
                     value={formFechaValidez}

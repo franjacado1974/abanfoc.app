@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, FileDigit, Download, Search, CheckCircle2, Circle, Clock, Trash2, Plus, Building2, MapPin, Save, Trash, Edit, Copy, Maximize2, X, Signature, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
-import { addAlbaran, updateAlbaran, deleteAlbaran, subscribeAlbaranes, subscribeEmpresas, subscribeTecnicos, subscribeCentros, subscribeClientes, subscribeTrabajos, db, type Albaran, type Cliente, type Centro, type Equipo, type Tecnico, type Empresa, type TrabajoConfig, updateParte, updateReparacion, updateInstalacion, updateUrgencia, obtenerSiguienteNumeroAlbaran } from './firebase';
+import { ArrowLeft, FileDigit, Download, Search, CheckCircle2, Circle, Clock, Trash2, Plus, Building2, MapPin, Save, Trash, Edit, Copy, Maximize2, X, Signature, ArrowUp, ArrowDown, ArrowUpDown, GripVertical, ChevronUp, ChevronDown } from 'lucide-react';
+import { addAlbaran, updateAlbaran, deleteAlbaran, subscribeAlbaranes, subscribeEmpresas, subscribeTecnicos, subscribeCentros, subscribeClientes, subscribeTrabajos, db, type Albaran, type Cliente, type Centro, type Equipo, type Tecnico, type Empresa, type TrabajoConfig, updateParte, updateReparacion, updateInstalacion, updateUrgencia, obtenerSiguienteNumeroAlbaran, extraerSufijoSecuencia, obtenerEmpresaPorDefecto } from './firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { generarAlbaranPDF } from './pdfGenerator';
 import ConfirmationModal from './ConfirmationModal';
@@ -76,6 +76,8 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
   const [editingDescriptionIndex, setEditingDescriptionIndex] = useState<number | null>(null);
   const [editingLineIndex, setEditingLineIndex] = useState<number | null>(null);
   const [precioUnidadInput, setPrecioUnidadInput] = useState<string>('');
+  const [draggedLineIndex, setDraggedLineIndex] = useState<number | null>(null);
+  const [dragOverLineIndex, setDragOverLineIndex] = useState<number | null>(null);
 
   useEffect(() => {
     if (editingLineIndex !== null && form.items[editingLineIndex]) {
@@ -130,12 +132,14 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
   const [isSending, setIsSending] = useState(false);
   const [sendProgress, setSendProgress] = useState(0);
   const [sendCompleted, setSendCompleted] = useState(false);
+  const [limiteAlbaranes, setLimiteAlbaranes] = useState<number | 'todos'>(10);
 
   const pendingCount = useMemo(() => 
     albaranes.filter(alb => !alb.facturado).length,
   [albaranes]);
 
   useEffect(() => {
+    window.scrollTo(0, 0);
     const unsubAlbaranes = subscribeAlbaranes((firebaseAlbaranes) => {
       setAlbaranes(firebaseAlbaranes);
       try {
@@ -185,7 +189,16 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
     const prefill = (location.state as any)?.prefillAlbaran;
     if (prefill) {
       (async () => {
-        const generatedId = prefill.id || await obtenerSiguienteNumeroAlbaran();
+        let generatedId = prefill.id;
+        if (!generatedId && prefill.numeroPedido) {
+          const sufijo = extraerSufijoSecuencia(prefill.numeroPedido);
+          if (sufijo) {
+            generatedId = `ALB.${sufijo}`;
+          }
+        }
+        if (!generatedId) {
+          generatedId = await obtenerSiguienteNumeroAlbaran();
+        }
         setForm({
           id: generatedId,
           empresaId: prefill.empresaId || '',
@@ -394,6 +407,11 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
     });
   }, [albaranes, isTecnicoMode, clientes, centros, searchTerm, showOnlyPending, sortField, sortOrder]);
 
+  const albaranesAMostrar = useMemo(() => {
+    if (limiteAlbaranes === 'todos') return filtered;
+    return filtered.slice(0, Number(limiteAlbaranes));
+  }, [filtered, limiteAlbaranes]);
+
   const addItem = () => {
     setForm({
       ...form,
@@ -418,6 +436,51 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
       return item;
     });
     setForm({ ...form, items: newItems });
+  };
+
+  // Reordenar líneas de artículos (arrastrar y soltar)
+  const handleDragStart = (index: number) => {
+    setDraggedLineIndex(index);
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    if (draggedLineIndex === null || draggedLineIndex === index) return;
+    setDragOverLineIndex(index);
+  };
+
+  const handleDrop = (index: number) => {
+    if (draggedLineIndex === null || draggedLineIndex === index) {
+      setDraggedLineIndex(null);
+      setDragOverLineIndex(null);
+      return;
+    }
+    const updated = [...form.items];
+    const [movedItem] = updated.splice(draggedLineIndex, 1);
+    updated.splice(index, 0, movedItem);
+    setForm(prev => ({ ...prev, items: updated }));
+    setDraggedLineIndex(null);
+    setDragOverLineIndex(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedLineIndex(null);
+    setDragOverLineIndex(null);
+  };
+
+  // Mover línea hacia arriba o hacia abajo
+  const handleMoverLinea = (index: number, direccion: 'up' | 'down') => {
+    const targetIndex = direccion === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= form.items.length) return;
+    const updated = [...form.items];
+    const temp = updated[index];
+    updated[index] = updated[targetIndex];
+    updated[targetIndex] = temp;
+    setForm(prev => ({ ...prev, items: updated }));
+    if (editingDescriptionIndex === index) setEditingDescriptionIndex(targetIndex);
+    else if (editingDescriptionIndex === targetIndex) setEditingDescriptionIndex(index);
+    if (editingLineIndex === index) setEditingLineIndex(targetIndex);
+    else if (editingLineIndex === targetIndex) setEditingLineIndex(index);
   };
 
   const initDraw = (canvas: HTMLCanvasElement | null) => { // Removed type assertion
@@ -611,30 +674,24 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
       <div className={`min-h-screen bg-[#F8FAFC] px-8 py-6 ${isTecnicoMode ? 'max-w-4xl mx-auto' : ''}`}>
         {/* Header */}
         <div className="mb-6 text-center sm:text-left flex flex-col items-center sm:items-start">
-          <button 
-            onClick={() => navigate('/')} 
-            className="flex items-center gap-1.5 text-xs font-semibold text-zinc-500 hover:text-zinc-900 mb-3 transition-colors cursor-pointer"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" /> Volver al panel
-          </button>
           <h1 className="text-2xl font-black text-zinc-950 tracking-tight">Registro de Albaranes</h1>
           <p className="text-xs font-semibold text-zinc-500 mt-1">Historial de albaranes de entrega generados y pendientes de facturar.</p>
         </div>
 
-        {/* Pestañas + botones */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+        {/* BARRA DE ACCIONES Y FILTROS */}
+        <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4 mb-6">
           {/* Pestañas */}
           {!isTecnicoMode && (
-            <div className="flex items-center gap-1.5 bg-zinc-100 p-1.5 rounded-2xl w-fit border border-zinc-200/40">
+            <div className="flex items-center gap-1.5 bg-zinc-100 p-1.5 rounded-2xl w-fit border border-zinc-200/40 overflow-x-auto">
               <button
                 onClick={() => setShowOnlyPending(false)}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 cursor-pointer ${
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
                   !showOnlyPending
                     ? 'bg-white text-zinc-950 shadow-sm border border-zinc-200/20 font-extrabold'
                     : 'text-zinc-500 hover:text-zinc-900 hover:bg-white/50'
                 }`}
               >
-                <FileDigit className={`w-4 h-4 ${!showOnlyPending ? 'text-red-600' : 'text-zinc-400'}`} />
+                <FileDigit className={`w-3.5 h-3.5 ${!showOnlyPending ? 'text-red-600' : 'text-zinc-400'}`} />
                 Todos
                 <span className={`text-[10px] font-black font-sans px-2 py-0.5 rounded-md transition-colors ${
                   !showOnlyPending ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-zinc-200 text-zinc-500'
@@ -644,13 +701,13 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
               </button>
               <button
                 onClick={() => setShowOnlyPending(true)}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 cursor-pointer ${
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
                   showOnlyPending
                     ? 'bg-white text-zinc-950 shadow-sm border border-zinc-200/20 font-extrabold'
                     : 'text-zinc-500 hover:text-zinc-900 hover:bg-white/50'
                 }`}
               >
-                <Clock className={`w-4 h-4 ${showOnlyPending ? 'text-red-600' : 'text-zinc-400'}`} />
+                <Clock className={`w-3.5 h-3.5 ${showOnlyPending ? 'text-red-600' : 'text-zinc-400'}`} />
                 Pendientes
                 <span className={`text-[10px] font-black font-sans px-2 py-0.5 rounded-md transition-colors ${
                   showOnlyPending ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-zinc-250 text-zinc-500'
@@ -661,25 +718,36 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
             </div>
           )}
 
-          {/* Botones de acción */}
-          {!isVisualizador && (
-            <button
-              onClick={async () => {
-                setEditingId(null);
-                const nextId = await obtenerSiguienteNumeroAlbaran();
-                setForm({ id: nextId, empresaId: '', clienteId: '', centroId: '', fechaCreacion: new Date().toISOString(), items: [{ cantidad: 1, concepto: '', descripcion: '', precioUnidad: 0, subtotal: 0 }], nombreFirmante: '', tecnicoId: '', facturado: false, numeroPedido: '' });
-                setView('form');
-              }}
-              className="ml-auto flex items-center justify-center gap-1.5 bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-xl font-bold shadow-md shadow-red-500/10 hover:shadow-lg hover:shadow-red-500/20 active:scale-95 transition-all text-xs cursor-pointer w-full sm:w-auto"
-            >
-              <Plus className="w-3.5 h-3.5" /> Nuevo Albarán
-            </button>
-          )}
-        </div>
+          {/* Búsqueda compacta y botón de acción */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full xl:w-auto">
+            <div className="relative flex-1 sm:flex-none sm:w-64">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+              <input 
+                type="text" 
+                className="w-full pl-10 pr-4 py-2.5 bg-white rounded-xl border border-zinc-200/80 focus:border-red-500 focus:ring-2 focus:ring-red-500/10 outline-none transition-all shadow-sm text-sm text-zinc-900 placeholder-zinc-400" 
+                placeholder="Buscar albaranes..." 
+                value={searchTerm} 
+                onChange={(e) => setSearchTerm(e.target.value)} 
+              />
+            </div>
 
-        <div className="relative mb-5">
-          <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none"><Search className="w-4 h-4 text-zinc-400" /></div>
-          <input type="text" className="w-full pl-10 pr-4 py-2.5 bg-white rounded-xl border border-zinc-200 focus:border-red-500 focus:ring-2 focus:ring-red-500/10 outline-none transition-all shadow-sm text-sm text-zinc-900 placeholder-zinc-400" placeholder="Buscar por número, tipo trabajo o cliente..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+            {!isVisualizador && (
+              <button
+                onClick={async () => {
+                  setEditingId(null);
+                  const nextId = await obtenerSiguienteNumeroAlbaran();
+                  const suf = extraerSufijoSecuencia(nextId);
+                  const defaultPedido = suf ? `PDV.${suf}` : '';
+                  const defaultEmpresaId = obtenerEmpresaPorDefecto(empresas);
+                  setForm({ id: nextId, empresaId: defaultEmpresaId, clienteId: '', centroId: '', fechaCreacion: new Date().toISOString(), items: [{ cantidad: 1, concepto: '', descripcion: '', precioUnidad: 0, subtotal: 0 }], nombreFirmante: '', tecnicoId: '', facturado: false, numeroPedido: defaultPedido });
+                  setView('form');
+                }}
+                className="flex items-center justify-center gap-1.5 bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-xl font-bold shadow-md shadow-red-500/10 hover:shadow-lg hover:shadow-red-500/20 active:scale-95 transition-all text-xs cursor-pointer w-full sm:w-auto shrink-0"
+              >
+                <Plus className="w-3.5 h-3.5" /> Nuevo Albarán
+              </button>
+            )}
+          </div>
         </div>
 
         {filtered.length === 0 ? (
@@ -692,7 +760,7 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
           <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden">
             {/* VISTA MÓVIL (TARJETAS) */}
             <div className="md:hidden divide-y divide-zinc-100 w-full">
-              {filtered.map((alb) => {
+              {albaranesAMostrar.map((alb) => {
                 const cliente = clientes.find(c => c.id === alb.clienteId);
                 const centro = centros.find(c => c._docId === alb.centroId || c.id === alb.centroId);
                 return (
@@ -877,30 +945,33 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-100">
-                  {filtered.map((alb) => {
+                  {albaranesAMostrar.map((alb, index) => {
                     const cliente = clientes.find(c => c.id === alb.clienteId);
                     const centro = centros.find(c => c._docId === alb.centroId || c.id === alb.centroId);
                     return (
-                      <tr key={alb.id} className="hover:bg-zinc-50/80 transition-colors">
-                        <td className="px-4 py-3 whitespace-nowrap">
+                      <tr 
+                        key={alb.id} 
+                        className={`transition-all duration-150 group ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100/80'} hover:bg-amber-100/90 hover:shadow-xs`}
+                      >
+                        <td className="px-4 py-2.5 whitespace-nowrap">
                           <span className="text-[11px] font-mono font-bold text-zinc-600 bg-zinc-100 px-2 py-0.5 rounded border border-zinc-200/80">{alb.id}</span>
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-xs font-semibold text-zinc-600">
+                        <td className="px-4 py-2.5 whitespace-nowrap text-xs font-semibold text-zinc-600">
                           {new Date(alb.fechaCreacion).toLocaleDateString()}
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-xs text-zinc-600">
+                        <td className="px-4 py-2.5 whitespace-nowrap text-xs text-zinc-600">
                           {alb.numeroPedido || '—'}
                         </td>
-                        <td className="px-4 py-3 text-sm text-zinc-700">
+                        <td className="px-4 py-2.5 text-sm text-zinc-700">
                           <div className="flex items-center gap-1.5">
                             <MapPin className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
                             <span className="font-medium">{centro?.nombre || alb.centroNombreLibre || cliente?.nombre || alb.clienteNombreLibre || 'Desconocido'}</span>
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-sm font-bold text-zinc-900">
+                        <td className="px-4 py-2.5 text-sm font-bold text-zinc-900">
                           <p className="line-clamp-2">{alb.titulo || '—'}</p>
                         </td>
-                        <td className="px-4 py-3 text-center whitespace-nowrap">
+                        <td className="px-4 py-2.5 text-center whitespace-nowrap">
                           <button 
                             onClick={() => !isVisualizador && toggleFacturado(alb.id)} 
                             disabled={isVisualizador}
@@ -912,7 +983,7 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                             {alb.facturado ? 'Facturado' : 'Pendiente'}
                           </button>
                         </td>
-                        <td className="px-4 py-3 text-center whitespace-nowrap">
+                        <td className="px-4 py-2.5 text-center whitespace-nowrap">
                           <div className="inline-flex items-center justify-center gap-1">
                             <span 
                               className={`p-1.5 rounded-xl ${
@@ -968,6 +1039,43 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                   })}
                 </tbody>
               </table>
+            </div>
+          </div>
+        )}
+
+        {filtered.length > 0 && (
+          <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-zinc-600 bg-white px-5 py-3.5 rounded-2xl border border-zinc-200/80 shadow-xs">
+            <div className="font-bold text-zinc-800 flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-red-500 shrink-0"></span>
+              {limiteAlbaranes === 'todos' ? (
+                <span>Mostrando todos los albaranes ({filtered.length} en total)</span>
+              ) : (
+                <span>
+                  Mostrando los {Math.min(Number(limiteAlbaranes), filtered.length)} últimos albaranes
+                  {filtered.length > Number(limiteAlbaranes) && (
+                    <span className="text-zinc-400 font-normal ml-1">
+                      (de {filtered.length} albaranes en total)
+                    </span>
+                  )}
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2.5">
+              <span className="text-zinc-500 font-semibold uppercase text-[11px] tracking-wider">Mostrar:</span>
+              <select
+                value={limiteAlbaranes}
+                onChange={(e) => setLimiteAlbaranes(e.target.value === 'todos' ? 'todos' : Number(e.target.value))}
+                className="bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 text-zinc-800 text-xs font-bold rounded-xl px-3.5 py-1.5 outline-none focus:border-red-500 focus:bg-white cursor-pointer transition-colors shadow-2xs"
+              >
+                <option value={10}>10</option>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+                <option value={200}>200</option>
+                <option value={500}>500</option>
+                <option value="todos">Mostrar todos</option>
+              </select>
             </div>
           </div>
         )}
@@ -1218,7 +1326,8 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="bg-zinc-900 text-white text-[10px] uppercase font-bold">
-                        <th className="px-4 py-3 text-left rounded-l-xl w-20">Cant.</th>
+                        <th className="px-2 py-3 text-center rounded-l-xl w-14" title="Posición y orden">Orden</th>
+                        <th className="px-4 py-3 text-left w-20">Cant.</th>
                         <th className="px-4 py-3 text-left w-48">Concepto</th>
                         <th className="px-4 py-3 text-left">Descripción</th>
                         <th className="px-4 py-3 text-right w-32">P. Unidad</th>
@@ -1228,7 +1337,51 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                     </thead>
                     <tbody className="divide-y divide-zinc-100">
                       {form.items.map((item, index) => (
-                        <tr key={index} className="group">
+                        <tr
+                          key={index}
+                          draggable
+                          onDragStart={() => handleDragStart(index)}
+                          onDragOver={(e) => handleDragOver(e, index)}
+                          onDrop={() => handleDrop(index)}
+                          onDragEnd={handleDragEnd}
+                          className={`group transition-colors ${
+                            draggedLineIndex === index
+                              ? 'opacity-40 bg-violet-100'
+                              : dragOverLineIndex === index
+                              ? 'border-t-2 border-violet-500 bg-violet-50'
+                              : 'hover:bg-zinc-50'
+                          }`}
+                        >
+                          <td className="p-2 text-center">
+                            <div className="flex items-center justify-center gap-0.5">
+                              <div
+                                className="cursor-grab active:cursor-grabbing p-1 text-zinc-400 hover:text-zinc-700 rounded transition-colors"
+                                title="Arrastra para mover la línea hacia arriba o hacia abajo"
+                              >
+                                <GripVertical className="w-3.5 h-3.5" />
+                              </div>
+                              <div className="flex flex-col items-center">
+                                <button
+                                  type="button"
+                                  disabled={index === 0}
+                                  onClick={() => handleMoverLinea(index, 'up')}
+                                  className="p-0.5 text-zinc-400 hover:text-violet-700 disabled:opacity-20 transition-colors cursor-pointer disabled:cursor-not-allowed"
+                                  title="Subir línea"
+                                >
+                                  <ChevronUp className="w-3 h-3" />
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={index === form.items.length - 1}
+                                  onClick={() => handleMoverLinea(index, 'down')}
+                                  className="p-0.5 text-zinc-400 hover:text-violet-700 disabled:opacity-20 transition-colors cursor-pointer disabled:cursor-not-allowed"
+                                  title="Bajar línea"
+                                >
+                                  <ChevronDown className="w-3 h-3" />
+                                </button>
+                              </div>
+                            </div>
+                          </td>
                           <td className="p-2"><input type="number" min="1" value={item.cantidad} onChange={e => updateItem(index, 'cantidad', parseInt(e.target.value))} className="w-full bg-transparent border-b border-transparent group-hover:border-zinc-200 outline-none p-1" /></td>
                           <td className="p-2">
                             <select value={item.concepto} onChange={e => updateItem(index, 'concepto', e.target.value)} className="w-full bg-transparent border-b border-transparent group-hover:border-zinc-200 outline-none p-1">
@@ -1267,11 +1420,56 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                 {/* Vista Móvil */}
                 <div className="grid grid-cols-1 gap-3 md:hidden">
                   {form.items.map((item, index) => (
-                    <div key={index} className="bg-white p-4 rounded-xl border border-zinc-200 shadow-sm flex flex-col gap-2 relative">
+                    <div
+                      key={index}
+                      draggable
+                      onDragStart={() => handleDragStart(index)}
+                      onDragOver={(e) => handleDragOver(e, index)}
+                      onDrop={() => handleDrop(index)}
+                      onDragEnd={handleDragEnd}
+                      className={`bg-white p-4 rounded-xl border border-zinc-200 shadow-sm flex flex-col gap-2 relative transition-colors ${
+                        draggedLineIndex === index
+                          ? 'opacity-40 bg-violet-100'
+                          : dragOverLineIndex === index
+                          ? 'border-t-2 border-violet-500 bg-violet-50'
+                          : ''
+                      }`}
+                    >
                       <div className="flex justify-between items-start">
-                        <div className="pr-4">
-                          <span className="text-[10px] font-bold text-white bg-violet-600 px-2 py-0.5 rounded-md uppercase tracking-wider">{item.concepto || 'Sin concepto'}</span>
-                          <p className="text-sm font-bold text-zinc-900 mt-1.5 leading-snug">{item.descripcion || <span className="text-zinc-400 font-normal italic">Sin descripción</span>}</p>
+                        <div className="flex items-start gap-2.5 pr-2">
+                          {/* Controles de orden / arrastre en móvil */}
+                          <div className="flex items-center gap-0.5 pt-0.5 shrink-0 bg-zinc-50 px-1 py-0.5 rounded-lg border border-zinc-200/60">
+                            <div
+                              className="cursor-grab active:cursor-grabbing p-1 text-zinc-400 hover:text-zinc-700 rounded"
+                              title="Arrastra para mover"
+                            >
+                              <GripVertical className="w-4 h-4" />
+                            </div>
+                            <div className="flex flex-col items-center">
+                              <button
+                                type="button"
+                                disabled={index === 0}
+                                onClick={() => handleMoverLinea(index, 'up')}
+                                className="p-0.5 text-zinc-400 hover:text-violet-700 disabled:opacity-20 transition-colors cursor-pointer disabled:cursor-not-allowed"
+                                title="Subir línea"
+                              >
+                                <ChevronUp className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={index === form.items.length - 1}
+                                onClick={() => handleMoverLinea(index, 'down')}
+                                className="p-0.5 text-zinc-400 hover:text-violet-700 disabled:opacity-20 transition-colors cursor-pointer disabled:cursor-not-allowed"
+                                title="Bajar línea"
+                              >
+                                <ChevronDown className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                          <div>
+                            <span className="text-[10px] font-bold text-white bg-violet-600 px-2 py-0.5 rounded-md uppercase tracking-wider">{item.concepto || 'Sin concepto'}</span>
+                            <p className="text-sm font-bold text-zinc-900 mt-1.5 leading-snug">{item.descripcion || <span className="text-zinc-400 font-normal italic">Sin descripción</span>}</p>
+                          </div>
                         </div>
                         <div className="text-right shrink-0">
                           <p className="text-sm font-bold text-zinc-900">{formatMoneda(item.subtotal)}</p>

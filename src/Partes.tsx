@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileText, Building2, MapPin, CalendarDays, Search, Trash2, Download, Eye, X, Check, ArrowLeft, Filter, ChevronDown, ArrowUp, ArrowDown, ArrowUpDown, Loader2, CheckCircle2, RotateCcw } from 'lucide-react';
+import { FileText, Building2, MapPin, CalendarDays, Search, Trash2, Download, Eye, X, Check, Filter, ChevronDown, ArrowUp, ArrowDown, ArrowUpDown, Loader2, CheckCircle2, RotateCcw } from 'lucide-react';
 import { subscribePartes, subscribeCentros, subscribeClientes, subscribeTecnicos, deleteParte, db, updateParte, getEquiposInstalados, updateEquipoInstalado } from './firebase';
 import { collection, getDocs, doc, getDoc, query, where } from 'firebase/firestore';
 import { generarActaExtintoresPDF, generarAlbaranPDF, generarCertificadoPDF } from './pdfGenerator';
@@ -73,6 +73,7 @@ export default function Partes() {
   const filterRef = useRef<HTMLDivElement>(null);
   const [sortField, setSortField] = useState<'fecha' | 'cliente' | 'centro' | 'poblacion' | 'tipo'>('fecha');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [limitePartes, setLimitePartes] = useState<number | 'todos'>(10);
 
   const handleSort = (field: 'fecha' | 'cliente' | 'centro' | 'poblacion' | 'tipo') => {
     if (sortField === field) {
@@ -159,6 +160,7 @@ export default function Partes() {
   const canvasFirmaTecnicoRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
+    window.scrollTo(0, 0);
     const unsubPartes = subscribePartes((items) => {
       const mappedItems = items.map((d: any) => ({ ...d })) as ParteItem[];
       setPartes(mappedItems);
@@ -1118,17 +1120,15 @@ export default function Partes() {
     return sortOrder === 'asc' ? comparison : -comparison;
   });
 
+  const partesAMostrar = limitePartes === 'todos'
+    ? partesPlanificados
+    : partesPlanificados.slice(0, Number(limitePartes));
+
   return (
     <div className="min-h-screen bg-[#F8FAFC] px-8 py-6">
         {/* Header */}
-        <div className="mb-6 flex flex-col items-center sm:items-start text-center sm:text-left">
-          <button 
-            onClick={() => navigate('/')} 
-            className="flex items-center gap-1.5 text-xs font-semibold text-zinc-500 hover:text-zinc-900 mb-3 transition-colors cursor-pointer"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" /> Volver al panel
-          </button>
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 w-full">
+        <div className="mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 w-full text-center sm:text-left">
             <div>
               <h1 className="text-2xl font-black text-zinc-950 tracking-tight flex items-center justify-center sm:justify-start gap-2">
                 Partes de Trabajo
@@ -1337,12 +1337,15 @@ export default function Partes() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-200">
-                  {partesPlanificados.map(parte => {
+                  {partesAMostrar.map((parte, index) => {
                     const centro = getCentro(parte.centroId);
                     const cliente = getCliente(parte.clienteId);
                     return (
-                      <tr key={parte.id} className="hover:bg-amber-50/40 transition-colors group">
-                        <td className="px-6 py-4">
+                      <tr 
+                        key={parte.id} 
+                        className={`transition-all duration-150 group ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100/80'} hover:bg-amber-100/90 hover:shadow-xs`}
+                      >
+                        <td className="px-6 py-2.5">
                           <div className="flex items-center gap-2">
                             <div>
                               <p className="font-bold text-zinc-900 text-sm">
@@ -1354,7 +1357,7 @@ export default function Partes() {
                             </div>
                           </div>
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-6 py-2.5">
                           <p className="font-medium text-zinc-800 text-sm">
                             {centro?.nombre || parte.nombreCentro || '—'}
                           </p>
@@ -1362,17 +1365,17 @@ export default function Partes() {
                             {centro?.id ? `${centro.id} - ` : ''}<span className="text-blue-600 font-bold">Parte: {(parte as any).numeroMantenimiento || parte.id}</span>
                           </p>
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-6 py-2.5">
                           <p className="text-sm text-zinc-600">
                             {centro?.poblacion || '—'}
                           </p>
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-6 py-2.5">
                           <p className="text-sm font-medium text-zinc-800">
                             {formatFecha(parte.fechaProgramada)}
                           </p>
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-6 py-2.5">
                           <div className="flex flex-col items-start gap-1">
                             <span className={`inline-block px-3 py-1 text-[11px] font-bold rounded-full border ${getRevisionColor(parte.periodicidad)}`}>
                               {getTipoRevision(parte.periodicidad)}
@@ -1429,8 +1432,8 @@ export default function Partes() {
                             })()}
                           </div>
                         </td>
-                        <td className="px-4 py-4">
-                          <div className="flex items-center justify-end gap-2">
+                        <td className="px-4 py-2.5">
+                          <div className="flex items-center justify-end gap-1.5">
                             {tieneRetimbrePendiente(parte) && (
                               <button
                                 type="button"
@@ -1445,7 +1448,7 @@ export default function Partes() {
                             )}
                             {(parte.tecnicoId || parte.estado === 'En revisión' || parte.estado === 'Pre-Cerrado' || parte.estado === 'Finalizado' || parte.estado === 'Cerrado') && (
                               <div 
-                                className={`w-2.5 h-2.5 rounded-full mr-2 shrink-0 ${
+                                className={`w-2.5 h-2.5 rounded-full mr-1.5 shrink-0 ${
                                   parte.estado === 'Cerrado'
                                     ? 'bg-black shadow-[0_0_8px_rgba(0,0,0,0.6)]'
                                     : parte.estado === 'Pre-Cerrado'
@@ -1471,28 +1474,28 @@ export default function Partes() {
                             )}
                             <button
                               onClick={() => irARevision(parte)}
-                              className="p-2 rounded-xl hover:bg-sky-50 text-red-600 transition-colors"
+                              className="p-1.5 rounded-lg hover:bg-sky-50 text-red-600 transition-colors"
                               title={(parte.estado === 'Pre-Cerrado' || parte.estado === 'Finalizado' || parte.estado === 'Cerrado') ? "Revisar parte finalizado" : "Ir a Revisión"}
                             >
-                              {(parte.estado === 'Pre-Cerrado' || parte.estado === 'Finalizado' || parte.estado === 'Cerrado') ? <Eye className="w-5 h-5" /> : <Search className="w-5 h-5" />}
+                              {(parte.estado === 'Pre-Cerrado' || parte.estado === 'Finalizado' || parte.estado === 'Cerrado') ? <Eye className="w-4 h-4" /> : <Search className="w-4 h-4" />}
                             </button>
                             
                             {(parte.estado === 'Pre-Cerrado' || parte.estado === 'Finalizado' || parte.estado === 'Cerrado' || parte.estado === 'Descargado (Offline)' || (parte as any).firmaCliente) && (
                               <button
                                 onClick={() => openDownloadModal(parte)}
-                                className="p-2 rounded-xl hover:bg-amber-50 text-amber-600 transition-colors"
+                                className="p-1.5 rounded-lg hover:bg-amber-50 text-amber-600 transition-colors"
                                 title="Descargar PDFs"
                               >
-                                <Download className="w-5 h-5" />
+                                <Download className="w-4 h-4" />
                               </button>
                             )}
 
                             <button
                               onClick={() => eliminarParte(parte)}
-                              className="p-2 rounded-xl hover:bg-red-50 text-red-500 transition-colors"
+                              className="p-1.5 rounded-lg hover:bg-red-50 text-red-500 transition-colors"
                               title="Eliminar"
                             >
-                              <Trash2 className="w-5 h-5" />
+                              <Trash2 className="w-4 h-4" />
                             </button>
                           </div>
                         </td>
@@ -1505,8 +1508,39 @@ export default function Partes() {
           )}
         </div>
 
-        <div className="mt-4 flex items-center justify-between text-xs text-zinc-400">
-          <span>Total: {partesPlanificados.length} parte{partesPlanificados.length !== 1 ? 's' : ''} planificado{partesPlanificados.length !== 1 ? 's' : ''}</span>
+        <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-zinc-600 bg-white px-5 py-3.5 rounded-2xl border border-zinc-200/80 shadow-xs">
+          <div className="font-bold text-zinc-800 flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-red-500 shrink-0"></span>
+            {limitePartes === 'todos' ? (
+              <span>Mostrando todos los partes ({partesPlanificados.length} en total)</span>
+            ) : (
+              <span>
+                Mostrando los {Math.min(Number(limitePartes), partesPlanificados.length)} últimos partes
+                {partesPlanificados.length > Number(limitePartes) && (
+                  <span className="text-zinc-400 font-normal ml-1">
+                    (de {partesPlanificados.length} partes en total)
+                  </span>
+                )}
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2.5">
+            <span className="text-zinc-500 font-semibold uppercase text-[11px] tracking-wider">Mostrar:</span>
+            <select
+              value={limitePartes}
+              onChange={(e) => setLimitePartes(e.target.value === 'todos' ? 'todos' : Number(e.target.value))}
+              className="bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 text-zinc-800 text-xs font-bold rounded-xl px-3.5 py-1.5 outline-none focus:border-red-500 focus:bg-white cursor-pointer transition-colors shadow-2xs"
+            >
+              <option value={10}>10</option>
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+              <option value={200}>200</option>
+              <option value={500}>500</option>
+              <option value="todos">Mostrar todos</option>
+            </select>
+          </div>
         </div>
 
       {/* Modal de Devolución de Extintores Retirados para Retimbrar (2 pasos) */}
