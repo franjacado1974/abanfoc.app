@@ -917,7 +917,7 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
               <div 
                 onClick={() => navigate('/partes_trabajo')}
                 className="px-4 py-3 border-b border-slate-200/80 bg-amber-50/30 flex items-center justify-between cursor-pointer hover:bg-amber-50/60 transition-colors"
-                title="Ir al módulo Planificación de Revisiones"
+                title="Ir al módulo Listado de mantenimientos anuales LISTMAN"
               >
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-extrabold px-3 py-1 rounded-xl bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1.5 shadow-xs tracking-wider">

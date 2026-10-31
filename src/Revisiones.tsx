@@ -768,7 +768,7 @@ export default function Revisiones() {
           <div>
             <h1 className="text-2xl font-black text-zinc-950 tracking-tight flex items-center justify-center sm:justify-start gap-2.5">
               <Calendar className="w-7 h-7 text-red-600" />
-              Planificación de Revisiones
+              Listado de mantenimientos anuales LISTMAN
             </h1>
             <p className="text-xs font-semibold text-zinc-500 mt-1">
               Control y seguimiento de mantenimientos preventivos (anuales, trimestrales y periódicos) organizados por meses del año.
