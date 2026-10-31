@@ -25,6 +25,13 @@ const formatMoneda = (valor: any) => {
   return `${parts.join(',')} €`;
 };
 
+const truncar30 = (texto: string | undefined | null, max = 30): string => {
+  if (!texto) return '—';
+  const str = String(texto).trim();
+  if (str.length <= max) return str;
+  return str.slice(0, max) + '...';
+};
+
 const MESES = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 
   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
@@ -1026,14 +1033,14 @@ export default function Reparaciones() {
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-zinc-200/90 border-b border-zinc-300 text-[11px] font-bold uppercase tracking-wider text-zinc-700">
-                <th className="px-5 py-3">REPARACIÓN</th>
-                <th className="w-28 whitespace-nowrap px-4 py-3">FECHA</th>
-                <th className="w-48 lg:w-60 px-4 py-3">LUGAR</th>
-                <th className="w-40 lg:w-48 whitespace-nowrap px-4 py-3">TÉCNICO ASIGNADO</th>
-                <th className="w-36 lg:w-44 whitespace-nowrap px-4 py-3">COMERCIAL</th>
-                <th className="w-28 whitespace-nowrap px-4 py-3 text-center">ESTADO</th>
-                <th className="w-16 whitespace-nowrap px-3 py-3 text-center">NOTA</th>
+              <tr className="bg-zinc-200/90 border-b border-zinc-300 text-[11px] font-bold uppercase tracking-wider text-zinc-700 whitespace-nowrap">
+                <th className="px-5 py-3 whitespace-nowrap">REPARACIÓN</th>
+                <th className="whitespace-nowrap px-4 py-3">FECHA</th>
+                <th className="whitespace-nowrap px-4 py-3">LUGAR</th>
+                <th className="whitespace-nowrap px-4 py-3">TÉCNICO ASIGNADO</th>
+                <th className="whitespace-nowrap px-4 py-3">COMERCIAL</th>
+                <th className="whitespace-nowrap px-4 py-3 text-center">ESTADO</th>
+                <th className="whitespace-nowrap px-3 py-3 text-center">NOTA</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm">
@@ -1060,11 +1067,11 @@ export default function Reparaciones() {
                     <tr 
                       key={item.id} 
                       onClick={() => setAccionesModalItem(item)}
-                      className={`transition-all duration-150 group cursor-pointer ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100/80'} hover:bg-amber-100/90 hover:shadow-xs`}
+                      className={`transition-all duration-150 group cursor-pointer whitespace-nowrap ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100/80'} hover:bg-amber-100/90 hover:shadow-xs`}
                     >
                       {/* REPARACIÓN CON REFERENCIA SUSTITUYENDO AL ICONO */}
-                      <td className="px-5 py-2.5">
-                        <div className="flex items-center gap-2.5">
+                      <td className="px-5 py-2.5 whitespace-nowrap">
+                        <div className="flex items-center gap-2.5 whitespace-nowrap">
                           {(item.pedidoId || item.numeroPedido) ? (
                             <span className="font-mono text-xs font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200/80 shrink-0">
                               {item.pedidoId || item.numeroPedido}
@@ -1074,8 +1081,8 @@ export default function Reparaciones() {
                               —
                             </span>
                           )}
-                          <span className="font-medium text-slate-800 text-sm" title={item.reparacion || 'Sin título'}>
-                            {item.reparacion || 'Sin título'}
+                          <span className="font-medium text-slate-800 text-sm whitespace-nowrap" title={item.reparacion || 'Sin título'}>
+                            {truncar30(item.reparacion || 'Sin título')}
                           </span>
                         </div>
                       </td>
@@ -1083,7 +1090,7 @@ export default function Reparaciones() {
                       {/* FECHA */}
                       <td className="w-28 whitespace-nowrap px-4 py-2.5 text-xs">
                         {item.fecha ? (
-                          <span className="inline-flex items-center gap-1.5 text-slate-600 font-medium">
+                          <span className="inline-flex items-center gap-1.5 text-slate-600 font-medium whitespace-nowrap">
                             <Calendar className="w-3.5 h-3.5 text-red-500" />
                             {formatearFecha(item.fecha)}
                           </span>
@@ -1093,26 +1100,26 @@ export default function Reparaciones() {
                       </td>
 
                       {/* LUGAR */}
-                      <td className="w-48 lg:w-60 px-4 py-2.5 text-xs text-slate-600">
-                        <div className="flex items-center gap-1.5">
+                      <td className="px-4 py-2.5 text-xs text-slate-600 whitespace-nowrap">
+                        <div className="flex items-center gap-1.5 whitespace-nowrap">
                           <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                          <span className="truncate" title={item.lugar || '—'}>{item.lugar || '—'}</span>
+                          <span title={item.lugar || '—'}>{truncar30(item.lugar)}</span>
                         </div>
                       </td>
 
                       {/* TÉCNICO ASIGNADO */}
-                      <td className="w-40 lg:w-48 whitespace-nowrap px-4 py-2.5 text-xs text-slate-600">
-                        <div className="flex items-center gap-1.5">
+                      <td className="whitespace-nowrap px-4 py-2.5 text-xs text-slate-600">
+                        <div className="flex items-center gap-1.5 whitespace-nowrap">
                           <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                          <span className="truncate" title={item.tecnicoAsignado || 'Sin asignar'}>{item.tecnicoAsignado || 'Sin asignar'}</span>
+                          <span title={item.tecnicoAsignado || 'Sin asignar'}>{truncar30(item.tecnicoAsignado || 'Sin asignar')}</span>
                         </div>
                       </td>
 
                       {/* COMERCIAL */}
-                      <td className="w-36 lg:w-44 whitespace-nowrap px-4 py-2.5 text-xs text-slate-600">
-                        <div className="flex items-center gap-1.5">
+                      <td className="whitespace-nowrap px-4 py-2.5 text-xs text-slate-600">
+                        <div className="flex items-center gap-1.5 whitespace-nowrap">
                           <Briefcase className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                          <span className="truncate" title={item.comercial || '—'}>{item.comercial || '—'}</span>
+                          <span title={item.comercial || '—'}>{truncar30(item.comercial || '—')}</span>
                         </div>
                       </td>
 
