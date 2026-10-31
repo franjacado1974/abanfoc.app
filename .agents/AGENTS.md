@@ -1551,13 +1551,13 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
 
 ---
 
-## 110. Blindaje Inviolable del Diseño Visual de Casillas en el Calendario: Días con Línea Roja, Bola de Billar Negra para Tareas y Scrollbar Negra (`Calendario.tsx`, `Planificacion.tsx`)
+## 110. Blindaje Inviolable del Diseño Visual de Casillas en el Calendario: Días con Línea Roja, Contador de Tareas en Número Azul Pequeño sobre la Scrollbar y Scrollbar Negra (`Calendario.tsx`, `Planificacion.tsx`)
 - **Diferenciación del Número de Día**:
   - El día **"Hoy"** (`isToday`) resalta con fondo rojo sólido y texto blanco (`bg-red-600 text-white shadow-xs shadow-red-500/30`).
   - Los **demás días del mes actual** (`d.currentMonth && !isToday`) llevan un marco perimetral con línea roja sin fondo (`border border-red-500 text-slate-900 bg-transparent`), diferenciando nítidamente el número del día.
   - Los días fuera del mes actual se muestran atenuados (`text-slate-400`).
-- **Contador de Cantidad de Tareas Tipo Bola de Billar**:
-  - En la esquina superior derecha de cada celda con eventos o tareas registradas, la cantidad se muestra en un distintivo circular negro con el número en blanco (`rounded-full bg-black text-white font-black shadow-xs`), simulando una bola de billar y distinguiéndose claramente del número de día.
+- **Contador de Cantidad de Tareas en Número Azul Pequeño sobre la Scrollbar**:
+  - En la esquina superior derecha de cada celda con eventos o tareas registradas, colocado directamente encima de la barra de desplazamiento, la cantidad se muestra como un **número pequeño en azul sin fondo** (`text-blue-600 font-black`), diferenciando claramente la cantidad de tareas respecto al día de forma limpia, sutil y elegante.
 - **Barra de Desplazamiento (Scrollbar) en Negro**:
   - La lista de tareas dentro de cada celda de día cuenta con barra de desplazamiento en negro (`scrollbar-color: #000000 transparent`, `::-webkit-scrollbar-thumb { background: #000000; }`), permitiendo al usuario identificar de inmediato cuándo una celda contiene más tareas ocultas por desbordamiento vertical.
 
