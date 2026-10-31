@@ -3,7 +3,8 @@ import {
   Gauge, Droplets, Activity, ChevronRight, Info, ArrowLeft,
   CheckCircle2, AlertTriangle, Save, ShieldCheck, Flame, 
   Building2, Users, Calendar, Clock, FileDown, Wrench,
-  History, Trash2, Search, X, FolderOpen
+  History, Trash2, Search, X, FolderOpen, Plus, User, MapPin, StickyNote,
+  FileText
 } from 'lucide-react';
 import { collection, addDoc, query, orderBy, onSnapshot, deleteDoc, doc, getDocs, getDoc } from 'firebase/firestore';
 import { db, subscribeEmpresas, moverAPapelera, subscribePresupuestos, subscribePedidos, type Presupuesto, type Pedido } from './firebase';
@@ -11,6 +12,14 @@ import { APP_VERSION } from './constants';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { fetchImageToBase64, optimizarImagenParaPDF, getImageFormat, generarPresupuestoPDF } from './pdfGenerator';
+import { HandOptionsIcon } from './components/HandOptionsIcon';
+
+const truncar30 = (texto: string | undefined | null, max = 30): string => {
+  if (!texto) return '—';
+  const str = String(texto).trim();
+  if (str.length <= max) return str;
+  return str.slice(0, max) + '...';
+};
 
 // ─── TIPOS Y NORMATIVA UNE / RIPCI ──────────────────────────────────────────
 export type TipoEquipoMedir = 
@@ -584,7 +593,13 @@ function GraficoCurvaPresionCaudal({
 
 // ─── PANTALLA PRINCIPAL: PRUEBAS TÉCNICAS ────────────────────────────────────
 export default function PruebasTecnicas() {
-  const [selectedView, setSelectedView] = useState<'menu' | 'red-publica' | 'grupo-presion'>('menu');
+  // ─── PESTAÑAS Y MODO DE VISTA (TABLA vs FORMULARIO) ───
+  const [activeTab, setActiveTab] = useState<'red-publica' | 'grupo-presion'>('red-publica');
+  const [viewMode, setViewMode] = useState<'table' | 'form'>('table');
+  const [search, setSearch] = useState('');
+  const [evaluacionFilter, setEvaluacionFilter] = useState<string>('TODOS');
+  const [limiteItems, setLimiteItems] = useState<number | 'todos'>(10);
+  const [accionesModalItem, setAccionesModalItem] = useState<EnsayoGuardado | null>(null);
 
   // ─── DATOS GENERALES DEL ENSAYO (UNIFICADOS) ───
   const [empresaMantenedora, setEmpresaMantenedora] = useState('ABANFOC S.L.');
@@ -626,7 +641,14 @@ export default function PruebasTecnicas() {
 
   // ─── HISTORIAL / RECUPERACIÓN DE ENSAYOS ANTERIORES ───
   const [historialModal, setHistorialModal] = useState(false);
-  const [ensayosGuardados, setEnsayosGuardados] = useState<EnsayoGuardado[]>([]);
+  const [ensayosGuardados, setEnsayosGuardados] = useState<EnsayoGuardado[]>(() => {
+    try {
+      const cached = localStorage.getItem('firecheck_db_pruebas_tecnicas');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
   const [busquedaHistorial, setBusquedaHistorial] = useState('');
   const [filtroTipoHistorial, setFiltroTipoHistorial] = useState('todos');
 
@@ -664,6 +686,9 @@ export default function PruebasTecnicas() {
         snap.forEach((d) => {
           docs.push({ id: d.id, ...(d.data() as any) });
         });
+        try {
+          localStorage.setItem('firecheck_db_pruebas_tecnicas', JSON.stringify(docs));
+        } catch {}
         setEnsayosGuardados(docs);
       });
       return () => unsub();
@@ -671,6 +696,79 @@ export default function PruebasTecnicas() {
       console.error('Error suscribiendo al historial de pruebas:', err);
     }
   }, []);
+
+  // Conteos y filtrados reactivos por pestaña
+  const countRedPublica = useMemo(() => {
+    return ensayosGuardados.filter(e => e.tipo !== 'grupo-presion').length;
+  }, [ensayosGuardados]);
+
+  const countGrupoPresion = useMemo(() => {
+    return ensayosGuardados.filter(e => e.tipo === 'grupo-presion').length;
+  }, [ensayosGuardados]);
+
+  const itemsFiltrados = useMemo(() => {
+    return ensayosGuardados.filter((ensayo) => {
+      // Filtrar por pestaña
+      if (activeTab === 'red-publica' && ensayo.tipo === 'grupo-presion') return false;
+      if (activeTab === 'grupo-presion' && ensayo.tipo !== 'grupo-presion') return false;
+
+      // Filtrar por evaluación
+      if (evaluacionFilter !== 'TODOS') {
+        if (evaluacionFilter === 'conforme' && ensayo.evaluacionGlobal !== 'conforme') return false;
+        if (evaluacionFilter === 'no_conforme' && ensayo.evaluacionGlobal === 'conforme') return false;
+      }
+
+      // Filtrar por búsqueda
+      if (search.trim()) {
+        const q = search.toLowerCase();
+        const cNombre = (ensayo.clienteNombre || '').toLowerCase();
+        const centroN = (ensayo.centroNombre || '').toLowerCase();
+        const tec = (ensayo.tecnicoNombre || '').toLowerCase();
+        const eqLabel = (ensayo.equipoAMedirLabel || REFERENCIAS_NORMATIVA[ensayo.tipoEquipo || 'bie25']?.nombre || '').toLowerCase();
+        const fStr = (ensayo.fechaEnsayo || '').toLowerCase();
+        const fFormatted = formatFechaEnsayo(ensayo.fechaEnsayo).toLowerCase();
+        const idStr = (ensayo.id || '').toLowerCase();
+        const pedStr = (ensayo.pedidoId || '').toLowerCase();
+
+        return (
+          cNombre.includes(q) ||
+          centroN.includes(q) ||
+          tec.includes(q) ||
+          eqLabel.includes(q) ||
+          fStr.includes(q) ||
+          fFormatted.includes(q) ||
+          idStr.includes(q) ||
+          pedStr.includes(q)
+        );
+      }
+
+      return true;
+    });
+  }, [ensayosGuardados, activeTab, evaluacionFilter, search]);
+
+  const itemsAMostrar = useMemo(() => {
+    if (limiteItems === 'todos') return itemsFiltrados;
+    return itemsFiltrados.slice(0, Number(limiteItems));
+  }, [itemsFiltrados, limiteItems]);
+
+  const handleOpenCrearEnsayo = () => {
+    setClienteNombre('');
+    setCentroNombre('');
+    setFechaEnsayo(new Date().toISOString().split('T')[0]);
+    setHoraEnsayo(() => {
+      const d = new Date();
+      return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    });
+    setPresionEstatica('');
+    setEquipo1Ubicacion('Equipo más desfavorable');
+    setPresionDin1('');
+    setCaudal1('');
+    setEquipo2Ubicacion('Segundo equipo simultáneo');
+    setPresionDin2('');
+    setCaudal2('');
+    setObservaciones('');
+    setViewMode('form');
+  };
 
   // Cálculos y diagnóstico de variación
   const pEstNum = parseFloat(presionEstatica) || 0;
@@ -728,8 +826,14 @@ export default function PruebasTecnicas() {
     setCaudal2(ensayo.prueba2?.caudal !== undefined ? String(ensayo.prueba2.caudal) : '');
 
     setObservaciones(ensayo.observaciones || '');
-    setSelectedView('red-publica');
+    if (ensayo.tipo === 'grupo-presion') {
+      setActiveTab('grupo-presion');
+    } else {
+      setActiveTab('red-publica');
+    }
+    setAccionesModalItem(null);
     setHistorialModal(false);
+    setViewMode('form');
   };
 
   // ─── ELIMINAR ENSAYO GUARDADO (Mover a Papelera) ───
@@ -760,6 +864,11 @@ export default function PruebasTecnicas() {
       } else {
         await deleteDoc(doc(db, 'pruebas_tecnicas', id));
       }
+      const updated = ensayosGuardados.filter(h => h.id !== id);
+      try {
+        localStorage.setItem('firecheck_db_pruebas_tecnicas', JSON.stringify(updated));
+      } catch {}
+      setEnsayosGuardados(updated);
     } catch (err) {
       console.error('Error eliminando ensayo:', err);
       alert('No se pudo eliminar el ensayo.');
@@ -1549,7 +1658,7 @@ export default function PruebasTecnicas() {
     setIsSaving(true);
     try {
       const docData = {
-        tipo: 'red-publica',
+        tipo: activeTab,
         empresaMantenedora,
         equipoMedicion,
         tipoEquipo,
@@ -1585,7 +1694,13 @@ export default function PruebasTecnicas() {
         versionApp: APP_VERSION,
       };
 
-      await addDoc(collection(db, 'pruebas_tecnicas'), docData);
+      const docRef = await addDoc(collection(db, 'pruebas_tecnicas'), docData);
+      const newSavedItem = { id: docRef.id, ...docData };
+      const nextList = [newSavedItem, ...ensayosGuardados.filter(e => e.id !== docRef.id)];
+      try {
+        localStorage.setItem('firecheck_db_pruebas_tecnicas', JSON.stringify(nextList));
+      } catch {}
+      setEnsayosGuardados(nextList);
       setSaveSuccessModal(true);
     } catch (err) {
       console.error('Error guardando prueba técnica:', err);
@@ -1614,60 +1729,331 @@ export default function PruebasTecnicas() {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] pb-16">
-      {/* ─── CABECERA PRINCIPAL ─── */}
-      <div className="bg-white border-b border-zinc-200/80 sticky top-0 z-30 px-4 sm:px-6 py-3.5">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex flex-col sm:flex-row items-center gap-3 text-center sm:text-left flex-1 sm:flex-initial">
-            {selectedView !== 'menu' && (
-              <button
-                onClick={() => setSelectedView('menu')}
-                className="flex items-center gap-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-xs font-bold py-1.5 px-3 rounded-xl transition-all cursor-pointer mr-1"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                <span>Volver</span>
-              </button>
-            )}
-            <div className="w-10 h-10 rounded-2xl bg-red-50 border border-red-100 flex items-center justify-center text-red-600 shadow-sm shrink-0">
-              <Gauge className="w-5 h-5 stroke-[2.2]" />
-            </div>
+      {viewMode === 'table' ? (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-6">
+          {/* Cabecera del módulo */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
             <div>
-              <div className="flex items-center justify-center sm:justify-start gap-2">
-                <h1 className="text-base sm:text-lg font-black text-zinc-900 tracking-tight">
-                  {selectedView === 'menu'
-                    ? 'Pruebas Técnicas'
-                    : selectedView === 'red-publica'
-                    ? 'Presión y Caudal en Red Pública'
-                    : 'Presión y Caudal en Grupo de Presión'}
-                </h1>
-                <span className="bg-red-50 text-red-700 text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full border border-red-200">
-                  {selectedView === 'menu' ? 'Operaciones' : 'Ensayo Hidráulico'}
-                </span>
-              </div>
-              <p className="text-[11px] text-zinc-500 font-medium hidden sm:block">
-                Verificación de presión estática, dinámica y aforo de caudal según UNE 23500:2021 y Real Decreto 513/2017
+              <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2.5">
+                <Gauge className="w-7 h-7 text-red-600" />
+                Pruebas Técnicas
+              </h1>
+              <p className="text-xs font-semibold text-slate-500 mt-1">
+                Control y seguimiento de pruebas de presión y caudal (Red Pública y Grupos de Presión).
               </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2.5">
+              {/* Búsqueda */}
+              <div className="relative">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Buscar prueba, cliente..."
+                  className="pl-9 pr-7 py-2 bg-white border border-slate-200/80 rounded-xl text-xs font-medium text-slate-700 outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 w-48 sm:w-60 shadow-xs"
+                />
+                {search && (
+                  <button
+                    onClick={() => setSearch('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Filtro Evaluación */}
+              <select
+                value={evaluacionFilter}
+                onChange={(e) => setEvaluacionFilter(e.target.value)}
+                className="px-3 py-2 bg-white border border-slate-200/80 rounded-xl text-xs font-bold text-slate-700 outline-none focus:border-red-500 cursor-pointer shadow-xs"
+              >
+                <option value="TODOS">Todos los estados</option>
+                <option value="conforme">Conformes (OK)</option>
+                <option value="no_conforme">No conformes</option>
+              </select>
+
+              {/* Botón Nueva Prueba */}
+              <button
+                type="button"
+                onClick={handleOpenCrearEnsayo}
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs sm:text-sm shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer shrink-0"
+              >
+                <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
+                <span>{activeTab === 'red-publica' ? 'Nueva Prueba Red Pública' : 'Nueva Prueba Grupo Presión'}</span>
+              </button>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            {/* Botón Recuperar Ensayos Anteriores */}
-            <button
-              onClick={() => setHistorialModal(true)}
-              className="flex items-center gap-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 text-xs font-bold py-2 px-3.5 rounded-xl border border-zinc-200/80 shadow-xs transition-all active:scale-95 cursor-pointer shrink-0"
-              title="Ver y recuperar ensayos técnicos anteriores guardados en Firestore"
-            >
-              <History className="w-4 h-4 text-zinc-600" />
-              <span className="hidden sm:inline">Recuperar ensayos anteriores</span>
-              <span className="sm:hidden">Recuperar</span>
-              {ensayosGuardados.length > 0 && (
-                <span className="bg-zinc-800 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full">
-                  {ensayosGuardados.length}
+          {/* 2 Pestañas con Contadores Numéricos y Degradados Estilizados */}
+          <div className="bg-white p-2.5 rounded-2xl border border-slate-200/80 shadow-sm mb-6">
+            <div className="flex flex-wrap sm:flex-nowrap items-center gap-3">
+              {/* Pestaña 1: Red Pública */}
+              <button
+                type="button"
+                onClick={() => setActiveTab('red-publica')}
+                className={`flex-1 flex items-center justify-center gap-2.5 px-5 py-3 rounded-xl font-bold text-xs sm:text-sm border transition-all cursor-pointer ${
+                  activeTab === 'red-publica'
+                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-500/20 scale-[1.01]'
+                    : 'bg-blue-50/60 text-blue-900 border-blue-200/80 hover:bg-blue-100/80'
+                }`}
+              >
+                <Droplets className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+                <span>Pruebas con Red Pública</span>
+                <span
+                  className={`px-2.5 py-0.5 rounded-full text-xs font-black ${
+                    activeTab === 'red-publica'
+                      ? 'bg-blue-950/80 text-white'
+                      : 'bg-blue-200 text-blue-900'
+                  }`}
+                >
+                  {countRedPublica}
                 </span>
-              )}
+              </button>
+
+              {/* Pestaña 2: Grupos de Presión */}
+              <button
+                type="button"
+                onClick={() => setActiveTab('grupo-presion')}
+                className={`flex-1 flex items-center justify-center gap-2.5 px-5 py-3 rounded-xl font-bold text-xs sm:text-sm border transition-all cursor-pointer ${
+                  activeTab === 'grupo-presion'
+                    ? 'bg-gradient-to-r from-amber-600 to-orange-600 text-white shadow-md shadow-amber-500/20 scale-[1.01]'
+                    : 'bg-amber-50/60 text-amber-950 border-amber-200/80 hover:bg-amber-100/80'
+                }`}
+              >
+                <Activity className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+                <span>Pruebas con Grupos de Presión</span>
+                <span
+                  className={`px-2.5 py-0.5 rounded-full text-xs font-black ${
+                    activeTab === 'grupo-presion'
+                      ? 'bg-amber-950/80 text-white'
+                      : 'bg-amber-200 text-amber-950'
+                  }`}
+                >
+                  {countGrupoPresion}
+                </span>
+              </button>
+            </div>
+          </div>
+
+          {/* Tabla de pruebas técnicas */}
+          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-zinc-200/90 border-b border-zinc-300 text-[11px] font-bold uppercase tracking-wider text-zinc-700 whitespace-nowrap">
+                    <th className="px-5 py-3 whitespace-nowrap">ENSAYO / EQUIPO</th>
+                    <th className="w-28 whitespace-nowrap px-4 py-3">FECHA</th>
+                    <th className="whitespace-nowrap px-4 py-3">CLIENTE</th>
+                    <th className="whitespace-nowrap px-4 py-3">CENTRO</th>
+                    <th className="whitespace-nowrap px-4 py-3">TÉCNICO ASIGNADO</th>
+                    <th className="w-32 whitespace-nowrap px-4 py-3 text-center">EVALUACIÓN</th>
+                    <th className="whitespace-nowrap px-4 py-3">PRESIÓN / CAUDAL</th>
+                    <th className="w-16 whitespace-nowrap px-3 py-3 text-center">NOTA</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-sm">
+                  {itemsFiltrados.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="px-6 py-12 text-center text-slate-400 font-medium">
+                        {search || evaluacionFilter !== 'TODOS'
+                          ? 'No se encontraron pruebas técnicas con los filtros aplicados.'
+                          : activeTab === 'red-publica'
+                          ? 'No hay pruebas técnicas en red pública registradas.'
+                          : 'No hay pruebas técnicas en grupos de presión registradas.'}
+                      </td>
+                    </tr>
+                  ) : (
+                    itemsAMostrar.map((item, index) => {
+                      const refNorma = REFERENCIAS_NORMATIVA[item.tipoEquipo || 'bie25'];
+                      const eqLabel = refNorma?.nombre || item.equipoAMedirLabel || item.tipoEquipo || 'BIE / Hidrante';
+                      const esConforme = item.evaluacionGlobal === 'conforme';
+                      const p0 = item.presionEstatica !== undefined ? `${item.presionEstatica} bar` : '—';
+                      const p1 = item.prueba1?.presionDin !== undefined ? `${item.prueba1.presionDin} bar` : '—';
+                      const qTot = item.prueba2?.caudalTotalSimultaneo || item.prueba1?.caudal || 0;
+                      const noteContent = (item.observaciones || '').trim();
+                      const hasNote = noteContent.length > 0;
+
+                      return (
+                        <tr
+                          key={item.id}
+                          onClick={() => setAccionesModalItem(item)}
+                          className={`transition-all duration-150 group cursor-pointer whitespace-nowrap ${
+                            index % 2 === 0 ? 'bg-white' : 'bg-slate-100/80'
+                          } hover:bg-amber-100/90 hover:shadow-xs`}
+                        >
+                          {/* ENSAYO / REF */}
+                          <td className="px-5 py-2.5 whitespace-nowrap">
+                            <div className="flex items-center gap-2 whitespace-nowrap">
+                              <span className="font-mono text-xs font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200/80 shrink-0">
+                                {item.pedidoId || item.id.slice(0, 8)}
+                              </span>
+                              <span className="font-semibold text-slate-800 text-xs whitespace-nowrap" title={eqLabel}>
+                                {truncar30(eqLabel, 26)}
+                              </span>
+                            </div>
+                          </td>
+
+                          {/* FECHA */}
+                          <td className="w-28 whitespace-nowrap px-4 py-2.5 text-xs">
+                            {item.fechaEnsayo ? (
+                              <span className="inline-flex items-center gap-1.5 text-slate-600 font-medium whitespace-nowrap">
+                                <Calendar className="w-3.5 h-3.5 text-red-500" />
+                                {formatFechaEnsayo(item.fechaEnsayo)}
+                              </span>
+                            ) : (
+                              <span className="text-slate-300">—</span>
+                            )}
+                          </td>
+
+                          {/* CLIENTE */}
+                          <td className="px-4 py-2.5 text-xs text-slate-700 whitespace-nowrap">
+                            <div className="flex items-center gap-1.5 whitespace-nowrap">
+                              <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                              <span className="font-medium" title={item.clienteNombre || '—'}>
+                                {truncar30(item.clienteNombre)}
+                              </span>
+                            </div>
+                          </td>
+
+                          {/* CENTRO */}
+                          <td className="px-4 py-2.5 text-xs text-slate-600 whitespace-nowrap">
+                            <div className="flex items-center gap-1.5 whitespace-nowrap">
+                              <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                              <span title={item.centroNombre || '—'}>{truncar30(item.centroNombre)}</span>
+                            </div>
+                          </td>
+
+                          {/* TÉCNICO */}
+                          <td className="whitespace-nowrap px-4 py-2.5 text-xs text-slate-600">
+                            <div className="flex items-center gap-1.5 whitespace-nowrap">
+                              <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                              <span title={item.tecnicoNombre || 'Sin asignar'}>
+                                {truncar30(item.tecnicoNombre || 'Sin asignar')}
+                              </span>
+                            </div>
+                          </td>
+
+                          {/* EVALUACIÓN */}
+                          <td className="w-32 whitespace-nowrap px-4 py-2.5 text-center">
+                            <span
+                              className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border whitespace-nowrap ${
+                                esConforme
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                  : 'bg-red-50 text-red-700 border-red-200'
+                              }`}
+                            >
+                              {esConforme ? (
+                                <>
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                  Conforme
+                                </>
+                              ) : (
+                                <>
+                                  <AlertTriangle className="w-3 h-3 text-red-600" />
+                                  No Conforme
+                                </>
+                              )}
+                            </span>
+                          </td>
+
+                          {/* PRESIÓN / CAUDAL */}
+                          <td className="px-4 py-2.5 text-xs font-mono text-slate-600 whitespace-nowrap">
+                            <div className="flex items-center gap-2 whitespace-nowrap">
+                              <span title={`P₀: ${p0}`}>P₀: <strong className="text-blue-700 font-bold">{p0}</strong></span>
+                              <span>|</span>
+                              <span title={`P₁: ${p1}`}>P₁: <strong className="text-emerald-700 font-bold">{p1}</strong></span>
+                              {qTot > 0 && (
+                                <>
+                                  <span>|</span>
+                                  <span title={`Q: ${qTot} l/min`}>Q: <strong className="text-purple-700 font-bold">{qTot} l/m</strong></span>
+                                </>
+                              )}
+                            </div>
+                          </td>
+
+                          {/* NOTA */}
+                          <td className="w-16 whitespace-nowrap px-3 py-2.5 text-center">
+                            {hasNote ? (
+                              <span
+                                className="inline-flex items-center justify-center p-1.5 rounded-xl bg-amber-100 text-amber-900 border border-amber-300"
+                                title={`Observaciones: ${noteContent}`}
+                              >
+                                <StickyNote className="w-3.5 h-3.5 text-amber-800" />
+                              </span>
+                            ) : (
+                              <span className="text-slate-300 text-xs">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Selector de paginación */}
+          {itemsFiltrados.length > 0 && (
+            <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-zinc-600 bg-white px-5 py-3.5 rounded-2xl border border-zinc-200/80 shadow-xs">
+              <div className="font-bold text-zinc-800 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-red-500 shrink-0"></span>
+                {limiteItems === 'todos' ? (
+                  <span>Mostrando todas las pruebas ({itemsFiltrados.length} en total)</span>
+                ) : (
+                  <span>
+                    Mostrando las {Math.min(Number(limiteItems), itemsFiltrados.length)} primeras pruebas
+                    {itemsFiltrados.length > Number(limiteItems) && (
+                      <span className="text-zinc-400 font-normal ml-1">
+                        (de {itemsFiltrados.length} pruebas en total)
+                      </span>
+                    )}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-zinc-500 font-medium">Mostrar:</span>
+                <select
+                  value={limiteItems}
+                  onChange={(e) => setLimiteItems(e.target.value === 'todos' ? 'todos' : Number(e.target.value))}
+                  className="bg-zinc-50 border border-zinc-300 text-zinc-700 font-bold rounded-lg px-2.5 py-1 outline-none focus:border-red-500 cursor-pointer"
+                >
+                  <option value={10}>10 pruebas</option>
+                  <option value={25}>25 pruebas</option>
+                  <option value={50}>50 pruebas</option>
+                  <option value="todos">Todas</option>
+                </select>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-5">
+          {/* Cabecera del formulario con botón volver */}
+          <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
+            <button
+              type="button"
+              onClick={() => setViewMode('table')}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors cursor-pointer w-fit"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Volver a la lista de pruebas</span>
             </button>
 
-            {selectedView === 'red-publica' && (
+            <div className="flex items-center gap-2">
+              <span className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-full border ${
+                activeTab === 'red-publica'
+                  ? 'bg-blue-50 text-blue-700 border-blue-200'
+                  : 'bg-amber-50 text-amber-700 border-amber-200'
+              }`}>
+                {activeTab === 'red-publica' ? 'Ensayo Hidráulico: Red Pública' : 'Ensayo Hidráulico: Grupo de Presión'}
+              </span>
+
               <button
+                type="button"
                 onClick={() => handleExportPDF()}
                 className="flex items-center gap-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-2 px-3.5 rounded-xl shadow-sm transition-all active:scale-95 cursor-pointer shrink-0"
               >
@@ -1675,164 +2061,9 @@ export default function PruebasTecnicas() {
                 <span className="hidden sm:inline">Descargar Informe PDF</span>
                 <span className="sm:hidden">PDF</span>
               </button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-5">
-        {/* ─── VISTA 1: MENÚ DE SELECCIÓN DE TARJETAS ─── */}
-        {selectedView === 'menu' && (
-          <div>
-            <div className="mb-6 bg-gradient-to-r from-zinc-900 via-zinc-800 to-zinc-900 text-white rounded-3xl p-5 sm:p-6 shadow-lg border border-zinc-800 flex items-start gap-4">
-              <div className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center text-white shrink-0 mt-0.5">
-                <Info className="w-5 h-5" />
-              </div>
-              <div>
-                <h2 className="text-sm sm:text-base font-bold text-white tracking-tight">
-                  Módulo de Ensayos y Verificaciones Hidráulicas
-                </h2>
-                <p className="text-xs text-zinc-300 mt-1 leading-relaxed max-w-2xl">
-                  Selecciona el tipo de prueba técnica a realizar o consultar para registrar los valores de manometría, curvas de presión y aforos de caudal.
-                </p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Tarjeta 1: Red Pública */}
-              <div className="bg-white border border-zinc-200/80 rounded-3xl p-6 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col justify-between hover:border-blue-300 hover:shadow-blue-500/5">
-                <div>
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="w-12 h-12 rounded-2xl flex items-center justify-center border shadow-sm bg-blue-50 text-blue-600 border-blue-100">
-                      <Droplets className="w-6 h-6 stroke-[2.2]" />
-                    </div>
-                    <span className="text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-full border bg-blue-100 text-blue-800 border-blue-200">
-                      Red General
-                    </span>
-                  </div>
-
-                  <h3 className="text-base font-black text-zinc-900 leading-snug">
-                    Pruebas de presión y caudal en red pública
-                  </h3>
-
-                  <p className="text-xs text-zinc-500 mt-2 leading-relaxed">
-                    Medición de presión estática, presión dinámica y comprobación de caudal nominal en la red general pública con 1 y 2 equipos simultáneos.
-                  </p>
-
-                  {/* DESPLEGABLE CON BUSCADOR DE ANTERIORES ENSAYOS DIRECTO EN LA TARJETA */}
-                  <div className="mt-5 p-3.5 bg-slate-50 border border-slate-200 rounded-2xl">
-                    <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-700 mb-1.5 flex items-center justify-between">
-                      <span className="flex items-center gap-1.5">
-                        <History className="w-3.5 h-3.5 text-blue-600" />
-                        Recuperar ensayo anterior:
-                      </span>
-                      {ensayosGuardados.length > 0 && (
-                        <span className="text-[9px] text-blue-700 bg-blue-100 px-1.5 py-0.2 rounded-full font-bold">
-                          {ensayosGuardados.length} guardados
-                        </span>
-                      )}
-                    </label>
-
-                    <div className="relative">
-                      <select
-                        defaultValue=""
-                        onChange={(e) => {
-                          const found = ensayosGuardados.find((ens) => ens.id === e.target.value);
-                          if (found) {
-                            handleCargarEnsayo(found);
-                          }
-                        }}
-                        className="w-full pl-3 pr-8 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 cursor-pointer shadow-xs transition-all"
-                      >
-                        <option value="" disabled>
-                          {ensayosGuardados.length === 0
-                            ? 'No hay ensayos guardados todavía'
-                            : '🔍 Desplegar para buscar y cargar ensayo anterior...'}
-                        </option>
-                        {ensayosGuardados.map((ens) => {
-                          const tLabel = REFERENCIAS_NORMATIVA[ens.tipoEquipo || 'bie25']?.nombre || ens.tipoEquipo || 'BIE';
-                          const diag = ens.evaluacionGlobal === 'conforme' ? '✓ CONFORME' : '✗ NO CONFORME';
-                          return (
-                            <option key={ens.id} value={ens.id}>
-                              {formatFechaEnsayo(ens.fechaEnsayo)} · {ens.clienteNombre || 'Sin cliente'} ({ens.centroNombre || 'Centro'}) - {tLabel} [{diag}]
-                            </option>
-                          );
-                        })}
-                      </select>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-5 pt-4 border-t border-zinc-100 flex items-center justify-between gap-2">
-                  <button
-                    onClick={() => {
-                      // Limpiar campos y abrir nuevo ensayo
-                      setClienteNombre('');
-                      setCentroNombre('');
-                      setPresionEstatica('');
-                      setPresionDin1('');
-                      setCaudal1('');
-                      setPresionDin2('');
-                      setCaudal2('');
-                      setObservaciones('');
-                      setSelectedView('red-publica');
-                    }}
-                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-2.5 px-4 rounded-xl shadow-sm transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
-                  >
-                    <span>Nuevo Ensayo Hidráulico</span>
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
-
-                  <button
-                    onClick={() => setHistorialModal(true)}
-                    className="bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-xs font-bold py-2.5 px-3 rounded-xl transition-all cursor-pointer flex items-center gap-1 shrink-0"
-                    title="Abrir historial detallado"
-                  >
-                    <History className="w-4 h-4" />
-                    <span className="hidden sm:inline">Historial</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Tarjeta 2: Grupo de Presión */}
-              <div
-                onClick={() => setSelectedView('grupo-presion')}
-                className="bg-white border border-zinc-200/80 rounded-3xl p-6 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col justify-between cursor-pointer group hover:-translate-y-0.5 hover:border-amber-300 hover:shadow-amber-500/5"
-              >
-                <div>
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="w-12 h-12 rounded-2xl flex items-center justify-center border shadow-sm bg-amber-50 text-amber-600 border-amber-100 group-hover:scale-105 transition-transform">
-                      <Activity className="w-6 h-6 stroke-[2.2]" />
-                    </div>
-                    <span className="text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-full border bg-amber-100 text-amber-800 border-amber-200">
-                      Grupo de Bombeo
-                    </span>
-                  </div>
-
-                  <h3 className="text-base font-black text-zinc-900 leading-snug group-hover:text-amber-600 transition-colors">
-                    Pruebas de presión y caudal en grupo de presión
-                  </h3>
-
-                  <p className="text-xs text-zinc-500 mt-2 leading-relaxed">
-                    Evaluación de bombas principales (eléctrica / diésel) y jockey, presiones de arranque/parada y curvas de caudal de abastecimiento.
-                  </p>
-                </div>
-
-                <div className="mt-6 pt-4 border-t border-zinc-100 flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">
-                    Ensayos de Bombeo
-                  </span>
-                  <div className="w-8 h-8 rounded-xl flex items-center justify-center transition-all group-hover:translate-x-1 text-amber-600 bg-amber-50">
-                    <ChevronRight className="w-4 h-4" />
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
-        )}
 
-        {/* ─── VISTA 2: FORMULARIO Y CURVA P-Q EN RED PÚBLICA ─── */}
-        {selectedView === 'red-publica' && (
           <div className="space-y-6">
             {/* 1. DATOS GENERALES DEL ENSAYO (UNIFICADOS) */}
             <div className="bg-white border border-zinc-200 rounded-3xl p-5 sm:p-6 shadow-sm">
@@ -2345,10 +2576,10 @@ export default function PruebasTecnicas() {
             <div className="flex flex-wrap items-center justify-end gap-3 pt-2">
               <button
                 type="button"
-                onClick={() => setSelectedView('menu')}
+                onClick={() => setViewMode('table')}
                 className="px-5 py-2.5 rounded-xl border border-zinc-300 text-zinc-700 text-xs font-bold hover:bg-zinc-100 transition-colors cursor-pointer"
               >
-                Cancelar
+                Volver a la lista
               </button>
               <button
                 type="button"
@@ -2377,29 +2608,8 @@ export default function PruebasTecnicas() {
               </button>
             </div>
           </div>
-        )}
-
-        {/* ─── VISTA 3: GRUPO DE PRESIÓN (PRÓXIMAMENTE) ─── */}
-        {selectedView === 'grupo-presion' && (
-          <div className="bg-white border border-zinc-200 rounded-3xl p-8 text-center max-w-xl mx-auto shadow-sm">
-            <div className="w-14 h-14 rounded-2xl bg-amber-50 border border-amber-100 text-amber-600 flex items-center justify-center mx-auto mb-4">
-              <Activity className="w-7 h-7" />
-            </div>
-            <h3 className="text-base font-black text-zinc-900 mb-2">
-              Pruebas de Presión y Caudal en Grupo de Presión
-            </h3>
-            <p className="text-xs text-zinc-500 leading-relaxed mb-6">
-              Módulo de registro y evaluación de bombas eléctricas/diésel, presión de arranque/parada y curvas características de grupo de presión contra incendios.
-            </p>
-            <button
-              onClick={() => setSelectedView('menu')}
-              className="bg-zinc-900 hover:bg-black text-white text-xs font-bold px-5 py-2.5 rounded-xl cursor-pointer"
-            >
-              Volver al selector de pruebas
-            </button>
-          </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* ─── MODAL FLOTANTE: RECUPERAR ENSAYOS ANTERIORES ─── */}
       {historialModal && (
@@ -2619,11 +2829,170 @@ export default function PruebasTecnicas() {
               <button
                 onClick={() => {
                   setSaveSuccessModal(false);
-                  setSelectedView('menu');
+                  setViewMode('table');
                 }}
                 className="w-full bg-zinc-100 hover:bg-zinc-200 text-zinc-800 py-3 rounded-2xl font-bold text-xs transition-all cursor-pointer"
               >
-                Aceptar y Volver
+                Aceptar y Volver a la Lista
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── MODAL FLOTANTE DE ACCIONES RÁPIDAS (MANO DE OPCIONES) ─── */}
+      {accionesModalItem && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-[9999] animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-100">
+            {/* Cabecera del modal */}
+            <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0 shadow-inner">
+                  <HandOptionsIcon className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="font-bold text-sm tracking-tight text-white flex items-center gap-2">
+                    Acciones de Ensayo
+                  </h3>
+                  <p className="text-xs text-slate-300 truncate">
+                    {accionesModalItem.clienteNombre || 'Ensayo sin cliente'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAccionesModalItem(null)}
+                className="p-2 text-slate-400 hover:text-white rounded-xl transition-colors cursor-pointer shrink-0"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Resumen del ensayo */}
+            <div className="px-6 py-3 bg-slate-50 border-b border-slate-100 flex items-center gap-2 flex-wrap text-xs">
+              {accionesModalItem.fechaEnsayo && (
+                <span className="inline-flex items-center gap-1 font-medium text-slate-600 bg-white px-2.5 py-1 rounded-lg border border-slate-200">
+                  <Calendar className="w-3.5 h-3.5 text-red-500" />
+                  {formatFechaEnsayo(accionesModalItem.fechaEnsayo)}
+                </span>
+              )}
+              {accionesModalItem.centroNombre && (
+                <span className="inline-flex items-center gap-1 text-slate-600 bg-white px-2.5 py-1 rounded-lg border border-slate-200 truncate max-w-[200px]">
+                  <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                  <span className="truncate">{accionesModalItem.centroNombre}</span>
+                </span>
+              )}
+              <span className={`px-2.5 py-1 rounded-lg font-bold text-[11px] border ${
+                accionesModalItem.evaluacionGlobal === 'conforme'
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                  : 'bg-red-50 text-red-800 border-red-200'
+              }`}>
+                {accionesModalItem.evaluacionGlobal === 'conforme' ? 'Conforme' : 'No Conforme'}
+              </span>
+            </div>
+
+            {/* Listado de acciones */}
+            <div className="p-6 space-y-2.5">
+              {/* Cargar Ensayo / Curva P-Q */}
+              <button
+                type="button"
+                onClick={() => {
+                  const it = accionesModalItem;
+                  handleCargarEnsayo(it);
+                }}
+                className="w-full flex items-center gap-3.5 p-3 rounded-2xl border border-emerald-200 bg-emerald-50/50 hover:bg-emerald-50 transition-all text-left cursor-pointer group hover:shadow-xs"
+              >
+                <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <FolderOpen className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-semibold text-emerald-950">
+                    Cargar y Ver Curva P-Q
+                  </div>
+                  <div className="text-xs text-emerald-700/80 truncate">
+                    Abrir cálculo interactivo y curva hidráulica de este ensayo
+                  </div>
+                </div>
+              </button>
+
+              {/* Descargar Informe PDF */}
+              <button
+                type="button"
+                onClick={() => {
+                  const it = accionesModalItem;
+                  setAccionesModalItem(null);
+                  handleExportPDF(it);
+                }}
+                className="w-full flex items-center gap-3.5 p-3 rounded-2xl border border-red-200 bg-red-50/40 hover:bg-red-50 transition-all text-left cursor-pointer group hover:shadow-xs"
+              >
+                <div className="w-10 h-10 rounded-xl bg-red-100 text-red-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <FileDown className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-semibold text-red-950">
+                    Descargar Informe PDF Oficial
+                  </div>
+                  <div className="text-xs text-red-700/80 truncate">
+                    Certificado hidráulico oficial con curva P-Q y normativa UNE
+                  </div>
+                </div>
+              </button>
+
+              {/* Descargar PDV */}
+              <button
+                type="button"
+                onClick={() => {
+                  const it = accionesModalItem;
+                  setAccionesModalItem(null);
+                  handleDescargarPDV(it);
+                }}
+                className="w-full flex items-center gap-3.5 p-3 rounded-2xl border border-indigo-200 bg-indigo-50/40 hover:bg-indigo-50 transition-all text-left cursor-pointer group hover:shadow-xs"
+              >
+                <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-semibold text-indigo-950">
+                    Descargar Pedido de Venta (PDV)
+                  </div>
+                  <div className="text-xs text-indigo-700/80 truncate">
+                    Ver o descargar el documento de venta asociado
+                  </div>
+                </div>
+              </button>
+
+              {/* Eliminar Ensayo */}
+              <button
+                type="button"
+                onClick={() => {
+                  const it = accionesModalItem;
+                  setAccionesModalItem(null);
+                  handleEliminarEnsayo(it.id, it.clienteNombre || '');
+                }}
+                className="w-full flex items-center gap-3.5 p-3 rounded-2xl border border-rose-200 bg-rose-50/40 hover:bg-rose-50 transition-all text-left cursor-pointer group hover:shadow-xs"
+              >
+                <div className="w-10 h-10 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-semibold text-rose-950">
+                    Eliminar Ensayo
+                  </div>
+                  <div className="text-xs text-rose-700/80 truncate">
+                    Mover a la papelera de reciclaje
+                  </div>
+                </div>
+              </button>
+            </div>
+
+            {/* Footer del modal */}
+            <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setAccionesModalItem(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 transition-colors cursor-pointer"
+              >
+                Cerrar
               </button>
             </div>
           </div>
