@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { 
-  ArrowLeft, Search, Edit, Trash2, CheckCircle2, 
+  Search, Edit, Trash2, CheckCircle2, 
   Clock, PauseCircle, Building2, MapPin, Briefcase, 
   X, Save, Calendar, Filter, StickyNote, ChevronDown
 } from 'lucide-react';
@@ -109,8 +108,6 @@ const truncar30 = (texto: string | undefined | null, max = 30): string => {
 };
 
 export default function Revisiones() {
-  const navigate = useNavigate();
-
   // Obtener mes actual del calendario (0: Enero ... 11: Diciembre)
   const currentMonthName = MESES[new Date().getMonth()];
   const [activeMonth, setActiveMonth] = useState<string>(currentMonthName);
@@ -765,15 +762,8 @@ export default function Revisiones() {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] px-4 sm:px-8 py-6">
-      {/* Header y Navegación Volver */}
+      {/* Header */}
       <div className="mb-6 flex flex-col items-center sm:items-start text-center sm:text-left">
-        <button 
-          onClick={() => navigate('/')} 
-          className="flex items-center gap-1.5 text-xs font-semibold text-zinc-500 hover:text-zinc-900 mb-3 transition-colors cursor-pointer"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" /> Volver al panel
-        </button>
-        
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 w-full">
           <div>
             <h1 className="text-2xl font-black text-zinc-950 tracking-tight flex items-center justify-center sm:justify-start gap-2.5">
