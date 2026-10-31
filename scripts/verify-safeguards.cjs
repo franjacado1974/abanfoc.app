@@ -12,6 +12,15 @@ console.log('🛡️ Verificando blindaje integral de todas las funcionalidades 
 
 let errors = [];
 
+// 0. Mandato Supremo: NO SALTARSE LAS REGLAS
+const agentsMdPath = path.join(__dirname, '../.agents/AGENTS.md');
+if (fs.existsSync(agentsMdPath)) {
+  const agentsMdContent = fs.readFileSync(agentsMdPath, 'utf8');
+  if (!agentsMdContent.includes('NO SALTARSE LAS REGLAS')) {
+    errors.push('CRÍTICO: AGENTS.md carece del mandato supremo "NO SALTARSE LAS REGLAS".');
+  }
+}
+
 // 1. Verificación de RevisionChecklist.tsx
 const revChecklistPath = path.join(__dirname, '../src/RevisionChecklist.tsx');
 if (!fs.existsSync(revChecklistPath)) {

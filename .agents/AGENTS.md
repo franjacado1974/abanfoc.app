@@ -1,10 +1,13 @@
 # Reglas del Proyecto (AGENTS.md)
 
+# ⚠️ MANDATO SUPREMO: NO SALTARSE LAS REGLAS ⚠️
+
 Este archivo contiene reglas y directrices críticas de comportamiento y de arquitectura específicas para este espacio de trabajo. Cualquier agente de IA que trabaje en esta base de código **DEBE** respetar y cumplir estas directrices para evitar regresiones de funcionalidad.
 
 ---
 
 ## 1. Reglas Generales de No Interferencia
+- **NO SALTARSE LAS REGLAS**: Directriz suprema e inviolable. NINGUNA regla, salvaguarda, directriz de estilo o restricción (incluyendo la prohibición estricta de deploy no solicitado, no tocar código ajeno o no modificar documentación) puede ser ignorada, omitida, saltada o relajada bajo ningún concepto, circunstancia o inercia de turnos anteriores.
 - **No tocar funcionalidades no solicitadas**: No se deben modificar ni refactorizar componentes o secciones del código que no estén directamente involucrados en la tarea solicitada.
 - **Mantener la documentación**: No modificar `documentacion.md` ni alterar sus descripciones.
 - **Evitar Errores de Compilación Estrictos (TS6133)**: No declarar variables, funciones o importaciones no utilizadas (ej. iconos de `lucide-react` importados sin usar), ya que el compilador TypeScript está configurado en modo estricto y bloquea la compilación (`npm run build`).
