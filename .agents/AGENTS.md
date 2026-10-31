@@ -1571,6 +1571,69 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
 - **Cabecera con Color de Días de la Semana**:
   - La fila superior con los días de la semana cuenta con fondo gris neutro sólido y definido (`bg-zinc-200/90 border-b border-zinc-300 divide-x divide-zinc-300/60`), con tipografía oscura destacada (`text-zinc-800 font-black`) y fines de semana resaltados en rojo (`text-red-600 font-black`), eliminando fondos blancos descoloridos o camuflados.
 
+---
+
+## 111. Blindaje Inviolable del Icono Vectorial de Mano con Botones de Opciones 1-2-3 (`HandOptionsIcon.tsx`)
+- **Geometría y Fidelidad Vectorial**:
+  - El componente `src/components/HandOptionsIcon.tsx` sustituye de forma permanente al icono anterior de varita mágica para la representación interactiva de acciones y opciones al pulsar en las filas de las tablas.
+  - Consta de una composición SVG con `viewBox="0 0 100 100"`:
+    1. **Botones superiores circulares**: Tres botones rotulados con los dígitos `1`, `2` y `3`. El botón central `2` cuenta con un arco abierto en su parte inferior donde penetra la punta del dedo índice al pulsarlo.
+    2. **Contorno continuo de la mano**: Trazo uniforme con pulgar en cuña a la izquierda, dedo índice vertical extendido hacia el botón central, y tres nudillos plegados en el lateral derecho de la palma.
+    3. **Muñeca y manga**: Collarín horizontal tipo cápsula y puño de manga redondeado.
+  - Queda prohibido volver a renderizar iconos genéricos o sustitutos que desvirtúen esta iconografía corporativa.
+
+---
+
+## 112. Blindaje Inviolable de Tablas a Ancho Completo sin Columna de Acciones y Apertura al Pulsar en Cualquier Punto de la Fila (`Revisiones.tsx`, `Instalaciones.tsx`, `Reparaciones.tsx`, `Urgencias.tsx`, `PruebasTecnicas.tsx`)
+- **Apertura de Acciones al Pulsar en la Línea**:
+  - Se suprime la columna rígida de "ACCIONES".
+  - Al pulsar en cualquier punto de la fila del registro, se despliega automáticamente el modal flotante de acciones agrupadas (`accionesModalItem`) con fondo difuminado (`backdrop-blur-sm`).
+  - En la cabecera de este modal se muestra obligatoriamente el icono `HandOptionsIcon` en un contenedor estilizado.
+- **Filas Planas y Prevención de Desbordamiento**:
+  - En todos estos módulos, cada fila se mantiene estrictamente en una sola línea plana con efecto cebra (`bg-white` / `bg-slate-100/80`) y resaltado ámbar al posar el cursor (`hover:bg-amber-100/90`).
+  - Las celdas deben incorporar `whitespace-nowrap` y textos con `title={...}` para que los datos respiren con fluidez a través de la pantalla sin montarse en dos líneas.
+- **Retirada del Botón "Volver al panel"**:
+  - En `Revisiones.tsx`, se mantiene permanentemente retirado el botón superior "Volver al panel".
+
+---
+
+## 113. Blindaje Inviolable del Módulo Pruebas Técnicas con 2 Pestañas Estilizadas y Tabla a Ancho Completo (`PruebasTecnicas.tsx`)
+- **Estructura por 2 Pestañas Estacionales**:
+  - El módulo muestra directamente una vista de tabla organizada por 2 pestañas principales con distintivos numéricos de conteo en tiempo real y degradados estacionales:
+    1. **Pruebas con Red Pública** (`activeTab === 'red-publica'`, azul/índigo con icono `Droplets` y contador numérico).
+    2. **Pruebas con Grupos de Presión** (`activeTab === 'grupo-presion'`, ámbar/naranja con icono `Activity` y contador numérico).
+- **Aprovechamiento Integral del Ancho de Pantalla**:
+  - El contenedor principal de la tabla utiliza `w-full px-4 sm:px-8 py-6` sin restricciones artificiales de `max-w-7xl`, expandiéndose en monitores panorámicos.
+- **Acciones Agrupadas y Descargas**:
+  - Al hacer clic en cualquier fila de la tabla se abre el modal de acciones (`HandOptionsIcon`) con las opciones: "Cargar y Ver Curva P-Q", "Descargar Informe PDF Oficial", "Descargar Pedido de Venta (PDV)" y "Eliminar Ensayo".
+- **Persistencia Dual Inmediata**:
+  - Sincronización en tiempo real con Firestore (`pruebas_tecnicas`) y almacenamiento instantáneo local en `localStorage` (`firecheck_db_pruebas_tecnicas`).
+
+---
+
+## 114. Blindaje Inviolable del Título Oficial Listado de mantenimientos anuales "LISTMAN" (`Revisiones.tsx`, `src/mantenimientos/pages/Revisiones.tsx`, `App.tsx`)
+- **Texto Exacto del Título**:
+  - En la cabecera principal del módulo de Revisiones (`Revisiones.tsx` y su ruta homóloga `src/mantenimientos/pages/Revisiones.tsx`), el título oficial DEBE ser obligatoriamente:
+    `Listado de mantenimientos anuales "LISTMAN"` (con las comillas dobles explícitas en `"LISTMAN"`).
+  - Queda prohibido volver a titularlo "Planificación de Revisiones".
+  - En el panel principal del Dashboard (`App.tsx`), el tooltip de acceso directo correspondiente DEBE reflejar: `Ir al módulo Listado de mantenimientos anuales "LISTMAN"`.
+
+---
+
+## 115. Blindaje Inviolable de Cabecera Ampliada y Modal en Lista con Scroll en Facturación (`Facturas.tsx`)
+- **Subtítulo Oficial y Tarjetas KPI Ampliadas**:
+  - En la cabecera de `Facturas.tsx`, debajo del título "Facturación", el subtítulo oficial es:
+    `Emisión de facturas a partir de albaranes finalizados`.
+  - Las 4 tarjetas KPI de importes (`Facturado`, `Cobrado`, `Pendiente`, `Vencido`) se expanden a lo largo del encabezado (`flex-1 xl:ml-8`) con espaciado amplio (`px-4 sm:px-5 py-3.5`), iconos de `11x11` y cifras en `text-base sm:text-lg lg:text-xl font-black`.
+- **Modal de Albaranes Listos para Facturar en 1 Sola Línea con Scroll**:
+  - Al pulsar "Lista de albaranes para facturar" (`showModalAlbaranesPendientes`), la ventana modal (`max-w-5xl`) DEBE renderizar los albaranes en formato de **lista donde cada albarán se muestra en una sola línea horizontal**:
+    1. Código (`ALB-YY-XXX`) y fecha.
+    2. Nombre del cliente y concepto / centro de trabajo.
+    3. Insignia de estado de firma (`Firmado` / `Sin firma`).
+    4. Importe base `+ IVA`.
+    5. Botón interactivo `+ Facturar`.
+  - El contenedor de la lista cuenta con scroll vertical independiente (`overflow-y-auto flex-1`), garantizando una navegación ágil sin que la ventana modal se desborde o se recorte independientemente del número de albaranes registrados.
+
 
 
 

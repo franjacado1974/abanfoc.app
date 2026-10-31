@@ -1553,6 +1553,93 @@ if (fs.existsSync(pdfGenPath)) {
     }
   }
 
+  // 111. Verificación del Icono Vectorial de Mano con Botones 1-2-3 (AGENTS.md REGLA 111)
+  const handIconPath111 = path.join(__dirname, '../src/components/HandOptionsIcon.tsx');
+  if (!fs.existsSync(handIconPath111)) {
+    errors.push('CRÍTICO: Falta el componente src/components/HandOptionsIcon.tsx (AGENTS.md REGLA 111).');
+  } else {
+    const handContent111 = fs.readFileSync(handIconPath111, 'utf8');
+    if (!handContent111.includes('viewBox="0 0 100 100"') || !handContent111.includes('M 44 28.4 A 12 12 0 1 1 56 28.4')) {
+      errors.push('CRÍTICO: HandOptionsIcon.tsx no posee la geometría vectorial exacta de los botones 1-2-3 y arco abierto del botón 2 (AGENTS.md REGLA 111).');
+    }
+  }
+
+  // 112. Verificación de Tablas a Ancho Completo sin Columna de Acciones y Apertura al Pulsar en la Línea (AGENTS.md REGLA 112)
+  const modulosTablaOperativa112 = [
+    { name: 'Revisiones.tsx', path: path.join(__dirname, '../src/Revisiones.tsx') },
+    { name: 'Instalaciones.tsx', path: path.join(__dirname, '../src/Instalaciones.tsx') },
+    { name: 'Reparaciones.tsx', path: path.join(__dirname, '../src/Reparaciones.tsx') },
+    { name: 'Urgencias.tsx', path: path.join(__dirname, '../src/Urgencias.tsx') },
+    { name: 'PruebasTecnicas.tsx', path: path.join(__dirname, '../src/PruebasTecnicas.tsx') }
+  ];
+
+  modulosTablaOperativa112.forEach(({ name, path: tPath }) => {
+    if (fs.existsSync(tPath)) {
+      const tContent = fs.readFileSync(tPath, 'utf8');
+      if (!tContent.includes('HandOptionsIcon')) {
+        errors.push(`CRÍTICO: ${name} carece del icono HandOptionsIcon para la cabecera del modal de acciones (AGENTS.md REGLA 112).`);
+      }
+      if (!tContent.includes('accionesModalItem') || !tContent.includes('setAccionesModalItem')) {
+        errors.push(`CRÍTICO: ${name} carece del modal accionesModalItem para apertura al pulsar en la fila (AGENTS.md REGLA 112).`);
+      }
+      if (name === 'Revisiones.tsx' && tContent.includes('Volver al panel')) {
+        errors.push(`CRÍTICO: ${name} contiene el botón 'Volver al panel' que debe permanecer retirado (AGENTS.md REGLA 112).`);
+      }
+    }
+  });
+
+  // 113. Verificación de Pruebas Técnicas con 2 Pestañas Estacionales y Tabla a Ancho Completo (AGENTS.md REGLA 113)
+  const pruebasTecPath113 = path.join(__dirname, '../src/PruebasTecnicas.tsx');
+  if (fs.existsSync(pruebasTecPath113)) {
+    const ptContent113 = fs.readFileSync(pruebasTecPath113, 'utf8');
+    if (!ptContent113.includes("activeTab === 'red-publica'") || !ptContent113.includes("activeTab === 'grupo-presion'")) {
+      errors.push('CRÍTICO: PruebasTecnicas.tsx carece de las 2 pestañas estacionales (red-publica / grupo-presion) (AGENTS.md REGLA 113).');
+    }
+    if (!ptContent113.includes('w-full px-4 sm:px-8 py-6') && !ptContent113.includes('w-full px-4')) {
+      errors.push('CRÍTICO: PruebasTecnicas.tsx carece del contenedor a ancho completo w-full en su vista de tabla (AGENTS.md REGLA 113).');
+    }
+    if (!ptContent113.includes('firecheck_db_pruebas_tecnicas')) {
+      errors.push('CRÍTICO: PruebasTecnicas.tsx carece de sincronización inmediata con firecheck_db_pruebas_tecnicas (AGENTS.md REGLA 113).');
+    }
+  }
+
+  // 114. Verificación del Título Oficial Listado de mantenimientos anuales "LISTMAN" (AGENTS.md REGLA 114)
+  const revPath114 = path.join(__dirname, '../src/Revisiones.tsx');
+  const revSubPath114 = path.join(__dirname, '../src/mantenimientos/pages/Revisiones.tsx');
+  const appPath114 = path.join(__dirname, '../src/App.tsx');
+  const expectedTitle114 = 'Listado de mantenimientos anuales "LISTMAN"';
+
+  if (fs.existsSync(revPath114)) {
+    const rContent114 = fs.readFileSync(revPath114, 'utf8');
+    if (!rContent114.includes(expectedTitle114)) {
+      errors.push('CRÍTICO: Revisiones.tsx carece del título oficial Listado de mantenimientos anuales "LISTMAN" (AGENTS.md REGLA 114).');
+    }
+  }
+  if (fs.existsSync(revSubPath114)) {
+    const rsContent114 = fs.readFileSync(revSubPath114, 'utf8');
+    if (!rsContent114.includes(expectedTitle114)) {
+      errors.push('CRÍTICO: mantenimientos/pages/Revisiones.tsx carece del título oficial Listado de mantenimientos anuales "LISTMAN" (AGENTS.md REGLA 114).');
+    }
+  }
+  if (fs.existsSync(appPath114)) {
+    const aContent114 = fs.readFileSync(appPath114, 'utf8');
+    if (!aContent114.includes(expectedTitle114)) {
+      errors.push('CRÍTICO: App.tsx carece de la referencia a Listado de mantenimientos anuales "LISTMAN" en su tooltip (AGENTS.md REGLA 114).');
+    }
+  }
+
+  // 115. Verificación de Cabecera Ampliada y Modal en Lista con Scroll en Facturación (AGENTS.md REGLA 115)
+  const facPath115 = path.join(__dirname, '../src/Facturas.tsx');
+  if (fs.existsSync(facPath115)) {
+    const fContent115 = fs.readFileSync(facPath115, 'utf8');
+    if (!fContent115.includes('Emisión de facturas a partir de albaranes finalizados')) {
+      errors.push('CRÍTICO: Facturas.tsx carece del subtítulo oficial "Emisión de facturas a partir de albaranes finalizados" (AGENTS.md REGLA 115).');
+    }
+    if (!fContent115.includes('showModalAlbaranesPendientes') || !fContent115.includes('flex flex-col gap-2')) {
+      errors.push('CRÍTICO: Facturas.tsx carece del modal de albaranes en lista de 1 sola línea por fila (AGENTS.md REGLA 115).');
+    }
+  }
+
 // Resultado de la verificación
 if (errors.length > 0) {
   console.error('\n❌ ERROR CRÍTICO DE BLINDAJE INTEGRAL (AGENTS.md):');
