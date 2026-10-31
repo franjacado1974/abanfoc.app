@@ -1564,6 +1564,8 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
   - En la esquina superior derecha de cada celda con eventos o tareas registradas, colocado directamente encima de la barra de desplazamiento, la cantidad se muestra como un **número pequeño en azul vivo sin fondo** (`text-blue-500 font-black`), diferenciando claramente la cantidad de tareas respecto al día de forma limpia, visible, sutil y elegante.
 - **Barra de Desplazamiento (Scrollbar) en Negro**:
   - La lista de tareas dentro de cada celda de día cuenta con barra de desplazamiento en negro (`scrollbar-color: #000000 transparent`, `::-webkit-scrollbar-thumb { background: #000000; }`), permitiendo al usuario identificar de inmediato cuándo una celda contiene más tareas ocultas por desbordamiento vertical.
+- **Cabecera con Color de Días de la Semana**:
+  - La fila superior con los días de la semana cuenta con fondo gris neutro sólido y definido (`bg-zinc-200/90 border-b border-zinc-300 divide-x divide-zinc-300/60`), con tipografía oscura destacada (`text-zinc-800 font-black`) y fines de semana resaltados en rojo (`text-red-600 font-black`), eliminando fondos blancos descoloridos o camuflados.
 
 
 

@@ -1548,6 +1548,9 @@ if (fs.existsSync(pdfGenPath)) {
     if (!calContent110.includes('scrollbar-color: #000000 transparent') && !calContent110.includes('#000000')) {
       errors.push('CRÍTICO: Calendario.tsx carece de la scrollbar en negro para alertar de tareas ocultas (AGENTS.md REGLA 110).');
     }
+    if (!calContent110.includes('bg-zinc-200/90') || !calContent110.includes('border-zinc-300')) {
+      errors.push('CRÍTICO: Calendario.tsx carece de la cabecera con color para los días de la semana (AGENTS.md REGLA 110).');
+    }
   }
 
 // Resultado de la verificación

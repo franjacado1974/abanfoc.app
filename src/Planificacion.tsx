@@ -444,12 +444,12 @@ export default function Planificacion() {
               </button>
             </div>
             {/* Encabezados de días de la semana - alineados con las columnas del calendario */}
-            <div className={`px-2 border-b border-zinc-300 bg-zinc-100 ${showWeekends ? 'grid grid-cols-7' : 'grid grid-cols-5'}`}>
+            <div className={`px-2 border-b border-zinc-300 bg-zinc-200/90 divide-x divide-zinc-300/60 ${showWeekends ? 'grid grid-cols-7' : 'grid grid-cols-5'}`}>
               {(showWeekends
                 ? ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
                 : ['Lun', 'Mar', 'Mié', 'Jue', 'Vie']
-              ).map(d => (
-                <div key={d} className="py-2.5 text-center text-[11px] font-extrabold uppercase tracking-wider text-zinc-700">
+              ).map((d, idx) => (
+                <div key={d} className={`py-3 text-center text-xs font-black uppercase tracking-wider ${idx >= 5 ? 'text-red-600 font-black' : 'text-zinc-800 font-black'}`}>
                   {d}
                 </div>
               ))}

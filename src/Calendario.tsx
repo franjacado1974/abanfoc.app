@@ -1057,9 +1057,9 @@ export default function Calendario() {
       {/* Contenedor del Calendario a toda la pantalla */}
       <div className="flex-1 bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden flex flex-col min-h-0">
         {/* Cabecera con Días de la Semana */}
-        <div className={`grid ${mostrarFinSemana ? 'grid-cols-7' : 'grid-cols-5'} border-b border-slate-200 bg-slate-50/80 text-center text-xs font-black text-slate-600 uppercase tracking-wider py-2.5 shrink-0`}>
+        <div className={`grid ${mostrarFinSemana ? 'grid-cols-7' : 'grid-cols-5'} border-b border-zinc-300 bg-zinc-200/90 divide-x divide-zinc-300/60 text-center text-xs font-black uppercase tracking-wider py-3 shrink-0`}>
           {diasSemanaCabecera.map((dia, idx) => (
-            <div key={dia} className={idx >= 5 ? 'text-red-600' : ''}>
+            <div key={dia} className={idx >= 5 ? 'text-red-600 font-black' : 'text-zinc-800 font-black'}>
               <span className="hidden sm:inline">{dia}</span>
               <span className="sm:hidden">{dia.slice(0, 2)}</span>
             </div>
