@@ -5,6 +5,7 @@ import {
   Clock, PauseCircle, Building2, MapPin, Briefcase, 
   X, Save, Calendar, Filter, StickyNote, ChevronDown
 } from 'lucide-react';
+import { HandOptionsIcon } from './components/HandOptionsIcon';
 import { 
   subscribeCentros, subscribeEmpresas, 
   subscribeRevisiones, updateRevision, addRevision, deleteRevision,
@@ -180,6 +181,7 @@ export default function Revisiones() {
   }, []);
 
   // Modales
+  const [accionesModalItem, setAccionesModalItem] = useState<RevisionItem | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<{
     docId?: string;
@@ -929,19 +931,19 @@ export default function Revisiones() {
               <thead>
                 <tr className="bg-zinc-200/90 border-b border-zinc-300 text-[11px] font-extrabold uppercase tracking-wider text-zinc-700">
                   <th className="py-3 px-6">CENTRO</th>
-                  <th className="py-3 px-6">CÓDIGO CENTRO</th>
-                  <th className="py-3 px-6 text-center">TIPO</th>
-                  <th className="py-3 px-6">EMPRESA MANTENEDORA</th>
-                  <th className="py-3 px-6">UBICACIÓN</th>
-                  <th className="py-3 px-6 text-center">ESTADO</th>
-                  <th className="py-3 px-6 text-right">ACCIONES</th>
+                  <th className="w-36 lg:w-44 py-3 px-6">CÓDIGO CENTRO</th>
+                  <th className="w-32 lg:w-44 py-3 px-6 text-center">TIPO</th>
+                  <th className="w-44 lg:w-56 py-3 px-6">EMPRESA MANTENEDORA</th>
+                  <th className="w-40 lg:w-52 py-3 px-6">UBICACIÓN</th>
+                  <th className="w-32 py-3 px-6 text-center">ESTADO</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100 text-xs">
                 {revisionesAMostrar.map((item, index) => (
                   <tr 
                     key={item.id} 
-                    className={`transition-all duration-150 group ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100/80'} hover:bg-amber-100/90 hover:shadow-xs`}
+                    onClick={() => setAccionesModalItem(item)}
+                    className={`transition-all duration-150 group cursor-pointer ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100/80'} hover:bg-amber-100/90 hover:shadow-xs`}
                   >
                     {/* CENTRO */}
                     <td className="py-2.5 px-6 font-medium text-zinc-800">
@@ -962,14 +964,14 @@ export default function Revisiones() {
                     </td>
 
                     {/* CÓDIGO CENTRO */}
-                    <td className="py-2.5 px-6 font-mono font-bold text-zinc-700">
+                    <td className="w-36 lg:w-44 py-2.5 px-6 font-mono font-bold text-zinc-700">
                       <span className="bg-zinc-100 border border-zinc-200 px-2.5 py-1 rounded-lg">
                         {item.codigoCentro}
                       </span>
                     </td>
 
                     {/* TIPO DE REVISIÓN */}
-                    <td className="py-2.5 px-6 text-center">
+                    <td className="w-32 lg:w-44 py-2.5 px-6 text-center">
                       <div className="flex flex-col items-center gap-1">
                         {renderTipoBadge(item.tipoRevision, item.tag)}
                         {(() => {
@@ -1024,44 +1026,24 @@ export default function Revisiones() {
                     </td>
 
                     {/* EMPRESA MANTENEDORA */}
-                    <td className="py-2.5 px-6 font-semibold text-zinc-700">
+                    <td className="w-44 lg:w-56 py-2.5 px-6 font-semibold text-zinc-700">
                       <div className="flex items-center gap-1.5">
-                        <Briefcase className="w-3.5 h-3.5 text-zinc-400" />
-                        <span>{item.empresaMantenedora}</span>
+                        <Briefcase className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                        <span className="truncate">{item.empresaMantenedora}</span>
                       </div>
                     </td>
 
                     {/* UBICACIÓN */}
-                    <td className="py-2.5 px-6 font-semibold text-zinc-700">
+                    <td className="w-40 lg:w-52 py-2.5 px-6 font-semibold text-zinc-700">
                       <div className="flex items-center gap-1.5">
-                        <MapPin className="w-3.5 h-3.5 text-zinc-400" />
-                        <span>{item.ubicacion}</span>
+                        <MapPin className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                        <span className="truncate">{item.ubicacion}</span>
                       </div>
                     </td>
 
                     {/* ESTADO */}
-                    <td className="py-2.5 px-6 text-center">
+                    <td className="w-32 py-2.5 px-6 text-center">
                       {renderEstadoBadge(item.estado)}
-                    </td>
-
-                    {/* ACCIONES */}
-                    <td className="py-2.5 px-6 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          onClick={() => handleOpenEdit(item)}
-                          title="Editar Estado u Observaciones"
-                          className="p-2 rounded-xl bg-zinc-100 hover:bg-black hover:text-white text-zinc-600 transition-all cursor-pointer"
-                        >
-                          <Edit className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => setDeleteConfirmId({ id: item.id, docId: item._docId, nombre: item.centroNombre })}
-                          title="Eliminar Registro de Revisión"
-                          className="p-2 rounded-xl bg-zinc-100 hover:bg-red-600 hover:text-white text-zinc-600 transition-all cursor-pointer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
                     </td>
                   </tr>
                 ))}
@@ -1104,6 +1086,95 @@ export default function Revisiones() {
               <option value={200}>200</option>
               <option value="todos">Mostrar todos</option>
             </select>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL FLOTANTE DE ACCIONES RÁPIDAS */}
+      {accionesModalItem && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-[9999] animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-100">
+            {/* Cabecera */}
+            <div className="px-6 py-5 bg-slate-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3 min-w-0 pr-2">
+                <div className="w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+                  <HandOptionsIcon className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="font-extrabold text-base truncate">
+                    Acciones de la Revisión
+                  </h3>
+                  <p className="text-xs text-slate-300 truncate">
+                    {accionesModalItem.centroNombre}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAccionesModalItem(null)}
+                className="p-2 text-slate-400 hover:text-white rounded-xl transition-colors cursor-pointer shrink-0"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Resumen */}
+            <div className="p-6 space-y-4">
+              <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-mono font-bold text-slate-600 bg-white border border-slate-200 px-2.5 py-1 rounded-lg">
+                    {accionesModalItem.codigoCentro}
+                  </span>
+                  {renderTipoBadge(accionesModalItem.tipoRevision, accionesModalItem.tag)}
+                </div>
+                <p className="text-sm font-bold text-slate-800">{accionesModalItem.centroNombre}</p>
+                <div className="flex items-center gap-2 text-xs text-slate-500">
+                  <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                  <span>{accionesModalItem.ubicacion || '—'}</span>
+                  <span>•</span>
+                  <span>{accionesModalItem.mes}</span>
+                </div>
+              </div>
+
+              {/* Botones de acción */}
+              <div className="grid grid-cols-1 gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const item = accionesModalItem;
+                    setAccionesModalItem(null);
+                    handleOpenEdit(item);
+                  }}
+                  className="w-full flex items-center gap-3 p-3.5 rounded-2xl border border-slate-200 hover:border-blue-300 bg-white hover:bg-blue-50/50 text-slate-700 hover:text-blue-900 transition-all font-semibold text-xs cursor-pointer group shadow-2xs"
+                >
+                  <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                    <Edit className="w-4 h-4" />
+                  </div>
+                  <div className="text-left flex-1 min-w-0">
+                    <div className="font-bold text-slate-800 group-hover:text-blue-900">Editar Estado u Observaciones</div>
+                    <div className="text-[11px] text-slate-400">Modificar el estado del mantenimiento o añadir notas</div>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const item = accionesModalItem;
+                    setAccionesModalItem(null);
+                    setDeleteConfirmId({ id: item.id, docId: item._docId, nombre: item.centroNombre });
+                  }}
+                  className="w-full flex items-center gap-3 p-3.5 rounded-2xl border border-red-200 hover:border-red-300 bg-red-50/30 hover:bg-red-50 text-red-700 transition-all font-semibold text-xs cursor-pointer group shadow-2xs"
+                >
+                  <div className="w-9 h-9 rounded-xl bg-red-100 text-red-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                    <Trash2 className="w-4 h-4" />
+                  </div>
+                  <div className="text-left flex-1 min-w-0">
+                    <div className="font-bold text-red-900">Eliminar Registro</div>
+                    <div className="text-[11px] text-red-500">Eliminar este mantenimiento planificado</div>
+                  </div>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

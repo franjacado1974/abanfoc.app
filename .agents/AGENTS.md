@@ -1518,15 +1518,17 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
 
 ---
 
-## 107. Blindaje Inviolable de Tablas Limpias en 1 Sola Fila, Columnas Adaptables y Agrupación de Acciones con Varita Mágica (`Wand2`) (`Reparaciones.tsx`, `Instalaciones.tsx`, `Urgencias.tsx`, `Pedidos.tsx`, `Albaranes.tsx`, `Facturas.tsx`)
-- **Diseño Limpio en 1 Sola Fila por Registro**:
-  - En los seis módulos de gestión (`Reparaciones.tsx`, `Instalaciones.tsx`, `Urgencias.tsx`, `Pedidos.tsx`, `Albaranes.tsx`, `Facturas.tsx`), toda la información de cada registro DEBE mostrarse en una sola fila plana sin saltos de línea amontonados debajo del título o cliente.
-  - La tipografía debe mantenerse suave y legible (`font-medium text-slate-700/800`), eliminando negritas agresivas innecesarias.
-  - Las columnas de fecha, referencia, estado, importes y acciones tienen ancho auto-adaptable al contenido (`w-px whitespace-nowrap`), permitiendo a las columnas de descripción y cliente expandirse naturalmente.
+## 107. Blindaje Inviolable de Tablas Limpias en 1 Sola Fila, Columnas Adaptables al Espacio sin Columna de Acciones y Apertura de Acciones al Pulsar en la Línea (`Reparaciones.tsx`, `Instalaciones.tsx`, `Urgencias.tsx`, `Revisiones.tsx`, `Pedidos.tsx`, `Albaranes.tsx`, `Facturas.tsx`)
+- **Diseño Limpio en 1 Sola Fila por Registro y Columnas Fluidas**:
+  - En los módulos de gestión (`Reparaciones.tsx`, `Instalaciones.tsx`, `Urgencias.tsx`, `Revisiones.tsx`, `Pedidos.tsx`, `Albaranes.tsx`, `Facturas.tsx`), toda la información de cada registro DEBE mostrarse en una sola fila plana sin saltos de línea amontonados debajo del título o cliente.
+  - La tipografía se mantiene suave y legible (`font-medium text-slate-700/800`), eliminando negritas agresivas innecesarias.
+  - Las columnas se adaptan de forma fluida y proporcional al ancho de pantalla disponible, dando espacio generoso a descripciones, títulos y lugares para evitar cortes prematuros o huecos vacíos.
   - En la fecha se utiliza el icono `Calendar` en rojo (`text-red-500`). En Reparaciones, Instalaciones y Urgencias, el icono genérico izquierdo fue sustituido por la referencia directa de la tarea.
-- **Acciones Agrupadas en Modal con Varita Mágica (`Wand2`)**:
-  - En la columna **Acciones** de las seis tablas, las múltiples acciones directas se unifican en un único botón con el icono de la **varita mágica** (`Wand2` en color índigo/azul).
-  - Al pulsar el botón se despliega una ventana modal (`accionesModalItem`) con fondo difuminado (`backdrop-blur-sm`) que reúne todas las operaciones del registro de forma accesible, ordenada y limpia.
+- **Supresión de la Columna de Acciones y Apertura al Pulsar en Cualquier Parte de la Línea**:
+  - En `Reparaciones.tsx`, `Instalaciones.tsx`, `Urgencias.tsx` y `Revisiones.tsx`, se suprime la columna redundante de "Acciones".
+  - Al pulsar en cualquier parte de la fila (con cursor `cursor-pointer`), se despliega la ventana modal (`accionesModalItem`) con fondo difuminado (`backdrop-blur-sm`).
+  - La cabecera del modal cuenta con el icono interactivo de la mano con botones (`HandOptionsIcon`), reuniendo todas las operaciones del registro de forma accesible, ordenada y limpia.
+  - En la celda de notas, el botón `StickyNote` utiliza `e.stopPropagation()` para abrir directamente la edición rápida de notas sin disparar el modal general de acciones.
 
 ---
 

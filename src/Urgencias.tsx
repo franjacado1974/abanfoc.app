@@ -5,8 +5,9 @@ import {
   AlertTriangle, Plus, Search, Filter, Edit, Trash2, CheckCircle2, 
   Clock, PauseCircle, User, MapPin, 
   X, Save, ChevronDown, StickyNote, Calendar,
-  ShieldAlert, Building2, Maximize2, Trash, FileText, GripVertical, ChevronUp, Wand2, ReceiptText
+  ShieldAlert, Building2, Maximize2, Trash, FileText, GripVertical, ChevronUp, ReceiptText
 } from 'lucide-react';
+import { HandOptionsIcon } from './components/HandOptionsIcon';
 import { 
   subscribeUrgencias, addUrgencia, updateUrgencia, deleteUrgencia, 
   subscribeTecnicos, subscribeCentros, subscribeClientes, subscribeEmpresas, subscribeTrabajos,
@@ -969,25 +970,24 @@ export default function Urgencias() {
             <thead>
               <tr className="bg-zinc-200/90 border-b border-zinc-300 text-[11px] font-bold uppercase tracking-wider text-zinc-700">
                 <th className="px-5 py-3">AVISO / URGENCIA</th>
-                <th className="w-px whitespace-nowrap px-4 py-3">FECHA</th>
-                <th className="px-4 py-3">LUGAR</th>
-                <th className="whitespace-nowrap px-4 py-3">TÉCNICO ASIGNADO</th>
-                <th className="w-px whitespace-nowrap px-4 py-3">PRIORIDAD</th>
-                <th className="w-px whitespace-nowrap px-4 py-3">ESTADO</th>
-                <th className="w-px whitespace-nowrap px-3 py-3 text-center">NOTA</th>
-                <th className="w-px whitespace-nowrap px-4 py-3 text-center">ACCIONES</th>
+                <th className="w-28 whitespace-nowrap px-4 py-3">FECHA</th>
+                <th className="w-48 lg:w-60 px-4 py-3">LUGAR</th>
+                <th className="w-40 lg:w-48 whitespace-nowrap px-4 py-3">TÉCNICO ASIGNADO</th>
+                <th className="w-28 whitespace-nowrap px-4 py-3 text-center">PRIORIDAD</th>
+                <th className="w-28 whitespace-nowrap px-4 py-3 text-center">ESTADO</th>
+                <th className="w-16 whitespace-nowrap px-3 py-3 text-center">NOTA</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-12 text-center text-slate-400">
+                  <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
                     Cargando avisos de urgencia...
                   </td>
                 </tr>
               ) : urgenciasFiltradas.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-12 text-center text-slate-400 font-medium">
+                  <td colSpan={7} className="px-6 py-12 text-center text-slate-400 font-medium">
                     {search || estadoFilter !== 'TODOS' || prioridadFilter !== 'TODAS'
                       ? 'No se encontraron avisos de urgencia con los filtros aplicados.'
                       : `No hay avisos de urgencia registrados en ${activeMonth}.`}
@@ -1001,7 +1001,8 @@ export default function Urgencias() {
                   return (
                     <tr 
                       key={item.id} 
-                      className={`transition-all duration-150 group ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100/80'} hover:bg-amber-100/90 hover:shadow-xs`}
+                      onClick={() => setAccionesModalItem(item)}
+                      className={`transition-all duration-150 group cursor-pointer ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100/80'} hover:bg-amber-100/90 hover:shadow-xs`}
                     >
                       {/* AVISO / URGENCIA CON REFERENCIA SUSTITUYENDO AL ICONO */}
                       <td className="px-5 py-2.5">
@@ -1022,7 +1023,7 @@ export default function Urgencias() {
                       </td>
 
                       {/* FECHA */}
-                      <td className="w-px whitespace-nowrap px-4 py-2.5 text-xs">
+                      <td className="w-28 whitespace-nowrap px-4 py-2.5 text-xs">
                         {item.fecha ? (
                           <span className="inline-flex items-center gap-1.5 text-slate-600 font-medium">
                             <Calendar className="w-3.5 h-3.5 text-red-500" />
@@ -1034,36 +1035,39 @@ export default function Urgencias() {
                       </td>
 
                       {/* LUGAR */}
-                      <td className="px-4 py-2.5 text-xs text-slate-600">
+                      <td className="w-48 lg:w-60 px-4 py-2.5 text-xs text-slate-600">
                         <div className="flex items-center gap-1.5">
                           <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                          <span title={item.lugar || '—'}>{item.lugar || '—'}</span>
+                          <span className="truncate" title={item.lugar || '—'}>{item.lugar || '—'}</span>
                         </div>
                       </td>
 
                       {/* TÉCNICO ASIGNADO */}
-                      <td className="whitespace-nowrap px-4 py-2.5 text-xs text-slate-600">
+                      <td className="w-40 lg:w-48 whitespace-nowrap px-4 py-2.5 text-xs text-slate-600">
                         <div className="flex items-center gap-1.5">
                           <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                          <span title={item.tecnicoAsignado || 'Sin asignar'}>{item.tecnicoAsignado || 'Sin asignar'}</span>
+                          <span className="truncate" title={item.tecnicoAsignado || 'Sin asignar'}>{item.tecnicoAsignado || 'Sin asignar'}</span>
                         </div>
                       </td>
 
                       {/* PRIORIDAD */}
-                      <td className="w-px whitespace-nowrap px-4 py-2.5">
+                      <td className="w-28 whitespace-nowrap px-4 py-2.5 text-center">
                         {renderPrioridadBadge(item.prioridad || 'Media')}
                       </td>
 
                       {/* ESTADO */}
-                      <td className="w-px whitespace-nowrap px-4 py-2.5">
+                      <td className="w-28 whitespace-nowrap px-4 py-2.5 text-center">
                         {renderEstadoBadge(item.estado)}
                       </td>
 
                       {/* NOTA CON ICONO Y NOTIFICACIÓN SI EXISTE */}
-                      <td className="w-px whitespace-nowrap px-3 py-2.5 text-center">
+                      <td className="w-16 whitespace-nowrap px-3 py-2.5 text-center">
                         <button
                           type="button"
-                          onClick={() => handleOpenNotaModal(item)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenNotaModal(item);
+                          }}
                           className={`relative inline-flex items-center justify-center p-1.5 rounded-xl transition-all cursor-pointer ${
                             hasNote
                               ? 'bg-amber-100 text-amber-900 border border-amber-300 shadow-xs hover:bg-amber-200'
@@ -1079,18 +1083,6 @@ export default function Urgencias() {
                               <span className="relative inline-flex rounded-full h-3 w-3 bg-red-600 border-2 border-white"></span>
                             </span>
                           )}
-                        </button>
-                      </td>
-
-                      {/* ACCIONES */}
-                      <td className="w-px whitespace-nowrap px-4 py-2.5 text-center">
-                        <button
-                          type="button"
-                          onClick={() => setAccionesModalItem(item)}
-                          className="inline-flex items-center justify-center p-2 rounded-xl text-amber-600 hover:text-amber-700 bg-amber-50/70 hover:bg-amber-100/80 border border-amber-200/80 transition-all cursor-pointer shadow-2xs group"
-                          title="Abrir acciones"
-                        >
-                          <Wand2 className="w-4 h-4 group-hover:rotate-12 transition-transform text-amber-600" />
                         </button>
                       </td>
                     </tr>
@@ -1147,7 +1139,7 @@ export default function Urgencias() {
             <div className="px-6 py-5 bg-slate-900 text-white flex items-center justify-between">
               <div className="flex items-center gap-3 min-w-0 pr-2">
                 <div className="w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
-                  <Wand2 className="w-5 h-5" />
+                  <HandOptionsIcon className="w-5 h-5" />
                 </div>
                 <div className="min-w-0">
                   <h3 className="font-extrabold text-base truncate">
