@@ -1862,6 +1862,8 @@ export default function Facturas() {
                         const clienteNombre = cli?.nombre || alb.clienteNombreLibre || cen?.nombre || 'Cliente';
                         const conceptoNombre = alb.titulo || cen?.nombre || 'Albarán';
 
+                        const fechaAlb = alb.fechaCreacion ? formatFecha(alb.fechaCreacion) : '';
+
                         return (
                           <button
                             key={alb.id}
@@ -1877,10 +1879,10 @@ export default function Facturas() {
                               <span className="text-xs font-mono font-bold text-zinc-800 bg-white px-2.5 py-1 rounded-lg border border-zinc-200 shadow-2xs">
                                 {alb.id}
                               </span>
-                              {alb.fecha && (
+                              {fechaAlb && fechaAlb !== '—' && (
                                 <span className="text-xs font-medium text-zinc-500 hidden sm:inline-flex items-center gap-1">
                                   <Calendar className="w-3.5 h-3.5 text-zinc-400" />
-                                  {alb.fecha}
+                                  {fechaAlb}
                                 </span>
                               )}
                             </div>
