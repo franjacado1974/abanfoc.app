@@ -71,6 +71,7 @@ export type ItemPlantillaInput = Omit<ItemPlantilla, 'id' | 'createdAt' | 'updat
 /** Plantilla de checklist (documento principal) */
 export interface Plantilla {
   id: string;
+  codigo?: string; // Código/número del sistema (ej: "S01", "S02")
   nombre: string;
   descripcion?: string;
   imagenUrl?: string;
@@ -106,6 +107,7 @@ export async function getPlantillas(): Promise<Plantilla[]> {
       const data = d.data() as any;
       return {
         id: d.id,
+        codigo: data.codigo || '',
         nombre: data.nombre || '',
         descripcion: data.descripcion || '',
         imagenUrl: data.imagenUrl || '',
@@ -131,6 +133,7 @@ export async function getPlantilla(id: string): Promise<Plantilla | null> {
     const data = snap.data() as any;
     return {
       id: snap.id,
+      codigo: data.codigo || '',
       nombre: data.nombre || '',
       descripcion: data.descripcion || '',
       imagenUrl: data.imagenUrl || '',
@@ -219,6 +222,7 @@ export function subscribePlantillas(callback: (plantillas: Plantilla[]) => void)
           const data = d.data() as any;
           return {
             id: d.id,
+            codigo: data.codigo || '',
             nombre: data.nombre || '',
             descripcion: data.descripcion || '',
             imagenUrl: data.imagenUrl || '',
@@ -626,6 +630,7 @@ export async function duplicarPlantilla(plantillaId: string): Promise<Plantilla>
     // 3. Crear la nueva plantilla con nombre "COPIA - ..."
     const col = collection(db, COLECCION_PLANTILLAS);
     const nuevaPlantillaData = {
+      codigo: original.codigo ? `${original.codigo}-COPIA` : '',
       nombre: `COPIA - ${original.nombre}`,
       descripcion: original.descripcion || '',
       imagenUrl: original.imagenUrl || '',

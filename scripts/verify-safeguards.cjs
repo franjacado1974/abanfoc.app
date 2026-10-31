@@ -1437,6 +1437,61 @@ if (fs.existsSync(pdfGenPath)) {
     }
   }
 
+  // 106. Verificación de Código de Sistema con Prefijo "S" en Editor de Plantillas (AGENTS.md REGLA 106)
+  const plantillasPath106 = path.join(__dirname, '../src/plantillas.ts');
+  const formBuilderPath106 = path.join(__dirname, '../src/FormBuilderPlantillas.tsx');
+  if (fs.existsSync(plantillasPath106)) {
+    const pContent = fs.readFileSync(plantillasPath106, 'utf8');
+    if (!pContent.includes('codigo?: string;')) {
+      errors.push('CRÍTICO: plantillas.ts carece de la propiedad codigo en Plantilla (AGENTS.md REGLA 106).');
+    }
+  }
+  if (fs.existsSync(formBuilderPath106)) {
+    const fbContent = fs.readFileSync(formBuilderPath106, 'utf8');
+    if (!fbContent.includes('numeroSistema') || !fbContent.includes('bg-teal-600 text-white font-black')) {
+      errors.push('CRÍTICO: FormBuilderPlantillas.tsx carece del campo con prefijo "S" para código de sistema (AGENTS.md REGLA 106).');
+    }
+  }
+
+  // 107. Verificación de Tablas Limpias en 1 Fila y Botón Varita Mágica (Wand2) (AGENTS.md REGLA 107)
+  const modulosWand = [
+    { name: 'Reparaciones.tsx', path: path.join(__dirname, '../src/Reparaciones.tsx') },
+    { name: 'Instalaciones.tsx', path: path.join(__dirname, '../src/Instalaciones.tsx') },
+    { name: 'Urgencias.tsx', path: path.join(__dirname, '../src/Urgencias.tsx') },
+    { name: 'Pedidos.tsx', path: path.join(__dirname, '../src/Pedidos.tsx') },
+    { name: 'Albaranes.tsx', path: path.join(__dirname, '../src/Albaranes.tsx') },
+    { name: 'Facturas.tsx', path: path.join(__dirname, '../src/Facturas.tsx') }
+  ];
+
+  modulosWand.forEach(({ name, path: wPath }) => {
+    if (fs.existsSync(wPath)) {
+      const wContent = fs.readFileSync(wPath, 'utf8');
+      if (!wContent.includes('Wand2')) {
+        errors.push(`CRÍTICO: ${name} carece del icono Wand2 para el botón de acciones agrupadas (AGENTS.md REGLA 107).`);
+      }
+      if (!wContent.includes('accionesModalItem') || !wContent.includes('setAccionesModalItem')) {
+        errors.push(`CRÍTICO: ${name} carece del modal accionesModalItem para agrupar acciones (AGENTS.md REGLA 107).`);
+      }
+    }
+  });
+
+  // 108. Verificación de Descargas Valorado y Sin Valorar para Operarios (AGENTS.md REGLA 108)
+  const modulosPDVOperario = [
+    { name: 'Pedidos.tsx', path: path.join(__dirname, '../src/Pedidos.tsx') },
+    { name: 'Reparaciones.tsx', path: path.join(__dirname, '../src/Reparaciones.tsx') },
+    { name: 'Instalaciones.tsx', path: path.join(__dirname, '../src/Instalaciones.tsx') },
+    { name: 'Urgencias.tsx', path: path.join(__dirname, '../src/Urgencias.tsx') }
+  ];
+
+  modulosPDVOperario.forEach(({ name, path: opPath }) => {
+    if (fs.existsSync(opPath)) {
+      const opContent = fs.readFileSync(opPath, 'utf8');
+      if (!opContent.toLowerCase().includes('sin valorar') || !opContent.toLowerCase().includes('operario')) {
+        errors.push(`CRÍTICO: ${name} carece de la opción de descarga sin valorar para operario (AGENTS.md REGLA 108).`);
+      }
+    }
+  });
+
 // Resultado de la verificación
 if (errors.length > 0) {
   console.error('\n❌ ERROR CRÍTICO DE BLINDAJE INTEGRAL (AGENTS.md):');

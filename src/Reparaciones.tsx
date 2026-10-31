@@ -5,7 +5,7 @@ import {
   Wrench, Plus, Search, Filter, Edit, Trash2, CheckCircle2, 
   Clock, PauseCircle, User, MapPin, Briefcase, 
   X, Save, ChevronDown, FileText, StickyNote, Bell, Calendar,
-  Building2, Maximize2, Trash, GripVertical, ChevronUp
+  Building2, Maximize2, Trash, GripVertical, ChevronUp, Wand2, ReceiptText
 } from 'lucide-react';
 import { 
   subscribeReparaciones, addReparacion, updateReparacion, deleteReparacion, 
@@ -142,6 +142,9 @@ export default function Reparaciones() {
   // Modal rápido de Nota / Notificación
   const [notaModalItem, setNotaModalItem] = useState<ReparacionItem | null>(null);
   const [notaText, setNotaText] = useState('');
+
+  // Modal rápido de Acciones (Varita mágica)
+  const [accionesModalItem, setAccionesModalItem] = useState<ReparacionItem | null>(null);
 
   // Formulario de edición/creación
   const [formData, setFormData] = useState({
@@ -619,8 +622,8 @@ export default function Reparaciones() {
     });
   };
 
-  // Descargar / Ver Pedido de Venta (PDV) en PDF
-  const handleDescargarPDV = async (item: ReparacionItem) => {
+  // Descargar / Ver Pedido de Venta (PDV) en PDF (valorado o sin valorar)
+  const handleDescargarPDV = async (item: ReparacionItem, sinValorar: boolean = false) => {
     // 1. Buscar presupuesto o pedido vinculado
     const matchPresupuesto = presupuestos.find(p => 
       (item.presupuestoId && (p.id === item.presupuestoId || (p as any)._docId === item.presupuestoId)) ||
@@ -712,7 +715,8 @@ export default function Reparaciones() {
       total,
       notas,
       esPedido: true,
-      tituloDocumento: 'PEDIDO DE VENTA'
+      tituloDocumento: sinValorar ? 'PEDIDO DE VENTA (SIN VALORAR)' : 'PEDIDO DE VENTA',
+      sinValorar
     }, empresaSeleccionada);
   };
 
@@ -903,7 +907,7 @@ export default function Reparaciones() {
   ];
 
   return (
-    <div className="p-4 sm:p-8 max-w-[1600px] mx-auto min-h-screen">
+    <div className="min-h-screen bg-[#F8FAFC] px-4 sm:px-8 py-6">
       {/* Header & Title + Controles (Búsqueda, Filtro de Estado y Nueva Reparación) */}
       <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 mb-6">
         <div className="shrink-0">
@@ -1021,26 +1025,27 @@ export default function Reparaciones() {
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-zinc-200/90 border-b border-zinc-300 text-[11px] font-extrabold uppercase tracking-wider text-zinc-700">
-                <th className="px-6 py-3">REPARACIÓN</th>
-                <th className="px-6 py-3">LUGAR</th>
-                <th className="px-6 py-3">TÉCNICO ASIGNADO</th>
-                <th className="px-6 py-3">COMERCIAL</th>
-                <th className="px-6 py-3">ESTADO</th>
-                <th className="px-4 py-3 text-center">NOTA</th>
-                <th className="px-6 py-3 text-right">ACCIONES</th>
+              <tr className="bg-zinc-200/90 border-b border-zinc-300 text-[11px] font-bold uppercase tracking-wider text-zinc-700">
+                <th className="px-5 py-3">REPARACIÓN</th>
+                <th className="w-px whitespace-nowrap px-4 py-3">FECHA</th>
+                <th className="px-4 py-3">LUGAR</th>
+                <th className="whitespace-nowrap px-4 py-3">TÉCNICO ASIGNADO</th>
+                <th className="whitespace-nowrap px-4 py-3">COMERCIAL</th>
+                <th className="w-px whitespace-nowrap px-4 py-3">ESTADO</th>
+                <th className="w-px whitespace-nowrap px-3 py-3 text-center">NOTA</th>
+                <th className="w-px whitespace-nowrap px-4 py-3 text-center">ACCIONES</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
+                  <td colSpan={8} className="px-6 py-12 text-center text-slate-400">
                     Cargando tareas de reparación...
                   </td>
                 </tr>
               ) : reparacionesFiltradas.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-slate-400 font-medium">
+                  <td colSpan={8} className="px-6 py-12 text-center text-slate-400 font-medium">
                     {search || estadoFilter !== 'TODOS'
                       ? 'No se encontraron tareas de reparación con los filtros aplicados.'
                       : `No hay tareas de reparación registradas en ${activeMonth}.`}
@@ -1056,68 +1061,73 @@ export default function Reparaciones() {
                       key={item.id} 
                       className={`transition-all duration-150 group ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100/80'} hover:bg-amber-100/90 hover:shadow-xs`}
                     >
-                      {/* REPARACIÓN */}
-                      <td className="px-6 py-2.5">
-                        <div className="flex items-start gap-3">
-                          <div className="w-9 h-9 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-700 shrink-0 mt-0.5">
-                            <Wrench className="w-4 h-4" />
-                          </div>
-                          <div>
-                            <p className="font-bold text-slate-900">{item.reparacion || 'Sin título'}</p>
-                            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                              {item.fecha && (
-                                <span className="text-[11px] font-semibold text-slate-500 inline-flex items-center gap-1 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200/80">
-                                  <Calendar className="w-3 h-3 text-red-500" />
-                                  {formatearFecha(item.fecha)}
-                                </span>
-                              )}
-                              {(item.pedidoId || item.numeroPedido) && (
-                                <span className="text-[11px] font-mono font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200/80 shadow-xs">
-                                  {item.pedidoId || item.numeroPedido}
-                                </span>
-                              )}
-                            </div>
-                          </div>
+                      {/* REPARACIÓN CON REFERENCIA SUSTITUYENDO AL ICONO */}
+                      <td className="px-5 py-2.5">
+                        <div className="flex items-center gap-2.5">
+                          {(item.pedidoId || item.numeroPedido) ? (
+                            <span className="font-mono text-xs font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200/80 shrink-0">
+                              {item.pedidoId || item.numeroPedido}
+                            </span>
+                          ) : (
+                            <span className="font-mono text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200/60 shrink-0">
+                              —
+                            </span>
+                          )}
+                          <span className="font-medium text-slate-800 text-sm" title={item.reparacion || 'Sin título'}>
+                            {item.reparacion || 'Sin título'}
+                          </span>
                         </div>
                       </td>
 
+                      {/* FECHA */}
+                      <td className="w-px whitespace-nowrap px-4 py-2.5 text-xs">
+                        {item.fecha ? (
+                          <span className="inline-flex items-center gap-1.5 text-slate-600 font-medium">
+                            <Calendar className="w-3.5 h-3.5 text-red-500" />
+                            {formatearFecha(item.fecha)}
+                          </span>
+                        ) : (
+                          <span className="text-slate-300">—</span>
+                        )}
+                      </td>
+
                       {/* LUGAR */}
-                      <td className="px-6 py-2.5 font-medium text-slate-700">
-                        <div className="flex items-center gap-2">
-                          <MapPin className="w-4 h-4 text-slate-400 shrink-0" />
-                          <span>{item.lugar || '—'}</span>
+                      <td className="px-4 py-2.5 text-xs text-slate-600">
+                        <div className="flex items-center gap-1.5">
+                          <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span title={item.lugar || '—'}>{item.lugar || '—'}</span>
                         </div>
                       </td>
 
                       {/* TÉCNICO ASIGNADO */}
-                      <td className="px-6 py-2.5 font-medium text-slate-700">
-                        <div className="flex items-center gap-2">
-                          <User className="w-4 h-4 text-slate-400 shrink-0" />
-                          <span>{item.tecnicoAsignado || 'Sin asignar'}</span>
+                      <td className="whitespace-nowrap px-4 py-2.5 text-xs text-slate-600">
+                        <div className="flex items-center gap-1.5">
+                          <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span title={item.tecnicoAsignado || 'Sin asignar'}>{item.tecnicoAsignado || 'Sin asignar'}</span>
                         </div>
                       </td>
 
                       {/* COMERCIAL */}
-                      <td className="px-6 py-2.5 font-medium text-slate-700">
-                        <div className="flex items-center gap-2">
-                          <Briefcase className="w-4 h-4 text-slate-400 shrink-0" />
-                          <span>{item.comercial || '—'}</span>
+                      <td className="whitespace-nowrap px-4 py-2.5 text-xs text-slate-600">
+                        <div className="flex items-center gap-1.5">
+                          <Briefcase className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span title={item.comercial || '—'}>{item.comercial || '—'}</span>
                         </div>
                       </td>
 
                       {/* ESTADO */}
-                      <td className="px-6 py-2.5">
+                      <td className="w-px whitespace-nowrap px-4 py-2.5">
                         {renderEstadoBadge(item.estado)}
                       </td>
 
                       {/* NOTA CON ICONO Y NOTIFICACIÓN SI EXISTE */}
-                      <td className="px-4 py-2.5 text-center">
+                      <td className="w-px whitespace-nowrap px-3 py-2.5 text-center">
                         <button
                           type="button"
                           onClick={() => handleOpenNotaModal(item)}
-                          className={`relative inline-flex items-center justify-center p-2 rounded-xl transition-all cursor-pointer ${
+                          className={`relative inline-flex items-center justify-center p-1.5 rounded-xl transition-all cursor-pointer ${
                             hasNote
-                              ? 'bg-amber-100 text-amber-900 border border-amber-300 shadow-sm hover:bg-amber-200'
+                              ? 'bg-amber-100 text-amber-900 border border-amber-300 shadow-xs hover:bg-amber-200'
                               : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100 border border-transparent'
                           }`}
                           title={hasNote ? `Nota registrada: "${noteContent}" (Clic para abrir)` : 'Añadir nota'}
@@ -1135,47 +1145,15 @@ export default function Reparaciones() {
                       </td>
 
                       {/* ACCIONES */}
-                      <td className="px-6 py-2.5 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => handleDescargarPDV(item)}
-                            className="p-2 rounded-xl text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 transition-colors cursor-pointer"
-                            title="Ver / Descargar Pedido de Venta (PDV)"
-                          >
-                            <Search className="w-4 h-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleOpenCrearAlbaran(item)}
-                            className={`p-1.5 rounded-xl transition-colors cursor-pointer ${
-                              item.albaranId 
-                                ? 'text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50' 
-                                : 'text-slate-600 hover:text-blue-600 hover:bg-blue-50'
-                            }`}
-                            title={item.albaranId ? `Albarán creado (${item.albaranId}) - Clic para generar otro` : "Crear Albarán"}
-                          >
-                            <svg className="w-5 h-5 inline-block" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                              <polyline points="14 2 14 8 20 8" />
-                              <text x="12" y="19" textAnchor="middle" fill="currentColor" stroke="none" fontSize="11.5" fontWeight="900" fontFamily="system-ui, -apple-system, sans-serif">A</text>
-                            </svg>
-                          </button>
-                          <button
-                            onClick={() => handleOpenEditModal(item)}
-                            className="p-2 rounded-xl text-slate-600 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
-                            title="Editar"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => setDeleteConfirmId({ id: item.id, docId: item._docId })}
-                            className="p-2 rounded-xl text-slate-600 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
-                            title="Eliminar"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
+                      <td className="w-px whitespace-nowrap px-4 py-2.5 text-center">
+                        <button
+                          type="button"
+                          onClick={() => setAccionesModalItem(item)}
+                          className="inline-flex items-center justify-center p-2 rounded-xl text-amber-600 hover:text-amber-700 bg-amber-50/70 hover:bg-amber-100/80 border border-amber-200/80 transition-all cursor-pointer shadow-2xs group"
+                          title="Abrir acciones"
+                        >
+                          <Wand2 className="w-4 h-4 group-hover:rotate-12 transition-transform text-amber-600" />
+                        </button>
                       </td>
                     </tr>
                   );
@@ -1219,6 +1197,207 @@ export default function Reparaciones() {
               <option value={200}>200</option>
               <option value="todos">Mostrar todos</option>
             </select>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL FLOTANTE DE ACCIONES RÁPIDAS (VARITA MÁGICA) */}
+      {accionesModalItem && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-[9999] animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-100">
+            {/* Cabecera */}
+            <div className="px-6 py-5 bg-slate-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3 min-w-0 pr-2">
+                <div className="w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+                  <Wand2 className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="font-extrabold text-base truncate">
+                    Acciones de la Reparación
+                  </h3>
+                  <p className="text-xs text-slate-300 truncate">
+                    {accionesModalItem.reparacion || 'Tarea sin título'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAccionesModalItem(null)}
+                className="p-2 text-slate-400 hover:text-white rounded-xl transition-colors cursor-pointer shrink-0"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Subcabecera con información resumida */}
+            <div className="px-6 py-3 bg-slate-50 border-b border-slate-100 flex items-center gap-2 flex-wrap text-xs">
+              {accionesModalItem.fecha && (
+                <span className="inline-flex items-center gap-1 font-medium text-slate-600 bg-white px-2.5 py-1 rounded-lg border border-slate-200">
+                  <Calendar className="w-3.5 h-3.5 text-red-500" />
+                  {formatearFecha(accionesModalItem.fecha)}
+                </span>
+              )}
+              {(accionesModalItem.pedidoId || accionesModalItem.numeroPedido) && (
+                <span className="font-mono font-medium text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-200/80">
+                  {accionesModalItem.pedidoId || accionesModalItem.numeroPedido}
+                </span>
+              )}
+              {accionesModalItem.lugar && (
+                <span className="inline-flex items-center gap-1 text-slate-500 bg-white px-2.5 py-1 rounded-lg border border-slate-200 truncate max-w-[200px]">
+                  <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                  <span className="truncate">{accionesModalItem.lugar}</span>
+                </span>
+              )}
+            </div>
+
+            {/* Listado de acciones */}
+            <div className="p-6 flex flex-col gap-3">
+              {/* Acción 1: PDV Valorado */}
+              <button
+                type="button"
+                onClick={() => {
+                  const it = accionesModalItem;
+                  setAccionesModalItem(null);
+                  handleDescargarPDV(it, false);
+                }}
+                className="w-full flex items-center gap-3.5 p-3 rounded-2xl border border-indigo-100 bg-indigo-50/40 hover:bg-indigo-50 text-indigo-950 transition-all text-left cursor-pointer group hover:shadow-xs"
+              >
+                <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <Search className="w-5 h-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-indigo-950">
+                      Ver / Descargar Pedido de Venta (PDV)
+                    </span>
+                    <span className="text-[10px] font-bold uppercase tracking-wider bg-indigo-200/70 text-indigo-800 px-1.5 py-0.5 rounded-md">
+                      Valorado
+                    </span>
+                  </div>
+                  <div className="text-xs text-indigo-600/80 truncate">
+                    Documento oficial con precios, desglose económico y totales
+                  </div>
+                </div>
+              </button>
+
+              {/* Acción 2: PDV Sin Valorar (para operario) */}
+              <button
+                type="button"
+                onClick={() => {
+                  const it = accionesModalItem;
+                  setAccionesModalItem(null);
+                  handleDescargarPDV(it, true);
+                }}
+                className="w-full flex items-center gap-3.5 p-3 rounded-2xl border border-amber-200/80 bg-amber-50/50 hover:bg-amber-100/70 text-amber-950 transition-all text-left cursor-pointer group hover:shadow-xs"
+              >
+                <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-amber-950">
+                      Descargar Pedido para Operario
+                    </span>
+                    <span className="text-[10px] font-bold uppercase tracking-wider bg-amber-200/80 text-amber-900 px-1.5 py-0.5 rounded-md">
+                      Sin valorar
+                    </span>
+                  </div>
+                  <div className="text-xs text-amber-700/80 truncate">
+                    Para el técnico: tareas, descripciones y unidades sin importes
+                  </div>
+                </div>
+              </button>
+
+              {/* Acción 2: Albarán */}
+              <button
+                type="button"
+                onClick={() => {
+                  const it = accionesModalItem;
+                  setAccionesModalItem(null);
+                  handleOpenCrearAlbaran(it);
+                }}
+                className={`w-full flex items-center gap-3.5 p-3 rounded-2xl border transition-all text-left cursor-pointer group hover:shadow-xs ${
+                  accionesModalItem.albaranId
+                    ? 'border-emerald-200 bg-emerald-50/50 hover:bg-emerald-50 text-emerald-950'
+                    : 'border-blue-200 bg-blue-50/40 hover:bg-blue-50 text-blue-950'
+                }`}
+              >
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform ${
+                  accionesModalItem.albaranId ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'
+                }`}>
+                  <ReceiptText className="w-5 h-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold">
+                    {accionesModalItem.albaranId
+                      ? `Albarán creado (${accionesModalItem.albaranId})`
+                      : 'Crear Albarán'}
+                  </div>
+                  <div className={`text-xs truncate ${accionesModalItem.albaranId ? 'text-emerald-700/80' : 'text-blue-700/80'}`}>
+                    {accionesModalItem.albaranId
+                      ? 'Albarán ya vinculado. Clic para generar otro nuevo'
+                      : 'Generar un albarán correlativo desde esta reparación'}
+                  </div>
+                </div>
+              </button>
+
+              {/* Acción 3: Editar */}
+              <button
+                type="button"
+                onClick={() => {
+                  const it = accionesModalItem;
+                  setAccionesModalItem(null);
+                  handleOpenEditModal(it);
+                }}
+                className="w-full flex items-center gap-3.5 p-3 rounded-2xl border border-slate-200 bg-slate-50/60 hover:bg-slate-100/80 text-slate-900 transition-all text-left cursor-pointer group hover:shadow-xs"
+              >
+                <div className="w-10 h-10 rounded-xl bg-slate-200/80 text-slate-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <Edit className="w-5 h-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold text-slate-900">
+                    Editar Reparación
+                  </div>
+                  <div className="text-xs text-slate-500 truncate">
+                    Modificar datos, técnico, comercial o líneas de trabajo
+                  </div>
+                </div>
+              </button>
+
+              {/* Acción 4: Eliminar */}
+              <button
+                type="button"
+                onClick={() => {
+                  const it = accionesModalItem;
+                  setAccionesModalItem(null);
+                  setDeleteConfirmId({ id: it.id, docId: it._docId });
+                }}
+                className="w-full flex items-center gap-3.5 p-3 rounded-2xl border border-red-200 bg-red-50/40 hover:bg-red-50 text-red-950 transition-all text-left cursor-pointer group hover:shadow-xs"
+              >
+                <div className="w-10 h-10 rounded-xl bg-red-100 text-red-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold text-red-900">
+                    Eliminar Reparación
+                  </div>
+                  <div className="text-xs text-red-600/80 truncate">
+                    Enviar esta tarea de reparación a la papelera
+                  </div>
+                </div>
+              </button>
+            </div>
+
+            {/* Pie de modal */}
+            <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-100 flex items-center justify-end">
+              <button
+                type="button"
+                onClick={() => setAccionesModalItem(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 transition-colors cursor-pointer"
+              >
+                Cerrar
+              </button>
+            </div>
           </div>
         </div>
       )}

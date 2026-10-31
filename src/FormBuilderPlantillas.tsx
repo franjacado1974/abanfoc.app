@@ -14,7 +14,7 @@
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Plus, Trash2, Save, ChevronUp, ChevronDown,
   GripVertical, AlertCircle,
@@ -79,6 +79,7 @@ export default function FormBuilderPlantillas() {
   const [plantillas, setPlantillas] = useState<Plantilla[]>([]);
   const [plantillaSeleccionada, setPlantillaSeleccionada] = useState<string | null>(null);
   const [items, setItems] = useState<ItemLocal[]>([]);
+  const [numeroSistema, setNumeroSistema] = useState('');
   const [nombrePlantilla, setNombrePlantilla] = useState('');
   const [descripcionPlantilla, setDescripcionPlantilla] = useState('');
   const [imagenPlantilla, setImagenPlantilla] = useState<string>('');
@@ -88,6 +89,20 @@ export default function FormBuilderPlantillas() {
   const [guardando, setGuardando] = useState(false);
   const [mensaje, setMensaje] = useState<{ tipo: 'ok' | 'error'; texto: string } | null>(null);
   const [inicializado, setInicializado] = useState(false);
+
+  // Ordenar plantillas por código de sistema (ej: S01, S02, S03...) o alfabéticamente
+  const plantillasOrdenadas = useMemo(() => {
+    return [...plantillas].sort((a, b) => {
+      const codA = (a.codigo || '').trim();
+      const codB = (b.codigo || '').trim();
+      if (codA && codB) {
+        return codA.localeCompare(codB, undefined, { numeric: true, sensitivity: 'base' });
+      }
+      if (codA) return -1;
+      if (codB) return 1;
+      return a.nombre.localeCompare(b.nombre, undefined, { numeric: true, sensitivity: 'base' });
+    });
+  }, [plantillas]);
 
   // Estados para modal "Crear tabla"
   const [modalTablaOpen, setModalTablaOpen] = useState(false);
@@ -151,7 +166,19 @@ export default function FormBuilderPlantillas() {
     if (!plantillaSeleccionada) return;
     const p = plantillas.find(p => p.id === plantillaSeleccionada);
     if (p) {
-      setNombrePlantilla(p.nombre);
+      let num = '';
+      let nom = p.nombre || '';
+      if (p.codigo) {
+        num = p.codigo.replace(/^S/i, '').trim();
+      } else {
+        const match = nom.match(/^S(\d+)\s*[-:]?\s*(.*)/i);
+        if (match) {
+          num = match[1];
+          nom = match[2].trim() || nom;
+        }
+      }
+      setNumeroSistema(num);
+      setNombrePlantilla(nom);
       setDescripcionPlantilla(p.descripcion || '');
       setImagenPlantilla(p.imagenUrl || '');
     }
@@ -167,12 +194,24 @@ export default function FormBuilderPlantillas() {
   // ─── MANEJADORES DE PLANTILLA ─────────────────────────────────────────────
 
   const handleCrearPlantilla = async () => {
-    const nombre = prompt('Nombre de la nueva plantilla:');
+    const nombre = prompt('Nombre de la nueva plantilla (ej: 01 EXTINTORES o S01 EXTINTORES):');
     if (!nombre || !nombre.trim()) return;
     try {
-      const input: PlantillaInput = { nombre: nombre.trim(), activa: true };
+      let cod = '';
+      let nom = nombre.trim();
+      const match = nom.match(/^(?:S)?(\d+)\s*[-:]?\s*(.*)/i);
+      if (match && match[2]) {
+        cod = `S${match[1]}`;
+        nom = match[2].trim();
+      }
+      const input: PlantillaInput = {
+        nombre: nom,
+        codigo: cod,
+        activa: true
+      };
       const creada = await addPlantilla(input);
       setPlantillaSeleccionada(creada.id);
+      setNumeroSistema(cod.replace(/^S/i, ''));
       setNombrePlantilla(creada.nombre);
       setDescripcionPlantilla('');
       mostrarMensaje('ok', 'Plantilla creada correctamente');
@@ -251,7 +290,12 @@ export default function FormBuilderPlantillas() {
   const handleGuardarNombre = async () => {
     if (!plantillaSeleccionada || !nombrePlantilla.trim()) return;
     try {
-      const datos: any = { nombre: nombrePlantilla.trim() };
+      const numLimpio = numeroSistema.replace(/^S+/i, '').trim();
+      const codigoFormateado = numLimpio ? `S${numLimpio.toUpperCase()}` : '';
+      const datos: any = {
+        nombre: nombrePlantilla.trim(),
+        codigo: codigoFormateado,
+      };
       if (descripcionPlantilla.trim()) {
         datos.descripcion = descripcionPlantilla.trim();
       }
@@ -260,10 +304,10 @@ export default function FormBuilderPlantillas() {
       }
       await updatePlantilla(plantillaSeleccionada, datos);
       setEditandoNombre(false);
-      mostrarMensaje('ok', 'Nombre guardado');
+      mostrarMensaje('ok', 'Plantilla actualizada');
     } catch (e) {
       console.error(e);
-      mostrarMensaje('error', 'Error al guardar el nombre');
+      mostrarMensaje('error', 'Error al guardar la plantilla');
     }
   };
 
@@ -841,7 +885,7 @@ export default function FormBuilderPlantillas() {
                   No hay plantillas. Crea una nueva.
                 </div>
               ) : (
-                plantillas.map(p => (
+                plantillasOrdenadas.map(p => (
                   <div
                     key={p.id}
                     className={`group flex items-center gap-2 p-2.5 rounded-xl cursor-pointer transition-all ${
@@ -861,11 +905,18 @@ export default function FormBuilderPlantillas() {
                     </div>
 
                     <div className="flex-1 min-w-0">
-                      <p className={`text-xs font-bold truncate ${
-                        plantillaSeleccionada === p.id ? 'text-teal-800' : 'text-zinc-800'
-                      }`}>
-                        {p.nombre}
-                      </p>
+                      <div className="flex items-center gap-1.5">
+                        {p.codigo ? (
+                          <span className="px-1.5 py-0.5 bg-teal-600 text-white rounded text-[10px] font-black shrink-0 tracking-wider">
+                            {p.codigo}
+                          </span>
+                        ) : null}
+                        <p className={`text-xs font-bold truncate ${
+                          plantillaSeleccionada === p.id ? 'text-teal-800' : 'text-zinc-800'
+                        }`}>
+                          {p.nombre}
+                        </p>
+                      </div>
                       {p.descripcion && (
                         <p className="text-[9px] text-zinc-400 truncate">{p.descripcion}</p>
                       )}
@@ -980,14 +1031,35 @@ export default function FormBuilderPlantillas() {
                   <div className="flex-1 min-w-0">
                     {editandoNombre ? (
                       <div className="space-y-2">
-                        <input
-                          type="text"
-                          value={nombrePlantilla}
-                          onChange={e => setNombrePlantilla(e.target.value)}
-                          className="w-full px-3 py-2 border border-teal-300 rounded-xl text-sm font-bold text-zinc-900 outline-none focus:ring-2 focus:ring-teal-500/20 bg-teal-50/30"
-                          autoFocus
-                          placeholder="Nombre de la plantilla"
-                        />
+                        <div className="flex items-center gap-2">
+                          {/* Ventanita del código con la letra S en negrita a la izquierda */}
+                          <div className="flex items-center bg-white border-2 border-teal-500 rounded-xl overflow-hidden shadow-xs shrink-0 focus-within:ring-2 focus-within:ring-teal-500/30">
+                            <span className="px-3 py-2 bg-teal-600 text-white font-black text-sm select-none tracking-wider flex items-center justify-center">
+                              S
+                            </span>
+                            <input
+                              type="text"
+                              value={numeroSistema}
+                              onChange={e => setNumeroSistema(e.target.value.replace(/^S+/i, '').trim())}
+                              onKeyDown={e => { if (e.key === 'Enter') handleGuardarNombre(); }}
+                              placeholder="01"
+                              className="w-16 px-2 py-2 text-sm font-black text-zinc-900 outline-none text-center bg-teal-50/20"
+                              maxLength={4}
+                              title="Número del sistema (ej: 01)"
+                            />
+                          </div>
+
+                          {/* Campo del nombre del sistema */}
+                          <input
+                            type="text"
+                            value={nombrePlantilla}
+                            onChange={e => setNombrePlantilla(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') handleGuardarNombre(); }}
+                            className="flex-1 px-3 py-2 border border-teal-300 rounded-xl text-sm font-bold text-zinc-900 outline-none focus:ring-2 focus:ring-teal-500/20 bg-teal-50/30"
+                            autoFocus
+                            placeholder="Nombre del sistema (ej: EXTINTORES)"
+                          />
+                        </div>
                         <input
                           type="text"
                           value={descripcionPlantilla}
@@ -1012,7 +1084,14 @@ export default function FormBuilderPlantillas() {
                       </div>
                     ) : (
                       <>
-                        <h2 className="text-lg font-bold text-zinc-900 truncate">{nombrePlantilla}</h2>
+                        <div className="flex items-center gap-2">
+                          {numeroSistema.trim() ? (
+                            <span className="px-2.5 py-1 bg-teal-600 text-white font-black text-sm rounded-lg shadow-xs tracking-wider shrink-0">
+                              S{numeroSistema.trim().toUpperCase().replace(/^S+/, '')}
+                            </span>
+                          ) : null}
+                          <h2 className="text-lg font-bold text-zinc-900 truncate">{nombrePlantilla}</h2>
+                        </div>
                         {descripcionPlantilla && (
                           <p className="text-xs text-zinc-500 mt-0.5">{descripcionPlantilla}</p>
                         )}
@@ -1455,7 +1534,14 @@ export default function FormBuilderPlantillas() {
                   </div>
                   <div className="p-5">
                     <div className="mb-4 pb-3 border-b border-zinc-100">
-                      <p className="text-sm font-bold text-zinc-800">{nombrePlantilla}</p>
+                      <div className="flex items-center gap-2">
+                        {numeroSistema.trim() ? (
+                          <span className="px-2 py-0.5 bg-zinc-800 text-white rounded text-xs font-black tracking-wider shrink-0">
+                            S{numeroSistema.trim().toUpperCase().replace(/^S+/, '')}
+                          </span>
+                        ) : null}
+                        <p className="text-sm font-bold text-zinc-800">{nombrePlantilla}</p>
+                      </div>
                       {descripcionPlantilla && (
                         <p className="text-[10px] text-zinc-500 mt-0.5">{descripcionPlantilla}</p>
                       )}

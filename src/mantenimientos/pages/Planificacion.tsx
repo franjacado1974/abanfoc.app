@@ -273,15 +273,30 @@ export default function Planificacion() {
               </h1>
               <p className="text-xs font-semibold text-zinc-500 mt-1">Calendarización y asignación mensual de mantenimientos preventivos a técnicos.</p>
             </div>
-            <label className="flex items-center gap-2 text-xs font-bold text-zinc-500 cursor-pointer select-none shrink-0">
-              <span className="text-[10px]">Mostrar fines de semana</span>
+            <div
+              onClick={() => setShowWeekends(!showWeekends)}
+              className={`flex items-center gap-2.5 px-3 py-1.5 rounded-xl border-2 transition-all cursor-pointer select-none shrink-0 shadow-xs ${
+                showWeekends
+                  ? 'bg-red-50 border-red-500 text-red-950 shadow-red-500/10'
+                  : 'bg-white border-zinc-200 hover:border-zinc-300 text-zinc-600'
+              }`}
+              title={showWeekends ? 'Ocultar fines de semana' : 'Mostrar fines de semana'}
+            >
+              <span className={`text-[11px] font-bold tracking-tight ${showWeekends ? 'text-red-700' : 'text-zinc-600'}`}>
+                Mostrar fines de semana
+              </span>
               <div
-                onClick={() => setShowWeekends(!showWeekends)}
-                className={`relative w-9 h-5 rounded-full transition-all cursor-pointer ${showWeekends ? 'bg-red-650' : 'bg-zinc-300'}`}
+                className={`relative w-9 h-5 rounded-full transition-all border ${
+                  showWeekends ? 'bg-red-600 border-red-700' : 'bg-zinc-300 border-zinc-400'
+                }`}
               >
-                <div className={`absolute w-3.5 h-3.5 bg-white rounded-full top-0.5 transition-all shadow-sm ${showWeekends ? 'left-[18px]' : 'left-[3px]'}`} />
+                <div
+                  className={`absolute w-3.5 h-3.5 bg-white rounded-full top-[2px] transition-all shadow-md ${
+                    showWeekends ? 'left-[18px]' : 'left-[2px]'
+                  }`}
+                />
               </div>
-            </label>
+            </div>
           </div>
         </div>
 

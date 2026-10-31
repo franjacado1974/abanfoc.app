@@ -3,7 +3,8 @@ import { useLocation } from 'react-router-dom';
 import {
   ArrowLeft, Receipt, Download, Search, CheckCircle2, Clock, AlertCircle,
   FileText, Trash2, Plus, Building2, Save, Edit, Copy, X,
-  ArrowUp, ArrowDown, ArrowUpDown, Signature, CreditCard, Check
+  ArrowUp, ArrowDown, ArrowUpDown, Signature, CreditCard, Check,
+  Wand2, Calendar, MapPin
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -835,6 +836,7 @@ export default function Facturas() {
   const [catalogoSearch, setCatalogoSearch] = useState('');
   const [limiteFacturas, setLimiteFacturas] = useState<number | 'todos'>(10);
   const [showModalAlbaranesPendientes, setShowModalAlbaranesPendientes] = useState(false);
+  const [accionesModalItem, setAccionesModalItem] = useState<Factura | null>(null);
 
   const calcularSiguienteNumeroFactura = (lista: Factura[]) => {
     const yy = new Date().getFullYear().toString().slice(-2);
@@ -1425,13 +1427,14 @@ export default function Facturas() {
               <div className="overflow-x-auto w-full">
                 <table className="w-full text-sm min-w-[900px]">
                   <thead>
-                    <tr className="bg-zinc-200/90 text-zinc-700 font-extrabold uppercase tracking-wider text-xs border-b border-zinc-300">
+                    <tr className="bg-zinc-200/90 text-zinc-700 font-bold uppercase tracking-wider text-[11px] border-b border-zinc-300">
                       <th
                         onClick={() => handleSort('numero')}
-                        className="px-4 py-3 text-left cursor-pointer hover:bg-zinc-300/80 transition-colors select-none group whitespace-nowrap"
+                        className="w-px whitespace-nowrap px-4 py-3 text-left cursor-pointer hover:bg-zinc-300/80 transition-colors select-none group"
+                        title="Ordenar por número de factura"
                       >
                         <div className="inline-flex items-center gap-1.5">
-                          <span>Nº Factura / Origen</span>
+                          <span>Nº Factura</span>
                           {sortField === 'numero' ? (
                             sortOrder === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-red-600 stroke-[2.5]" /> : <ArrowDown className="w-3.5 h-3.5 text-red-600 stroke-[2.5]" />
                           ) : (
@@ -1441,10 +1444,11 @@ export default function Facturas() {
                       </th>
                       <th
                         onClick={() => handleSort('fecha')}
-                        className="px-4 py-3 text-left cursor-pointer hover:bg-zinc-300/80 transition-colors select-none group whitespace-nowrap"
+                        className="w-px whitespace-nowrap px-4 py-3 text-left cursor-pointer hover:bg-zinc-300/80 transition-colors select-none group"
+                        title="Ordenar por fecha"
                       >
                         <div className="inline-flex items-center gap-1.5">
-                          <span>Emisión / Venc.</span>
+                          <span>Fecha</span>
                           {sortField === 'fecha' ? (
                             sortOrder === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-red-600 stroke-[2.5]" /> : <ArrowDown className="w-3.5 h-3.5 text-red-600 stroke-[2.5]" />
                           ) : (
@@ -1456,7 +1460,8 @@ export default function Facturas() {
                       <th className="px-4 py-3 text-left">Centro / Concepto</th>
                       <th
                         onClick={() => handleSort('estado')}
-                        className="px-4 py-3 text-left cursor-pointer hover:bg-zinc-300/80 transition-colors select-none group whitespace-nowrap"
+                        className="w-px whitespace-nowrap px-4 py-3 text-left cursor-pointer hover:bg-zinc-300/80 transition-colors select-none group"
+                        title="Ordenar por estado"
                       >
                         <div className="inline-flex items-center gap-1.5">
                           <span>Estado</span>
@@ -1469,7 +1474,8 @@ export default function Facturas() {
                       </th>
                       <th
                         onClick={() => handleSort('total')}
-                        className="px-4 py-3 text-right cursor-pointer hover:bg-zinc-300/80 transition-colors select-none group whitespace-nowrap"
+                        className="w-px whitespace-nowrap px-4 py-3 text-right cursor-pointer hover:bg-zinc-300/80 transition-colors select-none group"
+                        title="Ordenar por importe total"
                       >
                         <div className="inline-flex items-center justify-end gap-1.5">
                           <span>Importe Total</span>
@@ -1480,74 +1486,66 @@ export default function Facturas() {
                           )}
                         </div>
                       </th>
-                      <th className="px-4 py-3 text-center whitespace-nowrap">Acciones</th>
+                      <th className="w-px whitespace-nowrap px-4 py-3 text-center">Acciones</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-100">
                     {facturasAMostrar.map((fac, index) => {
                       const cli = clientes.find(c => c.id === fac.clienteId || (c as any)._docId === fac.clienteId);
                       const cen = centros.find(c => c._docId === fac.centroId || c.id === fac.centroId);
-                      const emp = empresas.find(e => e._docId === fac.empresaId || e.id === fac.empresaId);
                       const estadoInfo = getEstadoInfo(fac.estado);
                       const EstadoIcon = estadoInfo.icono;
                       const rowKey = fac._docId || fac.id;
-                      const baseImp = Math.max(0, (Number(fac.subtotal) || 0) - (Number(fac.descuentoImporte) || 0));
 
                       return (
                         <tr 
                           key={rowKey} 
                           className={`transition-all duration-150 group ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100/80'} hover:bg-amber-100/90 hover:shadow-xs`}
                         >
-                          {/* Nº Factura + Albarán/Pedido */}
-                          <td className="px-4 py-2.5 whitespace-nowrap">
-                            <div className="flex flex-col items-start gap-1">
-                              <span className="text-xs font-mono font-black text-zinc-900 bg-zinc-100 px-2.5 py-0.5 rounded-md border border-zinc-300">
+                          {/* Nº Factura */}
+                          <td className="w-px whitespace-nowrap px-4 py-2.5">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs font-mono font-medium text-zinc-800 bg-zinc-100 px-2.5 py-0.5 rounded-md border border-zinc-300">
                                 {fac.numeroFactura || fac.id}
                               </span>
-                              <div className="flex items-center gap-1 flex-wrap">
-                                {fac.albaranId && (
-                                  <span className="text-[10px] font-mono font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
-                                    Alb: {fac.albaranId}
-                                  </span>
-                                )}
-                              </div>
+                              {fac.albaranId && (
+                                <span className="text-[10px] font-mono font-medium text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200/80">
+                                  Alb: {fac.albaranId}
+                                </span>
+                              )}
                             </div>
                           </td>
 
-                          {/* Fecha Emisión / Vencimiento */}
-                          <td className="px-4 py-2.5 whitespace-nowrap">
-                            <p className="text-xs font-bold text-zinc-800">{formatFecha(fac.fechaCreacion)}</p>
-                            {fac.fechaVencimiento && (
-                              <p className="text-[10px] text-zinc-500 mt-0.5">
-                                Venc: <span className="font-semibold">{formatFecha(fac.fechaVencimiento)}</span>
-                              </p>
-                            )}
+                          {/* Fecha */}
+                          <td className="w-px whitespace-nowrap px-4 py-2.5 text-xs text-slate-600 font-medium">
+                            <span className="inline-flex items-center gap-1.5">
+                              <Calendar className="w-3.5 h-3.5 text-red-500" />
+                              {formatFecha(fac.fechaCreacion)}
+                            </span>
                           </td>
 
                           {/* Cliente */}
-                          <td className="px-4 py-2.5">
-                            <p className="text-sm font-bold text-zinc-900">
-                              {fac.nombreCliente || cli?.nombre || fac.clienteNombreLibre || 'Cliente'}
-                            </p>
-                            {(fac.cifCliente || cli?.cif) && (
-                              <p className="text-[11px] font-mono text-zinc-500">
-                                CIF: {fac.cifCliente || cli?.cif}
-                              </p>
-                            )}
+                          <td className="px-4 py-2.5 text-xs text-slate-700">
+                            <div className="flex items-center gap-1.5">
+                              <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                              <span className="font-medium truncate max-w-[180px]" title={fac.nombreCliente || cli?.nombre || fac.clienteNombreLibre || 'Cliente'}>
+                                {fac.nombreCliente || cli?.nombre || fac.clienteNombreLibre || 'Cliente'}
+                              </span>
+                            </div>
                           </td>
 
                           {/* Centro y Título */}
-                          <td className="px-4 py-2.5">
-                            <p className="text-xs font-bold text-zinc-800 truncate max-w-[230px]" title={fac.titulo}>
-                              {fac.titulo || 'Factura de servicios'}
-                            </p>
-                            <p className="text-[11px] text-zinc-500 truncate max-w-[230px]">
-                              {cen?.nombre || fac.centroNombreLibre || '—'}
-                            </p>
+                          <td className="px-4 py-2.5 text-xs text-slate-800">
+                            <div className="flex items-center gap-1.5">
+                              <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                              <span className="font-medium truncate max-w-xs lg:max-w-md" title={fac.titulo || cen?.nombre || 'Factura de servicios'}>
+                                {fac.titulo || cen?.nombre || 'Factura de servicios'}
+                              </span>
+                            </div>
                           </td>
 
                           {/* Estado con selector rápido */}
-                          <td className="px-4 py-2.5 whitespace-nowrap">
+                          <td className="w-px whitespace-nowrap px-4 py-2.5">
                             <div className="relative inline-flex items-center gap-1">
                               <button
                                 type="button"
@@ -1555,7 +1553,7 @@ export default function Facturas() {
                                   e.stopPropagation();
                                   setOpenStatusMenuId(openStatusMenuId === rowKey ? null : rowKey);
                                 }}
-                                className={`text-[10px] font-bold px-2.5 py-1 rounded-full border inline-flex items-center gap-1 uppercase tracking-wider cursor-pointer ${estadoInfo.color}`}
+                                className={`text-[10px] font-semibold px-2.5 py-0.5 rounded-full border inline-flex items-center gap-1 uppercase tracking-wider cursor-pointer ${estadoInfo.color}`}
                               >
                                 <EstadoIcon className="w-3 h-3" />
                                 {estadoInfo.etiqueta}
@@ -1586,56 +1584,190 @@ export default function Facturas() {
                             </div>
                           </td>
 
-                          {/* Importe Total + Base + IVA */}
-                          <td className="px-4 py-2.5 text-right whitespace-nowrap">
-                            <p className="text-sm font-black text-zinc-950">{formatMoneda(fac.total)}</p>
-                            <p className="text-[10px] text-zinc-500">
-                              Base: {formatMoneda(baseImp)} {fac.iva === 0 ? '(Exento)' : `+ ${fac.iva}% IVA`}
-                            </p>
+                          {/* Importe Total */}
+                          <td className="w-px whitespace-nowrap px-4 py-2.5 text-right">
+                            <span className="text-sm font-semibold text-slate-900">{formatMoneda(fac.total)}</span>
                           </td>
 
                           {/* Acciones */}
-                          <td className="px-4 py-2.5 text-center whitespace-nowrap">
-                            <div className="inline-flex items-center justify-center gap-1">
-                              <button
-                                type="button"
-                                onClick={() => generarFacturaOficialPDF(fac, cli, cen, emp)}
-                                className="p-1.5 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-xl transition-colors cursor-pointer"
-                                title="Descargar PDF Oficial de Factura"
-                              >
-                                <Download className="w-4 h-4" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleEditFactura(fac)}
-                                className="p-1.5 text-zinc-600 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-colors cursor-pointer"
-                                title="Editar Factura"
-                              >
-                                <Edit className="w-4 h-4" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDuplicateFactura(fac)}
-                                className="p-1.5 text-zinc-500 hover:text-violet-600 hover:bg-violet-50 rounded-xl transition-colors cursor-pointer"
-                                title="Duplicar Factura"
-                              >
-                                <Copy className="w-4 h-4" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteFactura(fac)}
-                                className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors cursor-pointer"
-                                title="Mover a la Papelera"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
+                          <td className="w-px whitespace-nowrap px-4 py-2.5 text-center">
+                            <button
+                              type="button"
+                              onClick={() => setAccionesModalItem(fac)}
+                              className="inline-flex items-center justify-center p-2 rounded-xl text-amber-600 hover:text-amber-700 bg-amber-50/70 hover:bg-amber-100/80 border border-amber-200/80 transition-all cursor-pointer shadow-2xs group"
+                              title="Abrir acciones de la factura"
+                            >
+                              <Wand2 className="w-4 h-4 group-hover:rotate-12 transition-transform text-amber-600" />
+                            </button>
                           </td>
                         </tr>
                       );
                     })}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          )}
+
+          {/* Modal flotante de Acciones de Factura */}
+          {accionesModalItem && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+              <div 
+                className="bg-white rounded-3xl shadow-2xl border border-slate-200/80 w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-150"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Cabecera oscura moderna */}
+                <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between">
+                  <div className="flex items-center gap-3 min-w-0 pr-2">
+                    <div className="w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+                      <Wand2 className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="font-extrabold text-base truncate">
+                        Acciones de la Factura
+                      </h3>
+                      <p className="text-xs text-slate-300 truncate">
+                        {accionesModalItem.numeroFactura || accionesModalItem.id} — {accionesModalItem.titulo || 'Factura de servicios'}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAccionesModalItem(null)}
+                    className="p-2 text-slate-400 hover:text-white rounded-xl transition-colors cursor-pointer shrink-0"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Subcabecera con información resumida */}
+                <div className="px-6 py-3 bg-slate-50 border-b border-slate-100 flex items-center gap-2 flex-wrap text-xs">
+                  {accionesModalItem.fechaCreacion && (
+                    <span className="inline-flex items-center gap-1 font-medium text-slate-600 bg-white px-2.5 py-1 rounded-lg border border-slate-200">
+                      <Calendar className="w-3.5 h-3.5 text-red-500" />
+                      {formatFecha(accionesModalItem.fechaCreacion)}
+                    </span>
+                  )}
+                  <span className="font-mono font-medium text-zinc-800 bg-zinc-100 px-2.5 py-1 rounded-lg border border-zinc-300">
+                    {accionesModalItem.numeroFactura || accionesModalItem.id}
+                  </span>
+                  {accionesModalItem.albaranId && (
+                    <span className="font-mono font-medium text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
+                      Alb: {accionesModalItem.albaranId}
+                    </span>
+                  )}
+                  {accionesModalItem.fechaVencimiento && (
+                    <span className="text-slate-500 bg-white px-2.5 py-1 rounded-lg border border-slate-200">
+                      Venc: <strong className="font-semibold text-slate-700">{formatFecha(accionesModalItem.fechaVencimiento)}</strong>
+                    </span>
+                  )}
+                  <span className="font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200/80 ml-auto">
+                    {formatMoneda(accionesModalItem.total)}
+                  </span>
+                </div>
+
+                {/* Listado de acciones */}
+                <div className="p-6 flex flex-col gap-3">
+                  {/* Acción 1: Descargar Factura Oficial PDF */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const fac = accionesModalItem;
+                      setAccionesModalItem(null);
+                      const c = clientes.find(cl => cl.id === fac.clienteId || (cl as any)._docId === fac.clienteId);
+                      const ce = centros.find(cn => cn._docId === fac.centroId || cn.id === fac.centroId);
+                      const em = empresas.find(ep => ep._docId === fac.empresaId || ep.id === fac.empresaId);
+                      generarFacturaOficialPDF(fac, c, ce, em);
+                    }}
+                    className="w-full flex items-center gap-3.5 p-3 rounded-2xl border border-red-100 bg-red-50/40 hover:bg-red-50 text-red-950 transition-all text-left cursor-pointer group hover:shadow-xs"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-red-100 text-red-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                      <Download className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-red-950">
+                          Descargar Factura Oficial PDF
+                        </span>
+                        <span className="text-[10px] font-bold uppercase tracking-wider bg-red-200/80 text-red-900 px-1.5 py-0.5 rounded-md">
+                          VERI*FACTU
+                        </span>
+                      </div>
+                      <div className="text-xs text-red-600/80 truncate">
+                        Documento oficial con código QR tributario y datos mercantiles de ABANFOC
+                      </div>
+                    </div>
+                  </button>
+
+                  {/* Acción 2: Editar Factura */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const fac = accionesModalItem;
+                      setAccionesModalItem(null);
+                      handleEditFactura(fac);
+                    }}
+                    className="w-full flex items-center gap-3.5 p-3 rounded-2xl border border-slate-200 hover:bg-slate-50 text-slate-800 transition-all text-left cursor-pointer group hover:shadow-xs"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                      <Edit className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <span className="text-sm font-semibold text-slate-800 block">
+                        Editar Factura
+                      </span>
+                      <span className="text-xs text-slate-500 truncate block">
+                        Modificar partidas, conceptos, fechas o condiciones fiscales
+                      </span>
+                    </div>
+                  </button>
+
+                  {/* Acción 3: Duplicar Factura */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const fac = accionesModalItem;
+                      setAccionesModalItem(null);
+                      handleDuplicateFactura(fac);
+                    }}
+                    className="w-full flex items-center gap-3.5 p-3 rounded-2xl border border-violet-200/80 bg-violet-50/40 hover:bg-violet-50 text-violet-950 transition-all text-left cursor-pointer group hover:shadow-xs"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-violet-100 text-violet-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                      <Copy className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <span className="text-sm font-semibold text-violet-950 block">
+                        Duplicar Factura
+                      </span>
+                      <span className="text-xs text-violet-600/80 truncate block">
+                        Generar una nueva factura con numeración correlativa
+                      </span>
+                    </div>
+                  </button>
+
+                  {/* Acción 4: Eliminar Factura */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const fac = accionesModalItem;
+                      setAccionesModalItem(null);
+                      handleDeleteFactura(fac);
+                    }}
+                    className="w-full flex items-center gap-3.5 p-3 rounded-2xl border border-red-200/80 bg-red-50/40 hover:bg-red-50 text-red-700 transition-all text-left cursor-pointer group hover:shadow-xs"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-red-100 text-red-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                      <Trash2 className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <span className="text-sm font-semibold text-red-700 block">
+                        Mover a la Papelera
+                      </span>
+                      <span className="text-xs text-red-500/80 truncate block">
+                        Eliminar factura y restaurar el albarán vinculado a pendiente
+                      </span>
+                    </div>
+                  </button>
+                </div>
               </div>
             </div>
           )}

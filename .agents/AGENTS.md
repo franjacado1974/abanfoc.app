@@ -1502,6 +1502,37 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
     - **Revisión Mensual**: `border-l-4 border-l-emerald-500 bg-gradient-to-br from-emerald-50/80 via-white to-emerald-50/20 border-emerald-200/90`.
   - Conservación íntegra de la interactividad Drag & Drop bidireccional (`onDragOver={onDragOver}`, `onDrop={onDropSidebar}`).
 
+---
+
+## 106. Blindaje Inviolable de Numeración de Sistemas con Prefijo "S" en Editor de Plantillas (`FormBuilderPlantillas.tsx`, `plantillas.ts`, `types/plantillas.ts`)
+- **Campo de Código de Sistema "S"**:
+  - En el editor de plantillas de sistemas (`FormBuilderPlantillas.tsx` y `oficina/pages/FormBuilderPlantillas.tsx`), cada sistema cuenta con un campo dedicado junto al título para ingresar el número de sistema.
+  - El campo muestra de forma permanente y en negrita el prefijo **"S"** a la izquierda (`font-black text-slate-800`), persistiendo el código en la propiedad `codigoSistema` (ej. `S01`).
+- **Definición de Tipos y Plantillas Predeterminadas**:
+  - El tipo `PlantillaSistema` en `plantillas.ts` y `recursos-compartidos/types/plantillas.ts` incluye opcionalmente `codigoSistema?: string;`.
+  - Las plantillas de sistemas predefinidas conservan sus códigos `S01`, `S02`, etc., facilitando su identificación y referencia en conceptos de facturación y albaranes.
+
+---
+
+## 107. Blindaje Inviolable de Tablas Limpias en 1 Sola Fila, Columnas Adaptables y Agrupación de Acciones con Varita Mágica (`Wand2`) (`Reparaciones.tsx`, `Instalaciones.tsx`, `Urgencias.tsx`, `Pedidos.tsx`, `Albaranes.tsx`, `Facturas.tsx`)
+- **Diseño Limpio en 1 Sola Fila por Registro**:
+  - En los seis módulos de gestión (`Reparaciones.tsx`, `Instalaciones.tsx`, `Urgencias.tsx`, `Pedidos.tsx`, `Albaranes.tsx`, `Facturas.tsx`), toda la información de cada registro DEBE mostrarse en una sola fila plana sin saltos de línea amontonados debajo del título o cliente.
+  - La tipografía debe mantenerse suave y legible (`font-medium text-slate-700/800`), eliminando negritas agresivas innecesarias.
+  - Las columnas de fecha, referencia, estado, importes y acciones tienen ancho auto-adaptable al contenido (`w-px whitespace-nowrap`), permitiendo a las columnas de descripción y cliente expandirse naturalmente.
+  - En la fecha se utiliza el icono `Calendar` en rojo (`text-red-500`). En Reparaciones, Instalaciones y Urgencias, el icono genérico izquierdo fue sustituido por la referencia directa de la tarea.
+- **Acciones Agrupadas en Modal con Varita Mágica (`Wand2`)**:
+  - En la columna **Acciones** de las seis tablas, las múltiples acciones directas se unifican en un único botón con el icono de la **varita mágica** (`Wand2` en color índigo/azul).
+  - Al pulsar el botón se despliega una ventana modal (`accionesModalItem`) con fondo difuminado (`backdrop-blur-sm`) que reúne todas las operaciones del registro de forma accesible, ordenada y limpia.
+
+---
+
+## 108. Blindaje Inviolable de Descargas de Pedidos de Venta Valorados y Sin Valorar para Operarios (`Pedidos.tsx`, `Reparaciones.tsx`, `Instalaciones.tsx`, `Urgencias.tsx`)
+- **Doble Modalidad de Descarga del Pedido de Venta (PDV)**:
+  - En el modal de acciones de Pedidos de Venta (`Pedidos.tsx`), Reparaciones (`Reparaciones.tsx`), Instalaciones (`Instalaciones.tsx`) y Avisos/Urgencias (`Urgencias.tsx`), se ofrecen dos modalidades de descarga del Pedido de Venta:
+    1. **Valorado**: Descarga completa con precios e importes para control de gestión o cliente.
+    2. **Sin valorar (para operario)**: Descarga oficial adaptada sin precios para entregar al técnico u operario que ejecutará el trabajo en obra o cliente.
+
+
 
 
 

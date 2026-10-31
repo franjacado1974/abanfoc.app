@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Search, X, Plus, Clock, CheckCircle, FileText, Trash2, Edit, Save,
   ChevronDown, ArrowLeft, Wrench, HardHat, ReceiptText, Gauge,
-  ArrowUp, ArrowDown, ArrowUpDown
+  ArrowUp, ArrowDown, ArrowUpDown, Wand2, Calendar, MapPin, Building2
 } from 'lucide-react';
 import { 
   subscribePedidos, addPedido, updatePedido, deletePedido, 
@@ -66,6 +66,7 @@ export default function Pedidos() {
   const [sortField, setSortField] = useState<'referencia' | 'fecha' | 'estado'>('fecha');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [limitePedidos, setLimitePedidos] = useState<number | 'todos'>(10);
+  const [accionesModalItem, setAccionesModalItem] = useState<Pedido | null>(null);
 
   const handleSort = (field: 'referencia' | 'fecha' | 'estado') => {
     if (sortField === field) {
@@ -457,8 +458,8 @@ export default function Pedidos() {
     });
   };
 
-  // Descargar / Ver Pedido de Venta (PDV) en PDF
-  const handleDescargarPDV = async (ped: Pedido) => {
+  // Descargar / Ver Pedido de Venta (PDV) en PDF (valorado o sin valorar)
+  const handleDescargarPDV = async (ped: Pedido, sinValorar: boolean = false) => {
     // 1. Buscar presupuesto vinculado
     const matchPresupuesto = presupuestos.find(p => 
       (ped.presupuestoId && (p.id === ped.presupuestoId || (p as any)._docId === ped.presupuestoId)) ||
@@ -547,7 +548,8 @@ export default function Pedidos() {
       total,
       notas,
       esPedido: true,
-      tituloDocumento: 'PEDIDO DE VENTA'
+      tituloDocumento: sinValorar ? 'PEDIDO DE VENTA (SIN VALORAR)' : 'PEDIDO DE VENTA',
+      sinValorar
     }, empresaSeleccionada);
   };
 
@@ -704,10 +706,10 @@ export default function Pedidos() {
               <div className="overflow-x-auto w-full">
                 <table className="w-full text-sm min-w-[860px]">
                   <thead>
-                    <tr className="bg-zinc-200/90 text-zinc-700 font-extrabold uppercase tracking-wider text-xs border-b border-zinc-300">
+                    <tr className="bg-zinc-200/90 text-zinc-700 font-bold uppercase tracking-wider text-[11px] border-b border-zinc-300">
                       <th
                         onClick={() => handleSort('referencia')}
-                        className="px-4 py-3 text-left cursor-pointer hover:bg-zinc-300/80 transition-colors select-none group whitespace-nowrap"
+                        className="w-px whitespace-nowrap px-4 py-3 text-left cursor-pointer hover:bg-zinc-300/80 transition-colors select-none group"
                         title="Ordenar por número de pedido"
                       >
                         <div className="inline-flex items-center gap-1.5">
@@ -721,7 +723,7 @@ export default function Pedidos() {
                       </th>
                       <th
                         onClick={() => handleSort('fecha')}
-                        className="px-4 py-3 text-left cursor-pointer hover:bg-zinc-300/80 transition-colors select-none group whitespace-nowrap"
+                        className="w-px whitespace-nowrap px-4 py-3 text-left cursor-pointer hover:bg-zinc-300/80 transition-colors select-none group"
                         title="Ordenar por fecha"
                       >
                         <div className="inline-flex items-center gap-1.5">
@@ -738,7 +740,7 @@ export default function Pedidos() {
                       <th className="px-4 py-3 text-left">Título / Trabajo</th>
                       <th
                         onClick={() => handleSort('estado')}
-                        className="px-4 py-3 text-left cursor-pointer hover:bg-zinc-300/80 transition-colors select-none group whitespace-nowrap"
+                        className="w-px whitespace-nowrap px-4 py-3 text-left cursor-pointer hover:bg-zinc-300/80 transition-colors select-none group"
                         title="Ordenar por estado"
                       >
                         <div className="inline-flex items-center gap-1.5">
@@ -750,8 +752,8 @@ export default function Pedidos() {
                           )}
                         </div>
                       </th>
-                      <th className="px-4 py-3 text-right whitespace-nowrap">Importe</th>
-                      <th className="px-4 py-3 text-center whitespace-nowrap">Acciones</th>
+                      <th className="w-px whitespace-nowrap px-4 py-3 text-right">Importe</th>
+                      <th className="w-px whitespace-nowrap px-4 py-3 text-center">Acciones</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-100">
@@ -768,7 +770,6 @@ export default function Pedidos() {
                       const nombreCentro = centro?.nombre || (ped as any).nombreCentro || '—';
 
                       const codigoPDV = ped.numeroPedido || (ped.id ? `PDV ${ped.id.replace(/^(PDV|PRV|PRE|PED)[-\s]*/i, '')}` : 'PDV');
-                      const codigoPRV = matchPresupuesto?.numeroPresupuesto || (ped.presupuestoId ? `PRV ${ped.presupuestoId.replace(/^(PDV|PRV|PRE)[-\s]*/i, '')}` : '');
 
                       const albaranAsociado = albaranes.find(alb =>
                         (ped.numeroPedido && alb.numeroPedido === ped.numeroPedido) ||
@@ -783,43 +784,42 @@ export default function Pedidos() {
                           key={rowKey} 
                           className={`transition-all duration-150 group ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100/80'} hover:bg-amber-100/90 hover:shadow-xs`}
                         >
-                          {/* Nº Pedido / Presupuesto */}
-                          <td className="px-4 py-2.5 whitespace-nowrap">
-                            <div className="flex flex-col items-start gap-1">
-                              <span className="text-xs font-mono font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200/80">
-                                {codigoPDV}
-                              </span>
-                              {codigoPRV && (
-                                <span className="text-[10px] font-mono font-semibold text-zinc-500">
-                                  Origen: {codigoPRV}
-                                </span>
-                              )}
-                            </div>
+                          {/* Nº Pedido */}
+                          <td className="w-px whitespace-nowrap px-4 py-2.5">
+                            <span className="text-xs font-mono font-medium text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200/80">
+                              {codigoPDV}
+                            </span>
                           </td>
 
                           {/* Fecha */}
-                          <td className="px-4 py-2.5 whitespace-nowrap">
-                            <p className="text-xs font-semibold text-zinc-600">{formatFecha(ped.fechaCreacion)}</p>
+                          <td className="w-px whitespace-nowrap px-4 py-2.5 text-xs text-slate-600 font-medium">
+                            <span className="inline-flex items-center gap-1.5">
+                              <Calendar className="w-3.5 h-3.5 text-red-500" />
+                              {formatFecha(ped.fechaCreacion)}
+                            </span>
                           </td>
 
                           {/* Cliente */}
-                          <td className="px-4 py-2.5">
-                            <p className="text-sm text-zinc-800 font-medium">{nombreCliente}</p>
+                          <td className="px-4 py-2.5 text-xs text-slate-700">
+                            <div className="flex items-center gap-1.5">
+                              <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                              <span className="font-medium truncate max-w-[180px]" title={nombreCliente}>{nombreCliente}</span>
+                            </div>
                           </td>
 
                           {/* Centro */}
-                          <td className="px-4 py-2.5">
-                            <p className="text-sm text-zinc-600">{nombreCentro}</p>
+                          <td className="px-4 py-2.5 text-xs text-slate-600">
+                            <div className="flex items-center gap-1.5">
+                              <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                              <span className="truncate max-w-[180px]" title={nombreCentro}>{nombreCentro}</span>
+                            </div>
                           </td>
 
                           {/* Título y Tipo de Trabajo */}
-                          <td className="px-4 py-2.5">
-                            <div className="flex flex-col items-start gap-1">
-                              <p className="text-sm font-bold text-zinc-900 truncate max-w-[220px]" title={ped.titulo}>
-                                {ped.titulo}
-                              </p>
+                          <td className="px-4 py-2.5 text-xs text-slate-800">
+                            <div className="flex items-center gap-2">
                               {ped.tipoPedido && (
-                                <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border inline-flex items-center gap-1 ${
+                                <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full border inline-flex items-center gap-1 shrink-0 ${
                                   ped.tipoPedido === 'Reparación'
                                     ? 'bg-amber-50 text-amber-800 border-amber-300'
                                     : ped.tipoPedido === 'Instalación'
@@ -836,55 +836,55 @@ export default function Pedidos() {
                                   {ped.tipoPedido}
                                 </span>
                               )}
+                              <span className="font-medium truncate max-w-xs lg:max-w-md" title={ped.titulo}>
+                                {ped.titulo}
+                              </span>
                             </div>
                           </td>
 
                           {/* Estado + Albarán vinculado */}
-                          <td className="px-4 py-2.5 whitespace-nowrap">
-                            <div className="flex flex-col items-start gap-1">
-                              <div className="relative inline-flex items-center gap-1">
-                                <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border inline-flex items-center gap-1 uppercase tracking-wider ${estadoInfo.color}`}>
-                                  <EstadoIcono className="w-3 h-3" /> {estadoInfo.valor}
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setOpenStatusMenuId(openStatusMenuId === rowKey ? null : rowKey);
-                                  }}
-                                  className="p-1 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded-lg transition-colors cursor-pointer"
-                                  title="Cambiar estado del pedido"
-                                >
-                                  <ChevronDown className="w-3.5 h-3.5" />
-                                </button>
-                                {openStatusMenuId === rowKey && (
-                                  <>
-                                    <div className="fixed inset-0 z-40" onClick={() => setOpenStatusMenuId(null)} />
-                                    <div className="absolute left-0 top-full mt-1 bg-white rounded-xl shadow-xl border border-zinc-200 py-1 min-w-[140px] z-50 animate-in fade-in zoom-in-95 duration-100">
-                                      {ESTADOS.filter(e => e.valor !== ped.estado).map(e => {
-                                        const Icono = e.icono;
-                                        return (
-                                          <button
-                                            key={e.valor}
-                                            type="button"
-                                            onClick={() => {
-                                              handleCambiarEstado(ped, e.valor);
-                                              setOpenStatusMenuId(null);
-                                            }}
-                                            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs font-medium hover:bg-zinc-50 cursor-pointer"
-                                          >
-                                            <Icono className="w-3.5 h-3.5" /> {e.valor}
-                                          </button>
-                                        );
-                                      })}
-                                    </div>
-                                  </>
-                                )}
-                              </div>
-
+                          <td className="w-px whitespace-nowrap px-4 py-2.5">
+                            <div className="relative inline-flex items-center gap-1.5">
+                              <span className={`text-[10px] font-semibold px-2.5 py-0.5 rounded-full border inline-flex items-center gap-1 uppercase tracking-wider ${estadoInfo.color}`}>
+                                <EstadoIcono className="w-3 h-3" /> {estadoInfo.valor}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setOpenStatusMenuId(openStatusMenuId === rowKey ? null : rowKey);
+                                }}
+                                className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                                title="Cambiar estado del pedido"
+                              >
+                                <ChevronDown className="w-3.5 h-3.5" />
+                              </button>
+                              {openStatusMenuId === rowKey && (
+                                <>
+                                  <div className="fixed inset-0 z-40" onClick={() => setOpenStatusMenuId(null)} />
+                                  <div className="absolute left-0 top-full mt-1 bg-white rounded-xl shadow-xl border border-zinc-200 py-1 min-w-[140px] z-50 animate-in fade-in zoom-in-95 duration-100">
+                                    {ESTADOS.filter(e => e.valor !== ped.estado).map(e => {
+                                      const Icono = e.icono;
+                                      return (
+                                        <button
+                                          key={e.valor}
+                                          type="button"
+                                          onClick={() => {
+                                            handleCambiarEstado(ped, e.valor);
+                                            setOpenStatusMenuId(null);
+                                          }}
+                                          className="w-full flex items-center gap-2 px-3 py-1.5 text-xs font-medium hover:bg-zinc-50 cursor-pointer"
+                                        >
+                                          <Icono className="w-3.5 h-3.5" /> {e.valor}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </>
+                              )}
                               {albaranAsociado && (
                                 <span
-                                  className="text-[10px] font-mono font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-md border border-emerald-200 inline-flex items-center gap-1"
+                                  className="text-[10px] font-mono font-medium text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-md border border-emerald-200 inline-flex items-center gap-1"
                                   title={`Albarán generado: ${albaranAsociado.id}`}
                                 >
                                   <ReceiptText className="w-2.5 h-2.5" /> {albaranAsociado.id}
@@ -894,61 +894,242 @@ export default function Pedidos() {
                           </td>
 
                           {/* Importe */}
-                          <td className="px-4 py-2.5 text-right whitespace-nowrap">
-                            <p className="font-black text-zinc-900">{formatMoneda(importeTotal)}</p>
-                            <p className="text-[10px] text-zinc-400">{ped.items.length} partida(s)</p>
+                          <td className="w-px whitespace-nowrap px-4 py-2.5 text-right">
+                            <span className="font-semibold text-slate-900 text-sm">{formatMoneda(importeTotal)}</span>
                           </td>
 
                           {/* Acciones */}
-                          <td className="px-4 py-2.5 text-center whitespace-nowrap">
-                            <div className="inline-flex items-center justify-center gap-1">
-                              <button 
-                                type="button" 
-                                onClick={() => handleDescargarPDV(ped)} 
-                                className="p-1.5 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-xl transition-colors cursor-pointer" 
-                                title="Ver / Descargar Pedido de Venta (PDV)"
-                              >
-                                <Search className="w-4 h-4" />
-                              </button>
-                              <button 
-                                type="button" 
-                                onClick={() => handleOpenCrearAlbaran(ped)} 
-                                className={`p-1.5 rounded-xl transition-colors cursor-pointer ${
-                                  albaranAsociado
-                                    ? 'text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50'
-                                    : 'text-zinc-500 hover:text-blue-600 hover:bg-blue-50'
-                                }`}
-                                title={albaranAsociado ? `Albarán creado (${albaranAsociado.id}) - Clic para generar otro` : 'Crear Albarán desde este Pedido'}
-                              >
-                                <svg className="w-4 h-4 inline-block" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                                  <polyline points="14 2 14 8 20 8" />
-                                  <text x="12" y="19" textAnchor="middle" fill="currentColor" stroke="none" fontSize="11.5" fontWeight="900" fontFamily="system-ui, -apple-system, sans-serif">A</text>
-                                </svg>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleEdit(ped)}
-                                className="p-1.5 text-zinc-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-colors cursor-pointer"
-                                title="Editar Pedido"
-                              >
-                                <Edit className="w-4 h-4" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDelete(ped)}
-                                className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors cursor-pointer"
-                                title="Eliminar Pedido"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
+                          <td className="w-px whitespace-nowrap px-4 py-2.5 text-center">
+                            <button
+                              type="button"
+                              onClick={() => setAccionesModalItem(ped)}
+                              className="inline-flex items-center justify-center p-2 rounded-xl text-amber-600 hover:text-amber-700 bg-amber-50/70 hover:bg-amber-100/80 border border-amber-200/80 transition-all cursor-pointer shadow-2xs group"
+                              title="Abrir acciones"
+                            >
+                              <Wand2 className="w-4 h-4 group-hover:rotate-12 transition-transform text-amber-600" />
+                            </button>
                           </td>
                         </tr>
                       );
                     })}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          )}
+
+          {/* Modal flotante de Acciones */}
+          {accionesModalItem && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+              <div 
+                className="bg-white rounded-3xl shadow-2xl border border-slate-200/80 w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-150"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Cabecera oscura moderna */}
+                <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between">
+                  <div className="flex items-center gap-3 min-w-0 pr-2">
+                    <div className="w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+                      <Wand2 className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="font-extrabold text-base truncate">
+                        Acciones del Pedido de Venta
+                      </h3>
+                      <p className="text-xs text-slate-300 truncate">
+                        {accionesModalItem.numeroPedido || accionesModalItem.id} — {accionesModalItem.titulo || 'Sin título'}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAccionesModalItem(null)}
+                    className="p-2 text-slate-400 hover:text-white rounded-xl transition-colors cursor-pointer shrink-0"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Subcabecera con información resumida */}
+                <div className="px-6 py-3 bg-slate-50 border-b border-slate-100 flex items-center gap-2 flex-wrap text-xs">
+                  {accionesModalItem.fechaCreacion && (
+                    <span className="inline-flex items-center gap-1 font-medium text-slate-600 bg-white px-2.5 py-1 rounded-lg border border-slate-200">
+                      <Calendar className="w-3.5 h-3.5 text-red-500" />
+                      {formatFecha(accionesModalItem.fechaCreacion)}
+                    </span>
+                  )}
+                  {accionesModalItem.numeroPedido && (
+                    <span className="font-mono font-medium text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-200/80">
+                      {accionesModalItem.numeroPedido}
+                    </span>
+                  )}
+                  {(() => {
+                    const matchCli = clientes.find(c => c.id === accionesModalItem.clienteId || (c as any)._docId === accionesModalItem.clienteId);
+                    const nomCli = matchCli?.nombre || (accionesModalItem as any).nombreCliente || '';
+                    return nomCli ? (
+                      <span className="inline-flex items-center gap-1 text-slate-600 bg-white px-2.5 py-1 rounded-lg border border-slate-200 truncate max-w-[200px]">
+                        <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        <span className="truncate">{nomCli}</span>
+                      </span>
+                    ) : null;
+                  })()}
+                  {(() => {
+                    const imp = (accionesModalItem as any).total || accionesModalItem.items.reduce((s, i) => s + (Number(i.subtotal) || 0), 0);
+                    return (
+                      <span className="font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200/80 ml-auto">
+                        {formatMoneda(imp)}
+                      </span>
+                    );
+                  })()}
+                </div>
+
+                {/* Listado de acciones */}
+                <div className="p-6 flex flex-col gap-3">
+                  {/* Acción 1: PDV Valorado */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const ped = accionesModalItem;
+                      setAccionesModalItem(null);
+                      handleDescargarPDV(ped, false);
+                    }}
+                    className="w-full flex items-center gap-3.5 p-3 rounded-2xl border border-indigo-100 bg-indigo-50/40 hover:bg-indigo-50 text-indigo-950 transition-all text-left cursor-pointer group hover:shadow-xs"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                      <Search className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-indigo-950">
+                          Ver / Descargar Pedido de Venta (PDV)
+                        </span>
+                        <span className="text-[10px] font-bold uppercase tracking-wider bg-indigo-200/70 text-indigo-800 px-1.5 py-0.5 rounded-md">
+                          Valorado
+                        </span>
+                      </div>
+                      <div className="text-xs text-indigo-600/80 truncate">
+                        Documento oficial con precios, desglose económico y totales
+                      </div>
+                    </div>
+                  </button>
+
+                  {/* Acción 2: PDV Sin Valorar */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const ped = accionesModalItem;
+                      setAccionesModalItem(null);
+                      handleDescargarPDV(ped, true);
+                    }}
+                    className="w-full flex items-center gap-3.5 p-3 rounded-2xl border border-amber-200/80 bg-amber-50/50 hover:bg-amber-100/70 text-amber-950 transition-all text-left cursor-pointer group hover:shadow-xs"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                      <FileText className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-amber-950">
+                          Descargar Pedido para Operario
+                        </span>
+                        <span className="text-[10px] font-bold uppercase tracking-wider bg-amber-200/80 text-amber-900 px-1.5 py-0.5 rounded-md">
+                          Sin valorar
+                        </span>
+                      </div>
+                      <div className="text-xs text-amber-700/80 truncate">
+                        Para el técnico: tareas, descripciones y unidades sin importes
+                      </div>
+                    </div>
+                  </button>
+
+                  {/* Acción 3: Crear Albarán */}
+                  {(() => {
+                    const albAsoc = albaranes.find(alb =>
+                      (accionesModalItem.numeroPedido && alb.numeroPedido === accionesModalItem.numeroPedido) ||
+                      (accionesModalItem.id && alb.numeroPedido === accionesModalItem.id)
+                    );
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const ped = accionesModalItem;
+                          setAccionesModalItem(null);
+                          handleOpenCrearAlbaran(ped);
+                        }}
+                        className={`w-full flex items-center gap-3.5 p-3 rounded-2xl border transition-all text-left cursor-pointer group hover:shadow-xs ${
+                          albAsoc
+                            ? 'border-emerald-200 bg-emerald-50/50 hover:bg-emerald-50 text-emerald-950'
+                            : 'border-blue-200 bg-blue-50/40 hover:bg-blue-50 text-blue-950'
+                        }`}
+                      >
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform ${
+                          albAsoc ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'
+                        }`}>
+                          <ReceiptText className="w-5 h-5" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-semibold">
+                              Crear Albarán desde este Pedido
+                            </span>
+                            {albAsoc && (
+                              <span className="text-[10px] font-bold font-mono bg-emerald-200 text-emerald-900 px-1.5 py-0.5 rounded-md">
+                                {albAsoc.id}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-xs text-slate-500 truncate">
+                            {albAsoc ? 'Albarán ya vinculado. Clic para generar otro.' : 'Pasa las partidas y datos de cliente directamente al albarán'}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })()}
+
+                  {/* Acción 4: Editar Pedido */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const ped = accionesModalItem;
+                      setAccionesModalItem(null);
+                      handleEdit(ped);
+                    }}
+                    className="w-full flex items-center gap-3.5 p-3 rounded-2xl border border-slate-200 hover:bg-slate-50 text-slate-800 transition-all text-left cursor-pointer group hover:shadow-xs"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                      <Edit className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <span className="text-sm font-semibold text-slate-800 block">
+                        Editar Pedido
+                      </span>
+                      <span className="text-xs text-slate-500 truncate block">
+                        Modificar líneas, cliente, centros o condiciones
+                      </span>
+                    </div>
+                  </button>
+
+                  {/* Acción 5: Eliminar Pedido */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const ped = accionesModalItem;
+                      setAccionesModalItem(null);
+                      handleDelete(ped);
+                    }}
+                    className="w-full flex items-center gap-3.5 p-3 rounded-2xl border border-red-200/80 bg-red-50/40 hover:bg-red-50 text-red-700 transition-all text-left cursor-pointer group hover:shadow-xs"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-red-100 text-red-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                      <Trash2 className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <span className="text-sm font-semibold text-red-700 block">
+                        Eliminar Pedido
+                      </span>
+                      <span className="text-xs text-red-500/80 truncate block">
+                        Eliminar este pedido permanentemente
+                      </span>
+                    </div>
+                  </button>
+                </div>
               </div>
             </div>
           )}

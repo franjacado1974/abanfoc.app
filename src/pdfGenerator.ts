@@ -3220,7 +3220,13 @@ export const generarActaExtintoresPDF = async (
                     const esBombaDieselNum = lblNorm.includes('esta es la bomba') && (lblNorm.includes('numero') || lblNorm.includes('nº') || lblNorm.includes('no.'));
                     const isCheckCol = isCheckOInspeccion(lblNorm, itemForCol);
                     const esCuadroPregunta = !isCheckCol && ((lblNorm.includes('cuadro') && (lblNorm.includes('control') || lblNorm.includes('mando'))) || lblNorm.includes('ubicacion del cuadro') || lblNorm.includes('ubicacion cuadro'));
-                    if (!isCheckCol && (lblNorm.includes('cobertura') || esBombaDieselNum || lblNorm.includes('instalaciones que abastece') || lblNorm.includes('se alimenta') || esCuadroPregunta)) {
+                    const esCentralPregunta = !isCheckCol && (
+                      lblNorm.includes('ubicacion de la central') ||
+                      lblNorm.includes('ubicacion central') ||
+                      lblNorm.includes('centralita') ||
+                      (lblNorm.includes('central') && (lblNorm.includes('ubicaci') || lblNorm.includes('situaci') || lblNorm.includes('emplazamiento')))
+                    );
+                    if (!isCheckCol && (lblNorm.includes('cobertura') || esBombaDieselNum || lblNorm.includes('instalaciones que abastece') || lblNorm.includes('se alimenta') || esCuadroPregunta || esCentralPregunta)) {
                       data.cell.styles.fillColor = [255, 249, 196]; // amarillo claro #FFF9C4
                       if (data.column.index % 2 === 1) {
                         data.cell.styles.fontStyle = 'bold';
@@ -3253,6 +3259,8 @@ export const generarActaExtintoresPDF = async (
                   const lLower = (item.label || '').toLowerCase();
                   if (lLower.includes('cuadro')) {
                     rawVal = eq[item.key] || (eq as any).cuadroControl || (eq as any).ubicacionCuadro || (eq as any).cuadro || rawVal;
+                  } else if (lLower.includes('central')) {
+                    rawVal = eq[item.key] || (eq as any).ubicacionCentral || (eq as any).central || eq.ubicacion || rawVal;
                   } else if (lLower.includes('ubicacion') || lLower.includes('cobertura')) {
                     rawVal = eq.ubicacion || eq.cobertura || rawVal;
                   }
@@ -3283,7 +3291,13 @@ export const generarActaExtintoresPDF = async (
                 const isCheckItem = isCheckOInspeccion(itemLblNorm, item);
                 const isAbastecePregunta = !isCheckItem && (itemLblNorm.includes('instalaciones que abastece') || (itemLblNorm.includes('abastece') && !itemLblNorm.includes('quedo') && !itemLblNorm.includes('quedó') && !itemLblNorm.includes('comprobacion')));
                 const isCuadroControlPregunta = !isCheckItem && ((itemLblNorm.includes('cuadro') && (itemLblNorm.includes('control') || itemLblNorm.includes('mando'))) || itemLblNorm.includes('ubicacion del cuadro') || itemLblNorm.includes('ubicacion cuadro'));
-                const isAreaCobertura = !isCheckItem && (itemLblNorm.includes('cobertura') || isManifoldRefOUbic || isAbastecePregunta || isCuadroControlPregunta);
+                const isUbicacionCentralPregunta = !isCheckItem && (
+                  itemLblNorm.includes('ubicacion de la central') ||
+                  itemLblNorm.includes('ubicacion central') ||
+                  itemLblNorm.includes('centralita') ||
+                  (itemLblNorm.includes('central') && (itemLblNorm.includes('ubicaci') || itemLblNorm.includes('situaci') || itemLblNorm.includes('emplazamiento')))
+                );
+                const isAreaCobertura = !isCheckItem && (itemLblNorm.includes('cobertura') || isManifoldRefOUbic || isAbastecePregunta || isCuadroControlPregunta || isUbicacionCentralPregunta);
 
                 if (isAreaCobertura) {
                   let labelText = (item.label || '').trim().replace(/[\.:\s]+$/, '') + ':';
@@ -3360,7 +3374,13 @@ export const generarActaExtintoresPDF = async (
                     const lblNorm = itemNorm ? (itemNorm.label || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") : '';
                     const isCheckNorm = isCheckOInspeccion(lblNorm, itemNorm);
                     const isCuadroControlPregunta = !isCheckNorm && ((lblNorm.includes('cuadro') && (lblNorm.includes('control') || lblNorm.includes('mando'))) || lblNorm.includes('ubicacion del cuadro') || lblNorm.includes('ubicacion cuadro'));
-                    const isAreaCobertura = !isCheckNorm && (lblNorm.includes('cobertura') || data.cell.colSpan === 2 || isCuadroControlPregunta);
+                    const isUbicacionCentralPregunta = !isCheckNorm && (
+                      lblNorm.includes('ubicacion de la central') ||
+                      lblNorm.includes('ubicacion central') ||
+                      lblNorm.includes('centralita') ||
+                      (lblNorm.includes('central') && (lblNorm.includes('ubicaci') || lblNorm.includes('situaci') || lblNorm.includes('emplazamiento')))
+                    );
+                    const isAreaCobertura = !isCheckNorm && (lblNorm.includes('cobertura') || data.cell.colSpan === 2 || isCuadroControlPregunta || isUbicacionCentralPregunta);
 
                     if (isAreaCobertura) {
                       data.cell.styles.fillColor = [255, 249, 196]; // amarillo claro #FFF9C4
@@ -3383,7 +3403,7 @@ export const generarActaExtintoresPDF = async (
                         data.cell.styles.halign = 'center';
                         data.cell.styles.fontStyle = 'bold';
                       }
-                      if (!isCheckNorm && (esBombaDieselNum || lblNorm.includes('instalaciones que abastece') || lblNorm.includes('se alimenta') || isCuadroControlPregunta)) {
+                      if (!isCheckNorm && (esBombaDieselNum || lblNorm.includes('instalaciones que abastece') || lblNorm.includes('se alimenta') || isCuadroControlPregunta || isUbicacionCentralPregunta)) {
                         data.cell.styles.fillColor = [255, 249, 196]; // amarillo claro #FFF9C4
                         if (data.column.index === 1) {
                           data.cell.styles.fontStyle = 'bold';
@@ -3435,7 +3455,13 @@ export const generarActaExtintoresPDF = async (
                     const lblNorm = itemNorm ? (itemNorm.label || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") : '';
                     const isCheckNorm = isCheckOInspeccion(lblNorm, itemNorm);
                     const isCuadroControlPregunta = !isCheckNorm && ((lblNorm.includes('cuadro') && (lblNorm.includes('control') || lblNorm.includes('mando'))) || lblNorm.includes('ubicacion del cuadro') || lblNorm.includes('ubicacion cuadro'));
-                    const isAreaCobertura = !isCheckNorm && (lblNorm.includes('cobertura') || data.cell.colSpan === 2 || isCuadroControlPregunta);
+                    const isUbicacionCentralPregunta = !isCheckNorm && (
+                      lblNorm.includes('ubicacion de la central') ||
+                      lblNorm.includes('ubicacion central') ||
+                      lblNorm.includes('centralita') ||
+                      (lblNorm.includes('central') && (lblNorm.includes('ubicaci') || lblNorm.includes('situaci') || lblNorm.includes('emplazamiento')))
+                    );
+                    const isAreaCobertura = !isCheckNorm && (lblNorm.includes('cobertura') || data.cell.colSpan === 2 || isCuadroControlPregunta || isUbicacionCentralPregunta);
 
                     if (isAreaCobertura) {
                       const { x, y, height } = data.cell;
@@ -3449,6 +3475,8 @@ export const generarActaExtintoresPDF = async (
                         const lLower = (itemNorm.label || '').toLowerCase();
                         if (lLower.includes('cuadro')) {
                           rawVal = eq[itemNorm.key] || (eq as any).cuadroControl || (eq as any).ubicacionCuadro || (eq as any).cuadro || '';
+                        } else if (lLower.includes('central')) {
+                          rawVal = eq[itemNorm.key] || (eq as any).ubicacionCentral || (eq as any).central || eq.ubicacion || '';
                         } else if (lLower.includes('ubicacion') || lLower.includes('cobertura')) {
                           rawVal = eq.ubicacion || eq.cobertura || rawVal;
                         } else if (lLower.includes('referencia')) {
@@ -6209,6 +6237,7 @@ export const generarPresupuestoPDF = async (
     notas?: string;
     esPedido?: boolean;
     tituloDocumento?: string;
+    sinValorar?: boolean;
   },
   _empresa?: Record<string, any>
 ) => {
@@ -6326,8 +6355,12 @@ export const generarPresupuestoPDF = async (
   // ─────────────────────────────────────────────────────────────────────────
   // TÍTULO Y DESCRIPCIÓN DEL DOCUMENTO (PRESUPUESTO O PEDIDO DE VENTA)
   // ─────────────────────────────────────────────────────────────────────────
+  const esSinValorar = !!presupuesto.sinValorar;
   const esPdv = !!presupuesto.esPedido || (presupuesto.numeroPresupuesto && presupuesto.numeroPresupuesto.toUpperCase().startsWith('PDV'));
-  const tituloEncabezado = presupuesto.tituloDocumento || (esPdv ? 'PEDIDO DE VENTA' : 'PRESUPUESTO');
+  let tituloEncabezado = presupuesto.tituloDocumento || (esPdv ? 'PEDIDO DE VENTA' : 'PRESUPUESTO');
+  if (esSinValorar && !presupuesto.tituloDocumento) {
+    tituloEncabezado = esPdv ? 'PEDIDO DE VENTA (SIN VALORAR)' : 'PRESUPUESTO (SIN VALORAR)';
+  }
 
   y = 37;
   doc.setFont('helvetica', 'bold');
@@ -6391,19 +6424,28 @@ export const generarPresupuestoPDF = async (
   doc.setTextColor(20, 20, 20);
   doc.text(fechaDoc, margen + 11, colStartY + 9.5);
 
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(70, 75, 85);
-  doc.text('Forma de pago: ', margen, colStartY + 13.5);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(20, 20, 20);
-  doc.text('Transferencia bancaria', margen + 23, colStartY + 13.5);
+  if (!esSinValorar) {
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(70, 75, 85);
+    doc.text('Forma de pago: ', margen, colStartY + 13.5);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(20, 20, 20);
+    doc.text('Transferencia bancaria', margen + 23, colStartY + 13.5);
 
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(70, 75, 85);
-  doc.text('Cuenta: ', margen, colStartY + 17.5);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(20, 20, 20);
-  doc.text(cuentaBanco, margen + 13, colStartY + 17.5);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(70, 75, 85);
+    doc.text('Cuenta: ', margen, colStartY + 17.5);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(20, 20, 20);
+    doc.text(cuentaBanco, margen + 13, colStartY + 17.5);
+  } else {
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(70, 75, 85);
+    doc.text('Tipo documento: ', margen, colStartY + 13.5);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(20, 20, 20);
+    doc.text('Copia para Operario (Sin valorar)', margen + 24, colStartY + 13.5);
+  }
 
   // BARRA VERTICAL ROJA SEPARADORA (más corta y estilizada)
   doc.setDrawColor(220, 38, 38);
@@ -6481,6 +6523,14 @@ export const generarPresupuestoPDF = async (
         if (presupuesto.lineas[k].tipo === 'capitulo') break;
         subtotalCap += (Number(presupuesto.lineas[k].cantidad) || 0) * (Number(presupuesto.lineas[k].precioUnidad) || 0);
       }
+      if (esSinValorar) {
+        return [
+          '', // Columna para imagen
+          '', // Código
+          (l.concepto || 'CAPÍTULO').toUpperCase(), // Título del capítulo
+          ''  // Unidades
+        ];
+      }
       return [
         '', // Columna para imagen
         '', // Código
@@ -6500,6 +6550,15 @@ export const generarPresupuestoPDF = async (
       textoArticulo = fam ? fam.toUpperCase() : desc;
     }
 
+    if (esSinValorar) {
+      return [
+        '', // Columna para imagen (si existe)
+        l.codigo || '-', // Código del artículo
+        textoArticulo, // Artículo
+        String(l.cantidad || 1) // Unidades
+      ];
+    }
+
     return [
       '', // Columna para imagen (si existe)
       l.codigo || '-', // Código del artículo
@@ -6510,16 +6569,41 @@ export const generarPresupuestoPDF = async (
     ];
   });
 
+  const tableHead = esSinValorar
+    ? [[
+        '', // Espacio para foto
+        'Código',
+        'Artículo',
+        { content: 'Und.', styles: { halign: 'center' } }
+      ]]
+    : [[
+        '', // Espacio para foto
+        'Código',
+        'Artículo',
+        { content: 'Precio', styles: { halign: 'right' } },
+        'Und.',
+        { content: 'Subtotal', styles: { halign: 'right' } }
+      ]];
+
+  const tableColumnStyles = esSinValorar
+    ? {
+        0: { cellWidth: colFotoWidth, halign: 'center', cellPadding: { left: 1, right: 1 } },
+        1: { cellWidth: 20, halign: 'left', fontStyle: 'bold', fontSize: 6.5, textColor: [110, 115, 125], cellPadding: { left: 1, right: 1 } },
+        2: { cellWidth: 'auto', halign: 'left', cellPadding: { top: 2.2, bottom: 2.2, left: 1.5, right: 1 } },
+        3: { cellWidth: 18, halign: 'center', cellPadding: { left: 1, right: 1 } }
+      }
+    : {
+        0: { cellWidth: colFotoWidth, halign: 'center', cellPadding: { left: 1, right: 1 } },
+        1: { cellWidth: 16, halign: 'left', fontStyle: 'bold', fontSize: 6.5, textColor: [110, 115, 125], cellPadding: { left: 1, right: 1 } },
+        2: { cellWidth: 'auto', halign: 'left', cellPadding: { top: 2.2, bottom: 2.2, left: 1.5, right: 1 } },
+        3: { cellWidth: 18, halign: 'right', cellPadding: { left: 1, right: 2 } },
+        4: { cellWidth: 13, halign: 'center', cellPadding: { left: 1, right: 1 } },
+        5: { cellWidth: 20, halign: 'right', cellPadding: { left: 1, right: 2 } }
+      };
+
   autoTable(doc, {
     startY: colStartY + 30,
-    head: [[
-      '', // Espacio para foto
-      'Código',
-      'Artículo',
-      { content: 'Precio', styles: { halign: 'right' } },
-      'Und.',
-      { content: 'Subtotal', styles: { halign: 'right' } }
-    ]],
+    head: tableHead as any,
     body: tableBody,
     theme: 'plain', // Sin fondos pesados ni líneas verticales
     headStyles: {
@@ -6545,14 +6629,7 @@ export const generarPresupuestoPDF = async (
       fillColor: [255, 255, 255], // Sin alternancia de color
     },
     margin: { left: margen, right: margen },
-    columnStyles: {
-      0: { cellWidth: colFotoWidth, halign: 'center', cellPadding: { left: 1, right: 1 } },
-      1: { cellWidth: 16, halign: 'left', fontStyle: 'bold', fontSize: 6.5, textColor: [110, 115, 125], cellPadding: { left: 1, right: 1 } }, // Código con tamaño de texto más pequeño
-      2: { cellWidth: 'auto', halign: 'left', cellPadding: { top: 2.2, bottom: 2.2, left: 1.5, right: 1 } }, // Artículo amplio
-      3: { cellWidth: 18, halign: 'right', cellPadding: { left: 1, right: 2 } }, // Precio
-      4: { cellWidth: 13, halign: 'center', cellPadding: { left: 1, right: 1 } }, // Und.
-      5: { cellWidth: 20, halign: 'right', cellPadding: { left: 1, right: 2 } } // Subtotal
-    },
+    columnStyles: tableColumnStyles as any,
     didParseCell: (data: any) => {
       const linea = (presupuesto.lineas || [])[data.row.index];
       if (linea?.tipo === 'capitulo') {
@@ -6563,7 +6640,7 @@ export const generarPresupuestoPDF = async (
           data.cell.styles.fontSize = 8;
           data.cell.styles.textColor = [15, 23, 42];
         }
-        if (data.column.index === 5) {
+        if (!esSinValorar && data.column.index === 5) {
           data.cell.styles.textColor = [234, 88, 12]; // Naranja / acento
         }
         return;
@@ -6654,95 +6731,99 @@ export const generarPresupuestoPDF = async (
   const finalY = (doc as any).lastAutoTable?.finalY || y + 10;
   const totalX = pageWidth - margen;
   let currentTotY = finalY + 4;
+  let currentBottomY = currentTotY;
 
-  const ivaExento = presupuesto.iva === 0;
-  const tieneDescuento = !!(presupuesto.descuentoPorcentaje && Number(presupuesto.descuentoPorcentaje) > 0);
-  const descPorc = Number(presupuesto.descuentoPorcentaje) || 0;
-  const descImp = Number(presupuesto.descuentoImporte) || (presupuesto.subtotal * descPorc / 100);
-  const baseTrasDescuento = Math.max(0, presupuesto.subtotal - descImp);
+  if (!esSinValorar) {
+    const ivaExento = presupuesto.iva === 0;
+    const tieneDescuento = !!(presupuesto.descuentoPorcentaje && Number(presupuesto.descuentoPorcentaje) > 0);
+    const descPorc = Number(presupuesto.descuentoPorcentaje) || 0;
+    const descImp = Number(presupuesto.descuentoImporte) || (presupuesto.subtotal * descPorc / 100);
+    const baseTrasDescuento = Math.max(0, presupuesto.subtotal - descImp);
 
-  // ── SALTO DE PÁGINA PREVENTIVO ──────────────────────────────────────────────
-  // Calcular altura total del bloque de totales para saber si cabe antes del pie
-  // Descuento: ~12mm | Subtotal: 5.5mm | IVA: 5.5mm | sep: 3.8mm | TOTAL: 5.5mm = ~32mm sin desc, ~44mm con desc
-  const alturaBloqueTotal = (tieneDescuento ? 13 : 0) + 32;
-  const firmaBoxHEstimado = 35;
-  const footerSafeZone = 30 + firmaBoxHEstimado + 6; // margen seguro sobre el pie de página
-  const limiteDisponible = pageHeight - footerSafeZone;
+    // ── SALTO DE PÁGINA PREVENTIVO ──────────────────────────────────────────────
+    // Calcular altura total del bloque de totales para saber si cabe antes del pie
+    // Descuento: ~12mm | Subtotal: 5.5mm | IVA: 5.5mm | sep: 3.8mm | TOTAL: 5.5mm = ~32mm sin desc, ~44mm con desc
+    const alturaBloqueTotal = (tieneDescuento ? 13 : 0) + 32;
+    const firmaBoxHEstimado = 35;
+    const footerSafeZone = 30 + firmaBoxHEstimado + 6; // margen seguro sobre el pie de página
+    const limiteDisponible = pageHeight - footerSafeZone;
 
-  if (currentTotY + alturaBloqueTotal > limiteDisponible) {
-    doc.addPage();
-    currentTotY = 20; // Margen superior en página nueva
-  }
-  // ────────────────────────────────────────────────────────────────────────────
+    if (currentTotY + alturaBloqueTotal > limiteDisponible) {
+      doc.addPage();
+      currentTotY = 20; // Margen superior en página nueva
+    }
+    // ────────────────────────────────────────────────────────────────────────────
 
+    // LÍNEA DE DESCUENTO AL FINAL DE TODOS LOS ARTÍCULOS ANTES DEL PRECIO, IVA, ETC.
+    if (tieneDescuento) {
+      const descPorcStr = descPorc.toFixed(2).replace('.', ',');
+      const labelDesc = `Descuento sobre el subtotal: ${descPorcStr} %`;
 
-  // LÍNEA DE DESCUENTO AL FINAL DE TODOS LOS ARTÍCULOS ANTES DEL PRECIO, IVA, ETC.
-  if (tieneDescuento) {
-    const descPorcStr = descPorc.toFixed(2).replace('.', ',');
-    const labelDesc = `Descuento sobre el subtotal: ${descPorcStr} %`;
+      // TEXTO DEL DESCUENTO
+      currentTotY += 3;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+      doc.setTextColor(220, 38, 38);
+      doc.text(labelDesc, margen + 2, currentTotY);
+      doc.text(`-${formatM(descImp)}`, totalX, currentTotY, { align: 'right' });
 
-    // TEXTO DEL DESCUENTO
-    currentTotY += 3;
-    doc.setFont('helvetica', 'bold');
+      // LÍNEA HORIZONTAL (inferior del descuento - ancho completo de margen a margen)
+      currentTotY += 3.2;
+      doc.setDrawColor(200, 205, 215);
+      doc.setLineWidth(0.35);
+      doc.line(margen, currentTotY, totalX, currentTotY);
+
+      currentTotY += 6;
+    } else {
+      currentTotY += 4;
+    }
+
+    // A CONTINUACIÓN: PRECIOS (SUBTOTAL, IVA Y TOTAL)
+    doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
-    doc.setTextColor(220, 38, 38);
-    doc.text(labelDesc, margen + 2, currentTotY);
-    doc.text(`-${formatM(descImp)}`, totalX, currentTotY, { align: 'right' });
+    doc.setTextColor(80, 80, 80);
+    doc.text('Subtotal:', totalX - 50, currentTotY, { align: 'right' });
+    doc.text(formatM(presupuesto.subtotal), totalX, currentTotY, { align: 'right' });
 
-    // LÍNEA HORIZONTAL (inferior del descuento - ancho completo de margen a margen)
-    currentTotY += 3.2;
-    doc.setDrawColor(200, 205, 215);
-    doc.setLineWidth(0.35);
-    doc.line(margen, currentTotY, totalX, currentTotY);
+    currentTotY += 5.5;
+    if (ivaExento) {
+      doc.text('IVA:', totalX - 50, currentTotY, { align: 'right' });
+      doc.text('Exento (0%)', totalX, currentTotY, { align: 'right' });
+    } else {
+      doc.text(`IVA (${presupuesto.iva}%):`, totalX - 50, currentTotY, { align: 'right' });
+      doc.text(formatM(baseTrasDescuento * presupuesto.iva / 100), totalX, currentTotY, { align: 'right' });
+    }
 
-    currentTotY += 6;
+    currentTotY += 3.8;
+    doc.setDrawColor(40, 40, 40);
+    doc.setLineWidth(0.4);
+    doc.line(totalX - 55, currentTotY, totalX, currentTotY);
+
+    currentTotY += 5.5;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10.5);
+    doc.setTextColor(24, 24, 27);
+    doc.text('TOTAL:', totalX - 50, currentTotY, { align: 'right' });
+    doc.text(formatM(presupuesto.total), totalX, currentTotY, { align: 'right' });
+
+    // Texto de exención de IVA si aplica
+    currentBottomY = currentTotY + 7;
+    if (ivaExento) {
+      doc.setDrawColor(230, 220, 200);
+      doc.setFillColor(255, 250, 243);
+      const textoExencion = 'Factura exenta de IVA por inversión del sujeto pasivo de acuerdo con el artículo 84 letra f-Uno. 2º - Ley 37/1992 - art. 5 Ley 7/2012';
+      const exencionSplit = doc.splitTextToSize(textoExencion, pageWidth - margen * 2 - 8);
+      const exencionH = 8 + exencionSplit.length * 4;
+      doc.roundedRect(margen, currentBottomY, pageWidth - margen * 2, exencionH, 2.5, 2.5, 'FD');
+      doc.setFont('helvetica', 'italic');
+      doc.setFontSize(7);
+      doc.setTextColor(170, 110, 30);
+      let exy = currentBottomY + 5;
+      exencionSplit.forEach((line: string) => { doc.text(line, margen + 4, exy); exy += 4; });
+      currentBottomY += exencionH + 6;
+    }
   } else {
-    currentTotY += 4;
-  }
-
-  // A CONTINUACIÓN: PRECIOS (SUBTOTAL, IVA Y TOTAL)
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.setTextColor(80, 80, 80);
-  doc.text('Subtotal:', totalX - 50, currentTotY, { align: 'right' });
-  doc.text(formatM(presupuesto.subtotal), totalX, currentTotY, { align: 'right' });
-
-  currentTotY += 5.5;
-  if (ivaExento) {
-    doc.text('IVA:', totalX - 50, currentTotY, { align: 'right' });
-    doc.text('Exento (0%)', totalX, currentTotY, { align: 'right' });
-  } else {
-    doc.text(`IVA (${presupuesto.iva}%):`, totalX - 50, currentTotY, { align: 'right' });
-    doc.text(formatM(baseTrasDescuento * presupuesto.iva / 100), totalX, currentTotY, { align: 'right' });
-  }
-
-  currentTotY += 3.8;
-  doc.setDrawColor(40, 40, 40);
-  doc.setLineWidth(0.4);
-  doc.line(totalX - 55, currentTotY, totalX, currentTotY);
-
-  currentTotY += 5.5;
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10.5);
-  doc.setTextColor(24, 24, 27);
-  doc.text('TOTAL:', totalX - 50, currentTotY, { align: 'right' });
-  doc.text(formatM(presupuesto.total), totalX, currentTotY, { align: 'right' });
-
-  // Texto de exención de IVA si aplica
-  let currentBottomY = currentTotY + 7;
-  if (ivaExento) {
-    doc.setDrawColor(230, 220, 200);
-    doc.setFillColor(255, 250, 243);
-    const textoExencion = 'Factura exenta de IVA por inversión del sujeto pasivo de acuerdo con el artículo 84 letra f-Uno. 2º - Ley 37/1992 - art. 5 Ley 7/2012';
-    const exencionSplit = doc.splitTextToSize(textoExencion, pageWidth - margen * 2 - 8);
-    const exencionH = 8 + exencionSplit.length * 4;
-    doc.roundedRect(margen, currentBottomY, pageWidth - margen * 2, exencionH, 2.5, 2.5, 'FD');
-    doc.setFont('helvetica', 'italic');
-    doc.setFontSize(7);
-    doc.setTextColor(170, 110, 30);
-    let exy = currentBottomY + 5;
-    exencionSplit.forEach((line: string) => { doc.text(line, margen + 4, exy); exy += 4; });
-    currentBottomY += exencionH + 6;
+    currentBottomY = finalY + 4;
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -6850,6 +6931,8 @@ export const generarPresupuestoPDF = async (
     doc.text(textoRegistro, 5.5, 220, { angle: 90 });
   }
 
-  const filePrefix = esPdv ? 'Pedido' : 'Presupuesto';
+  const filePrefix = esPdv 
+    ? (esSinValorar ? 'Pedido_Sin_Valorar' : 'Pedido') 
+    : (esSinValorar ? 'Presupuesto_Sin_Valorar' : 'Presupuesto');
   doc.save(`${filePrefix}_${presupuesto.numeroPresupuesto || 'N-A'}.pdf`);
 };

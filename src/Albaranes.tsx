@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, FileDigit, Download, Search, CheckCircle2, Circle, Clock, Trash2, Plus, Building2, MapPin, Save, Trash, Edit, Copy, Maximize2, X, Signature, ArrowUp, ArrowDown, ArrowUpDown, GripVertical, ChevronUp, ChevronDown } from 'lucide-react';
+import { ArrowLeft, FileDigit, Download, Search, CheckCircle2, Circle, Clock, Trash2, Plus, Building2, MapPin, Save, Trash, Edit, Copy, Maximize2, X, Signature, ArrowUp, ArrowDown, ArrowUpDown, GripVertical, ChevronUp, ChevronDown, Wand2, Calendar } from 'lucide-react';
 import { addAlbaran, updateAlbaran, deleteAlbaran, subscribeAlbaranes, subscribeEmpresas, subscribeTecnicos, subscribeCentros, subscribeClientes, subscribeTrabajos, db, type Albaran, type Cliente, type Centro, type Equipo, type Tecnico, type Empresa, type TrabajoConfig, updateParte, updateReparacion, updateInstalacion, updateUrgencia, obtenerSiguienteNumeroAlbaran, extraerSufijoSecuencia, obtenerEmpresaPorDefecto } from './firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { generarAlbaranPDF } from './pdfGenerator';
@@ -133,6 +133,7 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
   const [sendProgress, setSendProgress] = useState(0);
   const [sendCompleted, setSendCompleted] = useState(false);
   const [limiteAlbaranes, setLimiteAlbaranes] = useState<number | 'todos'>(10);
+  const [accionesModalItem, setAccionesModalItem] = useState<Albaran | null>(null);
 
   const pendingCount = useMemo(() => 
     albaranes.filter(alb => !alb.facturado).length,
@@ -301,6 +302,25 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
         }
       }
     }
+  };
+
+  const handleDescargarAlbaranPDF = async (alb: Albaran) => {
+    const eqsDelCentro = equipos.filter(e => e.centroId === alb.centroId);
+    const empId = alb.empresaId || centros.find(c => c._docId === alb.centroId || c.id === alb.centroId)?.empresaId;
+    let empresa = empresas.find(e => e._docId === empId || e.id === empId || (e.nombre && typeof e.nombre === 'string' && e.nombre.trim().toLowerCase() === empId?.trim().toLowerCase()));
+    if (!empresa && empId) {
+      try {
+        const docSnap = await getDoc(doc(db, 'empresa', empId));
+        if (docSnap.exists()) empresa = { _docId: docSnap.id, ...(docSnap.data() as any) };
+      } catch(e){}
+    }
+    const tecnico = tecnicos.find(t => t.id === alb.tecnicoId);
+    const tecnicoNombre = tecnico ? `${tecnico.nombre} ${tecnico.apellidos}` : '';
+    const cliente = clientes.find(c => c.id === alb.clienteId);
+    const centro = centros.find(c => c._docId === alb.centroId || c.id === alb.centroId);
+    const clienteParaPDF = cliente || (alb.clienteNombreLibre ? { nombre: alb.clienteNombreLibre } : null);
+    const centroParaPDF = centro || (alb.centroNombreLibre ? { nombre: alb.centroNombreLibre } : null);
+    await generarAlbaranPDF(clienteParaPDF as any, centroParaPDF as any, eqsDelCentro as any[], alb.numeroMantenimiento || alb.id, tecnicoNombre, alb.firmaCliente, alb.firmaTecnico, alb.nombreFirmante, alb.items, empresa as any, false, alb.titulo, alb.periodicidad, undefined, alb.numeroPedido, alb.fechaCreacion);
   };
 
   const handleOpenCrearFactura = (alb: Albaran) => {
@@ -780,53 +800,14 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                         </button>
                       </div>
                       <div className="flex items-center gap-1">
-                        <span 
-                          className={`p-1.5 rounded-xl ${
-                            isFirmaValida(alb.firmaCliente) 
-                              ? 'text-emerald-600 bg-emerald-50/80 font-bold' 
-                              : 'text-zinc-300'
-                          }`} 
-                          title={isFirmaValida(alb.firmaCliente) ? "Firmado por el cliente" : "Pendiente de firma del cliente"}
+                        <button
+                          type="button"
+                          onClick={() => setAccionesModalItem(alb)}
+                          className="inline-flex items-center justify-center p-2 rounded-xl text-amber-600 hover:text-amber-700 bg-amber-50/70 hover:bg-amber-100/80 border border-amber-200/80 transition-all cursor-pointer shadow-2xs group"
+                          title="Abrir acciones del albarán"
                         >
-                          <Signature className="w-4 h-4" />
-                        </span>
-                        <button onClick={async () => {
-                          const eqsDelCentro = equipos.filter(e => e.centroId === alb.centroId);
-                          const empId = alb.empresaId || centro?.empresaId;
-                          let empresa = empresas.find(e => e._docId === empId || e.id === empId || (e.nombre && typeof e.nombre === 'string' && e.nombre.trim().toLowerCase() === empId?.trim().toLowerCase()));
-                          if (!empresa && empId) {
-                            try {
-                                const docSnap = await getDoc(doc(db, 'empresa', empId));
-                                if (docSnap.exists()) empresa = { _docId: docSnap.id, ...(docSnap.data() as any) };
-                            } catch(e){}
-                          }
-                          const tecnico = tecnicos.find(t => t.id === alb.tecnicoId);
-                          const tecnicoNombre = tecnico ? `${tecnico.nombre} ${tecnico.apellidos}` : '';
-                          const clienteParaPDF = cliente || (alb.clienteNombreLibre ? { nombre: alb.clienteNombreLibre } : null);
-                          const centroParaPDF = centro || (alb.centroNombreLibre ? { nombre: alb.centroNombreLibre } : null);
-                          await generarAlbaranPDF(clienteParaPDF as any, centroParaPDF as any, eqsDelCentro as any[], alb.numeroMantenimiento || alb.id, tecnicoNombre, alb.firmaCliente, alb.firmaTecnico, alb.nombreFirmante, alb.items, empresa as any, false, alb.titulo, alb.periodicidad, undefined, alb.numeroPedido, alb.fechaCreacion);
-                        }} className="p-1.5 text-red-650 hover:bg-red-50 rounded-xl transition-colors" title="Descargar PDF"><Download className="w-4 h-4" /></button>
-                        {!isVisualizador && !isTecnicoMode && (
-                          <button
-                            type="button"
-                            onClick={() => handleOpenCrearFactura(alb)}
-                            className={`p-1.5 rounded-xl transition-colors cursor-pointer ${
-                              alb.facturado
-                                ? 'text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50'
-                                : 'text-zinc-500 hover:text-blue-600 hover:bg-blue-50'
-                            }`}
-                            title={alb.facturado ? `Facturado - Clic para ver/crear factura` : 'Crear Factura desde este Albarán'}
-                          >
-                            <svg className="w-4 h-4 inline-block" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                              <polyline points="14 2 14 8 20 8" />
-                              <text x="12" y="19" textAnchor="middle" fill="currentColor" stroke="none" fontSize="11.5" fontWeight="900" fontFamily="system-ui, -apple-system, sans-serif">F</text>
-                            </svg>
-                          </button>
-                        )}
-                        {!isVisualizador && <button onClick={() => handleEditAlbaran(alb)} className="p-1.5 text-black hover:bg-zinc-100 rounded-xl transition-colors" title="Editar"><Edit className="w-4 h-4" /></button>}
-                        {!isVisualizador && !isTecnicoMode && <button onClick={() => handleDuplicateAlbaran(alb)} className="p-1.5 text-violet-600 hover:bg-violet-50 rounded-xl transition-colors" title="Duplicar"><Copy className="w-4 h-4" /></button>}
-                        {!isVisualizador && !isTecnicoMode && <button onClick={() => handleDeleteAlbaran(alb.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded-xl transition-colors" title="Eliminar"><Trash2 className="w-4 h-4" /></button>}
+                          <Wand2 className="w-4 h-4 group-hover:rotate-12 transition-transform text-amber-600" />
+                        </button>
                       </div>
                     </div>
                     <div className="space-y-1">
@@ -854,10 +835,10 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
             <div className="hidden md:block overflow-x-auto w-full">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-zinc-200/90 border-b border-zinc-300 text-[11px] font-extrabold uppercase tracking-wider text-zinc-700">
+                  <tr className="bg-zinc-200/90 border-b border-zinc-300 text-[11px] font-bold uppercase tracking-wider text-zinc-700">
                     <th 
                       onClick={() => handleSort('albaran')} 
-                      className="px-4 py-3 text-left whitespace-nowrap cursor-pointer hover:text-zinc-950 transition-colors select-none group"
+                      className="w-px whitespace-nowrap px-4 py-3 text-left cursor-pointer hover:text-zinc-950 transition-colors select-none group"
                       title="Ordenar por número de albarán"
                     >
                       <div className="inline-flex items-center gap-1.5">
@@ -871,7 +852,7 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                     </th>
                     <th 
                       onClick={() => handleSort('fecha')} 
-                      className="px-4 py-3 text-left whitespace-nowrap cursor-pointer hover:text-zinc-950 transition-colors select-none group"
+                      className="w-px whitespace-nowrap px-4 py-3 text-left cursor-pointer hover:text-zinc-950 transition-colors select-none group"
                       title="Ordenar por fecha"
                     >
                       <div className="inline-flex items-center gap-1.5">
@@ -885,7 +866,7 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                     </th>
                     <th 
                       onClick={() => handleSort('pedido')} 
-                      className="px-4 py-3 text-left whitespace-nowrap cursor-pointer hover:text-zinc-950 transition-colors select-none group"
+                      className="w-px whitespace-nowrap px-4 py-3 text-left cursor-pointer hover:text-zinc-950 transition-colors select-none group"
                       title="Ordenar por número de pedido"
                     >
                       <div className="inline-flex items-center gap-1.5">
@@ -927,7 +908,7 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                     </th>
                     <th 
                       onClick={() => handleSort('estado')} 
-                      className="px-4 py-3 text-center whitespace-nowrap cursor-pointer hover:text-zinc-950 transition-colors select-none group"
+                      className="w-px whitespace-nowrap px-4 py-3 text-center cursor-pointer hover:text-zinc-950 transition-colors select-none group"
                       title="Ordenar por estado"
                     >
                       <div className="inline-flex items-center justify-center gap-1.5">
@@ -939,7 +920,7 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                         )}
                       </div>
                     </th>
-                    <th className="px-4 py-3 text-center whitespace-nowrap select-none">
+                    <th className="w-px whitespace-nowrap px-4 py-3 text-center select-none">
                       Acciones
                     </th>
                   </tr>
@@ -953,92 +934,278 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                         key={alb.id} 
                         className={`transition-all duration-150 group ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100/80'} hover:bg-amber-100/90 hover:shadow-xs`}
                       >
-                        <td className="px-4 py-2.5 whitespace-nowrap">
-                          <span className="text-[11px] font-mono font-bold text-zinc-600 bg-zinc-100 px-2 py-0.5 rounded border border-zinc-200/80">{alb.id}</span>
+                        <td className="w-px whitespace-nowrap px-4 py-2.5">
+                          <span className="text-xs font-mono font-medium text-zinc-700 bg-zinc-100 px-2 py-0.5 rounded border border-zinc-200/80">
+                            {alb.id}
+                          </span>
                         </td>
-                        <td className="px-4 py-2.5 whitespace-nowrap text-xs font-semibold text-zinc-600">
-                          {new Date(alb.fechaCreacion).toLocaleDateString()}
+                        <td className="w-px whitespace-nowrap px-4 py-2.5 text-xs text-slate-600 font-medium">
+                          <span className="inline-flex items-center gap-1.5">
+                            <Calendar className="w-3.5 h-3.5 text-red-500" />
+                            {new Date(alb.fechaCreacion).toLocaleDateString()}
+                          </span>
                         </td>
-                        <td className="px-4 py-2.5 whitespace-nowrap text-xs text-zinc-600">
-                          {alb.numeroPedido || '—'}
+                        <td className="w-px whitespace-nowrap px-4 py-2.5 text-xs text-slate-600 font-mono">
+                          {alb.numeroPedido ? (
+                            <span className="text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200/80 font-medium">
+                              {alb.numeroPedido}
+                            </span>
+                          ) : (
+                            <span className="text-slate-300">—</span>
+                          )}
                         </td>
-                        <td className="px-4 py-2.5 text-sm text-zinc-700">
+                        <td className="px-4 py-2.5 text-xs text-slate-600">
                           <div className="flex items-center gap-1.5">
-                            <MapPin className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
-                            <span className="font-medium">{centro?.nombre || alb.centroNombreLibre || cliente?.nombre || alb.clienteNombreLibre || 'Desconocido'}</span>
+                            <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <span className="font-medium text-slate-700 truncate max-w-[200px]" title={centro?.nombre || alb.centroNombreLibre || cliente?.nombre || alb.clienteNombreLibre || 'Desconocido'}>
+                              {centro?.nombre || alb.centroNombreLibre || cliente?.nombre || alb.clienteNombreLibre || 'Desconocido'}
+                            </span>
                           </div>
                         </td>
-                        <td className="px-4 py-2.5 text-sm font-bold text-zinc-900">
-                          <p className="line-clamp-2">{alb.titulo || '—'}</p>
+                        <td className="px-4 py-2.5 text-xs text-slate-800">
+                          <span className="font-medium truncate block max-w-xs lg:max-w-md" title={alb.titulo || '—'}>
+                            {alb.titulo || '—'}
+                          </span>
                         </td>
-                        <td className="px-4 py-2.5 text-center whitespace-nowrap">
+                        <td className="w-px whitespace-nowrap px-4 py-2.5 text-center">
                           <button 
                             onClick={() => !isVisualizador && toggleFacturado(alb.id)} 
                             disabled={isVisualizador}
-                            className={`text-[10px] font-bold px-2 py-1 rounded-xl border inline-flex items-center gap-1 cursor-pointer ${
+                            className={`text-[10px] font-semibold px-2.5 py-0.5 rounded-full border inline-flex items-center gap-1 cursor-pointer ${
                               alb.facturado ? 'bg-blue-600 border-blue-700 text-white' : 'bg-zinc-100 border-zinc-200 text-zinc-500'
                             } ${isVisualizador ? 'cursor-not-allowed opacity-70' : ''}`}
+                            title={alb.facturado ? 'Facturado - Clic para cambiar' : 'Pendiente - Clic para marcar facturado'}
                           >
                             {alb.facturado ? <CheckCircle2 className="w-3 h-3" /> : <Circle className="w-3 h-3" />}
                             {alb.facturado ? 'Facturado' : 'Pendiente'}
                           </button>
                         </td>
-                        <td className="px-4 py-2.5 text-center whitespace-nowrap">
-                          <div className="inline-flex items-center justify-center gap-1">
-                            <span 
-                              className={`p-1.5 rounded-xl ${
-                                isFirmaValida(alb.firmaCliente) 
-                                  ? 'text-emerald-600 bg-emerald-50/80 font-bold' 
-                                  : 'text-zinc-300'
-                              }`} 
-                              title={isFirmaValida(alb.firmaCliente) ? "Firmado por el cliente" : "Pendiente de firma del cliente"}
-                            >
-                              <Signature className="w-4 h-4" />
-                            </span>
-                            <button onClick={async () => {
-                              const eqsDelCentro = equipos.filter(e => e.centroId === alb.centroId);
-                              const empId = alb.empresaId || centro?.empresaId;
-                              let empresa = empresas.find(e => e._docId === empId || e.id === empId || (e.nombre && typeof e.nombre === 'string' && e.nombre.trim().toLowerCase() === empId?.trim().toLowerCase()));
-                              if (!empresa && empId) {
-                                try {
-                                    const docSnap = await getDoc(doc(db, 'empresa', empId));
-                                    if (docSnap.exists()) empresa = { _docId: docSnap.id, ...(docSnap.data() as any) };
-                                } catch(e){}
-                              }
-                              const tecnico = tecnicos.find(t => t.id === alb.tecnicoId);
-                              const tecnicoNombre = tecnico ? `${tecnico.nombre} ${tecnico.apellidos}` : '';
-                              const clienteParaPDF = cliente || (alb.clienteNombreLibre ? { nombre: alb.clienteNombreLibre } : null);
-                              const centroParaPDF = centro || (alb.centroNombreLibre ? { nombre: alb.centroNombreLibre } : null);
-                              await generarAlbaranPDF(clienteParaPDF as any, centroParaPDF as any, eqsDelCentro as any[], alb.numeroMantenimiento || alb.id, tecnicoNombre, alb.firmaCliente, alb.firmaTecnico, alb.nombreFirmante, alb.items, empresa as any, false, alb.titulo, alb.periodicidad, undefined, alb.numeroPedido, alb.fechaCreacion);
-                            }} className="p-1.5 text-red-650 hover:bg-red-50 rounded-xl transition-colors cursor-pointer" title="Descargar PDF"><Download className="w-4 h-4" /></button>
-                            {!isVisualizador && !isTecnicoMode && (
-                              <button
-                                type="button"
-                                onClick={() => handleOpenCrearFactura(alb)}
-                                className={`p-1.5 rounded-xl transition-colors cursor-pointer ${
-                                  alb.facturado
-                                    ? 'text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50'
-                                    : 'text-zinc-500 hover:text-blue-600 hover:bg-blue-50'
-                                }`}
-                                title={alb.facturado ? `Facturado - Clic para ver/crear factura` : 'Crear Factura desde este Albarán'}
-                              >
-                                <svg className="w-4 h-4 inline-block" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                                  <polyline points="14 2 14 8 20 8" />
-                                  <text x="12" y="19" textAnchor="middle" fill="currentColor" stroke="none" fontSize="11.5" fontWeight="900" fontFamily="system-ui, -apple-system, sans-serif">F</text>
-                                </svg>
-                              </button>
-                            )}
-                            {!isVisualizador && <button onClick={() => handleEditAlbaran(alb)} className="p-1.5 text-black hover:bg-zinc-100 rounded-xl transition-colors cursor-pointer" title="Editar"><Edit className="w-4 h-4" /></button>}
-                            {!isVisualizador && !isTecnicoMode && <button onClick={() => handleDuplicateAlbaran(alb)} className="p-1.5 text-violet-600 hover:bg-violet-50 rounded-xl transition-colors cursor-pointer" title="Duplicar"><Copy className="w-4 h-4" /></button>}
-                            {!isVisualizador && !isTecnicoMode && <button onClick={() => handleDeleteAlbaran(alb.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded-xl transition-colors cursor-pointer" title="Eliminar"><Trash2 className="w-4 h-4" /></button>}
-                          </div>
+                        <td className="w-px whitespace-nowrap px-4 py-2.5 text-center">
+                          <button
+                            type="button"
+                            onClick={() => setAccionesModalItem(alb)}
+                            className="inline-flex items-center justify-center p-2 rounded-xl text-amber-600 hover:text-amber-700 bg-amber-50/70 hover:bg-amber-100/80 border border-amber-200/80 transition-all cursor-pointer shadow-2xs group"
+                            title="Abrir acciones del albarán"
+                          >
+                            <Wand2 className="w-4 h-4 group-hover:rotate-12 transition-transform text-amber-600" />
+                          </button>
                         </td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
+            </div>
+          </div>
+        )}
+
+        {/* Modal flotante de Acciones de Albarán */}
+        {accionesModalItem && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+            <div 
+              className="bg-white rounded-3xl shadow-2xl border border-slate-200/80 w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-150"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Cabecera oscura moderna */}
+              <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between">
+                <div className="flex items-center gap-3 min-w-0 pr-2">
+                  <div className="w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+                    <Wand2 className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="font-extrabold text-base truncate">
+                      Acciones del Albarán
+                    </h3>
+                    <p className="text-xs text-slate-300 truncate">
+                      {accionesModalItem.id} — {accionesModalItem.titulo || 'Sin título'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAccionesModalItem(null)}
+                  className="p-2 text-slate-400 hover:text-white rounded-xl transition-colors cursor-pointer shrink-0"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Subcabecera con información resumida */}
+              <div className="px-6 py-3 bg-slate-50 border-b border-slate-100 flex items-center gap-2 flex-wrap text-xs">
+                {accionesModalItem.fechaCreacion && (
+                  <span className="inline-flex items-center gap-1 font-medium text-slate-600 bg-white px-2.5 py-1 rounded-lg border border-slate-200">
+                    <Calendar className="w-3.5 h-3.5 text-red-500" />
+                    {new Date(accionesModalItem.fechaCreacion).toLocaleDateString()}
+                  </span>
+                )}
+                <span className="font-mono font-medium text-zinc-700 bg-zinc-100 px-2.5 py-1 rounded-lg border border-zinc-200">
+                  {accionesModalItem.id}
+                </span>
+                {accionesModalItem.numeroPedido && (
+                  <span className="font-mono font-medium text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-200/80">
+                    {accionesModalItem.numeroPedido}
+                  </span>
+                )}
+                <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border text-xs font-medium ${
+                  isFirmaValida(accionesModalItem.firmaCliente)
+                    ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                    : 'text-zinc-500 bg-zinc-100 border-zinc-200'
+                }`}>
+                  <Signature className="w-3.5 h-3.5" />
+                  {isFirmaValida(accionesModalItem.firmaCliente) ? 'Firmado' : 'Sin firma'}
+                </span>
+                {(() => {
+                  const total = (accionesModalItem.items || []).reduce((s, i) => s + (Number(i.subtotal) || ((Number(i.cantidad) || 0) * (Number(i.precioUnidad) || 0))), 0);
+                  return (
+                    <span className="font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200/80 ml-auto">
+                      {formatMoneda(total)}
+                    </span>
+                  );
+                })()}
+              </div>
+
+              {/* Listado de acciones */}
+              <div className="p-6 flex flex-col gap-3">
+                {/* Acción 1: Descargar PDF */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const alb = accionesModalItem;
+                    setAccionesModalItem(null);
+                    handleDescargarAlbaranPDF(alb);
+                  }}
+                  className="w-full flex items-center gap-3.5 p-3 rounded-2xl border border-red-100 bg-red-50/40 hover:bg-red-50 text-red-950 transition-all text-left cursor-pointer group hover:shadow-xs"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-red-100 text-red-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                    <Download className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <span className="text-sm font-semibold text-red-950 block">
+                      Descargar PDF Oficial del Albarán
+                    </span>
+                    <span className="text-xs text-red-600/80 truncate block">
+                      Documento oficial firmado con detalle de equipos y partidas
+                    </span>
+                  </div>
+                </button>
+
+                {/* Acción 2: Facturación / Conexión directa */}
+                {!isVisualizador && !isTecnicoMode && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const alb = accionesModalItem;
+                      setAccionesModalItem(null);
+                      handleOpenCrearFactura(alb);
+                    }}
+                    className={`w-full flex items-center gap-3.5 p-3 rounded-2xl border transition-all text-left cursor-pointer group hover:shadow-xs ${
+                      accionesModalItem.facturado
+                        ? 'border-emerald-200 bg-emerald-50/50 hover:bg-emerald-50 text-emerald-950'
+                        : 'border-blue-200 bg-blue-50/40 hover:bg-blue-50 text-blue-950'
+                    }`}
+                  >
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform font-bold ${
+                      accionesModalItem.facturado ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'
+                    }`}>
+                      <svg className="w-5 h-5 inline-block" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <polyline points="14 2 14 8 20 8" />
+                        <text x="12" y="19" textAnchor="middle" fill="currentColor" stroke="none" fontSize="11.5" fontWeight="900" fontFamily="system-ui, -apple-system, sans-serif">F</text>
+                      </svg>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold">
+                          {accionesModalItem.facturado ? 'Ver / Gestionar Factura' : 'Crear Factura desde este Albarán'}
+                        </span>
+                        <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md ${
+                          accionesModalItem.facturado ? 'bg-emerald-200 text-emerald-900' : 'bg-blue-200 text-blue-900'
+                        }`}>
+                          {accionesModalItem.facturado ? 'Facturado' : 'Pendiente'}
+                        </span>
+                      </div>
+                      <div className="text-xs text-slate-500 truncate">
+                        {accionesModalItem.facturado ? 'Albarán ya facturado. Clic para ver o emitir factura.' : 'Emite la factura oficial precargando datos y partidas del albarán'}
+                      </div>
+                    </div>
+                  </button>
+                )}
+
+                {/* Acción 3: Editar Albarán */}
+                {!isVisualizador && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const alb = accionesModalItem;
+                      setAccionesModalItem(null);
+                      handleEditAlbaran(alb);
+                    }}
+                    className="w-full flex items-center gap-3.5 p-3 rounded-2xl border border-slate-200 hover:bg-slate-50 text-slate-800 transition-all text-left cursor-pointer group hover:shadow-xs"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                      <Edit className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <span className="text-sm font-semibold text-slate-800 block">
+                        Editar Albarán
+                      </span>
+                      <span className="text-xs text-slate-500 truncate block">
+                        Modificar partidas, conceptos, cliente o firmas
+                      </span>
+                    </div>
+                  </button>
+                )}
+
+                {/* Acción 4: Duplicar Albarán */}
+                {!isVisualizador && !isTecnicoMode && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const alb = accionesModalItem;
+                      setAccionesModalItem(null);
+                      handleDuplicateAlbaran(alb);
+                    }}
+                    className="w-full flex items-center gap-3.5 p-3 rounded-2xl border border-violet-200/80 bg-violet-50/40 hover:bg-violet-50 text-violet-950 transition-all text-left cursor-pointer group hover:shadow-xs"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-violet-100 text-violet-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                      <Copy className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <span className="text-sm font-semibold text-violet-950 block">
+                        Duplicar Albarán
+                      </span>
+                      <span className="text-xs text-violet-600/80 truncate block">
+                        Crear una copia con un nuevo número correlativo
+                      </span>
+                    </div>
+                  </button>
+                )}
+
+                {/* Acción 5: Eliminar Albarán */}
+                {!isVisualizador && !isTecnicoMode && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const alb = accionesModalItem;
+                      setAccionesModalItem(null);
+                      handleDeleteAlbaran(alb.id);
+                    }}
+                    className="w-full flex items-center gap-3.5 p-3 rounded-2xl border border-red-200/80 bg-red-50/40 hover:bg-red-50 text-red-700 transition-all text-left cursor-pointer group hover:shadow-xs"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-red-100 text-red-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                      <Trash2 className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <span className="text-sm font-semibold text-red-700 block">
+                        Eliminar Albarán
+                      </span>
+                      <span className="text-xs text-red-500/80 truncate block">
+                        Mover a la papelera y borrar registros
+                      </span>
+                    </div>
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         )}
