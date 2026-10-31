@@ -1124,7 +1124,7 @@ export default function Revisiones() {
                   <span className="text-xs font-mono font-bold text-slate-600 bg-white border border-slate-200 px-2.5 py-1 rounded-lg">
                     {accionesModalItem.codigoCentro}
                   </span>
-                  {renderTipoBadge(accionesModalItem.tipoRevision, accionesModalItem.tag)}
+                  {renderTipoBadge(accionesModalItem.tipoRevision || 'Anual', (accionesModalItem as any).tag)}
                 </div>
                 <p className="text-sm font-bold text-slate-800">{accionesModalItem.centroNombre}</p>
                 <div className="flex items-center gap-2 text-xs text-slate-500">
@@ -1160,7 +1160,7 @@ export default function Revisiones() {
                   onClick={() => {
                     const item = accionesModalItem;
                     setAccionesModalItem(null);
-                    setDeleteConfirmId({ id: item.id, docId: item._docId, nombre: item.centroNombre });
+                    setDeleteConfirmId({ id: item.id || '', docId: item._docId, nombre: item.centroNombre || '' });
                   }}
                   className="w-full flex items-center gap-3 p-3.5 rounded-2xl border border-red-200 hover:border-red-300 bg-red-50/30 hover:bg-red-50 text-red-700 transition-all font-semibold text-xs cursor-pointer group shadow-2xs"
                 >

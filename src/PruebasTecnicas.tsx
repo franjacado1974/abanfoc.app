@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useId } from 'react';
 import { 
-  Gauge, Droplets, Activity, ChevronRight, Info, ArrowLeft,
+  Gauge, Droplets, Activity, ArrowLeft,
   CheckCircle2, AlertTriangle, Save, ShieldCheck, Flame, 
   Building2, Users, Calendar, Clock, FileDown, Wrench,
   History, Trash2, Search, X, FolderOpen, Plus, User, MapPin, StickyNote,
@@ -13,13 +13,6 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { fetchImageToBase64, optimizarImagenParaPDF, getImageFormat, generarPresupuestoPDF } from './pdfGenerator';
 import { HandOptionsIcon } from './components/HandOptionsIcon';
-
-const truncar30 = (texto: string | undefined | null, max = 30): string => {
-  if (!texto) return '—';
-  const str = String(texto).trim();
-  if (str.length <= max) return str;
-  return str.slice(0, max) + '...';
-};
 
 // ─── TIPOS Y NORMATIVA UNE / RIPCI ──────────────────────────────────────────
 export type TipoEquipoMedir = 
@@ -799,7 +792,7 @@ export default function PruebasTecnicas() {
   // Evaluación de cumplimiento
   const cumplePrueba1 = p1Num >= normaActiva.presionMin && q1Num >= normaActiva.caudalMin1Eq;
   const cumplePrueba2 = p2Num >= normaActiva.presionMin && (qTotalNum >= normaActiva.caudalMin2Eq || (q1Num >= normaActiva.caudalMin1Eq && q2Num >= normaActiva.caudalMin1Eq));
-  const evaluacionGlobal = p1Num > 0 && q1Num > 0 && p2Num > 0 && q2Num > 0
+  const evaluacionGlobal: 'conforme' | 'no_conforme' | 'pendiente' = p1Num > 0 && q1Num > 0 && p2Num > 0 && q2Num > 0
     ? (cumplePrueba1 && cumplePrueba2 ? 'conforme' : 'no_conforme')
     : 'pendiente';
 
@@ -1695,7 +1688,7 @@ export default function PruebasTecnicas() {
       };
 
       const docRef = await addDoc(collection(db, 'pruebas_tecnicas'), docData);
-      const newSavedItem = { id: docRef.id, ...docData };
+      const newSavedItem: EnsayoGuardado = { id: docRef.id, ...docData };
       const nextList = [newSavedItem, ...ensayosGuardados.filter(e => e.id !== docRef.id)];
       try {
         localStorage.setItem('firecheck_db_pruebas_tecnicas', JSON.stringify(nextList));
@@ -1730,7 +1723,7 @@ export default function PruebasTecnicas() {
   return (
     <div className="min-h-screen bg-[#F8FAFC] pb-16">
       {viewMode === 'table' ? (
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-6">
+        <div className="w-full px-4 sm:px-8 py-6">
           {/* Cabecera del módulo */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
             <div>
@@ -1891,7 +1884,7 @@ export default function PruebasTecnicas() {
                                 {item.pedidoId || item.id.slice(0, 8)}
                               </span>
                               <span className="font-semibold text-slate-800 text-xs whitespace-nowrap" title={eqLabel}>
-                                {truncar30(eqLabel, 26)}
+                                {eqLabel}
                               </span>
                             </div>
                           </td>
@@ -1912,8 +1905,8 @@ export default function PruebasTecnicas() {
                           <td className="px-4 py-2.5 text-xs text-slate-700 whitespace-nowrap">
                             <div className="flex items-center gap-1.5 whitespace-nowrap">
                               <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                              <span className="font-medium" title={item.clienteNombre || '—'}>
-                                {truncar30(item.clienteNombre)}
+                              <span className="font-medium whitespace-nowrap" title={item.clienteNombre || '—'}>
+                                {item.clienteNombre || '—'}
                               </span>
                             </div>
                           </td>
@@ -1922,7 +1915,9 @@ export default function PruebasTecnicas() {
                           <td className="px-4 py-2.5 text-xs text-slate-600 whitespace-nowrap">
                             <div className="flex items-center gap-1.5 whitespace-nowrap">
                               <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                              <span title={item.centroNombre || '—'}>{truncar30(item.centroNombre)}</span>
+                              <span className="whitespace-nowrap" title={item.centroNombre || '—'}>
+                                {item.centroNombre || '—'}
+                              </span>
                             </div>
                           </td>
 
@@ -1930,8 +1925,8 @@ export default function PruebasTecnicas() {
                           <td className="whitespace-nowrap px-4 py-2.5 text-xs text-slate-600">
                             <div className="flex items-center gap-1.5 whitespace-nowrap">
                               <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                              <span title={item.tecnicoNombre || 'Sin asignar'}>
-                                {truncar30(item.tecnicoNombre || 'Sin asignar')}
+                              <span className="whitespace-nowrap" title={item.tecnicoNombre || 'Sin asignar'}>
+                                {item.tecnicoNombre || 'Sin asignar'}
                               </span>
                             </div>
                           </td>
