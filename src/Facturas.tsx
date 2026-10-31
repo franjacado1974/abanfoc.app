@@ -1294,54 +1294,62 @@ export default function Facturas() {
     return (
       <div className="min-h-screen bg-[#F8FAFC] px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
         <div className="w-full">
-          {/* Header con Título a la izquierda y 4 mini casillas KPI a la derecha */}
+          {/* Header con Título a la izquierda y 4 casillas KPI ampliadas a la derecha */}
           <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4 mb-6">
-            <div className="text-center sm:text-left">
+            <div className="text-center sm:text-left shrink-0">
               <h1 className="text-2xl font-black text-zinc-950 tracking-tight">Facturación</h1>
               <p className="text-xs font-semibold text-zinc-500 mt-0.5">
-                Emisión de facturas oficiales a partir de los albaranes firmados y control de cobros.
+                Emisión de facturas a partir de albaranes finalizados
               </p>
             </div>
 
             {/* 4 Casillas KPI Adaptadas y Ampliadas */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 w-full xl:w-auto flex-1 xl:max-w-4xl xl:ml-8">
-              <div className="bg-white rounded-2xl border border-zinc-200/90 px-4 py-3 shadow-xs flex items-center gap-3.5 min-w-[160px] sm:min-w-[185px]">
-                <div className="w-10 h-10 rounded-2xl bg-zinc-900 text-white flex items-center justify-center shrink-0 shadow-xs">
-                  <Receipt className="w-5 h-5" />
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 w-full xl:w-auto flex-1 xl:ml-8">
+              <div className="bg-white rounded-2xl border border-zinc-200/90 px-4 sm:px-5 py-3.5 shadow-xs flex items-center gap-3.5 min-w-[160px] sm:min-w-[185px]">
+                <div className="w-11 h-11 rounded-2xl bg-zinc-900 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <Receipt className="w-5.5 h-5.5" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider leading-none">Facturado</p>
-                  <p className="text-base sm:text-lg font-black text-zinc-950 leading-tight mt-1 truncate">{formatMoneda(kpis.totalFacturado)}</p>
+                  <p className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider leading-none">Facturado</p>
+                  <p className="text-base sm:text-lg lg:text-xl font-black text-zinc-950 leading-tight mt-1 truncate" title={formatMoneda(kpis.totalFacturado)}>
+                    {formatMoneda(kpis.totalFacturado)}
+                  </p>
                 </div>
               </div>
 
-              <div className="bg-white rounded-2xl border border-emerald-200/90 px-4 py-3 shadow-xs flex items-center gap-3.5 min-w-[160px] sm:min-w-[185px]">
-                <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 shadow-xs">
-                  <CheckCircle2 className="w-5 h-5" />
+              <div className="bg-white rounded-2xl border border-emerald-200/90 px-4 sm:px-5 py-3.5 shadow-xs flex items-center gap-3.5 min-w-[160px] sm:min-w-[185px]">
+                <div className="w-11 h-11 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 shadow-xs">
+                  <CheckCircle2 className="w-5.5 h-5.5" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider leading-none">Cobrado</p>
-                  <p className="text-base sm:text-lg font-black text-emerald-700 leading-tight mt-1 truncate">{formatMoneda(kpis.totalCobrado)}</p>
+                  <p className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider leading-none">Cobrado</p>
+                  <p className="text-base sm:text-lg lg:text-xl font-black text-emerald-700 leading-tight mt-1 truncate" title={formatMoneda(kpis.totalCobrado)}>
+                    {formatMoneda(kpis.totalCobrado)}
+                  </p>
                 </div>
               </div>
 
-              <div className="bg-white rounded-2xl border border-amber-200/90 px-4 py-3 shadow-xs flex items-center gap-3.5 min-w-[160px] sm:min-w-[185px]">
-                <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 shadow-xs">
-                  <Clock className="w-5 h-5" />
+              <div className="bg-white rounded-2xl border border-amber-200/90 px-4 sm:px-5 py-3.5 shadow-xs flex items-center gap-3.5 min-w-[160px] sm:min-w-[185px]">
+                <div className="w-11 h-11 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 shadow-xs">
+                  <Clock className="w-5.5 h-5.5" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-[10px] font-bold text-amber-700 uppercase tracking-wider leading-none">Pendiente</p>
-                  <p className="text-base sm:text-lg font-black text-amber-700 leading-tight mt-1 truncate">{formatMoneda(kpis.totalPendiente)}</p>
+                  <p className="text-[11px] font-bold text-amber-700 uppercase tracking-wider leading-none">Pendiente</p>
+                  <p className="text-base sm:text-lg lg:text-xl font-black text-amber-700 leading-tight mt-1 truncate" title={formatMoneda(kpis.totalPendiente)}>
+                    {formatMoneda(kpis.totalPendiente)}
+                  </p>
                 </div>
               </div>
 
-              <div className="bg-white rounded-2xl border border-red-200/90 px-4 py-3 shadow-xs flex items-center gap-3.5 min-w-[160px] sm:min-w-[185px]">
-                <div className="w-10 h-10 rounded-2xl bg-red-100 text-red-600 flex items-center justify-center shrink-0 shadow-xs">
-                  <AlertCircle className="w-5 h-5" />
+              <div className="bg-white rounded-2xl border border-red-200/90 px-4 sm:px-5 py-3.5 shadow-xs flex items-center gap-3.5 min-w-[160px] sm:min-w-[185px]">
+                <div className="w-11 h-11 rounded-2xl bg-red-100 text-red-600 flex items-center justify-center shrink-0 shadow-xs">
+                  <AlertCircle className="w-5.5 h-5.5" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-[10px] font-bold text-red-700 uppercase tracking-wider leading-none">Vencido</p>
-                  <p className="text-base sm:text-lg font-black text-red-600 leading-tight mt-1 truncate">{formatMoneda(kpis.totalVencido)}</p>
+                  <p className="text-[11px] font-bold text-red-700 uppercase tracking-wider leading-none">Vencido</p>
+                  <p className="text-base sm:text-lg lg:text-xl font-black text-red-600 leading-tight mt-1 truncate" title={formatMoneda(kpis.totalVencido)}>
+                    {formatMoneda(kpis.totalVencido)}
+                  </p>
                 </div>
               </div>
             </div>
