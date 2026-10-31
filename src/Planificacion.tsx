@@ -481,7 +481,7 @@ export default function Planificacion() {
                       {partesDia.length > 0 && (
                         <span
                           title={`${partesDia.length} ${partesDia.length === 1 ? 'mantenimiento' : 'mantenimientos'}`}
-                          className="text-[10px] sm:text-[11px] font-black text-blue-600 select-none pr-0.5 leading-none"
+                          className="text-[10px] sm:text-[11px] font-black text-blue-500 select-none pr-0.5 leading-none"
                         >
                           {partesDia.length}
                         </span>

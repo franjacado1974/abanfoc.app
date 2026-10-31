@@ -1117,7 +1117,7 @@ export default function Calendario() {
                   {eventosDia.length > 0 && (
                     <span
                       title={`${eventosDia.length} ${eventosDia.length === 1 ? 'tarea' : 'tareas'}`}
-                      className="text-[10px] sm:text-[11px] font-black text-blue-600 select-none pr-0.5 leading-none"
+                      className="text-[10px] sm:text-[11px] font-black text-blue-500 select-none pr-0.5 leading-none"
                     >
                       {eventosDia.length}
                     </span>

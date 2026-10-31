@@ -1542,8 +1542,8 @@ if (fs.existsSync(pdfGenPath)) {
     if (!calContent110.includes('border border-red-500')) {
       errors.push('CRÍTICO: Calendario.tsx carece del marco con línea roja para los días del mes (AGENTS.md REGLA 110).');
     }
-    if (!calContent110.includes('text-blue-600')) {
-      errors.push('CRÍTICO: Calendario.tsx carece del número pequeño en azul para la cantidad de tareas (AGENTS.md REGLA 110).');
+    if (!calContent110.includes('text-blue-500')) {
+      errors.push('CRÍTICO: Calendario.tsx carece del número pequeño en azul vivo para la cantidad de tareas (AGENTS.md REGLA 110).');
     }
     if (!calContent110.includes('scrollbar-color: #000000 transparent') && !calContent110.includes('#000000')) {
       errors.push('CRÍTICO: Calendario.tsx carece de la scrollbar en negro para alertar de tareas ocultas (AGENTS.md REGLA 110).');
