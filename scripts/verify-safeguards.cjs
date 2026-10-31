@@ -1475,8 +1475,8 @@ if (fs.existsSync(pdfGenPath)) {
   modulosWand.forEach(({ name, path: wPath }) => {
     if (fs.existsSync(wPath)) {
       const wContent = fs.readFileSync(wPath, 'utf8');
-      if (!wContent.includes('Wand2')) {
-        errors.push(`CRÍTICO: ${name} carece del icono Wand2 para el botón de acciones agrupadas (AGENTS.md REGLA 107).`);
+      if (!wContent.includes('Wand2') && !wContent.includes('HandOptionsIcon')) {
+        errors.push(`CRÍTICO: ${name} carece del icono Wand2 o HandOptionsIcon para el botón de acciones agrupadas (AGENTS.md REGLA 107).`);
       }
       if (!wContent.includes('accionesModalItem') || !wContent.includes('setAccionesModalItem')) {
         errors.push(`CRÍTICO: ${name} carece del modal accionesModalItem para agrupar acciones (AGENTS.md REGLA 107).`);
@@ -1520,8 +1520,8 @@ if (fs.existsSync(pdfGenPath)) {
       if (!dContent.includes('hover:bg-amber-100/90')) {
         errors.push(`CRÍTICO: ${name} carece del resaltado ámbar en filas de la tabla (AGENTS.md REGLA 109).`);
       }
-      if (!dContent.includes('Wand2')) {
-        errors.push(`CRÍTICO: ${name} carece del icono Wand2 para el botón de acciones agrupadas (AGENTS.md REGLA 109).`);
+      if (!dContent.includes('Wand2') && !dContent.includes('HandOptionsIcon')) {
+        errors.push(`CRÍTICO: ${name} carece del icono Wand2 o HandOptionsIcon para las acciones agrupadas (AGENTS.md REGLA 109).`);
       }
       if (!dContent.includes('accionesModalItem') || !dContent.includes('setAccionesModalItem')) {
         errors.push(`CRÍTICO: ${name} carece del modal accionesModalItem para agrupar acciones (AGENTS.md REGLA 109).`);

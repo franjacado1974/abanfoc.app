@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Package, Wrench, Plus, Search, Edit, Trash2, X, Download, Upload, Image as ImageIcon, Copy, Check, Minus, Wand2 } from 'lucide-react';
+import { Package, Wrench, Plus, Search, Edit, Trash2, X, Download, Upload, Image as ImageIcon, Copy, Check, Minus } from 'lucide-react';
+import { HandOptionsIcon } from './components/HandOptionsIcon';
 import ConfirmationModal from './ConfirmationModal';
 import * as XLSX from 'xlsx';
 import { 
@@ -731,16 +732,15 @@ export default function Catalogo({ isTecnicoMode = false, userRole, user }: Cata
 
         {/* Lista de Artículos */}
         <div className="bg-white rounded-3xl border border-zinc-200 shadow-sm overflow-hidden overflow-x-auto">
-          <div className={`${isTecnicoMode ? 'hidden' : 'hidden md:flex'} items-center bg-zinc-200/90 border-b border-zinc-300 px-4 py-3 text-[11px] font-extrabold uppercase tracking-wider text-zinc-700`}>
-            <div className="w-20 shrink-0">Código</div>
-            <div className="flex-1 min-w-[180px]">Artículo</div>
-            <div className="w-24 shrink-0">Tipo</div>
-            <div className="w-28 shrink-0">Modelo</div>
-            <div className="w-36 shrink-0">Familia</div>
-            <div className="w-24 shrink-0 text-center">Estado</div>
-            <div className="w-20 shrink-0 text-center">Stock</div>
-            <div className="w-24 shrink-0 text-right">P. Venta</div>
-            <div className="w-20 shrink-0 text-right">Acciones</div>
+          <div className={`${isTecnicoMode ? 'hidden' : 'hidden md:flex'} items-center bg-zinc-200/90 border-b border-zinc-300 px-4 py-3 text-[11px] font-extrabold uppercase tracking-wider text-zinc-700 w-full`}>
+            <div className="w-20 lg:w-24 shrink-0 pr-2">Código</div>
+            <div className="flex-1 min-w-[200px] pr-4">Artículo</div>
+            <div className="w-24 shrink-0 pr-3">Tipo</div>
+            <div className="w-28 lg:w-32 shrink-0 pr-3">Modelo</div>
+            <div className="w-36 lg:w-44 shrink-0 pr-3">Familia</div>
+            <div className="w-24 shrink-0 text-center pr-3">Estado</div>
+            <div className="w-20 shrink-0 text-center pr-3">Stock</div>
+            <div className="w-24 lg:w-28 shrink-0 text-right">P. Venta</div>
           </div>
 
           <div className="divide-y divide-zinc-200">
@@ -756,15 +756,16 @@ export default function Catalogo({ isTecnicoMode = false, userRole, user }: Cata
                 const estadoCfg = getEstadoCfg(a.estado);
 
                 return (
-                  <div key={a.id} className={`flex flex-col md:flex-row md:items-center px-4 py-2.5 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100/80'} hover:bg-amber-100/90 hover:shadow-xs transition-colors group`}>
+                  <div 
+                    key={a.id} 
+                    className={`flex flex-col md:flex-row md:items-center px-4 py-2.5 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100/80'} hover:bg-amber-100/90 hover:shadow-xs transition-colors cursor-pointer group`}
+                    onClick={() => {
+                      if (isTecnicoMode) setViewArticuloModal(a);
+                      else setAccionesModalItem(a);
+                    }}
+                  >
                     {/* Vista Móvil / Tarjeta */}
-                    <div 
-                      className={`flex ${isTecnicoMode ? '' : 'md:hidden'} flex-col gap-2.5 w-full cursor-pointer`}
-                      onClick={() => {
-                        if (isTecnicoMode) setViewArticuloModal(a);
-                        else setAccionesModalItem(a);
-                      }}
-                    >
+                    <div className={`flex ${isTecnicoMode ? '' : 'md:hidden'} flex-col gap-2.5 w-full`}>
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-mono font-medium text-slate-500 bg-white/90 border border-slate-200/80 px-2 py-0.5 rounded shadow-2xs">{a.codigo}</span>
                         <div className="flex items-center gap-1.5">
@@ -780,14 +781,6 @@ export default function Catalogo({ isTecnicoMode = false, userRole, user }: Cata
                               Stock: {cantNum}
                             </span>
                           )}
-                          <button 
-                            type="button"
-                            onClick={(e) => { e.stopPropagation(); setAccionesModalItem(a); }}
-                            className="p-1 text-amber-600 hover:text-amber-800 hover:bg-amber-100/60 rounded-lg transition-colors cursor-pointer"
-                            title="Acciones"
-                          >
-                            <Wand2 className="w-4 h-4" />
-                          </button>
                         </div>
                       </div>
                       
@@ -820,20 +813,12 @@ export default function Catalogo({ isTecnicoMode = false, userRole, user }: Cata
                     {/* Vista Escritorio */}
                     <div className={`${isTecnicoMode ? 'hidden' : 'hidden md:flex'} items-center w-full`}>
                       {/* Código */}
-                      <div 
-                        onClick={() => setAccionesModalItem(a)}
-                        className="w-20 shrink-0 cursor-pointer"
-                        title="Clic para ver acciones"
-                      >
+                      <div className="w-20 lg:w-24 shrink-0 pr-2">
                         <span className="text-[11px] font-mono font-medium text-slate-600 bg-white/90 border border-zinc-200/80 hover:bg-amber-50 hover:text-amber-800 px-1.5 py-0.5 rounded transition-colors shadow-2xs">{a.codigo}</span>
                       </div>
 
                       {/* Artículo */}
-                      <div 
-                        onClick={() => setAccionesModalItem(a)}
-                        className="flex-1 min-w-[180px] pr-2 flex items-center gap-3 cursor-pointer group/title"
-                        title="Clic para ver acciones"
-                      >
+                      <div className="flex-1 min-w-[200px] pr-4 flex items-center gap-3 group/title">
                         {a.fotoUrl ? (
                           <img src={a.fotoUrl} alt={a.nombre} className="w-8 h-8 rounded-xl object-cover border border-zinc-200 shrink-0 bg-white img-no-bg" />
                         ) : (
@@ -852,24 +837,24 @@ export default function Catalogo({ isTecnicoMode = false, userRole, user }: Cata
                       </div>
 
                       {/* Tipo */}
-                      <div className="w-24 shrink-0 pr-2">
+                      <div className="w-24 shrink-0 pr-3">
                         <span className="text-[11px] font-medium text-slate-600 bg-slate-100 border border-slate-200/80 px-2 py-0.5 rounded-md truncate inline-block max-w-full">
                           {a.tipo || 'Repuesto'}
                         </span>
                       </div>
 
                       {/* Modelo */}
-                      <div className="w-28 shrink-0 text-xs font-medium text-slate-600 truncate pr-2" title={a.modelo}>
+                      <div className="w-28 lg:w-32 shrink-0 text-xs font-medium text-slate-600 truncate pr-3" title={a.modelo}>
                         {a.modelo || <span className="text-slate-300 italic">—</span>}
                       </div>
 
                       {/* Familia (Sistema) */}
-                      <div className="w-36 shrink-0 text-xs font-medium text-slate-700 truncate pr-2" title={a.familia}>
+                      <div className="w-36 lg:w-44 shrink-0 text-xs font-medium text-slate-700 truncate pr-3" title={a.familia}>
                         {a.familia || '—'}
                       </div>
 
                       {/* Estado */}
-                      <div className="w-24 shrink-0 text-center pr-2">
+                      <div className="w-24 shrink-0 text-center pr-3">
                         <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold border ${estadoCfg.badge}`}>
                           <span className={`w-1.5 h-1.5 rounded-full ${estadoCfg.dot}`} />
                           {estadoCfg.label}
@@ -877,7 +862,7 @@ export default function Catalogo({ isTecnicoMode = false, userRole, user }: Cata
                       </div>
 
                       {/* Stock / Cantidad */}
-                      <div className="w-20 shrink-0 text-center pr-2">
+                      <div className="w-20 shrink-0 text-center pr-3">
                         {isStockTracked ? (
                           <span className={`text-xs font-bold ${
                             cantNum === 0 
@@ -894,20 +879,8 @@ export default function Catalogo({ isTecnicoMode = false, userRole, user }: Cata
                       </div>
 
                       {/* P. Venta */}
-                      <div className="w-24 shrink-0 text-xs font-semibold text-slate-700 text-right pr-2">
+                      <div className="w-24 lg:w-28 shrink-0 text-xs font-semibold text-slate-700 text-right">
                         {formatMoneda(a.precioVenta)}
-                      </div>
-
-                      {/* Acciones (Varita mágica) */}
-                      <div className="w-20 shrink-0 flex items-center justify-end" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          type="button"
-                          onClick={() => setAccionesModalItem(a)}
-                          className="p-1.5 text-amber-600 hover:text-amber-800 hover:bg-amber-100/60 rounded-lg transition-colors group/btn flex items-center justify-center cursor-pointer ml-auto"
-                          title="Acciones del artículo"
-                        >
-                          <Wand2 className="w-4 h-4 group-hover/btn:rotate-12 transition-transform text-amber-600" />
-                        </button>
                       </div>
                     </div>
                   </div>
@@ -965,7 +938,7 @@ export default function Catalogo({ isTecnicoMode = false, userRole, user }: Cata
               <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-2xl bg-amber-500 text-white flex items-center justify-center shadow-md shadow-amber-500/20">
-                    <Wand2 className="w-5 h-5" />
+                    <HandOptionsIcon className="w-5 h-5" />
                   </div>
                   <div>
                     <h3 className="text-base font-bold text-slate-800">Acciones del Artículo</h3>

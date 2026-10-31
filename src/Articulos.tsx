@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Package, Plus, Search, Edit, Trash2, X, Download, Upload, Wand2 } from 'lucide-react';
+import { Package, Plus, Search, Edit, Trash2, X, Download, Upload } from 'lucide-react';
+import { HandOptionsIcon } from './components/HandOptionsIcon';
 import ConfirmationModal from './ConfirmationModal'; // Import the new modal component
 import * as XLSX from 'xlsx';
 import { 
@@ -417,14 +418,13 @@ export default function Articulos() {
 
         {/* Lista de Artículos */}
         <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden overflow-x-auto">
-          <div className="hidden md:flex items-center bg-zinc-200/90 border-b border-zinc-300 px-4 py-3 text-[11px] font-extrabold uppercase tracking-wider text-zinc-700">
-            <div className="w-24 shrink-0">Código</div>
-            <div className="flex-1 min-w-0 pr-2">Artículo</div>
-            <div className="w-36 shrink-0 pr-2">Familia</div>
-            <div className="w-28 shrink-0 text-right pr-2">P. Compra</div>
-            <div className="w-28 shrink-0 text-right pr-2">P. Venta</div>
-            <div className="w-24 shrink-0 text-center pr-2">Revisable</div>
-            <div className="w-20 shrink-0 text-right">Acciones</div>
+          <div className="hidden md:flex items-center bg-zinc-200/90 border-b border-zinc-300 px-4 py-3 text-[11px] font-extrabold uppercase tracking-wider text-zinc-700 w-full">
+            <div className="w-24 shrink-0 pr-3">Código</div>
+            <div className="flex-1 min-w-0 pr-4">Artículo</div>
+            <div className="w-40 lg:w-48 shrink-0 pr-4">Familia</div>
+            <div className="w-28 lg:w-32 shrink-0 text-right pr-4">P. Compra</div>
+            <div className="w-28 lg:w-32 shrink-0 text-right pr-4">P. Venta</div>
+            <div className="w-24 shrink-0 text-center">Revisable</div>
           </div>
 
           <div className="divide-y divide-zinc-200">
@@ -436,25 +436,15 @@ export default function Articulos() {
             ) : (
               articulosAMostrar.map((a, index) => {
                 return (
-                  <div key={a.id} className={`flex flex-col md:flex-row md:items-center px-4 py-2.5 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100/80'} hover:bg-amber-100/90 hover:shadow-xs transition-colors group`}>
-                    <div 
-                      className="flex md:hidden items-center justify-between mb-1 cursor-pointer"
-                      onClick={() => setAccionesModalItem(a)}
-                    >
+                  <div 
+                    key={a.id} 
+                    className={`flex flex-col md:flex-row md:items-center px-4 py-2.5 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100/80'} hover:bg-amber-100/90 hover:shadow-xs transition-colors cursor-pointer group`}
+                    onClick={() => setAccionesModalItem(a)}
+                  >
+                    <div className="flex md:hidden items-center justify-between mb-1">
                       <span className="text-[10px] font-mono font-medium text-slate-500 bg-white/90 border border-slate-200 px-1.5 py-0.5 rounded shadow-2xs">{a.codigo}</span>
-                      <button 
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); setAccionesModalItem(a); }}
-                        className="p-1 text-amber-600 hover:text-amber-800 hover:bg-amber-100/60 rounded-lg transition-colors cursor-pointer"
-                        title="Acciones"
-                      >
-                        <Wand2 className="w-4 h-4" />
-                      </button>
                     </div>
-                    <div 
-                      className="flex md:hidden mb-1 cursor-pointer"
-                      onClick={() => setAccionesModalItem(a)}
-                    >
+                    <div className="flex md:hidden mb-1">
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-slate-700 truncate">{a.nombre}</p>
                         <p className="text-xs text-slate-500">{a.familia}</p>
@@ -462,37 +452,19 @@ export default function Articulos() {
                     </div>
 
                     <div className="hidden md:flex items-center w-full">
-                      <div 
-                        onClick={() => setAccionesModalItem(a)}
-                        className="w-24 shrink-0 cursor-pointer"
-                        title="Clic para ver acciones"
-                      >
+                      <div className="w-24 shrink-0 pr-3">
                         <span className="text-[11px] font-mono font-medium text-slate-600 bg-white/90 border border-zinc-200/80 hover:bg-amber-50 hover:text-amber-800 px-2 py-0.5 rounded transition-colors shadow-2xs">{a.codigo}</span>
                       </div>
-                      <div 
-                        onClick={() => setAccionesModalItem(a)}
-                        className="flex-1 min-w-0 pr-2 cursor-pointer group/title"
-                        title="Clic para ver acciones"
-                      >
+                      <div className="flex-1 min-w-0 pr-4 group/title">
                         <p className="text-sm font-medium text-slate-800 truncate group-hover/title:text-blue-900 transition-colors">{a.nombre}</p>
                       </div>
-                      <div className="w-36 shrink-0 text-xs text-slate-600 truncate pr-2">{a.familia || '—'}</div>
-                      <div className="w-28 shrink-0 text-xs text-slate-600 text-right pr-2">{formatMoneda(a.precioCompra)}</div>
-                      <div className="w-28 shrink-0 text-xs font-semibold text-slate-700 text-right pr-2">{formatMoneda(a.precioVenta)}</div>
-                      <div className="w-24 shrink-0 text-center pr-2">
+                      <div className="w-40 lg:w-48 shrink-0 text-xs text-slate-600 truncate pr-4">{a.familia || '—'}</div>
+                      <div className="w-28 lg:w-32 shrink-0 text-xs text-slate-600 text-right pr-4">{formatMoneda(a.precioCompra)}</div>
+                      <div className="w-28 lg:w-32 shrink-0 text-xs font-semibold text-slate-700 text-right pr-4">{formatMoneda(a.precioVenta)}</div>
+                      <div className="w-24 shrink-0 text-center">
                         <span className={`text-[10px] px-2 py-0.5 rounded-md font-semibold border ${a.revisable ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
                           {a.revisable ? 'Sí' : 'No'}
                         </span>
-                      </div>
-                      <div className="w-20 shrink-0 flex items-center justify-end" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          type="button"
-                          onClick={() => setAccionesModalItem(a)}
-                          className="p-1.5 text-amber-600 hover:text-amber-800 hover:bg-amber-100/60 rounded-lg transition-colors group/btn flex items-center justify-center cursor-pointer ml-auto"
-                          title="Acciones del artículo"
-                        >
-                          <Wand2 className="w-4 h-4 group-hover/btn:rotate-12 transition-transform text-amber-600" />
-                        </button>
                       </div>
                     </div>
                   </div>
@@ -550,7 +522,7 @@ export default function Articulos() {
               <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-2xl bg-amber-500 text-white flex items-center justify-center shadow-md shadow-amber-500/20">
-                    <Wand2 className="w-5 h-5" />
+                    <HandOptionsIcon className="w-5 h-5" />
                   </div>
                   <div>
                     <h3 className="text-base font-bold text-slate-800">Acciones del Artículo</h3>
