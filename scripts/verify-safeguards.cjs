@@ -1640,6 +1640,22 @@ if (fs.existsSync(pdfGenPath)) {
     }
   }
 
+  // 116. Verificación de Tabla Limpia sin Columna de Acciones, Cliente sin Negrita, Filtro Inicial Planificados y Modal Flotante de Acciones al Pulsar en Fila en Partes de Trabajo (AGENTS.md REGLA 116)
+  const partesPath116 = path.join(__dirname, '../src/Partes.tsx');
+  if (fs.existsSync(partesPath116)) {
+    const pContent116 = fs.readFileSync(partesPath116, 'utf8');
+    if (!pContent116.includes("const [estadoFilter, setEstadoFilter] = useState('Abierto');")) {
+      errors.push('CRÍTICO: Partes.tsx carece de la inicialización de estadoFilter en "Abierto" (Planificado) (AGENTS.md REGLA 116).');
+    }
+    if (!pContent116.includes('setAccionesModalItem(parte)') || !pContent116.includes('accionesModalItem &&')) {
+      errors.push('CRÍTICO: Partes.tsx carece del modal flotante de acciones al hacer clic en la fila de la tabla (AGENTS.md REGLA 116).');
+    }
+    if (!pContent116.includes('font-medium text-zinc-800 text-sm') || pContent116.includes('font-bold text-zinc-900 text-sm')) {
+      errors.push('CRÍTICO: Partes.tsx debe mostrar el nombre del cliente sin negrita en la tabla (AGENTS.md REGLA 116).');
+    }
+  }
+
+
 // Resultado de la verificación
 if (errors.length > 0) {
   console.error('\n❌ ERROR CRÍTICO DE BLINDAJE INTEGRAL (AGENTS.md):');

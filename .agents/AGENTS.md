@@ -1634,6 +1634,26 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
     5. Botón interactivo `+ Facturar`.
   - El contenedor de la lista cuenta con scroll vertical independiente (`overflow-y-auto flex-1`), garantizando una navegación ágil sin que la ventana modal se desborde o se recorte independientemente del número de albaranes registrados.
 
+---
+
+## 116. Blindaje Inviolable de Tabla Limpia sin Columna de Acciones, Cliente sin Negrita, Filtro Inicial Planificados y Modal Flotante de Acciones al Pulsar en Fila en Partes de Trabajo (`Partes.tsx`)
+- **Columna Cliente sin Negrita**:
+  - En la tabla de partes de trabajo (`src/Partes.tsx`), el nombre del cliente se muestra con tipografía normal sin negrita (`font-medium text-zinc-800 text-sm`), homologado con el resto de módulos del sistema.
+- **Filtro Inicial Obligatorio en Partes Planificados**:
+  - El estado inicial de filtro por estado debe ser `useState('Abierto')` (etiquetado como "Planificado"), cargando por defecto de forma automática los partes abiertos/planificados para agilizar el trabajo diario.
+- **Sustitución de la Columna Rígida de Acciones por Columna Limpia de Estado**:
+  - Se suprime la cabecera fija `Acciones` y su celda de botones, reemplazándose por la columna `Estado`.
+  - La celda de estado integra la luz de estado (`bg-black` para Cerrado, `bg-green-500` para Pre-Cerrado, `bg-blue-500` para Finalizado, `bg-yellow-500` para En revisión, `bg-zinc-400` para Planificado), la bola roja parpadeante si `tieneRetimbrePendiente(parte)`, y el texto legible del estado.
+- **Fila Interactiva y Modal Flotante de Acciones Rápidas (`accionesModalItem`)**:
+  - Toda la fila (`<tr>`) es interactiva (`cursor-pointer`) y al hacer clic en cualquier parte se abre el modal flotante (`accionesModalItem`):
+    - Cabecera oscura con el icono oficial `HandOptionsIcon` en recuadro ámbar y título "Acciones del Parte de Trabajo".
+    - Tarjeta de resumen con número de parte, tipo de revisión con color, nombre del cliente, centro, población, fecha planificada y estado.
+    - Botón **Ver / Revisar Parte**: acceso directo al checklist y formulario (`irARevision(item)`).
+    - Botón **Descargar Documentos Oficiales**: abre el asistente de descarga de PDFs (Acta, Certificado y Albarán) mediante `openDownloadModal(item)`.
+    - Botón **Confirmar Devolución de Extintores**: si `tieneRetimbrePendiente(item)`, permite confirmar la entrega de los equipos retimbrados.
+    - Botón **Eliminar Parte de Trabajo**: acceso para mover a la papelera (`eliminarParte(item)`) con la confirmación de seguridad reglamentaria.
+
+
 
 
 
