@@ -1820,7 +1820,7 @@ export default function Facturas() {
           {/* MODAL: Albaranes firmados listos para facturar */}
           {showModalAlbaranesPendientes && (
             <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-              <div className="bg-white rounded-3xl w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in fade-in zoom-in-95 duration-200">
+              <div className="bg-white rounded-3xl w-full max-w-5xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in fade-in zoom-in-95 duration-200">
                 <div className="px-6 py-4 border-b border-zinc-100 flex items-center justify-between bg-gradient-to-r from-emerald-50/80 via-teal-50/40 to-white shrink-0">
                   <div className="flex items-center gap-2.5">
                     <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-xs">
@@ -1844,8 +1844,8 @@ export default function Facturas() {
                   </button>
                 </div>
 
-                {/* Contenedor desplazable de albaranes pendientes: max-h-[142px] overflow-y-auto optimizado en modal flotante */}
-                <div className="p-6 overflow-y-auto space-y-3">
+                {/* Contenedor desplazable de albaranes pendientes: max-h-[142px] overflow-y-auto optimizado en lista de 1 sola linea con scroll */}
+                <div className="p-4 sm:p-6 overflow-y-auto flex-1">
                   {albaranesPendientesFacturar.length === 0 ? (
                     <div className="py-12 text-center">
                       <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
@@ -1853,12 +1853,15 @@ export default function Facturas() {
                       <p className="text-xs text-zinc-500 mt-1">Todos los albaranes registrados ya han sido facturados.</p>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    <div className="flex flex-col gap-2">
                       {albaranesPendientesFacturar.map(alb => {
                         const cli = clientes.find(c => c.id === alb.clienteId || (c as any)._docId === alb.clienteId);
                         const cen = centros.find(c => c._docId === alb.centroId || c.id === alb.centroId);
                         const firmado = isFirmaValida(alb.firmaCliente);
                         const baseAlb = (alb.items || []).reduce((s, i) => s + (Number(i.subtotal) || ((Number(i.cantidad) || 1) * (Number(i.precioUnidad) || 0))), 0);
+                        const clienteNombre = cli?.nombre || alb.clienteNombreLibre || cen?.nombre || 'Cliente';
+                        const conceptoNombre = alb.titulo || cen?.nombre || 'Albarán';
+
                         return (
                           <button
                             key={alb.id}
@@ -1867,31 +1870,63 @@ export default function Facturas() {
                               setShowModalAlbaranesPendientes(false);
                               iniciarFacturaDesdeAlbaran(alb);
                             }}
-                            className="flex items-center justify-between p-3.5 bg-zinc-50/70 hover:bg-emerald-50/50 rounded-2xl border border-zinc-200 hover:border-emerald-400 hover:shadow-md transition-all text-left group cursor-pointer"
+                            className="w-full flex items-center justify-between gap-3 px-4 py-2.5 bg-zinc-50/70 hover:bg-emerald-50/60 rounded-2xl border border-zinc-200 hover:border-emerald-400 hover:shadow-xs transition-all text-left group cursor-pointer whitespace-nowrap"
                           >
-                            <div className="min-w-0 flex-1 pr-3">
-                              <div className="flex items-center gap-1.5 mb-1">
-                                <span className="text-[10px] font-mono font-bold text-zinc-700 bg-white px-2 py-0.5 rounded-md border border-zinc-200">
-                                  {alb.id}
+                            {/* 1. Código y Fecha */}
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="text-xs font-mono font-bold text-zinc-800 bg-white px-2.5 py-1 rounded-lg border border-zinc-200 shadow-2xs">
+                                {alb.id}
+                              </span>
+                              {alb.fecha && (
+                                <span className="text-xs font-medium text-zinc-500 hidden sm:inline-flex items-center gap-1">
+                                  <Calendar className="w-3.5 h-3.5 text-zinc-400" />
+                                  {alb.fecha}
                                 </span>
-                                {firmado && (
-                                  <span className="text-[9px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full inline-flex items-center gap-0.5">
-                                    <Check className="w-2.5 h-2.5" /> Firmado
-                                  </span>
-                                )}
-                              </div>
-                              <p className="text-xs font-bold text-zinc-900 truncate leading-snug">
-                                {cli?.nombre || alb.clienteNombreLibre || cen?.nombre || 'Cliente'}
-                              </p>
-                              <p className="text-[11px] text-zinc-500 truncate mt-0.5">
-                                {alb.titulo || cen?.nombre || 'Albarán'}
-                              </p>
-                              <p className="text-xs font-black text-zinc-900 mt-1.5">
-                                {formatMoneda(baseAlb)} <span className="text-[9px] font-semibold text-zinc-500">+ IVA</span>
-                              </p>
+                              )}
                             </div>
-                            <div className="w-8 h-8 rounded-xl bg-white group-hover:bg-emerald-600 text-emerald-700 group-hover:text-white flex items-center justify-center transition-colors shrink-0 shadow-2xs border border-zinc-200 group-hover:border-emerald-600">
-                              <Plus className="w-4 h-4" />
+
+                            {/* 2. Cliente y Concepto / Centro en una sola línea */}
+                            <div className="min-w-0 flex-1 flex items-center gap-2 overflow-hidden px-2">
+                              <span className="text-xs sm:text-sm font-bold text-zinc-900 truncate" title={clienteNombre}>
+                                {clienteNombre}
+                              </span>
+                              {conceptoNombre && (
+                                <>
+                                  <span className="text-zinc-300 hidden md:inline shrink-0">•</span>
+                                  <span className="text-xs text-zinc-500 truncate hidden md:inline" title={conceptoNombre}>
+                                    {conceptoNombre}
+                                  </span>
+                                </>
+                              )}
+                            </div>
+
+                            {/* 3. Insignia de Firma */}
+                            <div className="shrink-0 hidden sm:flex items-center">
+                              {firmado ? (
+                                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full inline-flex items-center gap-1 border border-emerald-200">
+                                  <Check className="w-3 h-3 text-emerald-600" /> Firmado
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-medium text-zinc-600 bg-zinc-100 px-2 py-0.5 rounded-full border border-zinc-200">
+                                  Sin firma
+                                </span>
+                              )}
+                            </div>
+
+                            {/* 4. Importe Base */}
+                            <div className="shrink-0 text-right">
+                              <span className="text-xs sm:text-sm font-black text-zinc-900">
+                                {formatMoneda(baseAlb)}
+                              </span>
+                              <span className="text-[10px] font-semibold text-zinc-400 ml-1">+ IVA</span>
+                            </div>
+
+                            {/* 5. Botón Acción Facturar */}
+                            <div className="shrink-0">
+                              <div className="px-3 py-1.5 rounded-xl bg-white group-hover:bg-emerald-600 text-emerald-700 group-hover:text-white border border-emerald-200 group-hover:border-emerald-600 text-xs font-bold flex items-center gap-1 shadow-2xs transition-all">
+                                <Plus className="w-3.5 h-3.5" />
+                                <span className="hidden sm:inline">Facturar</span>
+                              </div>
                             </div>
                           </button>
                         );
