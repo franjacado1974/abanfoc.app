@@ -8,6 +8,7 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
 - **No tocar funcionalidades no solicitadas**: No se deben modificar ni refactorizar componentes o secciones del código que no estén directamente involucrados en la tarea solicitada.
 - **Mantener la documentación**: No modificar `documentacion.md` ni alterar sus descripciones.
 - **Evitar Errores de Compilación Estrictos (TS6133)**: No declarar variables, funciones o importaciones no utilizadas (ej. iconos de `lucide-react` importados sin usar), ya que el compilador TypeScript está configurado en modo estricto y bloquea la compilación (`npm run build`).
+- **Prohibición Estricta de Despliegue No Solicitado**: Queda terminantemente prohibido ejecutar despliegues a producción (`npm run deploy`, `firebase deploy`) a menos que el usuario lo solicite de forma explícita y directa en su mensaje actual. La inercia o haberlo pedido en turnos anteriores NUNCA autoriza a realizar un deploy si el usuario no lo ha ordenado expresamente en su última petición.
 
 ---
 
