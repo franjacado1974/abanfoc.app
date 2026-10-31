@@ -1,6 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Package, Wrench, Plus, Search, Edit, Trash2, X, Download, Upload, Image as ImageIcon, Copy, ArrowLeft, Check, Minus } from 'lucide-react';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { Package, Wrench, Plus, Search, Edit, Trash2, X, Download, Upload, Image as ImageIcon, Copy, Check, Minus, Wand2 } from 'lucide-react';
 import ConfirmationModal from './ConfirmationModal';
 import * as XLSX from 'xlsx';
 import { 
@@ -84,8 +83,6 @@ interface CatalogoProps {
 }
 
 export default function Catalogo({ isTecnicoMode = false, userRole, user }: CatalogoProps) {
-  const navigate = useNavigate();
-
   // Determinar rol efectivo
   const currentRole = (() => {
     if (userRole) return userRole;
@@ -105,6 +102,8 @@ export default function Catalogo({ isTecnicoMode = false, userRole, user }: Cata
   const [tab, setTab] = useState<'articulos' | 'servicios'>('articulos');
   const [articulos, setArticulos] = useState<Articulo[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [limiteArticulos, setLimiteArticulos] = useState<number | 'todos'>(10);
+  const [accionesModalItem, setAccionesModalItem] = useState<Articulo | null>(null);
 
   const [familias, setFamilias] = useState<SistemaCategoria[]>([]);
   const [isFamiliasLoading, setIsFamiliasLoading] = useState(true);
@@ -504,6 +503,11 @@ export default function Catalogo({ isTecnicoMode = false, userRole, user }: Cata
     );
   });
 
+  const articulosAMostrar = useMemo(() => {
+    if (limiteArticulos === 'todos') return filteredArticulos;
+    return filteredArticulos.slice(0, Number(limiteArticulos));
+  }, [filteredArticulos, limiteArticulos]);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const currentFamiliaIsAvailable = familias.some(familia =>
     familia.id === formData.familiaId || familia.nombre === formData.familia
@@ -631,12 +635,6 @@ export default function Catalogo({ isTecnicoMode = false, userRole, user }: Cata
       <div className="w-full">
         {/* Header */}
         <div className="mb-6 text-center sm:text-left flex flex-col items-center sm:items-start">
-          <button 
-            onClick={() => navigate('/')} 
-            className="flex items-center gap-1.5 text-xs font-semibold text-zinc-500 hover:text-zinc-900 mb-3 transition-colors cursor-pointer"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" /> Volver al panel
-          </button>
           <h1 className="text-2xl font-black text-zinc-950 tracking-tight">Catálogo de Artículos y Servicios</h1>
           <p className="text-xs font-semibold text-zinc-500 mt-1">Gestión del inventario de equipos revisables y tarifas de servicios asociados.</p>
         </div>
@@ -679,60 +677,61 @@ export default function Catalogo({ isTecnicoMode = false, userRole, user }: Cata
             </button>
           </div>
 
-          {/* Botones de acción */}
-          {!isTecnico && (
-            <div className="flex items-center gap-2 w-full sm:w-auto">
+          {/* Buscador y Botones de acción */}
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+            <div className="relative w-48 sm:w-60 lg:w-72">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Search className="w-3.5 h-3.5 text-zinc-400" />
+              </div>
               <input 
-                type="file" 
-                ref={fileInputRef} 
-                onChange={handleImport} 
-                accept=".xlsx, .xls, .csv" 
-                className="hidden" 
+                type="text"
+                className="w-full pl-9 pr-3 py-2 bg-white rounded-xl border border-zinc-200 focus:border-red-500 focus:ring-2 focus:ring-red-500/10 outline-none transition-all shadow-xs text-xs text-zinc-900 placeholder-zinc-400"
+                placeholder="Buscar por código, nombre..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
               />
-              <button 
-                onClick={() => fileInputRef.current?.click()}
-                className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-white border border-zinc-200 hover:border-zinc-300 text-zinc-700 hover:text-zinc-950 px-3.5 py-2.5 rounded-xl font-bold transition-all text-xs shadow-sm cursor-pointer hover:shadow"
-                title="Importar Excel"
-              >
-                <Download className="w-3.5 h-3.5 text-zinc-450" />
-                Importar
-              </button>
-              <button 
-                onClick={handleExport}
-                className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-white border border-zinc-200 hover:border-zinc-300 text-zinc-700 hover:text-zinc-950 px-3.5 py-2.5 rounded-xl font-bold transition-all text-xs shadow-sm cursor-pointer hover:shadow"
-                title="Exportar a Excel"
-              >
-                <Upload className="w-3.5 h-3.5 text-zinc-450" />
-                Exportar
-              </button>
-              <button 
-                onClick={() => handleOpenModal()}
-                className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-xl font-bold shadow-md shadow-red-500/10 hover:shadow-lg hover:shadow-red-500/20 active:scale-95 transition-all text-xs cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Nuevo {tab === 'articulos' ? 'Artículo' : 'Servicio'}
-              </button>
             </div>
-          )}
-        </div>
-
-        {/* Buscador */}
-        <div className="relative mb-5">
-          <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-            <Search className="w-4 h-4 text-zinc-400" />
+            {!isTecnico && (
+              <>
+                <input 
+                  type="file" 
+                  ref={fileInputRef} 
+                  onChange={handleImport} 
+                  accept=".xlsx, .xls, .csv" 
+                  className="hidden" 
+                />
+                <button 
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-white border border-zinc-200 hover:border-zinc-300 text-zinc-700 hover:text-zinc-950 px-3.5 py-2.5 rounded-xl font-bold transition-all text-xs shadow-sm cursor-pointer hover:shadow"
+                  title="Importar Excel"
+                >
+                  <Download className="w-3.5 h-3.5 text-zinc-450" />
+                  <span className="hidden sm:inline">Importar</span>
+                </button>
+                <button 
+                  onClick={handleExport}
+                  className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-white border border-zinc-200 hover:border-zinc-300 text-zinc-700 hover:text-zinc-950 px-3.5 py-2.5 rounded-xl font-bold transition-all text-xs shadow-sm cursor-pointer hover:shadow"
+                  title="Exportar a Excel"
+                >
+                  <Upload className="w-3.5 h-3.5 text-zinc-450" />
+                  <span className="hidden sm:inline">Exportar</span>
+                </button>
+                <button 
+                  onClick={() => handleOpenModal()}
+                  className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-xl font-bold shadow-md shadow-red-500/10 hover:shadow-lg hover:shadow-red-500/20 active:scale-95 transition-all text-xs cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Nuevo {tab === 'articulos' ? 'Artículo' : 'Servicio'}</span>
+                  <span className="sm:hidden">Nuevo</span>
+                </button>
+              </>
+            )}
           </div>
-          <input
-            type="text"
-            className="w-full pl-10 pr-4 py-2.5 bg-white rounded-xl border border-zinc-200 focus:border-red-500 focus:ring-2 focus:ring-red-500/10 outline-none transition-all shadow-sm text-sm text-zinc-900 placeholder-zinc-400"
-            placeholder="Buscar por código, nombre o familia..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
         </div>
 
         {/* Lista de Artículos */}
         <div className="bg-white rounded-3xl border border-zinc-200 shadow-sm overflow-hidden overflow-x-auto">
-          <div className={`${isTecnicoMode ? 'hidden' : 'hidden md:flex'} items-center bg-zinc-50 border-b border-zinc-200/80 px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-zinc-500`}>
+          <div className={`${isTecnicoMode ? 'hidden' : 'hidden md:flex'} items-center bg-zinc-200/90 border-b border-zinc-300 px-4 py-3 text-[11px] font-extrabold uppercase tracking-wider text-zinc-700`}>
             <div className="w-20 shrink-0">Código</div>
             <div className="flex-1 min-w-[180px]">Artículo</div>
             <div className="w-24 shrink-0">Tipo</div>
@@ -741,7 +740,7 @@ export default function Catalogo({ isTecnicoMode = false, userRole, user }: Cata
             <div className="w-24 shrink-0 text-center">Estado</div>
             <div className="w-20 shrink-0 text-center">Stock</div>
             <div className="w-24 shrink-0 text-right">P. Venta</div>
-            <div className="w-24 shrink-0 text-right">Acciones</div>
+            <div className="w-20 shrink-0 text-right">Acciones</div>
           </div>
 
           <div className="divide-y divide-zinc-200">
@@ -751,23 +750,23 @@ export default function Catalogo({ isTecnicoMode = false, userRole, user }: Cata
                 <p className="text-red-600/50 font-medium">No hay artículos registrados</p>
               </div>
             ) : (
-              filteredArticulos.map(a => {
+              articulosAMostrar.map((a, index) => {
                 const isStockTracked = a.cantidad !== undefined && a.cantidad !== null;
                 const cantNum = isStockTracked ? Number(a.cantidad) : undefined;
                 const estadoCfg = getEstadoCfg(a.estado);
 
                 return (
-                  <div key={a.id} className="flex flex-col md:flex-row md:items-center px-4 py-3 hover:bg-zinc-50/80 transition-colors group">
+                  <div key={a.id} className={`flex flex-col md:flex-row md:items-center px-4 py-2.5 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100/80'} hover:bg-amber-100/90 hover:shadow-xs transition-colors group`}>
                     {/* Vista Móvil / Tarjeta */}
                     <div 
                       className={`flex ${isTecnicoMode ? '' : 'md:hidden'} flex-col gap-2.5 w-full cursor-pointer`}
                       onClick={() => {
                         if (isTecnicoMode) setViewArticuloModal(a);
-                        else handleOpenModal(a);
+                        else setAccionesModalItem(a);
                       }}
                     >
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-mono font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded">{a.codigo}</span>
+                        <span className="text-[10px] font-mono font-medium text-slate-500 bg-white/90 border border-slate-200/80 px-2 py-0.5 rounded shadow-2xs">{a.codigo}</span>
                         <div className="flex items-center gap-1.5">
                           <span className={`text-[10px] px-2 py-0.5 rounded-md font-semibold border ${estadoCfg.badge}`}>
                             {estadoCfg.label}
@@ -781,6 +780,14 @@ export default function Catalogo({ isTecnicoMode = false, userRole, user }: Cata
                               Stock: {cantNum}
                             </span>
                           )}
+                          <button 
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setAccionesModalItem(a); }}
+                            className="p-1 text-amber-600 hover:text-amber-800 hover:bg-amber-100/60 rounded-lg transition-colors cursor-pointer"
+                            title="Acciones"
+                          >
+                            <Wand2 className="w-4 h-4" />
+                          </button>
                         </div>
                       </div>
                       
@@ -808,49 +815,24 @@ export default function Catalogo({ isTecnicoMode = false, userRole, user }: Cata
                         <span className="text-slate-500 font-medium">Precio Venta</span>
                         <span className="font-bold text-slate-800">{formatMoneda(a.precioVenta)}</span>
                       </div>
-
-                      {isTecnico ? (
-                        <div className="flex items-center justify-end mt-1" onClick={(e) => e.stopPropagation()}>
-                          <button 
-                            type="button"
-                            onClick={() => setViewArticuloModal(a)} 
-                            className="w-full py-2 px-3 text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200/80 rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-sm"
-                          >
-                            <Package className="w-4 h-4 text-blue-600" />
-                            <span>Modificar Stock ({isStockTracked ? `${cantNum} uds` : 'Sin asignar'})</span>
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center justify-end gap-1.5 mt-1" onClick={(e) => e.stopPropagation()}>
-                          <button onClick={() => handleDuplicate(a)} className="flex-1 py-1.5 text-zinc-600 bg-zinc-100 hover:bg-emerald-50 hover:text-emerald-700 rounded-xl text-[11px] font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer">
-                            <Copy className="w-3.5 h-3.5" /> Copiar
-                          </button>
-                          <button onClick={() => handleOpenModal(a)} className="flex-1 py-1.5 text-zinc-600 bg-zinc-100 hover:bg-blue-50 hover:text-blue-600 rounded-xl text-[11px] font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer">
-                            <Edit className="w-3.5 h-3.5" /> Editar
-                          </button>
-                          <button onClick={() => handleDelete(a.id)} className="px-3 py-1.5 text-red-600 bg-red-50 hover:bg-red-100 rounded-xl text-[11px] font-bold transition-colors flex items-center justify-center cursor-pointer">
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      )}
                     </div>
 
                     {/* Vista Escritorio */}
                     <div className={`${isTecnicoMode ? 'hidden' : 'hidden md:flex'} items-center w-full`}>
                       {/* Código */}
                       <div 
-                        onClick={() => handleOpenModal(a)}
+                        onClick={() => setAccionesModalItem(a)}
                         className="w-20 shrink-0 cursor-pointer"
-                        title="Clic para editar artículo"
+                        title="Clic para ver acciones"
                       >
-                        <span className="text-[11px] font-mono font-medium text-slate-500 bg-slate-100 hover:bg-blue-50 hover:text-blue-600 px-1.5 py-0.5 rounded transition-colors">{a.codigo}</span>
+                        <span className="text-[11px] font-mono font-medium text-slate-600 bg-white/90 border border-zinc-200/80 hover:bg-amber-50 hover:text-amber-800 px-1.5 py-0.5 rounded transition-colors shadow-2xs">{a.codigo}</span>
                       </div>
 
-                      {/* Artículo (Texto suave y clicable para abrir modal) */}
+                      {/* Artículo */}
                       <div 
-                        onClick={() => handleOpenModal(a)}
+                        onClick={() => setAccionesModalItem(a)}
                         className="flex-1 min-w-[180px] pr-2 flex items-center gap-3 cursor-pointer group/title"
-                        title="Clic para editar artículo"
+                        title="Clic para ver acciones"
                       >
                         {a.fotoUrl ? (
                           <img src={a.fotoUrl} alt={a.nombre} className="w-8 h-8 rounded-xl object-cover border border-zinc-200 shrink-0 bg-white img-no-bg" />
@@ -860,7 +842,7 @@ export default function Catalogo({ isTecnicoMode = false, userRole, user }: Cata
                           </div>
                         )}
                         <div className="min-w-0">
-                          <p className="text-sm font-medium text-slate-700 truncate group-hover/title:text-blue-600 transition-colors">
+                          <p className="text-sm font-medium text-slate-800 truncate group-hover/title:text-blue-900 transition-colors">
                             {a.nombre}
                           </p>
                           {a.observaciones && (
@@ -882,8 +864,8 @@ export default function Catalogo({ isTecnicoMode = false, userRole, user }: Cata
                       </div>
 
                       {/* Familia (Sistema) */}
-                      <div className="w-36 shrink-0 text-xs font-semibold text-slate-700 truncate pr-2" title={a.familia}>
-                        {a.familia || '-'}
+                      <div className="w-36 shrink-0 text-xs font-medium text-slate-700 truncate pr-2" title={a.familia}>
+                        {a.familia || '—'}
                       </div>
 
                       {/* Estado */}
@@ -916,31 +898,17 @@ export default function Catalogo({ isTecnicoMode = false, userRole, user }: Cata
                         {formatMoneda(a.precioVenta)}
                       </div>
 
-                      {/* Acciones */}
-                      {isTecnico ? (
-                        <div className="w-24 shrink-0 flex items-center justify-end">
-                          <button 
-                            type="button"
-                            onClick={() => setViewArticuloModal(a)} 
-                            className="px-2.5 py-1 text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200/70 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
-                            title="Modificar stock"
-                          >
-                            <Package className="w-3.5 h-3.5 text-blue-600" /> Stock
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="w-24 shrink-0 flex items-center justify-end gap-1">
-                          <button onClick={() => handleDuplicate(a)} className="p-1.5 text-zinc-400 hover:text-emerald-700 hover:bg-emerald-50 rounded-xl transition-colors cursor-pointer" title="Duplicar">
-                            <Copy className="w-4 h-4" />
-                          </button>
-                          <button onClick={() => handleOpenModal(a)} className="p-1.5 text-zinc-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-colors cursor-pointer" title="Editar">
-                            <Edit className="w-4 h-4" />
-                          </button>
-                          <button onClick={() => handleDelete(a.id)} className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-xl transition-colors cursor-pointer" title="Borrar">
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      )}
+                      {/* Acciones (Varita mágica) */}
+                      <div className="w-20 shrink-0 flex items-center justify-end" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={() => setAccionesModalItem(a)}
+                          className="p-1.5 text-amber-600 hover:text-amber-800 hover:bg-amber-100/60 rounded-lg transition-colors group/btn flex items-center justify-center cursor-pointer ml-auto"
+                          title="Acciones del artículo"
+                        >
+                          <Wand2 className="w-4 h-4 group-hover/btn:rotate-12 transition-transform text-amber-600" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -948,6 +916,194 @@ export default function Catalogo({ isTecnicoMode = false, userRole, user }: Cata
             )}
           </div>
         </div>
+
+        {/* Selector de paginación */}
+        {filteredArticulos.length > 0 && (
+          <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-zinc-600 bg-white px-5 py-3.5 rounded-2xl border border-zinc-200/80 shadow-xs">
+            <div className="font-bold text-zinc-800 flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0"></span>
+              {limiteArticulos === 'todos' ? (
+                <span>Mostrando todos los artículos ({filteredArticulos.length} en total)</span>
+              ) : (
+                <span>
+                  Mostrando los {Math.min(Number(limiteArticulos), filteredArticulos.length)} primeros artículos
+                  {filteredArticulos.length > Number(limiteArticulos) && (
+                    <span className="text-zinc-400 font-normal ml-1">
+                      (de {filteredArticulos.length} en total)
+                    </span>
+                  )}
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2.5">
+              <span className="text-zinc-500 font-semibold uppercase text-[11px] tracking-wider">Mostrar:</span>
+              <select
+                value={limiteArticulos}
+                onChange={(e) => setLimiteArticulos(e.target.value === 'todos' ? 'todos' : Number(e.target.value))}
+                className="bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 text-zinc-800 text-xs font-bold rounded-xl px-3.5 py-1.5 outline-none focus:border-blue-500 focus:bg-white cursor-pointer transition-colors shadow-2xs"
+              >
+                <option value={10}>10</option>
+                <option value={20}>20</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+                <option value={200}>200</option>
+                <option value="todos">Mostrar todos</option>
+              </select>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL FLOTANTE DE ACCIONES (VARITA MÁGICA) */}
+        {accionesModalItem && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+            <div 
+              className="bg-white rounded-3xl shadow-2xl border border-slate-200/80 w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Cabecera del modal */}
+              <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-amber-500 text-white flex items-center justify-center shadow-md shadow-amber-500/20">
+                    <Wand2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-800">Acciones del Artículo</h3>
+                    <p className="text-xs text-slate-500 truncate max-w-xs">{accionesModalItem.codigo} - {accionesModalItem.nombre}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setAccionesModalItem(null)}
+                  className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Tarjeta resumen del artículo */}
+              <div className="p-6 space-y-4">
+                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 text-xs space-y-3">
+                  <div className="flex items-start gap-3">
+                    {accionesModalItem.fotoUrl ? (
+                      <img src={accionesModalItem.fotoUrl} alt={accionesModalItem.nombre} className="w-12 h-12 rounded-xl object-cover border border-zinc-200 shrink-0 bg-white img-no-bg" />
+                    ) : (
+                      <div className="w-12 h-12 rounded-xl bg-zinc-100 border border-zinc-200 shrink-0 flex items-center justify-center">
+                        <Package className="w-5 h-5 text-zinc-400" />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-mono font-bold text-slate-700 bg-white px-2 py-0.5 rounded border border-slate-200">
+                          {accionesModalItem.codigo}
+                        </span>
+                        <span className="font-bold text-slate-900 text-sm">{formatMoneda(accionesModalItem.precioVenta)}</span>
+                      </div>
+                      <div className="font-medium text-slate-800 text-sm mt-1">{accionesModalItem.nombre}</div>
+                      <div className="flex items-center gap-2 text-slate-500 mt-1 flex-wrap">
+                        <span className="bg-white px-1.5 py-0.5 rounded border border-slate-200/80 text-[10px]">{accionesModalItem.familia || 'Sin familia'}</span>
+                        {accionesModalItem.tipo && <span className="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded text-[10px]">{accionesModalItem.tipo}</span>}
+                        {accionesModalItem.cantidad !== undefined && accionesModalItem.cantidad !== null && (
+                          <span className="font-bold text-slate-700 text-[10px]">Stock: {accionesModalItem.cantidad} uds</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Lista de acciones */}
+                <div className="space-y-2">
+                  {/* 1. Modificar Stock */}
+                  <button
+                    onClick={() => {
+                      const art = accionesModalItem;
+                      setAccionesModalItem(null);
+                      setViewArticuloModal(art);
+                    }}
+                    className="w-full p-3 rounded-2xl bg-blue-50/60 hover:bg-blue-100/80 border border-blue-200/80 flex items-center gap-3.5 transition-all text-left cursor-pointer group"
+                  >
+                    <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs group-hover:scale-105 transition-transform">
+                      <Package className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-bold text-blue-900">Modificar Stock</div>
+                      <div className="text-[11px] text-blue-700/80">Ajustar inventario y registrar movimientos</div>
+                    </div>
+                  </button>
+
+                  {/* 2. Editar Artículo (no técnico) */}
+                  {!isTecnico && (
+                    <button
+                      onClick={() => {
+                        const art = accionesModalItem;
+                        setAccionesModalItem(null);
+                        handleOpenModal(art);
+                      }}
+                      className="w-full p-3 rounded-2xl bg-emerald-50/60 hover:bg-emerald-100/80 border border-emerald-200/80 flex items-center gap-3.5 transition-all text-left cursor-pointer group"
+                    >
+                      <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs group-hover:scale-105 transition-transform">
+                        <Edit className="w-4 h-4" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-bold text-emerald-900">Editar Artículo</div>
+                        <div className="text-[11px] text-emerald-700/80">Modificar datos, precios, familia, foto y notas</div>
+                      </div>
+                    </button>
+                  )}
+
+                  {/* 3. Duplicar Artículo (no técnico) */}
+                  {!isTecnico && (
+                    <button
+                      onClick={() => {
+                        const art = accionesModalItem;
+                        setAccionesModalItem(null);
+                        handleDuplicate(art);
+                      }}
+                      className="w-full p-3 rounded-2xl bg-purple-50/60 hover:bg-purple-100/80 border border-purple-200/80 flex items-center gap-3.5 transition-all text-left cursor-pointer group"
+                    >
+                      <div className="w-9 h-9 rounded-xl bg-purple-600 text-white flex items-center justify-center shrink-0 shadow-xs group-hover:scale-105 transition-transform">
+                        <Copy className="w-4 h-4" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-bold text-purple-900">Duplicar Artículo</div>
+                        <div className="text-[11px] text-purple-700/80">Crear una copia rápida con nuevo código</div>
+                      </div>
+                    </button>
+                  )}
+
+                  {/* 4. Eliminar Artículo (no técnico) */}
+                  {!isTecnico && (
+                    <button
+                      onClick={() => {
+                        const art = accionesModalItem;
+                        setAccionesModalItem(null);
+                        handleDelete(art.id);
+                      }}
+                      className="w-full p-3 rounded-2xl bg-red-50/60 hover:bg-red-100/80 border border-red-200/80 flex items-center gap-3.5 transition-all text-left cursor-pointer group"
+                    >
+                      <div className="w-9 h-9 rounded-xl bg-red-600 text-white flex items-center justify-center shrink-0 shadow-xs group-hover:scale-105 transition-transform">
+                        <Trash2 className="w-4 h-4" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-bold text-red-900">Eliminar Artículo</div>
+                        <div className="text-[11px] text-red-700/80">Dar de baja del catálogo permanentemente</div>
+                      </div>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Footer del modal */}
+              <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-100 flex justify-end">
+                <button
+                  onClick={() => setAccionesModalItem(null)}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-800 hover:bg-slate-200/60 rounded-xl transition-colors cursor-pointer"
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Modal Formulario */}

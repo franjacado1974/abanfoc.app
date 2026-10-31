@@ -1,9 +1,9 @@
 import { collection, doc, deleteDoc, getDocs, setDoc } from "firebase/firestore";
-import { db } from '../../recursos-compartidos/firebase/firebase';
+import { db } from "../../recursos-compartidos/firebase/firebase";
 import { useState, useEffect, useRef, useMemo } from 'react';
 import ConfirmationModal from '../../recursos-compartidos/ConfirmationModal';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Save, Building2, Plus, Download, Upload, Users, Search, Edit, Trash2, CreditCard, Phone, Mail, MapPin, Eye } from 'lucide-react';
+import { ArrowLeft, Save, Building2, Plus, Download, Upload, Users, Search, Edit, Trash2, CreditCard, Phone, Mail, MapPin, Eye, Wand2, X } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import DetailModal from '../../recursos-compartidos/components/DetailModal';
 
@@ -75,6 +75,8 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [clientIdToDelete, setClientIdToDelete] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [limiteClientes, setLimiteClientes] = useState<number | 'todos'>(10);
+  const [accionesModalItem, setAccionesModalItem] = useState<Cliente | null>(null);
   
   // Detail modal state
   const [selectedCliente, setSelectedCliente] = useState<Cliente | null>(null);
@@ -229,6 +231,11 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
     );
   }, [clientes, searchTerm]);
 
+  const clientesAMostrar = useMemo(() => {
+    if (limiteClientes === 'todos') return filteredClientes;
+    return filteredClientes.slice(0, Number(limiteClientes));
+  }, [filteredClientes, limiteClientes]);
+
   const handleOpenNewForm = () => {
     let maxNum = 0;
     clientes.forEach(c => {
@@ -256,43 +263,55 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
           {/* Header */}
           {!hideHeader ? (
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-            <div>
-              <button onClick={() => navigate('/')} className="flex items-center gap-1.5 text-xs font-medium text-zinc-500 hover:text-zinc-900 mb-3 transition-colors">
-                <ArrowLeft className="w-3.5 h-3.5" /> Volver al panel
-              </button>
+            <div className="text-center md:text-left flex flex-col items-center md:items-start">
               <h1 className="text-2xl font-bold text-zinc-900 tracking-tight">Directorio de Clientes</h1>
               <p className="text-sm text-zinc-500 mt-1">{clientes.length} registrados en la base de datos.</p>
             </div>
-            {!isVisualizador && (
-              <div className="flex flex-wrap items-center gap-2">
-                <input type="file" accept=".xlsx, .xls, .csv" className="hidden" ref={fileInputRef} onChange={handleImportExcel} />
-                <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-1.5 bg-white border border-zinc-200 text-zinc-700 px-3.5 py-2 rounded-xl font-medium hover:bg-zinc-50 hover:border-zinc-300 transition-all text-xs shadow-sm" title="Importar Excel">
-                  <Download className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Importar</span>
-                </button>
-                <button onClick={handleExportExcel} className="flex items-center gap-1.5 bg-white border border-zinc-200 text-zinc-700 px-3.5 py-2 rounded-xl font-medium hover:bg-zinc-50 hover:border-zinc-300 transition-all text-xs shadow-sm" title="Exportar Excel">
-                  <Upload className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Exportar</span>
-                </button>
-                <button onClick={handleOpenNewForm} className="flex items-center gap-1.5 bg-black text-white px-4 py-2 rounded-xl font-medium hover:bg-zinc-800 transition-all text-xs shadow-md shadow-black/10">
-                  <Plus className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Nuevo Cliente</span><span className="sm:hidden">Nuevo</span>
-                </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative w-48 sm:w-60 lg:w-72">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Search className="w-3.5 h-3.5 text-zinc-400" />
+                </div>
+                <input
+                  type="text"
+                  className="w-full pl-9 pr-3 py-2 bg-white rounded-xl border border-zinc-200 focus:border-red-500 focus:ring-2 focus:ring-red-500/10 outline-none transition-all shadow-xs text-xs text-zinc-900 placeholder-zinc-400"
+                  placeholder="Buscar clientes por nombre, CIF..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
               </div>
-            )}
-          </div>
-          ) : null}
-
-          {/* Buscador */}
-          <div className="relative mb-5">
-            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-              <Search className="w-4 h-4 text-zinc-400" />
+              {!isVisualizador && (
+                <>
+                  <input type="file" accept=".xlsx, .xls, .csv" className="hidden" ref={fileInputRef} onChange={handleImportExcel} />
+                  <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-1.5 bg-white border border-zinc-200 text-zinc-700 px-3.5 py-2 rounded-xl font-medium hover:bg-zinc-50 hover:border-zinc-300 transition-all text-xs shadow-sm" title="Importar Excel">
+                    <Download className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Importar</span>
+                  </button>
+                  <button onClick={handleExportExcel} className="flex items-center gap-1.5 bg-white border border-zinc-200 text-zinc-700 px-3.5 py-2 rounded-xl font-medium hover:bg-zinc-50 hover:border-zinc-300 transition-all text-xs shadow-sm" title="Exportar Excel">
+                    <Upload className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Exportar</span>
+                  </button>
+                  <button onClick={handleOpenNewForm} className="flex items-center gap-1.5 bg-black text-white px-4 py-2 rounded-xl font-medium hover:bg-zinc-800 transition-all text-xs shadow-md shadow-black/10">
+                    <Plus className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Nuevo Cliente</span><span className="sm:hidden">Nuevo</span>
+                  </button>
+                </>
+              )}
             </div>
-            <input
-              type="text"
-              className="w-full pl-10 pr-4 py-2.5 bg-white rounded-xl border border-zinc-200 focus:border-red-500 focus:ring-2 focus:ring-red-500/10 outline-none transition-all shadow-sm text-sm text-zinc-900 placeholder-zinc-400"
-              placeholder="Buscar por nombre, CIF o población..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
           </div>
+          ) : (
+            <div className="flex justify-end mb-4">
+              <div className="relative w-48 sm:w-60 lg:w-72">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Search className="w-3.5 h-3.5 text-zinc-400" />
+                </div>
+                <input
+                  type="text"
+                  className="w-full pl-9 pr-3 py-2 bg-white rounded-xl border border-zinc-200 focus:border-red-500 focus:ring-2 focus:ring-red-500/10 outline-none transition-all shadow-xs text-xs text-zinc-900 placeholder-zinc-400"
+                  placeholder="Buscar clientes por nombre, CIF..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
 
           {/* Tabla de Clientes */}
           {clientes.length === 0 ? (
@@ -317,34 +336,38 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
           ) : (
             <div className="bg-white rounded-3xl border border-zinc-200 shadow-sm overflow-hidden overflow-x-auto">
               {/* Table header */}
-              <div className="hidden md:flex items-center bg-zinc-50 border-b border-zinc-200/80 px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-zinc-500">
+              <div className="hidden md:flex items-center bg-zinc-200/90 border-b border-zinc-300 px-4 py-3 text-[11px] font-extrabold uppercase tracking-wider text-zinc-700">
                 <div className="w-24 shrink-0">Código</div>
-                <div className="flex-1 min-w-0">Cliente</div>
-                {!isTecnicoMode && <div className="w-36 shrink-0">CIF / NIF</div>}
-                <div className="w-44 shrink-0">Población</div>
-                <div className="w-36 shrink-0">Teléfono</div>
-                <div className="w-28 shrink-0 text-right">Acciones</div>
+                <div className="flex-1 min-w-0 pr-2">Cliente</div>
+                {!isTecnicoMode && <div className="w-36 shrink-0 pr-2">CIF / NIF</div>}
+                <div className="w-44 shrink-0 pr-2">Población</div>
+                <div className="w-36 shrink-0 pr-2">Teléfono</div>
+                <div className="w-20 shrink-0 text-right">Acciones</div>
               </div>
 
               {/* Table rows */}
               <div className="divide-y divide-zinc-200">
-                {filteredClientes.map((cliente) => {
+                {clientesAMostrar.map((cliente, index) => {
                   return (
                     <div
                       key={cliente.id}
-                      className="flex flex-col md:flex-row md:items-center px-4 py-3.5 hover:bg-zinc-50/80 transition-colors cursor-pointer group"
+                      className={`flex flex-col md:flex-row md:items-center px-4 py-2.5 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100/80'} hover:bg-amber-100/90 hover:shadow-xs transition-colors cursor-pointer group`}
                       onClick={() => handleViewDetail(cliente)}
                     >
                       {/* Mobile view */}
                       <div className="flex md:hidden items-center justify-between mb-2">
-                        <span className="text-[10px] font-mono font-bold text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded">{cliente.id}</span>
-                        <button onClick={(e) => { e.stopPropagation(); handleViewDetail(cliente); }} className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors">
-                          <Eye className="w-4 h-4" />
+                        <span className="text-[10px] font-mono font-bold text-zinc-600 bg-white/90 border border-zinc-200/80 px-2 py-0.5 rounded shadow-2xs">{cliente.id}</span>
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); setAccionesModalItem(cliente); }} 
+                          className="p-1.5 text-amber-600 hover:text-amber-800 hover:bg-amber-100/60 rounded-xl transition-colors cursor-pointer"
+                          title="Acciones"
+                        >
+                          <Wand2 className="w-4 h-4" />
                         </button>
                       </div>
                       <div className="flex md:hidden">
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-bold text-zinc-900 truncate">{cliente.nombre}</p>
+                          <p className="text-sm font-medium text-slate-800 truncate">{cliente.nombre}</p>
                           {cliente.poblacion && <p className="text-xs text-zinc-500 truncate">{cliente.poblacion}</p>}
                         </div>
                       </div>
@@ -356,48 +379,204 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
                       {/* Desktop cells */}
                       <div className="hidden md:flex items-center w-full">
                         <div className="w-24 shrink-0">
-                          <span className="text-[11px] font-mono font-bold text-zinc-500 bg-zinc-100 px-1.5 py-0.5 rounded">{cliente.id}</span>
+                          <span className="text-[11px] font-mono font-bold text-zinc-600 bg-white/90 border border-zinc-200/80 px-2 py-0.5 rounded-md shadow-2xs">{cliente.id}</span>
                         </div>
                         <div className="flex-1 min-w-0 pr-2">
-                          <p className="text-sm font-bold text-zinc-900 truncate group-hover:text-red-600 transition-colors">{cliente.nombre}</p>
+                          <div className="flex items-center gap-2">
+                            <Building2 className="w-4 h-4 text-blue-500 shrink-0" />
+                            <p className="text-sm font-medium text-slate-800 truncate group-hover:text-blue-900 transition-colors">{cliente.nombre}</p>
+                          </div>
                         </div>
-                        {!isTecnicoMode && <div className="w-36 shrink-0 text-sm text-zinc-600 truncate pr-2">{cliente.cif || '-'}</div>}
-                        <div className="w-44 shrink-0 text-sm text-zinc-600 truncate pr-2 flex items-center gap-1">
-                          <MapPin className="w-3 h-3 text-zinc-400 shrink-0" />
-                          {cliente.poblacion || '-'}
+                        {!isTecnicoMode && <div className="w-36 shrink-0 text-xs font-mono text-slate-600 truncate pr-2">{cliente.cif || '—'}</div>}
+                        <div className="w-44 shrink-0 text-xs text-slate-600 truncate pr-2 flex items-center gap-1.5">
+                          <MapPin className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                          <span className="truncate">{cliente.poblacion || '—'}</span>
                         </div>
-                        <div className="w-36 shrink-0 text-sm text-zinc-600 truncate pr-2">{cliente.telefono || '-'}</div>
-                        <div className="w-28 shrink-0 flex items-center justify-end gap-1">
+                        <div className="w-36 shrink-0 text-xs text-slate-600 truncate pr-2">
+                          {cliente.telefono ? (
+                            <div className="flex items-center gap-1.5">
+                              <Phone className="w-3 h-3 text-zinc-400 shrink-0" />
+                              <span className="truncate">{cliente.telefono}</span>
+                            </div>
+                          ) : '—'}
+                        </div>
+                        <div className="w-20 shrink-0 flex items-center justify-end" onClick={(e) => e.stopPropagation()}>
                           <button
-                            onClick={(e) => { e.stopPropagation(); handleViewDetail(cliente); }}
-                            className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors"
-                            title="Ver detalle"
+                            type="button"
+                            onClick={() => setAccionesModalItem(cliente)}
+                            className="p-1.5 text-amber-600 hover:text-amber-800 hover:bg-amber-100/60 rounded-lg transition-colors group/btn flex items-center justify-center cursor-pointer ml-auto"
+                            title="Acciones del cliente"
                           >
-                            <Eye className="w-4 h-4" />
+                            <Wand2 className="w-4 h-4 group-hover/btn:rotate-12 transition-transform text-amber-600" />
                           </button>
-                          {!isVisualizador && (
-                            <>
-                              <button
-                                onClick={(e) => { e.stopPropagation(); handleEdit(cliente); }}
-                                className="p-1.5 text-zinc-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors"
-                                title="Editar"
-                              >
-                                <Edit className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={(e) => { e.stopPropagation(); handleDelete(cliente.id); }}
-                                className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors"
-                                title="Eliminar"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </>
-                          )}
                         </div>
                       </div>
                     </div>
                   );
                 })}
+              </div>
+            </div>
+          )}
+
+          {/* Selector de paginación */}
+          {filteredClientes.length > 0 && (
+            <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-zinc-600 bg-white px-5 py-3.5 rounded-2xl border border-zinc-200/80 shadow-xs">
+              <div className="font-bold text-zinc-800 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0"></span>
+                {limiteClientes === 'todos' ? (
+                  <span>Mostrando todos los clientes ({filteredClientes.length} en total)</span>
+                ) : (
+                  <span>
+                    Mostrando los {Math.min(Number(limiteClientes), filteredClientes.length)} primeros clientes
+                    {filteredClientes.length > Number(limiteClientes) && (
+                      <span className="text-zinc-400 font-normal ml-1">
+                        (de {filteredClientes.length} en total)
+                      </span>
+                    )}
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2.5">
+                <span className="text-zinc-500 font-semibold uppercase text-[11px] tracking-wider">Mostrar:</span>
+                <select
+                  value={limiteClientes}
+                  onChange={(e) => setLimiteClientes(e.target.value === 'todos' ? 'todos' : Number(e.target.value))}
+                  className="bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 text-zinc-800 text-xs font-bold rounded-xl px-3.5 py-1.5 outline-none focus:border-blue-500 focus:bg-white cursor-pointer transition-colors shadow-2xs"
+                >
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                  <option value={200}>200</option>
+                  <option value="todos">Mostrar todos</option>
+                </select>
+              </div>
+            </div>
+          )}
+
+          {/* MODAL FLOTANTE DE ACCIONES (VARITA MÁGICA) */}
+          {accionesModalItem && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+              <div 
+                className="bg-white rounded-3xl shadow-2xl border border-slate-200/80 w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Cabecera del modal */}
+                <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-2xl bg-amber-500 text-white flex items-center justify-center shadow-md shadow-amber-500/20">
+                      <Wand2 className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-slate-800">Acciones del Cliente</h3>
+                      <p className="text-xs text-slate-500 truncate max-w-xs">{accionesModalItem.nombre}</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setAccionesModalItem(null)}
+                    className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Tarjeta resumen del cliente */}
+                <div className="p-6 space-y-4">
+                  <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 text-xs space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono font-bold text-slate-700 bg-white px-2 py-0.5 rounded border border-slate-200">
+                        {accionesModalItem.id}
+                      </span>
+                      {accionesModalItem.cif && (
+                        <span className="text-slate-500 font-mono">CIF: <strong className="text-slate-700">{accionesModalItem.cif}</strong></span>
+                      )}
+                    </div>
+                    <div className="font-medium text-slate-800 text-sm">{accionesModalItem.nombre}</div>
+                    <div className="flex items-center gap-4 text-slate-500 flex-wrap">
+                      {accionesModalItem.poblacion && (
+                        <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5 text-slate-400" />{accionesModalItem.poblacion}</span>
+                      )}
+                      {accionesModalItem.telefono && (
+                        <span className="flex items-center gap-1"><Phone className="w-3.5 h-3.5 text-slate-400" />{accionesModalItem.telefono}</span>
+                      )}
+                      {accionesModalItem.correo && (
+                        <span className="flex items-center gap-1"><Mail className="w-3.5 h-3.5 text-slate-400" />{accionesModalItem.correo}</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Lista de acciones */}
+                  <div className="space-y-2">
+                    {/* 1. Ver Detalle / Ficha */}
+                    <button
+                      onClick={() => {
+                        const cli = accionesModalItem;
+                        setAccionesModalItem(null);
+                        handleViewDetail(cli);
+                      }}
+                      className="w-full p-3 rounded-2xl bg-blue-50/60 hover:bg-blue-100/80 border border-blue-200/80 flex items-center gap-3.5 transition-all text-left cursor-pointer group"
+                    >
+                      <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs group-hover:scale-105 transition-transform">
+                        <Eye className="w-4 h-4" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-bold text-blue-900">Ver Ficha Completa</div>
+                        <div className="text-[11px] text-blue-700/80">Información detallada, centros vinculados y contactos</div>
+                      </div>
+                    </button>
+
+                    {/* 2. Editar Cliente */}
+                    {!isVisualizador && (
+                      <button
+                        onClick={() => {
+                          const cli = accionesModalItem;
+                          setAccionesModalItem(null);
+                          handleEdit(cli);
+                        }}
+                        className="w-full p-3 rounded-2xl bg-emerald-50/60 hover:bg-emerald-100/80 border border-emerald-200/80 flex items-center gap-3.5 transition-all text-left cursor-pointer group"
+                      >
+                        <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs group-hover:scale-105 transition-transform">
+                          <Edit className="w-4 h-4" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs font-bold text-emerald-900">Editar Cliente</div>
+                          <div className="text-[11px] text-emerald-700/80">Modificar datos fiscales, direcciones, teléfonos y notas</div>
+                        </div>
+                      </button>
+                    )}
+
+                    {/* 3. Eliminar Cliente */}
+                    {!isVisualizador && (
+                      <button
+                        onClick={() => {
+                          const cli = accionesModalItem;
+                          setAccionesModalItem(null);
+                          handleDelete(cli.id);
+                        }}
+                        className="w-full p-3 rounded-2xl bg-red-50/60 hover:bg-red-100/80 border border-red-200/80 flex items-center gap-3.5 transition-all text-left cursor-pointer group"
+                      >
+                        <div className="w-9 h-9 rounded-xl bg-red-600 text-white flex items-center justify-center shrink-0 shadow-xs group-hover:scale-105 transition-transform">
+                          <Trash2 className="w-4 h-4" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs font-bold text-red-900">Eliminar Cliente</div>
+                          <div className="text-[11px] text-red-700/80">Dar de baja al cliente de la base de datos</div>
+                        </div>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Footer del modal */}
+                <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-100 flex justify-end">
+                  <button
+                    onClick={() => setAccionesModalItem(null)}
+                    className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-800 hover:bg-slate-200/60 rounded-xl transition-colors cursor-pointer"
+                  >
+                    Cerrar
+                  </button>
+                </div>
               </div>
             </div>
           )}

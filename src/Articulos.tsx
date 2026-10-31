@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Package, Plus, Search, Edit, Trash2, X, Download, Upload } from 'lucide-react';
+import { Package, Plus, Search, Edit, Trash2, X, Download, Upload, Wand2 } from 'lucide-react';
 import ConfirmationModal from './ConfirmationModal'; // Import the new modal component
 import * as XLSX from 'xlsx';
 import { 
@@ -38,6 +38,8 @@ export default function Articulos() {
 
   const [familias, setFamilias] = useState<SistemaCategoria[]>([]); // This will now hold SistemaCategoria
   const [isFamiliasLoading, setIsFamiliasLoading] = useState(true);
+  const [limiteArticulos, setLimiteArticulos] = useState<number | 'todos'>(10);
+  const [accionesModalItem, setAccionesModalItem] = useState<Articulo | null>(null);
   
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -225,6 +227,11 @@ export default function Articulos() {
     a.familia.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const articulosAMostrar = useMemo(() => {
+    if (limiteArticulos === 'todos') return filteredArticulos;
+    return filteredArticulos.slice(0, Number(limiteArticulos));
+  }, [filteredArticulos, limiteArticulos]);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const currentFamiliaIsAvailable = familias.some(familia =>
     familia.id === formData.familiaId || familia.nombre === formData.familia
@@ -363,6 +370,18 @@ export default function Articulos() {
             <p className="text-fuchsia-900/60 mt-1">Gestiona el inventario de repuestos y productos</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <div className="relative w-48 sm:w-60 lg:w-72">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Search className="w-3.5 h-3.5 text-zinc-400" />
+              </div>
+              <input
+                type="text"
+                placeholder="Buscar por código, nombre..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 bg-white rounded-xl border border-zinc-200 focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/10 outline-none transition-all shadow-xs text-xs text-zinc-900 placeholder-zinc-400"
+              />
+            </div>
             <input 
               type="file" 
               ref={fileInputRef} 
@@ -372,75 +391,69 @@ export default function Articulos() {
             />
             <button 
               onClick={() => fileInputRef.current?.click()}
-              className="flex items-center justify-center gap-2 bg-white border border-fuchsia-200 hover:border-fuchsia-300 text-fuchsia-700 px-4 py-2.5 rounded-xl font-medium transition-colors shadow-sm"
+              className="flex items-center justify-center gap-1.5 bg-white border border-fuchsia-200 hover:border-fuchsia-300 text-fuchsia-700 px-3.5 py-2 rounded-xl font-medium transition-colors shadow-xs text-xs"
               title="Importar Excel"
             >
-              <Download className="w-5 h-5" />
+              <Download className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Importar</span>
             </button>
             <button 
               onClick={handleExport}
-              className="flex items-center justify-center gap-2 bg-white border border-fuchsia-200 hover:border-fuchsia-300 text-fuchsia-700 px-4 py-2.5 rounded-xl font-medium transition-colors shadow-sm"
+              className="flex items-center justify-center gap-1.5 bg-white border border-fuchsia-200 hover:border-fuchsia-300 text-fuchsia-700 px-3.5 py-2 rounded-xl font-medium transition-colors shadow-xs text-xs"
               title="Exportar a Excel"
             >
-              <Upload className="w-5 h-5" />
+              <Upload className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Exportar</span>
             </button>
             <button 
               onClick={() => handleOpenModal()}
-              className="flex items-center justify-center gap-2 bg-fuchsia-600 hover:bg-fuchsia-700 text-white px-5 py-2.5 rounded-xl font-medium transition-colors shadow-sm"
+              className="flex items-center justify-center gap-1.5 bg-fuchsia-600 hover:bg-fuchsia-700 text-white px-4 py-2 rounded-xl font-medium transition-colors shadow-xs text-xs"
             >
-              <Plus className="w-5 h-5" />
+              <Plus className="w-3.5 h-3.5" />
               Nuevo
             </button>
           </div>
         </div>
 
-        {/* Buscador */}
-        <div className="bg-white p-2 rounded-2xl border border-fuchsia-100 shadow-sm mb-6 flex items-center">
-          <div className="pl-4 pr-2 text-fuchsia-300">
-            <Search className="w-5 h-5" />
-          </div>
-          <input
-            type="text"
-            placeholder="Buscar por código, nombre o familia..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="flex-1 py-2 px-2 outline-none text-fuchsia-950 placeholder:text-fuchsia-900/30 bg-transparent"
-          />
-        </div>
-
         {/* Lista de Artículos */}
         <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden overflow-x-auto">
-          <div className="hidden md:flex items-center bg-[#f9f7f4] border-b-2 border-zinc-200 px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-zinc-500">
+          <div className="hidden md:flex items-center bg-zinc-200/90 border-b border-zinc-300 px-4 py-3 text-[11px] font-extrabold uppercase tracking-wider text-zinc-700">
             <div className="w-24 shrink-0">Código</div>
-            <div className="flex-1 min-w-0">Artículo</div>
-            <div className="w-36 shrink-0">Familia</div>
-            <div className="w-28 shrink-0 text-right">P. Compra</div>
-            <div className="w-28 shrink-0 text-right">P. Venta</div>
-            <div className="w-24 shrink-0 text-center">Revisable</div>
-            <div className="w-28 shrink-0 text-right">Acciones</div>
+            <div className="flex-1 min-w-0 pr-2">Artículo</div>
+            <div className="w-36 shrink-0 pr-2">Familia</div>
+            <div className="w-28 shrink-0 text-right pr-2">P. Compra</div>
+            <div className="w-28 shrink-0 text-right pr-2">P. Venta</div>
+            <div className="w-24 shrink-0 text-center pr-2">Revisable</div>
+            <div className="w-20 shrink-0 text-right">Acciones</div>
           </div>
 
           <div className="divide-y divide-zinc-200">
             {filteredArticulos.length === 0 ? (
               <div className="p-12 text-center">
-                <Package className="w-12 h-12 text-fuchsia-200 mx-auto mb-3" />
-                <p className="text-fuchsia-900/50 font-medium">No hay artículos registrados</p>
+                <Package className="w-12 h-12 text-blue-200 mx-auto mb-3" />
+                <p className="text-slate-400 font-medium">No hay artículos registrados</p>
               </div>
             ) : (
-              filteredArticulos.map(a => {
+              articulosAMostrar.map((a, index) => {
                 return (
-                  <div key={a.id} className="flex flex-col md:flex-row md:items-center px-4 py-3 hover:bg-zinc-50/80 transition-colors group">
+                  <div key={a.id} className={`flex flex-col md:flex-row md:items-center px-4 py-2.5 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100/80'} hover:bg-amber-100/90 hover:shadow-xs transition-colors group`}>
                     <div 
                       className="flex md:hidden items-center justify-between mb-1 cursor-pointer"
-                      onClick={() => handleOpenModal(a)}
+                      onClick={() => setAccionesModalItem(a)}
                     >
-                      <span className="text-[10px] font-mono font-medium text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">{a.codigo}</span>
+                      <span className="text-[10px] font-mono font-medium text-slate-500 bg-white/90 border border-slate-200 px-1.5 py-0.5 rounded shadow-2xs">{a.codigo}</span>
+                      <button 
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setAccionesModalItem(a); }}
+                        className="p-1 text-amber-600 hover:text-amber-800 hover:bg-amber-100/60 rounded-lg transition-colors cursor-pointer"
+                        title="Acciones"
+                      >
+                        <Wand2 className="w-4 h-4" />
+                      </button>
                     </div>
                     <div 
                       className="flex md:hidden mb-1 cursor-pointer"
-                      onClick={() => handleOpenModal(a)}
+                      onClick={() => setAccionesModalItem(a)}
                     >
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-slate-700 truncate">{a.nombre}</p>
@@ -450,33 +463,35 @@ export default function Articulos() {
 
                     <div className="hidden md:flex items-center w-full">
                       <div 
-                        onClick={() => handleOpenModal(a)}
+                        onClick={() => setAccionesModalItem(a)}
                         className="w-24 shrink-0 cursor-pointer"
-                        title="Clic para editar artículo"
+                        title="Clic para ver acciones"
                       >
-                        <span className="text-[11px] font-mono font-medium text-slate-500 bg-slate-100 hover:bg-fuchsia-50 hover:text-fuchsia-700 px-1.5 py-0.5 rounded transition-colors">{a.codigo}</span>
+                        <span className="text-[11px] font-mono font-medium text-slate-600 bg-white/90 border border-zinc-200/80 hover:bg-amber-50 hover:text-amber-800 px-2 py-0.5 rounded transition-colors shadow-2xs">{a.codigo}</span>
                       </div>
                       <div 
-                        onClick={() => handleOpenModal(a)}
+                        onClick={() => setAccionesModalItem(a)}
                         className="flex-1 min-w-0 pr-2 cursor-pointer group/title"
-                        title="Clic para editar artículo"
+                        title="Clic para ver acciones"
                       >
-                        <p className="text-sm font-medium text-slate-700 truncate group-hover/title:text-fuchsia-700 transition-colors">{a.nombre}</p>
+                        <p className="text-sm font-medium text-slate-800 truncate group-hover/title:text-blue-900 transition-colors">{a.nombre}</p>
                       </div>
-                      <div className="w-36 shrink-0 text-sm text-zinc-600 truncate pr-2">{a.familia || '-'}</div>
-                      <div className="w-28 shrink-0 text-sm text-zinc-600 text-right pr-2">{formatMoneda(a.precioCompra)}</div>
-                      <div className="w-28 shrink-0 text-sm text-zinc-600 text-right pr-2">{formatMoneda(a.precioVenta)}</div>
-                      <div className="w-24 shrink-0 text-center">
-                        <span className={`text-[11px] px-1.5 py-0.5 rounded font-bold ${a.revisable ? 'bg-emerald-100 text-emerald-700' : 'bg-zinc-100 text-zinc-400'}`}>
+                      <div className="w-36 shrink-0 text-xs text-slate-600 truncate pr-2">{a.familia || '—'}</div>
+                      <div className="w-28 shrink-0 text-xs text-slate-600 text-right pr-2">{formatMoneda(a.precioCompra)}</div>
+                      <div className="w-28 shrink-0 text-xs font-semibold text-slate-700 text-right pr-2">{formatMoneda(a.precioVenta)}</div>
+                      <div className="w-24 shrink-0 text-center pr-2">
+                        <span className={`text-[10px] px-2 py-0.5 rounded-md font-semibold border ${a.revisable ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
                           {a.revisable ? 'Sí' : 'No'}
                         </span>
                       </div>
-                      <div className="w-28 shrink-0 flex items-center justify-end gap-1">
-                        <button onClick={() => handleOpenModal(a)} className="p-1.5 text-zinc-400 hover:text-fuchsia-700 hover:bg-fuchsia-50 rounded-lg transition-colors">
-                          <Edit className="w-4 h-4" />
-                        </button>
-                        <button onClick={() => handleDelete(a.id)} className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors">
-                          <Trash2 className="w-4 h-4" />
+                      <div className="w-20 shrink-0 flex items-center justify-end" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={() => setAccionesModalItem(a)}
+                          className="p-1.5 text-amber-600 hover:text-amber-800 hover:bg-amber-100/60 rounded-lg transition-colors group/btn flex items-center justify-center cursor-pointer ml-auto"
+                          title="Acciones del artículo"
+                        >
+                          <Wand2 className="w-4 h-4 group-hover/btn:rotate-12 transition-transform text-amber-600" />
                         </button>
                       </div>
                     </div>
@@ -484,8 +499,140 @@ export default function Articulos() {
                 );
               })
             )}
-            </div>
+          </div>
         </div>
+
+        {/* Selector de paginación */}
+        {filteredArticulos.length > 0 && (
+          <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-zinc-600 bg-white px-5 py-3.5 rounded-2xl border border-zinc-200/80 shadow-xs">
+            <div className="font-bold text-zinc-800 flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0"></span>
+              {limiteArticulos === 'todos' ? (
+                <span>Mostrando todos los artículos ({filteredArticulos.length} en total)</span>
+              ) : (
+                <span>
+                  Mostrando los {Math.min(Number(limiteArticulos), filteredArticulos.length)} primeros artículos
+                  {filteredArticulos.length > Number(limiteArticulos) && (
+                    <span className="text-zinc-400 font-normal ml-1">
+                      (de {filteredArticulos.length} en total)
+                    </span>
+                  )}
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2.5">
+              <span className="text-zinc-500 font-semibold uppercase text-[11px] tracking-wider">Mostrar:</span>
+              <select
+                value={limiteArticulos}
+                onChange={(e) => setLimiteArticulos(e.target.value === 'todos' ? 'todos' : Number(e.target.value))}
+                className="bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 text-zinc-800 text-xs font-bold rounded-xl px-3.5 py-1.5 outline-none focus:border-blue-500 focus:bg-white cursor-pointer transition-colors shadow-2xs"
+              >
+                <option value={10}>10</option>
+                <option value={20}>20</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+                <option value={200}>200</option>
+                <option value="todos">Mostrar todos</option>
+              </select>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL FLOTANTE DE ACCIONES (VARITA MÁGICA) */}
+        {accionesModalItem && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+            <div 
+              className="bg-white rounded-3xl shadow-2xl border border-slate-200/80 w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Cabecera del modal */}
+              <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-amber-500 text-white flex items-center justify-center shadow-md shadow-amber-500/20">
+                    <Wand2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-800">Acciones del Artículo</h3>
+                    <p className="text-xs text-slate-500 truncate max-w-xs">{accionesModalItem.codigo} - {accionesModalItem.nombre}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setAccionesModalItem(null)}
+                  className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Tarjeta resumen del artículo */}
+              <div className="p-6 space-y-4">
+                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 text-xs space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono font-bold text-slate-700 bg-white px-2 py-0.5 rounded border border-slate-200">
+                      {accionesModalItem.codigo}
+                    </span>
+                    <span className="font-bold text-slate-900 text-sm">{formatMoneda(accionesModalItem.precioVenta)}</span>
+                  </div>
+                  <div className="font-medium text-slate-800 text-sm">{accionesModalItem.nombre}</div>
+                  <div className="flex items-center gap-4 text-slate-500 flex-wrap">
+                    <span className="bg-white px-1.5 py-0.5 rounded border border-slate-200/80 text-[10px]">{accionesModalItem.familia || 'Sin familia'}</span>
+                    <span className="text-slate-400">P. Compra: <strong className="text-slate-600">{formatMoneda(accionesModalItem.precioCompra)}</strong></span>
+                  </div>
+                </div>
+
+                {/* Lista de acciones */}
+                <div className="space-y-2">
+                  {/* 1. Editar Artículo */}
+                  <button
+                    onClick={() => {
+                      const art = accionesModalItem;
+                      setAccionesModalItem(null);
+                      handleOpenModal(art);
+                    }}
+                    className="w-full p-3 rounded-2xl bg-blue-50/60 hover:bg-blue-100/80 border border-blue-200/80 flex items-center gap-3.5 transition-all text-left cursor-pointer group"
+                  >
+                    <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs group-hover:scale-105 transition-transform">
+                      <Edit className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-bold text-blue-900">Editar Artículo</div>
+                      <div className="text-[11px] text-blue-700/80">Modificar código, nombre, precios y familia</div>
+                    </div>
+                  </button>
+
+                  {/* 2. Eliminar Artículo */}
+                  <button
+                    onClick={() => {
+                      const art = accionesModalItem;
+                      setAccionesModalItem(null);
+                      handleDelete(art.id);
+                    }}
+                    className="w-full p-3 rounded-2xl bg-red-50/60 hover:bg-red-100/80 border border-red-200/80 flex items-center gap-3.5 transition-all text-left cursor-pointer group"
+                  >
+                    <div className="w-9 h-9 rounded-xl bg-red-600 text-white flex items-center justify-center shrink-0 shadow-xs group-hover:scale-105 transition-transform">
+                      <Trash2 className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-bold text-red-900">Eliminar Artículo</div>
+                      <div className="text-[11px] text-red-700/80">Dar de baja del catálogo permanentemente</div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Footer del modal */}
+              <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-100 flex justify-end">
+                <button
+                  onClick={() => setAccionesModalItem(null)}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-800 hover:bg-slate-200/60 rounded-xl transition-colors cursor-pointer"
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Modal Formulario */}

@@ -1532,6 +1532,23 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
     1. **Valorado**: Descarga completa con precios e importes para control de gestión o cliente.
     2. **Sin valorar (para operario)**: Descarga oficial adaptada sin precios para entregar al técnico u operario que ejecutará el trabajo en obra o cliente.
 
+---
+
+## 109. Blindaje Inviolable de Tablas Limpias en 1 Sola Fila, Cabecera Gris Neutro, Filas Cebra, Paginación de 10 Elementos y Modal de Acciones con Varita Mágica (`Wand2`) en Clientes, Centros y Catálogo (`Clientes.tsx`, `Centros.tsx`, `Catalogo.tsx`, `Articulos.tsx`)
+- **Cabecera Gris Neutro y Filas Cebra**:
+  - En los directorios de Clientes (`Clientes.tsx`), Centros (`Centros.tsx`) y Catálogo de Artículos (`Catalogo.tsx`, `Articulos.tsx`), las tablas lucen cabecera gris uniforme: `bg-zinc-200/90 border-b border-zinc-300 text-[11px] font-extrabold uppercase tracking-wider text-zinc-700` con espaciado vertical compacto (`py-3`).
+  - Las filas alternan diseño cebra (`index % 2 === 0 ? 'bg-white' : 'bg-slate-100/80'`), resaltan en tono ámbar suave al pasar el ratón (`hover:bg-amber-100/90 hover:shadow-xs`) y mantienen toda la información en 1 sola fila plana con tipografía limpia y suave (`font-medium text-slate-700/800`).
+- **Paginación y Selector de Límite (10 inicial)**:
+  - Inicialmente se muestran 10 registros (`limiteClientes`, `limiteCentros`, `limiteArticulos`), con una barra inferior que informa del número total de elementos y un selector para elegir entre **10, 20, 50, 100, 200 o Mostrar todos**.
+- **Acciones Agrupadas en Modal Flotante con Varita Mágica (`Wand2`)**:
+  - En la columna **Acciones** de las cuatro tablas, se incluye el botón de la **varita mágica** (`Wand2` en color ámbar).
+  - Al pulsarlo se abre un modal flotante moderno (`accionesModalItem`) con fondo desenfocado (`backdrop-blur-sm`), tarjeta de resumen del registro y botones directos con iconos para Ver Detalle/Ficha, Editar, Duplicar/Modificar Stock y Eliminar.
+- **Buscador Compacto Integrado en la Fila Superior de Acciones**:
+  - En Clientes, Centros y Catálogo, el buscador ya no ocupa una franja independiente completa de ancho total debajo de la cabecera.
+  - Se integra de forma compacta (`w-48 sm:w-60 lg:w-72`) en la misma fila de los botones superiores de acción (`+ Nuevo...`, `Importar`, `Exportar`), optimizando el espacio visual de la pantalla.
+- **Cabecera Limpia sin Botón 'Volver al panel'**:
+  - En `Clientes.tsx`, `Centros.tsx`, `Catalogo.tsx` y `ClientesCentros.tsx` (así como sus réplicas en `src/oficina/pages/`), se suprime permanentemente el botón superior `"Volver al panel"`, permitiendo que el título principal y la barra de búsqueda y acciones ocupen limpiamente la parte superior sin elementos redundantes.
+
 
 
 

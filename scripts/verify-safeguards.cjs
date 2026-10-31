@@ -1492,6 +1492,40 @@ if (fs.existsSync(pdfGenPath)) {
     }
   });
 
+  // 109. Verificación de Tablas Limpias, Cabecera Gris, Cebra, Paginación 10 y Varita Mágica en Clientes, Centros y Catálogo (AGENTS.md REGLA 109)
+  const modulosDirectorios109 = [
+    { name: 'Clientes.tsx', path: path.join(__dirname, '../src/Clientes.tsx'), limitKey: 'limiteClientes' },
+    { name: 'Centros.tsx', path: path.join(__dirname, '../src/Centros.tsx'), limitKey: 'limiteCentros' },
+    { name: 'Catalogo.tsx', path: path.join(__dirname, '../src/Catalogo.tsx'), limitKey: 'limiteArticulos' }
+  ];
+
+  modulosDirectorios109.forEach(({ name, path: dPath, limitKey }) => {
+    if (fs.existsSync(dPath)) {
+      const dContent = fs.readFileSync(dPath, 'utf8');
+      if (!dContent.includes(limitKey)) {
+        errors.push(`CRÍTICO: ${name} carece del estado de paginación ${limitKey} (AGENTS.md REGLA 109).`);
+      }
+      if (!dContent.includes('bg-zinc-200/90') || !dContent.includes('border-zinc-300')) {
+        errors.push(`CRÍTICO: ${name} carece de la cabecera gris neutro en la tabla (AGENTS.md REGLA 109).`);
+      }
+      if (!dContent.includes('hover:bg-amber-100/90')) {
+        errors.push(`CRÍTICO: ${name} carece del resaltado ámbar en filas de la tabla (AGENTS.md REGLA 109).`);
+      }
+      if (!dContent.includes('Wand2')) {
+        errors.push(`CRÍTICO: ${name} carece del icono Wand2 para el botón de acciones agrupadas (AGENTS.md REGLA 109).`);
+      }
+      if (!dContent.includes('accionesModalItem') || !dContent.includes('setAccionesModalItem')) {
+        errors.push(`CRÍTICO: ${name} carece del modal accionesModalItem para agrupar acciones (AGENTS.md REGLA 109).`);
+      }
+      if (!dContent.includes('w-48 sm:w-60 lg:w-72') || !dContent.includes('searchTerm')) {
+        errors.push(`CRÍTICO: ${name} carece del buscador compacto integrado en la fila superior de acciones (AGENTS.md REGLA 109).`);
+      }
+      if (dContent.includes('Volver al panel')) {
+        errors.push(`CRÍTICO: ${name} contiene el botón 'Volver al panel' que debe permanecer retirado (AGENTS.md REGLA 109).`);
+      }
+    }
+  });
+
 // Resultado de la verificación
 if (errors.length > 0) {
   console.error('\n❌ ERROR CRÍTICO DE BLINDAJE INTEGRAL (AGENTS.md):');

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, Building2, Plus, Upload, Download, ArrowLeft } from 'lucide-react';
+import { Users, Building2, Plus, Upload, Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import Clientes from './Clientes';
 import Centros from './Centros';
@@ -49,13 +49,7 @@ export default function ClientesCentros() {
   return (
     <div className="min-h-screen bg-[#F8FAFC] px-8 py-6">
       {/* Cabecera */}
-      <div className="mb-6">
-        <button 
-          onClick={() => navigate('/')} 
-          className="flex items-center gap-1.5 text-xs font-semibold text-zinc-500 hover:text-zinc-900 mb-3 transition-colors cursor-pointer"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" /> Volver al panel
-        </button>
+      <div className="mb-6 text-center sm:text-left flex flex-col items-center sm:items-start">
         <h1 className="text-2xl font-black text-zinc-950 tracking-tight">Clientes y Centros</h1>
         <p className="text-xs font-semibold text-zinc-500 mt-1">Gestión integral de las fichas de clientes y sus respectivos centros de trabajo.</p>
       </div>
