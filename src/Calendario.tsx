@@ -1108,21 +1108,24 @@ export default function Calendario() {
                       isToday
                         ? 'bg-red-600 text-white shadow-xs shadow-red-500/30'
                         : d.currentMonth
-                        ? 'text-slate-800'
+                        ? 'border border-red-500 text-slate-900 bg-transparent'
                         : 'text-slate-400'
                     }`}
                   >
                     {d.dayNumber}
                   </span>
                   {eventosDia.length > 0 && (
-                    <span className="text-[9px] sm:text-[10px] font-bold text-slate-500 bg-slate-100 px-1 py-0.2 rounded">
+                    <span
+                      title={`${eventosDia.length} ${eventosDia.length === 1 ? 'tarea' : 'tareas'}`}
+                      className="min-w-[18px] h-[18px] sm:min-w-[20px] sm:h-[20px] px-1 rounded-full bg-black text-white text-[9px] sm:text-[10px] font-black flex items-center justify-center shadow-xs shrink-0"
+                    >
                       {eventosDia.length}
                     </span>
                   )}
                 </div>
 
                 {/* Lista de etiquetas arrastrables */}
-                <div className="flex-1 flex flex-col gap-0.5 sm:gap-1 overflow-y-auto pr-0.5 custom-calendar-scroll min-h-0">
+                <div className="flex-1 flex flex-col gap-0.5 sm:gap-1 overflow-y-auto pr-0.5 custom-calendar-scroll [scrollbar-color:#000000_transparent] [scrollbar-width:thin] min-h-0">
                   {eventosDia.map((ev) => {
                     const isFestivo = ev.modulo === 'Festivo';
                     return (
@@ -1479,8 +1482,23 @@ export default function Calendario() {
       )}
 
       <style>{`
-        .custom-calendar-scroll::-webkit-scrollbar { width: 3px; }
-        .custom-calendar-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 6px; }
+        .custom-calendar-scroll {
+          scrollbar-width: thin;
+          scrollbar-color: #000000 transparent;
+        }
+        .custom-calendar-scroll::-webkit-scrollbar {
+          width: 5px;
+        }
+        .custom-calendar-scroll::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .custom-calendar-scroll::-webkit-scrollbar-thumb {
+          background: #000000;
+          border-radius: 9999px;
+        }
+        .custom-calendar-scroll::-webkit-scrollbar-thumb:hover {
+          background: #27272a;
+        }
       `}</style>
     </div>
   );

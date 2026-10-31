@@ -1526,6 +1526,21 @@ if (fs.existsSync(pdfGenPath)) {
     }
   });
 
+  // 110. Verificación del Diseño Visual de Casillas en Calendario (AGENTS.md REGLA 110)
+  const calPath110 = path.join(__dirname, '../src/Calendario.tsx');
+  if (fs.existsSync(calPath110)) {
+    const calContent110 = fs.readFileSync(calPath110, 'utf8');
+    if (!calContent110.includes('border border-red-500')) {
+      errors.push('CRÍTICO: Calendario.tsx carece del marco con línea roja para los días del mes (AGENTS.md REGLA 110).');
+    }
+    if (!calContent110.includes('bg-black text-white') || !calContent110.includes('rounded-full')) {
+      errors.push('CRÍTICO: Calendario.tsx carece del distintivo tipo bola de billar negra para la cantidad de tareas (AGENTS.md REGLA 110).');
+    }
+    if (!calContent110.includes('scrollbar-color: #000000 transparent') && !calContent110.includes('#000000')) {
+      errors.push('CRÍTICO: Calendario.tsx carece de la scrollbar en negro para alertar de tareas ocultas (AGENTS.md REGLA 110).');
+    }
+  }
+
 // Resultado de la verificación
 if (errors.length > 0) {
   console.error('\n❌ ERROR CRÍTICO DE BLINDAJE INTEGRAL (AGENTS.md):');

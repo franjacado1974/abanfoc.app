@@ -40,6 +40,7 @@ export default function Planificacion() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [searchMonth, setSearchMonth] = useState('');
   const [showWeekends, setShowWeekends] = useState(true);
+  const today = new Date();
 
 
   useEffect(() => {
@@ -458,11 +459,36 @@ export default function Planificacion() {
                 .filter(({ date }) => showWeekends || (date.getDay() !== 0 && date.getDay() !== 6))
                 .map(({ date, currentMonth }, idx) => {
                 const dateStr = formatDate(date);
+                const isToday =
+                  date.getDate() === today.getDate() &&
+                  date.getMonth() === today.getMonth() &&
+                  date.getFullYear() === today.getFullYear();
+                const partesDia = partes.filter(p => p.fechaProgramada === dateStr && p.estado !== 'Cerrado');
                 return (
                   <div key={dateStr + idx} onDragOver={onDragOver} onDrop={(e) => onDrop(e, dateStr)} className={`min-h-[80px] md:min-h-[100px] p-1 md:p-2 border border-zinc-100 flex flex-col ${currentMonth ? 'bg-amber-50/20' : 'bg-white opacity-40'}`}>
-                    <span className="text-xs font-bold text-zinc-400 mb-1">{date.getDate()}</span>
-                    <div className="flex-1 space-y-1">
-                      {partes.filter(p => p.fechaProgramada === dateStr && p.estado !== 'Cerrado').map(p => {
+                    <div className="flex items-center justify-between mb-1 shrink-0">
+                      <span
+                        className={`w-5 h-5 sm:w-6 sm:h-6 rounded-lg flex items-center justify-center text-[11px] sm:text-xs font-black ${
+                          isToday
+                            ? 'bg-red-600 text-white shadow-xs shadow-red-500/30'
+                            : currentMonth
+                            ? 'border border-red-500 text-zinc-900 bg-transparent'
+                            : 'text-zinc-400'
+                        }`}
+                      >
+                        {date.getDate()}
+                      </span>
+                      {partesDia.length > 0 && (
+                        <span
+                          title={`${partesDia.length} ${partesDia.length === 1 ? 'mantenimiento' : 'mantenimientos'}`}
+                          className="min-w-[18px] h-[18px] sm:min-w-[20px] sm:h-[20px] px-1 rounded-full bg-black text-white text-[9px] sm:text-[10px] font-black flex items-center justify-center shadow-xs shrink-0"
+                        >
+                          {partesDia.length}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex-1 space-y-1 overflow-y-auto max-h-[120px] custom-scrollbar [scrollbar-color:#000000_transparent] [scrollbar-width:thin] pr-0.5">
+                      {partesDia.map(p => {
                         const centro = centros.find(c => c._docId === p.centroId || c.id === p.centroId);
                         return (
                           <div key={p.id} className="group relative">
@@ -491,8 +517,14 @@ export default function Planificacion() {
         </div>
       </div>
       <style>{`
+        .custom-scrollbar {
+          scrollbar-width: thin;
+          scrollbar-color: #000000 transparent;
+        }
         .custom-scrollbar::-webkit-scrollbar { width: 5px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #000000; border-radius: 9999px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #27272a; }
       `}</style>
     </div>
   );
