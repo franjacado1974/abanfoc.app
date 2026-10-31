@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileText, Building2, MapPin, CalendarDays, Search, Trash2, Download, Eye, X, Check, Filter, ChevronDown, ArrowUp, ArrowDown, ArrowUpDown, Loader2, CheckCircle2, RotateCcw } from 'lucide-react';
+import { FileText, Building2, MapPin, CalendarDays, Search, Trash2, Download, Eye, X, Check, Filter, ChevronDown, ArrowUp, ArrowDown, ArrowUpDown, Loader2, CheckCircle2, RotateCcw, ClipboardCheck } from 'lucide-react';
+import { HandOptionsIcon } from './components/HandOptionsIcon';
 import { subscribePartes, subscribeCentros, subscribeClientes, subscribeTecnicos, deleteParte, db, updateParte, getEquiposInstalados, updateEquipoInstalado } from './firebase';
 import { collection, getDocs, doc, getDoc, query, where } from 'firebase/firestore';
 import { generarActaExtintoresPDF, generarAlbaranPDF, generarCertificadoPDF } from './pdfGenerator';
@@ -68,7 +69,7 @@ export default function Partes() {
   const [search, setSearch] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [estadoFilter, setEstadoFilter] = useState('TODOS');
+  const [estadoFilter, setEstadoFilter] = useState('Abierto');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
   const [sortField, setSortField] = useState<'fecha' | 'cliente' | 'centro' | 'poblacion' | 'tipo'>('fecha');
@@ -139,6 +140,7 @@ export default function Partes() {
   const [isDeletingParte, setIsDeletingParte] = useState(false);
   const [parteDevolucionRetimbre, setParteDevolucionRetimbre] = useState<ParteItem | null>(null);
   const [pasoConfirmacionRetimbre, setPasoConfirmacionRetimbre] = useState<1 | 2>(1);
+  const [accionesModalItem, setAccionesModalItem] = useState<ParteItem | null>(null);
   const [isUpdatingRetimbre, setIsUpdatingRetimbre] = useState(false);
   const [downloadOptions, setDownloadOptions] = useState({ acta: true, certificado: true, albaran: true, contrato: false });
   const [isGeneratingPDFs, setIsGeneratingPDFs] = useState(false);
@@ -1331,8 +1333,8 @@ export default function Partes() {
                         )}
                       </div>
                     </th>
-                    <th className="text-right px-6 py-3.5 text-[11px] font-extrabold uppercase tracking-wider text-zinc-700 whitespace-nowrap">
-                      Acciones
+                    <th className="px-6 py-3.5 text-left text-[11px] font-extrabold uppercase tracking-wider text-zinc-700 whitespace-nowrap">
+                      Estado
                     </th>
                   </tr>
                 </thead>
@@ -1343,12 +1345,13 @@ export default function Partes() {
                     return (
                       <tr 
                         key={parte.id} 
-                        className={`transition-all duration-150 group ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100/80'} hover:bg-amber-100/90 hover:shadow-xs`}
+                        onClick={() => setAccionesModalItem(parte)}
+                        className={`transition-all duration-150 group cursor-pointer ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100/80'} hover:bg-amber-100/90 hover:shadow-xs`}
                       >
                         <td className="px-6 py-2.5">
                           <div className="flex items-center gap-2">
                             <div>
-                              <p className="font-bold text-zinc-900 text-sm">
+                              <p className="font-medium text-zinc-800 text-sm">
                                 {cliente?.nombre || '—'}
                               </p>
                               {cliente?.cif && (
@@ -1432,8 +1435,8 @@ export default function Partes() {
                             })()}
                           </div>
                         </td>
-                        <td className="px-4 py-2.5">
-                          <div className="flex items-center justify-end gap-1.5">
+                        <td className="px-6 py-2.5 whitespace-nowrap">
+                          <div className="flex items-center gap-2">
                             {tieneRetimbrePendiente(parte) && (
                               <button
                                 type="button"
@@ -1442,61 +1445,45 @@ export default function Partes() {
                                   setParteDevolucionRetimbre(parte);
                                   setPasoConfirmacionRetimbre(1);
                                 }}
-                                className="w-2.5 h-2.5 rounded-full mr-1 shrink-0 bg-red-600 shadow-[0_0_12px_rgba(220,38,38,0.9)] animate-pulse cursor-pointer hover:scale-125 transition-transform"
+                                className="w-2.5 h-2.5 rounded-full shrink-0 bg-red-600 shadow-[0_0_12px_rgba(220,38,38,0.9)] animate-pulse cursor-pointer hover:scale-125 transition-transform"
                                 title="Extintores retirados para retimbrar pendientes de devolver (Haz clic aquí cuando se hayan devuelto)"
                               />
                             )}
-                            {(parte.tecnicoId || parte.estado === 'En revisión' || parte.estado === 'Pre-Cerrado' || parte.estado === 'Finalizado' || parte.estado === 'Cerrado') && (
-                              <div 
-                                className={`w-2.5 h-2.5 rounded-full mr-1.5 shrink-0 ${
-                                  parte.estado === 'Cerrado'
-                                    ? 'bg-black shadow-[0_0_8px_rgba(0,0,0,0.6)]'
-                                    : parte.estado === 'Pre-Cerrado'
-                                      ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.8)]'
-                                      : parte.estado === 'Finalizado'
-                                        ? 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.8)]'
-                                        : parte.estado === 'En revisión' 
-                                          ? 'bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.8)]' 
-                                          : 'bg-zinc-400 shadow-[0_0_8px_rgba(161,161,170,0.8)]'
-                                }`} 
-                                title={
-                                  parte.estado === 'Cerrado'
-                                    ? "Revisión Cerrada"
+                            <div 
+                              className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                                parte.estado === 'Cerrado'
+                                  ? 'bg-black shadow-[0_0_8px_rgba(0,0,0,0.6)]'
+                                  : parte.estado === 'Pre-Cerrado'
+                                    ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.8)]'
                                     : parte.estado === 'Finalizado'
-                                      ? "Revisión Finalizada"
-                                      : parte.estado === 'Pre-Cerrado'
-                                        ? "Revisión Pre-Cerrada (Firmada)" 
-                                        : parte.estado === 'En revisión' 
-                                          ? "Revisión Empezada" 
-                                          : "Planificado"
-                                }
-                              ></div>
-                            )}
-                            <button
-                              onClick={() => irARevision(parte)}
-                              className="p-1.5 rounded-lg hover:bg-sky-50 text-red-600 transition-colors"
-                              title={(parte.estado === 'Pre-Cerrado' || parte.estado === 'Finalizado' || parte.estado === 'Cerrado') ? "Revisar parte finalizado" : "Ir a Revisión"}
-                            >
-                              {(parte.estado === 'Pre-Cerrado' || parte.estado === 'Finalizado' || parte.estado === 'Cerrado') ? <Eye className="w-4 h-4" /> : <Search className="w-4 h-4" />}
-                            </button>
-                            
-                            {(parte.estado === 'Pre-Cerrado' || parte.estado === 'Finalizado' || parte.estado === 'Cerrado' || parte.estado === 'Descargado (Offline)' || (parte as any).firmaCliente) && (
-                              <button
-                                onClick={() => openDownloadModal(parte)}
-                                className="p-1.5 rounded-lg hover:bg-amber-50 text-amber-600 transition-colors"
-                                title="Descargar PDFs"
-                              >
-                                <Download className="w-4 h-4" />
-                              </button>
-                            )}
-
-                            <button
-                              onClick={() => eliminarParte(parte)}
-                              className="p-1.5 rounded-lg hover:bg-red-50 text-red-500 transition-colors"
-                              title="Eliminar"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                                      ? 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.8)]'
+                                      : parte.estado === 'En revisión' 
+                                        ? 'bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.8)]' 
+                                        : 'bg-zinc-400 shadow-[0_0_8px_rgba(161,161,170,0.8)]'
+                              }`} 
+                              title={
+                                parte.estado === 'Cerrado'
+                                  ? "Revisión Cerrada"
+                                  : parte.estado === 'Finalizado'
+                                    ? "Revisión Finalizada"
+                                    : parte.estado === 'Pre-Cerrado'
+                                      ? "Revisión Pre-Cerrada (Firmada)" 
+                                      : parte.estado === 'En revisión' 
+                                        ? "Revisión Empezada" 
+                                        : "Planificado"
+                              }
+                            />
+                            <span className="text-xs font-semibold text-zinc-700">
+                              {parte.estado === 'Cerrado'
+                                ? 'Cerrado'
+                                : parte.estado === 'Pre-Cerrado'
+                                  ? 'Pre-Cerrado'
+                                  : parte.estado === 'Finalizado'
+                                    ? 'Finalizado'
+                                    : parte.estado === 'En revisión'
+                                      ? 'En revisión'
+                                      : 'Planificado'}
+                            </span>
                           </div>
                         </td>
                       </tr>
@@ -1787,6 +1774,203 @@ export default function Partes() {
           </div>
         </div>
       )}
+
+      {/* MODAL FLOTANTE DE ACCIONES RÁPIDAS DEL PARTE DE TRABAJO */}
+      {accionesModalItem && (() => {
+        const centroModal = getCentro(accionesModalItem.centroId);
+        const clienteModal = getCliente(accionesModalItem.clienteId);
+        const clienteNombre = clienteModal?.nombre || '—';
+        const centroNombre = centroModal?.nombre || accionesModalItem.nombreCentro || '—';
+        const numParte = (accionesModalItem as any).numeroMantenimiento || accionesModalItem.id;
+
+        return (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-[9999] animate-in fade-in duration-200">
+            <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-100">
+              {/* Cabecera */}
+              <div className="px-6 py-5 bg-slate-900 text-white flex items-center justify-between">
+                <div className="flex items-center gap-3 min-w-0 pr-2">
+                  <div className="w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+                    <HandOptionsIcon className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="font-extrabold text-base truncate">
+                      Acciones del Parte de Trabajo
+                    </h3>
+                    <p className="text-xs text-slate-300 truncate">
+                      {clienteNombre} • {centroNombre}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAccionesModalItem(null)}
+                  className="p-2 text-slate-400 hover:text-white rounded-xl transition-colors cursor-pointer shrink-0"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Resumen */}
+              <div className="p-6 space-y-4">
+                <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 flex flex-col gap-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-mono font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-lg">
+                      Parte: {numParte}
+                    </span>
+                    <span className={`inline-block px-3 py-1 text-[11px] font-bold rounded-full border ${getRevisionColor(accionesModalItem.periodicidad)}`}>
+                      {getTipoRevision(accionesModalItem.periodicidad)}
+                    </span>
+                  </div>
+
+                  <div>
+                    <p className="text-sm font-bold text-slate-900">{clienteNombre}</p>
+                    <p className="text-xs font-medium text-slate-600 mt-0.5">{centroNombre}</p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 pt-1 border-t border-slate-200/60">
+                    {centroModal?.poblacion && (
+                      <div className="flex items-center gap-1">
+                        <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        <span>{centroModal.poblacion}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-1">
+                      <CalendarDays className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <span>{formatFecha(accionesModalItem.fechaProgramada)}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 ml-auto">
+                      <span className={`w-2 h-2 rounded-full ${
+                        accionesModalItem.estado === 'Cerrado'
+                          ? 'bg-black shadow-[0_0_8px_rgba(0,0,0,0.6)]'
+                          : accionesModalItem.estado === 'Pre-Cerrado'
+                            ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.8)]'
+                            : accionesModalItem.estado === 'Finalizado'
+                              ? 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.8)]'
+                              : accionesModalItem.estado === 'En revisión' 
+                                ? 'bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.8)]' 
+                                : 'bg-zinc-400 shadow-[0_0_8px_rgba(161,161,170,0.8)]'
+                      }`} />
+                      <span className="font-semibold text-slate-700">
+                        {accionesModalItem.estado === 'Cerrado'
+                          ? 'Cerrado'
+                          : accionesModalItem.estado === 'Pre-Cerrado'
+                            ? 'Pre-Cerrado'
+                            : accionesModalItem.estado === 'Finalizado'
+                              ? 'Finalizado'
+                              : accionesModalItem.estado === 'En revisión'
+                                ? 'En revisión'
+                                : 'Planificado'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Botones de acción */}
+                <div className="grid grid-cols-1 gap-2.5 pt-1">
+                  {/* Ver / Revisar Parte */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const item = accionesModalItem;
+                      setAccionesModalItem(null);
+                      irARevision(item);
+                    }}
+                    className="w-full flex items-center gap-3 p-3.5 rounded-2xl border border-slate-200 hover:border-blue-300 bg-white hover:bg-blue-50/50 text-slate-700 hover:text-blue-900 transition-all font-semibold text-xs cursor-pointer group shadow-2xs"
+                  >
+                    <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                      {(accionesModalItem.estado === 'Pre-Cerrado' || accionesModalItem.estado === 'Finalizado' || accionesModalItem.estado === 'Cerrado') ? (
+                        <Eye className="w-4 h-4" />
+                      ) : (
+                        <Search className="w-4 h-4" />
+                      )}
+                    </div>
+                    <div className="text-left flex-1 min-w-0">
+                      <div className="font-bold text-slate-800 group-hover:text-blue-900">
+                        {(accionesModalItem.estado === 'Pre-Cerrado' || accionesModalItem.estado === 'Finalizado' || accionesModalItem.estado === 'Cerrado') ? "Ver / Revisar Parte Finalizado" : "Abrir / Continuar Revisión"}
+                      </div>
+                      <div className="text-[11px] text-slate-400">
+                        Acceder al checklist y datos del parte de trabajo
+                      </div>
+                    </div>
+                  </button>
+
+                  {/* Descarga de Documentos */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const item = accionesModalItem;
+                      setAccionesModalItem(null);
+                      openDownloadModal(item);
+                    }}
+                    className="w-full flex items-center gap-3 p-3.5 rounded-2xl border border-slate-200 hover:border-amber-300 bg-white hover:bg-amber-50/50 text-slate-700 hover:text-amber-900 transition-all font-semibold text-xs cursor-pointer group shadow-2xs"
+                  >
+                    <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                      <Download className="w-4 h-4" />
+                    </div>
+                    <div className="text-left flex-1 min-w-0">
+                      <div className="font-bold text-slate-800 group-hover:text-amber-900">
+                        Descargar Documentos Oficiales
+                      </div>
+                      <div className="text-[11px] text-slate-400">
+                        Generar Acta de Revisión, Certificado y Albarán PDF
+                      </div>
+                    </div>
+                  </button>
+
+                  {/* Confirmar Devolución de Retimbre si aplica */}
+                  {tieneRetimbrePendiente(accionesModalItem) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const item = accionesModalItem;
+                        setAccionesModalItem(null);
+                        setParteDevolucionRetimbre(item);
+                        setPasoConfirmacionRetimbre(1);
+                      }}
+                      className="w-full flex items-center gap-3 p-3.5 rounded-2xl border border-red-200 hover:border-red-300 bg-red-50/40 hover:bg-red-50 text-red-700 transition-all font-semibold text-xs cursor-pointer group shadow-2xs"
+                    >
+                      <div className="w-9 h-9 rounded-xl bg-red-600 text-white flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform animate-pulse">
+                        <RotateCcw className="w-4 h-4" />
+                      </div>
+                      <div className="text-left flex-1 min-w-0">
+                        <div className="font-bold text-red-900">
+                          Confirmar Devolución de Extintores
+                        </div>
+                        <div className="text-[11px] text-red-600">
+                          Finalizar estado retimbrando tras devolver los equipos al cliente
+                        </div>
+                      </div>
+                    </button>
+                  )}
+
+                  {/* Eliminar Parte */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const item = accionesModalItem;
+                      setAccionesModalItem(null);
+                      eliminarParte(item);
+                    }}
+                    className="w-full flex items-center gap-3 p-3.5 rounded-2xl border border-slate-200 hover:border-red-300 bg-white hover:bg-red-50/40 text-slate-700 hover:text-red-700 transition-all font-semibold text-xs cursor-pointer group shadow-2xs"
+                  >
+                    <div className="w-9 h-9 rounded-xl bg-red-100 text-red-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                      <Trash2 className="w-4 h-4" />
+                    </div>
+                    <div className="text-left flex-1 min-w-0">
+                      <div className="font-bold text-red-900">
+                        Eliminar Parte de Trabajo
+                      </div>
+                      <div className="text-[11px] text-red-500">
+                        Mover este parte a la papelera
+                      </div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Modal de Opciones de Descarga PDF */}
       {showDownloadModal && (
