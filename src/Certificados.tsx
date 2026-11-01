@@ -27,9 +27,9 @@ export const CATEGORIAS_CERTIFICADO = [
     nombre: 'Certificado de Revisión',
     descripcion: 'Revisión periódica de mantenimiento PCI',
     icono: CheckCircle2,
-    colorBadge: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    colorBtn: 'bg-emerald-600 hover:bg-emerald-700',
-    colorIconBg: 'bg-emerald-100 text-emerald-700',
+    colorBadge: 'bg-amber-50 text-amber-800 border-amber-200',
+    colorBtn: 'bg-amber-500 hover:bg-amber-600',
+    colorIconBg: 'bg-amber-100 text-amber-800',
     plantillaTexto: 'CERTIFICA que se ha efectuado la revisión periódica de los equipos y sistemas de protección contra incendios según la normativa vigente (R.D. 513/2017).'
   },
   {
@@ -37,9 +37,9 @@ export const CATEGORIAS_CERTIFICADO = [
     nombre: 'Certificado de Instalación',
     descripcion: 'Nuevas instalaciones de sistemas y equipos PCI',
     icono: Wrench,
-    colorBadge: 'bg-blue-50 text-blue-700 border-blue-200',
-    colorBtn: 'bg-blue-600 hover:bg-blue-700',
-    colorIconBg: 'bg-blue-100 text-blue-700',
+    colorBadge: 'bg-red-50 text-red-700 border-red-200',
+    colorBtn: 'bg-red-600 hover:bg-red-700',
+    colorIconBg: 'bg-red-100 text-red-700',
     plantillaTexto: 'ABANFOC S.L. CERTIFICA: que se ha realizado la instalación completa de los sistemas de protección contra incendios indicados, habiendo sido ejecutados según proyecto técnico y normativa R.D. 513/2017.'
   },
   {
@@ -47,9 +47,9 @@ export const CATEGORIAS_CERTIFICADO = [
     nombre: 'Certificado de Reparación',
     descripcion: 'Corrección de deficiencias y sustitución de elementos',
     icono: AlertTriangle,
-    colorBadge: 'bg-amber-50 text-amber-700 border-amber-200',
-    colorBtn: 'bg-amber-600 hover:bg-amber-700',
-    colorIconBg: 'bg-amber-100 text-amber-700',
+    colorBadge: 'bg-blue-50 text-blue-700 border-blue-200',
+    colorBtn: 'bg-blue-600 hover:bg-blue-700',
+    colorIconBg: 'bg-blue-100 text-blue-700',
     plantillaTexto: 'CERTIFICA que se han reparado y subsanado satisfactoriamente las deficiencias detectadas en los equipos y sistemas de protección contra incendios.'
   },
   {
@@ -67,9 +67,9 @@ export const CATEGORIAS_CERTIFICADO = [
     nombre: 'Certificado de Obligación Salarial',
     descripcion: 'Cumplimiento laboral y salarial del personal',
     icono: FileCheck,
-    colorBadge: 'bg-indigo-50 text-indigo-700 border-indigo-200',
-    colorBtn: 'bg-indigo-600 hover:bg-indigo-700',
-    colorIconBg: 'bg-indigo-100 text-indigo-700',
+    colorBadge: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    colorBtn: 'bg-emerald-600 hover:bg-emerald-700',
+    colorIconBg: 'bg-emerald-100 text-emerald-700',
     plantillaTexto: 'Que dicha empresa cumple con todas las obligaciones legales de naturaleza salarial, con los trabajadores asignados al expediente, mediante el abono de sus correspondientes nóminas, encontrándose al corriente en el pago de los salarios de los mismos.\n\nLos trabajadores y/o el/los Representantes de los mismos abajo firmantes, declaran encontrarse al corriente de todas sus obligaciones de carácter salarial.'
   },
   {
@@ -77,12 +77,57 @@ export const CATEGORIAS_CERTIFICADO = [
     nombre: 'Certificado Genérico',
     descripcion: 'Certificaciones especiales con título libre',
     icono: FileText,
-    colorBadge: 'bg-zinc-100 text-zinc-800 border-zinc-300',
-    colorBtn: 'bg-zinc-800 hover:bg-zinc-900',
-    colorIconBg: 'bg-zinc-200 text-zinc-800',
+    colorBadge: 'bg-orange-50 text-orange-700 border-orange-200',
+    colorBtn: 'bg-orange-500 hover:bg-orange-600',
+    colorIconBg: 'bg-orange-100 text-orange-700',
     plantillaTexto: 'CERTIFICA que se han realizado los trabajos y verificaciones técnicas descritas a continuación en las instalaciones del centro de trabajo.'
   }
 ];
+
+const FILTER_STYLES: Record<string, { inactive: string; active: string; countInactive: string; countActive: string }> = {
+  todos: {
+    inactive: 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200 border border-zinc-200/80',
+    active: 'bg-zinc-900 text-white shadow-xs border border-zinc-900',
+    countInactive: 'bg-zinc-200 text-zinc-700',
+    countActive: 'bg-white/20 text-white',
+  },
+  instalacion: {
+    inactive: 'bg-red-50 text-red-700 hover:bg-red-100 border border-red-200',
+    active: 'bg-red-600 text-white shadow-xs border border-red-600',
+    countInactive: 'bg-red-100 text-red-800',
+    countActive: 'bg-white/20 text-white',
+  },
+  reparacion: {
+    inactive: 'bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200',
+    active: 'bg-blue-600 text-white shadow-xs border border-blue-600',
+    countInactive: 'bg-blue-100 text-blue-800',
+    countActive: 'bg-white/20 text-white',
+  },
+  revision: {
+    inactive: 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200',
+    active: 'bg-amber-500 text-white shadow-xs border border-amber-500',
+    countInactive: 'bg-amber-100 text-amber-900',
+    countActive: 'bg-white/20 text-white',
+  },
+  puesta_en_marcha: {
+    inactive: 'bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200',
+    active: 'bg-purple-600 text-white shadow-xs border border-purple-600',
+    countInactive: 'bg-purple-100 text-purple-800',
+    countActive: 'bg-white/20 text-white',
+  },
+  obligacion_salarial: {
+    inactive: 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200',
+    active: 'bg-emerald-600 text-white shadow-xs border border-emerald-600',
+    countInactive: 'bg-emerald-100 text-emerald-800',
+    countActive: 'bg-white/20 text-white',
+  },
+  generico: {
+    inactive: 'bg-orange-50 text-orange-700 hover:bg-orange-100 border border-orange-200',
+    active: 'bg-orange-500 text-white shadow-xs border border-orange-500',
+    countInactive: 'bg-orange-100 text-orange-800',
+    countActive: 'bg-white/20 text-white',
+  },
+};
 
 export default function Certificados() {
   const [certificados, setCertificados] = useState<any[]>([]);
@@ -491,15 +536,15 @@ export default function Certificados() {
           </div>
 
           <div className="flex items-center gap-2.5 flex-wrap 2xl:justify-end flex-1 2xl:ml-4">
-            {/* Pestañas de filtrado compactas */}
-            <div className="flex items-center gap-1 overflow-x-auto pb-0.5 scrollbar-none text-xs">
+            {/* Pestañas de filtrado compactas con colores suaves */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-none text-xs">
               <button
                 type="button"
                 onClick={() => setActiveCategoryFilter('todos')}
                 className={`px-2.5 py-1.5 rounded-xl font-bold whitespace-nowrap transition-all cursor-pointer ${
                   activeCategoryFilter === 'todos' 
-                    ? 'bg-black text-white shadow-xs' 
-                    : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+                    ? FILTER_STYLES.todos.active 
+                    : FILTER_STYLES.todos.inactive
                 }`}
               >
                 Todos ({certificados.length})
@@ -508,20 +553,19 @@ export default function Certificados() {
                 const cCount = certificados.filter(c => (c.tipoCertificado || 'revision') === cat.id).length;
                 const active = activeCategoryFilter === cat.id;
                 const Icono = cat.icono;
+                const style = FILTER_STYLES[cat.id] || FILTER_STYLES.todos;
                 return (
                   <button
                     key={cat.id}
                     type="button"
                     onClick={() => setActiveCategoryFilter(cat.id)}
                     className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl font-bold whitespace-nowrap transition-all cursor-pointer ${
-                      active 
-                        ? 'bg-black text-white shadow-xs' 
-                        : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+                      active ? style.active : style.inactive
                     }`}
                   >
                     <Icono className="w-3 h-3" />
                     <span>{cat.nombre.replace('Certificado de ', '').replace('Certificado ', '')}</span>
-                    <span className={`text-[10px] px-1 rounded-full ${active ? 'bg-white/20 text-white' : 'bg-zinc-200 text-zinc-700'}`}>
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${active ? style.countActive : style.countInactive}`}>
                       {cCount}
                     </span>
                   </button>
@@ -580,7 +624,7 @@ export default function Certificados() {
           <div className="bg-white rounded-2xl border border-zinc-200 shadow-xs overflow-hidden overflow-x-auto">
             {/* Cabecera con color */}
             <div className="hidden md:flex items-center bg-zinc-200/90 border-b border-zinc-300 px-4 py-3 text-[11px] font-extrabold uppercase tracking-wider text-zinc-700 min-w-[780px]">
-              <div className="w-36 shrink-0">Nº Certificado</div>
+              <div className="w-52 shrink-0 pr-2">Nº Certificado</div>
               <div className="w-36 shrink-0">Tipo / Categoría</div>
               <div className="w-28 shrink-0">Fecha</div>
               <div className="flex-1 min-w-0 pr-4">Cliente / Centro</div>
@@ -682,9 +726,9 @@ export default function Certificados() {
 
                     {/* Desktop cells */}
                     <div className="hidden md:flex items-center w-full">
-                      <div className="w-36 shrink-0 flex items-center gap-1.5">
-                        <span className="text-[11px] font-mono font-medium text-slate-700 bg-white border border-zinc-200/80 px-2 py-0.5 rounded shadow-2xs">{cert.numeroMantenimiento}</span>
-                        {cert.esManual && <span className="text-[9px] font-bold text-blue-600 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded uppercase">Manual</span>}
+                      <div className="w-52 shrink-0 flex items-center gap-1.5 whitespace-nowrap pr-2">
+                        <span className="text-[11px] font-mono font-medium text-slate-700 bg-white border border-zinc-200/80 px-2 py-0.5 rounded shadow-2xs whitespace-nowrap">{cert.numeroMantenimiento}</span>
+                        {cert.esManual && <span className="text-[9px] font-bold text-blue-600 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded uppercase whitespace-nowrap">Manual</span>}
                       </div>
                       <div className="w-36 shrink-0 pr-2">
                         <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold truncate max-w-full ${catInfo.colorBadge}`}>
