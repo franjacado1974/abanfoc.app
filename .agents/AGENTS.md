@@ -1653,6 +1653,41 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
     - Botón **Confirmar Devolución de Extintores**: si `tieneRetimbrePendiente(item)`, permite confirmar la entrega de los equipos retimbrados.
     - Botón **Eliminar Parte de Trabajo**: acceso para mover a la papelera (`eliminarParte(item)`) con la confirmación de seguridad reglamentaria.
 
+---
+
+## 117. Blindaje Inviolable del Rediseño del Módulo Certificados con Cabecera Integrada, Filtros con Colores Suaves, Buscador Compacto, Botón Único de Creación, Columna de Número de Certificado Ampliada y Tabla Cebra con Límite de 10 (`Certificados.tsx`)
+- **Cabecera Integrada en una Sola Franja sin Botón 'Volver al panel'**:
+  - En `src/Certificados.tsx`, el subtítulo oficial es: `Gestión y edición de certificados`.
+  - Quedan suprimidas permanentemente las 6 tarjetas de categoría de gran tamaño de la cabecera.
+  - A la derecha del campo de búsqueda se sitúa el botón único de creación: `+ Crear nuevo certificado` (`handleOpenCreateModal()`).
+  - Todo el bloque superior (título, filtros, buscador y botón de crear) se unifica en una sola línea integrada, haciendo que la tabla suba a la parte superior de la pantalla.
+- **Filtros por Categoría con Paleta Reglamentaria de Colores Suaves (`FILTER_STYLES`)**:
+  - `instalacion`: rojo suave (`bg-red-50 text-red-700 border-red-200`).
+  - `reparacion`: azul suave (`bg-blue-50 text-blue-700 border-blue-200`).
+  - `revision`: amarillo suave (`bg-amber-50 text-amber-800 border-amber-200`).
+  - `puesta_en_marcha`: lila suave (`bg-purple-50 text-purple-700 border-purple-200`).
+  - `obligacion_salarial`: verde suave (`bg-emerald-50 text-emerald-700 border-emerald-200`).
+  - `generico`: naranja suave (`bg-orange-50 text-orange-700 border-orange-200`).
+  - `todos`: gris neutro (`bg-zinc-100 text-zinc-700 border-zinc-200`).
+  - Cada botón incorpora su icono correspondiente y distintivo numérico de conteo de certificados.
+- **Buscador Compacto Integrado**:
+  - Campo de texto `Buscar certificado...` (`w-44 sm:w-56 lg:w-64`) con icono de lupa y botón `X` de limpieza rápida.
+- **Tabla Cebra con Columna de Número de Certificado Ampliada (`w-52`)**:
+  - La primera columna (`Nº Certificado`) cuenta con un ancho mínimo obligatorio de 208px (`w-52`) y clase `whitespace-nowrap`, garantizando que el código identificativo completo y el badge `Manual` se muestren siempre en una única línea plana.
+  - Cabecera con fondo gris destacado (`bg-zinc-200/90 border-b border-zinc-300 px-4 py-3 text-[11px] font-extrabold uppercase tracking-wider text-zinc-700`).
+  - Filas alternadas en cebra (`bg-white` / `bg-slate-100/80`) con efecto hover ámbar (`hover:bg-amber-100/90`).
+  - Nombre del cliente en tipografía normal sin negrita (`font-medium text-zinc-800`).
+- **Modal Flotante de Acciones Rápidas (`accionesModalItem`) con `HandOptionsIcon`**:
+  - Al hacer clic en cualquier punto de la fila se despliega el modal flotante (`accionesModalItem`) con cabecera oscura `bg-slate-900`, icono oficial `HandOptionsIcon` en recuadro ámbar, tarjeta de resumen y botones para:
+    1. *Ver Detalle Completo* (`handleViewDetail`).
+    2. *Ver Documento PDF Oficial* en nueva pestaña (`handleViewPDF`).
+    3. *Descargar Certificado PDF* (`handleGenerarPDF`).
+    4. *Editar Certificado* (`handleOpenEditModal`).
+    5. *Eliminar Certificado* (`handleDeleteCertificado`).
+- **Paginación y Límite Inicial de 10 Elementos**:
+  - Carga inicial limitada a 10 certificados (`useState<number | 'todos'>(10)`), con selector de 10, 20, 50, 100, 200 o Todos, y barra inferior con conteo global.
+
+
 
 
 

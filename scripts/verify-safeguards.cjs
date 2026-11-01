@@ -1655,6 +1655,28 @@ if (fs.existsSync(pdfGenPath)) {
     }
   }
 
+  // 117. Verificación del Rediseño del Módulo Certificados (AGENTS.md REGLA 117)
+  const certsPath117 = path.join(__dirname, '../src/Certificados.tsx');
+  if (fs.existsSync(certsPath117)) {
+    const cContent117 = fs.readFileSync(certsPath117, 'utf8');
+    if (!cContent117.includes('Gestión y edición de certificados')) {
+      errors.push('CRÍTICO: Certificados.tsx carece del subtítulo oficial "Gestión y edición de certificados" (AGENTS.md REGLA 117).');
+    }
+    if (!cContent117.includes('FILTER_STYLES') || !cContent117.includes('bg-red-50 text-red-700') || !cContent117.includes('bg-amber-50 text-amber-800')) {
+      errors.push('CRÍTICO: Certificados.tsx carece de la paleta de colores suaves en los filtros por categoría (AGENTS.md REGLA 117).');
+    }
+    if (!cContent117.includes('w-52 shrink-0 pr-2">Nº Certificado</div>')) {
+      errors.push('CRÍTICO: Certificados.tsx carece de la columna Nº Certificado ampliada a w-52 (AGENTS.md REGLA 117).');
+    }
+    if (!cContent117.includes('setAccionesModalItem(cert)') || !cContent117.includes('accionesModalItem &&')) {
+      errors.push('CRÍTICO: Certificados.tsx carece del modal flotante de acciones rápidas al hacer clic en la fila (AGENTS.md REGLA 117).');
+    }
+    if (!cContent117.includes("limiteCertificados, setLimiteCertificados] = useState<number | 'todos'>(10)")) {
+      errors.push('CRÍTICO: Certificados.tsx carece de la paginación con límite inicial de 10 certificados (AGENTS.md REGLA 117).');
+    }
+  }
+
+
 
 // Resultado de la verificación
 if (errors.length > 0) {
