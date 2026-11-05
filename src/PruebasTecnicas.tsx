@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo, useId } from 'react';
+import { useState, useEffect, useMemo, useId, useRef } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   Gauge, Droplets, Activity, ArrowLeft,
   CheckCircle2, AlertTriangle, Save, ShieldCheck, Flame, 
@@ -586,9 +587,12 @@ function GraficoCurvaPresionCaudal({
 
 // ─── PANTALLA PRINCIPAL: PRUEBAS TÉCNICAS ────────────────────────────────────
 export default function PruebasTecnicas() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const desdeCrearParteRef = useRef<boolean>(!!(location.state as any)?.abrirCrear);
   // ─── PESTAÑAS Y MODO DE VISTA (TABLA vs FORMULARIO) ───
   const [activeTab, setActiveTab] = useState<'red-publica' | 'grupo-presion'>('red-publica');
-  const [viewMode, setViewMode] = useState<'table' | 'form'>('table');
+  const [viewMode, setViewMode] = useState<'table' | 'form'>(() => (location.state as any)?.abrirCrear ? 'form' : 'table');
   const [search, setSearch] = useState('');
   const [evaluacionFilter, setEvaluacionFilter] = useState<string>('TODOS');
   const [limiteItems, setLimiteItems] = useState<number | 'todos'>(10);
@@ -762,6 +766,14 @@ export default function PruebasTecnicas() {
     setObservaciones('');
     setViewMode('form');
   };
+
+  // Apertura automática desde el menú "Crear nuevo parte"
+  useEffect(() => {
+    if (desdeCrearParteRef.current) {
+      handleOpenCrearEnsayo();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Cálculos y diagnóstico de variación
   const pEstNum = parseFloat(presionEstatica) || 0;
@@ -1722,7 +1734,7 @@ export default function PruebasTecnicas() {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] pb-16">
-      {viewMode === 'table' ? (
+      {viewMode === 'table' && !desdeCrearParteRef.current ? (
         <div className="w-full px-4 sm:px-8 py-6">
           {/* Cabecera del módulo */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
@@ -2031,11 +2043,14 @@ export default function PruebasTecnicas() {
           <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
             <button
               type="button"
-              onClick={() => setViewMode('table')}
+              onClick={() => {
+                if (desdeCrearParteRef.current) navigate('/crear-parte');
+                else setViewMode('table');
+              }}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors cursor-pointer w-fit"
             >
               <ArrowLeft className="w-4 h-4" />
-              <span>Volver a la lista de pruebas</span>
+              <span>{desdeCrearParteRef.current ? 'Volver a Crear nuevo parte' : 'Volver a la lista de pruebas'}</span>
             </button>
 
             <div className="flex items-center gap-2">
@@ -2571,10 +2586,13 @@ export default function PruebasTecnicas() {
             <div className="flex flex-wrap items-center justify-end gap-3 pt-2">
               <button
                 type="button"
-                onClick={() => setViewMode('table')}
+                onClick={() => {
+                  if (desdeCrearParteRef.current) navigate('/crear-parte');
+                  else setViewMode('table');
+                }}
                 className="px-5 py-2.5 rounded-xl border border-zinc-300 text-zinc-700 text-xs font-bold hover:bg-zinc-100 transition-colors cursor-pointer"
               >
-                Volver a la lista
+                {desdeCrearParteRef.current ? 'Cancelar y volver' : 'Volver a la lista'}
               </button>
               <button
                 type="button"
@@ -2825,6 +2843,10 @@ export default function PruebasTecnicas() {
                 onClick={() => {
                   setSaveSuccessModal(false);
                   setViewMode('table');
+                  if (desdeCrearParteRef.current) {
+                    desdeCrearParteRef.current = false;
+                    navigate('/partes-trabajo');
+                  }
                 }}
                 className="w-full bg-zinc-100 hover:bg-zinc-200 text-zinc-800 py-3 rounded-2xl font-bold text-xs transition-all cursor-pointer"
               >

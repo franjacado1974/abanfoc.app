@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileText, Building2, MapPin, CalendarDays, Search, Trash2, Download, Eye, X, Check, Filter, ChevronDown, ArrowUp, ArrowDown, ArrowUpDown, Loader2, CheckCircle2, RotateCcw, ClipboardCheck } from 'lucide-react';
+import { FileText, Building2, MapPin, CalendarDays, Search, Trash2, Download, Eye, X, Check, Filter, ChevronDown, ArrowUp, ArrowDown, ArrowUpDown, Loader2, CheckCircle2, RotateCcw } from 'lucide-react';
 import { HandOptionsIcon } from './components/HandOptionsIcon';
 import { subscribePartes, subscribeCentros, subscribeClientes, subscribeTecnicos, deleteParte, db, updateParte, getEquiposInstalados, updateEquipoInstalado } from './firebase';
 import { collection, getDocs, doc, getDoc, query, where } from 'firebase/firestore';
@@ -1133,19 +1133,19 @@ export default function Partes() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 w-full text-center sm:text-left">
             <div>
               <h1 className="text-2xl font-black text-zinc-950 tracking-tight flex items-center justify-center sm:justify-start gap-2">
-                Partes de Trabajo
+                Partes de Revisión
               </h1>
               <p className="text-xs font-semibold text-zinc-500 mt-1">Gestión, seguimiento y precierre de partes de revisión en los clientes.</p>
             </div>
             
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                 <div className="flex items-center gap-2 bg-white px-3 rounded-xl border border-zinc-200/80 shadow-sm shrink-0 h-[52px]">
+            <div className="flex flex-row items-center gap-2 w-full sm:w-auto min-w-0">
+                 <div className="flex items-center gap-1.5 bg-white px-2 rounded-xl border border-zinc-200/80 shadow-sm shrink-0 h-10">
                 <CalendarDays className="w-4 h-4 text-zinc-400" />
                 <input 
                   type="date" 
                   value={startDate} 
                   onChange={e => setStartDate(e.target.value)} 
-                  className="text-sm outline-none text-zinc-600 bg-transparent border-0"
+                  className="text-xs outline-none text-zinc-600 bg-transparent border-0 w-[110px]"
                   title="Fecha inicial"
                 />
                 <span className="text-zinc-400 text-sm">a</span>
@@ -1153,7 +1153,7 @@ export default function Partes() {
                   type="date" 
                   value={endDate} 
                   onChange={e => setEndDate(e.target.value)} 
-                  className="text-sm outline-none text-zinc-650 bg-transparent border-0"
+                  className="text-xs outline-none text-zinc-650 bg-transparent border-0 w-[110px]"
                   title="Fecha final"
                 />
                 {(startDate || endDate) && (
@@ -1168,7 +1168,7 @@ export default function Partes() {
               </div>
 
               {/* Buscador */}
-              <div className="relative w-full sm:w-64 shrink-0 h-[52px]">
+              <div className="relative flex-1 min-w-[120px] sm:w-64 sm:flex-none h-10">
                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 z-10" />
                 <input
                   type="text"
@@ -1193,11 +1193,11 @@ export default function Partes() {
                 const selectedOption = opcionesEstado.find(o => o.value === estadoFilter) || opcionesEstado[0];
 
                 return (
-                  <div className="relative shrink-0 h-[52px]" ref={filterRef}>
+                  <div className="relative shrink-0 h-10" ref={filterRef}>
                     <button
                       type="button"
                       onClick={() => setIsFilterOpen(!isFilterOpen)}
-                      className="h-full px-4 bg-white border border-zinc-200/80 rounded-xl text-sm flex items-center justify-between gap-3 text-zinc-900 shadow-sm font-medium hover:border-zinc-300 transition-all min-w-[200px]"
+                      className="h-full px-3 bg-white border border-zinc-200/80 rounded-xl text-xs flex items-center justify-between gap-2 text-zinc-900 shadow-sm font-medium hover:border-zinc-300 transition-all min-w-[150px] max-w-[190px]"
                       title="Filtrar partes por estado"
                     >
                       <div className="flex items-center gap-2.5">

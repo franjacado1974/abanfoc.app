@@ -168,7 +168,7 @@ export default function SistemaExtincionGas({
                                                                                          opciones={item.opciones || []}
                                                                                          filasInicio={item.filasInicio}
                                                                                          value={String(val || '')}
-                                                                                         onChange={(newVal) => handleCheckChange(eq.id, item.key, newVal)}
+                                                                                         onChange={(newVal) => handleCheckChange(eq.id, item.key, newVal, item.label)}
                                                                                      />
                                                                                  );
                                                                              }

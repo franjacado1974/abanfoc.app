@@ -226,7 +226,7 @@ function DashboardHome({ loggedUser, onLogout, onNavigate }: DashboardTecnicoPro
   const cards = [
     {
       id: 'partes' as TecnicoView,
-      title: 'Partes de Trabajo',
+      title: 'Partes de Revisión',
       description: 'Consulta tus partes de trabajo asignados',
       icon: FileText,
       bgColor: 'bg-violet-50',

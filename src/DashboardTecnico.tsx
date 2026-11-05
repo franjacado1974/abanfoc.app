@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { FileText, Package, Power, LogOut, FileCheck, Mail, Gauge, Calendar, AlertTriangle, Building2, StickyNote } from 'lucide-react';
+import { FileText, Package, Power, LogOut, FileCheck, Mail, Calendar, HardHat, Building2, StickyNote } from 'lucide-react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { 
@@ -12,6 +12,7 @@ import {
   subscribeNotasBloc
 } from './firebase';
 import PartesTecnico from './PartesTecnico';
+import PartesTrabajoOperaciones from './PartesTrabajoOperaciones';
 import RevisionChecklist from './RevisionChecklist';
 import Albaranes from './Albaranes';
 import Clientes from './Clientes';
@@ -36,7 +37,7 @@ interface DashboardTecnicoProps {
   onLogout: () => void;
 }
 
-type TecnicoView = 'dashboard' | 'partes' | 'albaranes' | 'clientes' | 'centros' | 'catalogo' | 'buzon' | 'pruebas-tecnicas' | 'calendario' | 'urgencias' | 'notas';
+type TecnicoView = 'dashboard' | 'partes' | 'partes-trabajo' | 'albaranes' | 'clientes' | 'centros' | 'catalogo' | 'buzon' | 'pruebas-tecnicas' | 'calendario' | 'urgencias' | 'notas';
 
 // ─── PANTALLA PRINCIPAL DEL TÉCNICO ──────────────────────────────────────────
 function DashboardHome({ loggedUser, onLogout, onNavigate }: DashboardTecnicoProps & { onNavigate: (view: TecnicoView) => void }) {
@@ -194,13 +195,42 @@ function DashboardHome({ loggedUser, onLogout, onNavigate }: DashboardTecnicoPro
     } catch (e) { console.warn(e); }
 
     try {
-      // 7. Avisos / Urgencias
+      // 7. Partes de Trabajo (Operaciones: Reparaciones, Instalaciones, Pruebas Técnicas y Avisos)
+      let urgsList: any[] = [];
+      let repsList: any[] = [];
+      let instsList: any[] = [];
+      let pruebasList: any[] = [];
+      const recalcOperaciones = () => {
+        const activeReps = repsList.filter((r: any) => !r.facturado);
+        const activeInsts = instsList.filter((i: any) => !i.facturado);
+        const total = urgsList.length + activeReps.length + activeInsts.length + pruebasList.length;
+        const pends =
+          urgsList.filter((u: any) => u.estado !== 'Solucionado' && u.estado !== 'Finalizado').length +
+          activeReps.filter((r: any) => r.estado !== 'Finalizado').length +
+          activeInsts.filter((i: any) => i.estado !== 'Finalizado').length +
+          pruebasList.filter((p: any) => p.estado !== 'Finalizado' && p.estado !== 'Realizada').length;
+        setStats(prev => ({ ...prev, urgencias: total, urgenciasPendientes: pends }));
+      };
+      unsubs.push(onSnapshot(collection(db, 'reparaciones'), (snap) => {
+        repsList = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        try { localStorage.setItem('firecheck_db_reparaciones', JSON.stringify(repsList)); } catch {}
+        recalcOperaciones();
+      }));
+      unsubs.push(onSnapshot(collection(db, 'instalaciones'), (snap) => {
+        instsList = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        try { localStorage.setItem('firecheck_db_instalaciones', JSON.stringify(instsList)); } catch {}
+        recalcOperaciones();
+      }));
+      unsubs.push(onSnapshot(collection(db, 'pruebas_tecnicas'), (snap) => {
+        pruebasList = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        try { localStorage.setItem('firecheck_db_pruebas_tecnicas', JSON.stringify(pruebasList)); } catch {}
+        recalcOperaciones();
+      }));
       const qUrg = collection(db, 'urgencias');
       const unsubUrg = onSnapshot(qUrg, (snap) => {
-        const urgs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        try { localStorage.setItem('firecheck_db_urgencias', JSON.stringify(urgs)); } catch {}
-        const pends = urgs.filter((u: any) => u.estado !== 'Solucionado' && u.estado !== 'Finalizado').length;
-        setStats(prev => ({ ...prev, urgencias: urgs.length, urgenciasPendientes: pends }));
+        urgsList = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        try { localStorage.setItem('firecheck_db_urgencias', JSON.stringify(urgsList)); } catch {}
+        recalcOperaciones();
       });
       unsubs.push(unsubUrg);
     } catch (e) { console.warn(e); }
@@ -374,7 +404,7 @@ function DashboardHome({ loggedUser, onLogout, onNavigate }: DashboardTecnicoPro
     },
     {
       id: 'partes' as TecnicoView,
-      title: 'Partes de Trabajo',
+      title: 'Partes de Revisión',
       description: 'Partes asignados e intervenciones',
       icon: FileText,
       bgColor: 'bg-violet-500/10 text-violet-600',
@@ -410,21 +440,21 @@ function DashboardHome({ loggedUser, onLogout, onNavigate }: DashboardTecnicoPro
       ],
     },
     {
-      id: 'urgencias' as TecnicoView,
-      title: 'Avisos',
-      description: 'Avisos de averías e incidencias urgentes',
-      icon: AlertTriangle,
-      bgColor: 'bg-zinc-900 text-white',
-      iconColor: 'text-amber-400',
-      borderColor: 'border-zinc-800',
-      hoverBorder: 'hover:border-black hover:shadow-zinc-300',
+      id: 'partes-trabajo' as TecnicoView,
+      title: 'Partes de Trabajo',
+      description: 'Reparaciones, instalaciones, pruebas y avisos',
+      icon: HardHat,
+      badgeLabel: 'Operaciones',
+      bgColor: 'bg-blue-500 text-white',
+      iconColor: 'text-orange-300',
+      borderColor: 'border-blue-200/80',
+      hoverBorder: 'hover:border-blue-400 hover:shadow-blue-100',
       textColor: 'text-zinc-900',
       badgeBg: 'bg-amber-100',
       badgeText: 'text-amber-900',
-      badgeLabel: 'Avisos',
       clickable: true,
       stats: [
-        { label: 'Total avisos', value: stats.urgencias },
+        { label: 'Total', value: stats.urgencias },
         { label: 'Pendientes', value: stats.urgenciasPendientes },
       ],
     },
@@ -480,24 +510,6 @@ function DashboardHome({ loggedUser, onLogout, onNavigate }: DashboardTecnicoPro
       clickable: true,
       stats: [
         { label: 'Centros', value: stats.centros },
-      ],
-    },
-    {
-      id: 'pruebas-tecnicas' as TecnicoView,
-      title: 'Pruebas Técnicas',
-      description: 'Presión y caudal en red y bombas',
-      icon: Gauge,
-      bgColor: 'bg-red-500/10 text-red-600',
-      iconColor: 'text-red-600',
-      borderColor: 'border-red-200/80',
-      hoverBorder: 'hover:border-red-400 hover:shadow-red-100',
-      textColor: 'text-red-700',
-      badgeBg: 'bg-red-100/80',
-      badgeText: 'text-red-700',
-      badgeLabel: 'Operaciones',
-      clickable: true,
-      stats: [
-        { label: 'Ensayos', value: '2 Tipos' },
       ],
     },
     {
@@ -565,7 +577,7 @@ function DashboardHome({ loggedUser, onLogout, onNavigate }: DashboardTecnicoPro
         <div className="h-0.5 bg-red-600 w-full" />
       </header>
 
-      {/* Cuadrícula de 9 Tarjetas: 3x3 en tablet/PC o 2 cols en móvil */}
+      {/* Cuadrícula de Tarjetas en tablet/PC o 2 cols en móvil */}
       <main className="flex-1 w-full max-w-6xl mx-auto px-3 sm:px-6 pt-6 sm:pt-10 pb-6 flex flex-col justify-start">
         <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5 sm:gap-3.5">
           {cards.map((card) => {
@@ -674,6 +686,16 @@ function DashboardHome({ loggedUser, onLogout, onNavigate }: DashboardTecnicoPro
 // ─── WRAPPER PRINCIPAL CON ESTADO DE NAVEGACIÓN ───────────────────────────────
 function TecnicoApp({ loggedUser, onLogout }: DashboardTecnicoProps) {
   const [currentView, setCurrentView] = useState<TecnicoView>('dashboard');
+
+  if (currentView === 'partes-trabajo') {
+    return (
+      <PartesTrabajoOperaciones
+        isTecnicoMode={true}
+        loggedUser={loggedUser}
+        onBack={() => setCurrentView('dashboard')}
+      />
+    );
+  }
 
   if (currentView === 'partes') {
     return (
@@ -894,6 +916,7 @@ export default function DashboardTecnico({ loggedUser, onLogout }: DashboardTecn
         <Route path="/buzon" element={<Buzon isTecnicoMode={true} />} />
         <Route path="/pruebas-tecnicas" element={<PruebasTecnicas />} />
         <Route path="/urgencias" element={<Urgencias />} />
+        <Route path="/partes-trabajo" element={<PartesTrabajoOperaciones isTecnicoMode={true} loggedUser={loggedUser} />} />
         <Route path="/notas" element={<Notas user={loggedUser} />} />
         <Route path="/revision-checklist" element={<RevisionChecklist />} />
       </Routes>

@@ -255,10 +255,10 @@ export default function Planificacion() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] px-8 py-6">
-      <div className="max-w-[1600px] mx-auto">
+    <div className="min-h-screen bg-[#F8FAFC] px-4 lg:px-6 py-5 w-full">
+      <div className="w-full max-w-full mx-auto">
         {/* Header */}
-        <div className="mb-6 flex flex-col items-center sm:items-start text-center sm:text-left">
+        <div className="mb-5 flex flex-col items-center sm:items-start text-center sm:text-left">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 w-full">
             <div>
               <h1 className="text-2xl font-black text-zinc-950 tracking-tight flex items-center justify-center sm:justify-start gap-2">
@@ -293,12 +293,12 @@ export default function Planificacion() {
           </div>
         </div>
 
-        <div className="flex flex-col lg:flex-row gap-6 lg:h-[calc(100vh-180px)]">
+        <div className="flex flex-col lg:flex-row gap-5 w-full lg:h-[calc(100vh-145px)]">
           {/* BARRA LATERAL IZQUIERDA: Selector de Meses y Tareas a Planificar */}
           <div 
             onDragOver={onDragOver} 
             onDrop={onDropSidebar} 
-            className="w-full lg:w-80 xl:w-88 bg-white rounded-3xl shadow-xl border border-zinc-200/85 flex flex-col overflow-hidden shrink-0 h-[500px] lg:h-full"
+            className="w-full lg:w-[30%] lg:min-w-[340px] lg:max-w-[460px] bg-white rounded-3xl shadow-xl border border-zinc-200/85 flex flex-col overflow-hidden shrink-0 h-[500px] lg:h-full"
           >
             {/* Cabecera del panel lateral: alineada con la cabecera del calendario */}
             <div className="px-5 py-3.5 border-b border-zinc-300 flex items-center justify-between bg-zinc-200/90">
@@ -347,7 +347,7 @@ export default function Planificacion() {
             </div>
 
             {/* LISTA VERTICAL DE TAREAS A PLANIFICAR */}
-            <div className="flex-1 bg-slate-100/70 p-3.5 overflow-y-auto space-y-2.5">
+            <div className="flex-1 bg-slate-100/70 p-3.5 overflow-y-auto overflow-x-hidden space-y-2.5">
               {!searchMonth ? (
                 <div className="h-full flex flex-col items-center justify-center text-center p-6 text-zinc-400">
                   <div className="w-12 h-12 rounded-2xl bg-white border border-zinc-200 shadow-sm flex items-center justify-center mb-3 text-red-500">
@@ -422,7 +422,7 @@ export default function Planificacion() {
           </div>
 
             {/* CALENDARIO */}
-          <div className="flex-1 bg-white rounded-3xl shadow-xl border border-zinc-200/85 flex flex-col overflow-hidden h-[600px] lg:h-full">
+          <div className="flex-1 min-w-0 bg-white rounded-3xl shadow-xl border border-zinc-200/85 flex flex-col overflow-hidden h-[600px] lg:h-full">
             {/* Navegación del mes */}
             <div className="px-6 py-3.5 border-b border-zinc-300 flex items-center justify-center gap-4 bg-zinc-200/90">
               <button 
@@ -444,7 +444,7 @@ export default function Planificacion() {
               </button>
             </div>
             {/* Encabezados de días de la semana - alineados con las columnas del calendario */}
-            <div className={`px-2 border-b border-zinc-300 bg-zinc-200/90 divide-x divide-zinc-300/60 ${showWeekends ? 'grid grid-cols-7' : 'grid grid-cols-5'}`}>
+            <div className={`border-b border-zinc-300 bg-zinc-200/90 divide-x divide-zinc-300/60 ${showWeekends ? 'grid grid-cols-7' : 'grid grid-cols-5'}`}>
               {(showWeekends
                 ? ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
                 : ['Lun', 'Mar', 'Mié', 'Jue', 'Vie']
@@ -454,7 +454,7 @@ export default function Planificacion() {
                 </div>
               ))}
             </div>
-            <div className={`flex-1 overflow-y-auto px-2 ${showWeekends ? 'grid grid-cols-7' : 'grid grid-cols-5'}`}>
+            <div className={`flex-1 overflow-y-auto overflow-x-hidden auto-rows-fr ${showWeekends ? 'grid grid-cols-7' : 'grid grid-cols-5'}`}>
               {getCalendarDays()
                 .filter(({ date }) => showWeekends || (date.getDay() !== 0 && date.getDay() !== 6))
                 .map(({ date, currentMonth }, idx) => {
@@ -465,7 +465,7 @@ export default function Planificacion() {
                   date.getFullYear() === today.getFullYear();
                 const partesDia = partes.filter(p => p.fechaProgramada === dateStr && p.estado !== 'Cerrado');
                 return (
-                  <div key={dateStr + idx} onDragOver={onDragOver} onDrop={(e) => onDrop(e, dateStr)} className={`min-h-[80px] md:min-h-[100px] p-1 md:p-2 border border-zinc-100 flex flex-col ${currentMonth ? 'bg-amber-50/20' : 'bg-white opacity-40'}`}>
+                  <div key={dateStr + idx} onDragOver={onDragOver} onDrop={(e) => onDrop(e, dateStr)} className={`min-h-[95px] md:min-h-[115px] min-w-0 overflow-hidden p-1.5 md:p-2.5 border border-zinc-100 flex flex-col ${currentMonth ? 'bg-amber-50/20' : 'bg-white opacity-40'}`}>
                     <div className="flex items-center justify-between mb-1 shrink-0">
                       <span
                         className={`w-5 h-5 sm:w-6 sm:h-6 rounded-lg flex items-center justify-center text-[11px] sm:text-xs font-black ${
@@ -487,12 +487,12 @@ export default function Planificacion() {
                         </span>
                       )}
                     </div>
-                    <div className="flex-1 space-y-1 overflow-y-auto max-h-[120px] custom-scrollbar [scrollbar-color:#000000_transparent] [scrollbar-width:thin] pr-0.5">
+                    <div className="flex-1 space-y-1 overflow-y-auto overflow-x-hidden max-h-[120px] custom-scrollbar [scrollbar-color:#000000_transparent] [scrollbar-width:thin] pr-0.5">
                       {partesDia.map(p => {
                         const centro = centros.find(c => c._docId === p.centroId || c.id === p.centroId);
                         return (
-                          <div key={p.id} className="group relative">
-                            <div draggable onDragStart={(e) => onDragStart(e, p.id)} className="p-1 bg-sky-100 rounded text-[9px] text-sky-800 font-bold truncate cursor-grab active:cursor-grabbing shadow-sm hover:bg-sky-200 transition-colors">
+                          <div key={p.id} className="group relative min-w-0">
+                            <div draggable onDragStart={(e) => onDragStart(e, p.id)} className="p-1 pr-5 bg-sky-100 rounded text-[9px] text-sky-800 font-bold truncate cursor-grab active:cursor-grabbing shadow-sm hover:bg-sky-200 transition-colors">
                               {centro?.nombre || '...'}
                             </div>
                             <button
@@ -500,7 +500,7 @@ export default function Planificacion() {
                                 const docId = (p as any)._docId || p.id;
                                 try { await updateParte(docId, { fechaProgramada: '' }); } catch (err) { console.error(err); }
                               }}
-                              className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm hover:bg-red-600"
+                              className="absolute top-1/2 -translate-y-1/2 right-1 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm hover:bg-red-600"
                               title="Quitar del calendario y volver a la barra"
                             >
                               <span className="text-[8px] font-bold leading-none">×</span>
@@ -520,8 +520,10 @@ export default function Planificacion() {
         .custom-scrollbar {
           scrollbar-width: thin;
           scrollbar-color: #000000 transparent;
+          overflow-x: hidden;
         }
-        .custom-scrollbar::-webkit-scrollbar { width: 5px; }
+        .custom-scrollbar::-webkit-scrollbar { width: 5px; height: 0px; }
+        .custom-scrollbar::-webkit-scrollbar:horizontal { display: none; height: 0px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #000000; border-radius: 9999px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #27272a; }

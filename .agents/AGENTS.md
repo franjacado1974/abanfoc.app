@@ -1687,11 +1687,88 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
 - **Paginación y Límite Inicial de 10 Elementos**:
   - Carga inicial limitada a 10 certificados (`useState<number | 'todos'>(10)`), con selector de 10, 20, 50, 100, 200 o Todos, y barra inferior con conteo global.
 
+---
 
+## 118. Blindaje Inviolable de Tabla de Inventario e Información de Recipientes en Extinción Automática con Gas, Anomalía de Retimbrado > 10 Años, Formato de Fecha MM/YYYY y Limpieza Total de Anomalías Manuales (`TableInput.tsx`, `RevisionChecklist.tsx`, `pdfGenerator.ts`)
+- **Formato de Fechas Mes/Año (`MM/YYYY`) y Resaltado en Rojo (> 10 años) en Tabla de Recipientes**:
+  - En `src/components/TableInput.tsx` y `src/recursos-compartidos/components/TableInput.tsx`, las columnas de fecha de fabricación y de prueba hidrostática / retimbre en tablas de recipientes/depósitos se muestran y editan en formato mes y año (`MM/YYYY`, ej. `04/2014`).
+  - Si la fecha de prueba hidrostática / retimbre supera los 10 años (`esFechaMayor10Anos`), la celda se resalta automáticamente en rojo (`bg-red-50 border-2 border-red-500 text-red-700 font-bold`) y en el PDF (`esFechaMayor10AnosLocal`) se imprime en negrita roja (`[200, 0, 0]`).
+- **Autogeneración de Anomalía por Recipiente con Retimbrado > 10 Años (`RevisionChecklist.tsx`)**:
+  - La función `evaluarAnomaliasTablasRecipientes` evalúa las filas de la tabla de recipientes/depósitos y, cuando una fecha supera los 10 años, inserta automáticamente en `eq.anomalias` el texto exacto:
+    `- Recipiente Nº [X]: Fecha de prueba hidrostatica supera los 10 años. Se debe realizar retimbrado.`
+  - Si la fecha se actualiza a un valor dentro de plazo (< 10 años), la línea de anomalía se retira automáticamente.
+- **Adaptación Proporcional de Columnas en Tabla de Recipientes (`isTablaRecipientesGas`)**:
+  - Tanto en `TableInput.tsx` como en `pdfGenerator.ts`, la tabla `3. INVENTARIO E INFORMACIÓN DE RECIPIENTES` adapta el ancho de cada columna según su contenido (compactando `Nº`/`Orden` y ampliando `Nº Serie`, `Agente extintor`, `Fecha fabricación`, `Prueba hidrostática`, `Ubicación`, etc.).
+  - En `pdfGenerator.ts`, `totalColsCount` y `maxTableWidth` DEBEN declararse al inicio del bloque `colStyles` antes de evaluar `isPuestosControl` e `isTablaRecipientesGas`.
+- **Limpieza Sincronizada de `anomalias` y `observaciones` en `handleCheckChange` (`RevisionChecklist.tsx`)**:
+  - Cuando el usuario edita o borra manualmente el campo `anomalias` (`checkKey === 'anomalias'`) o `observaciones` (`checkKey === 'observaciones'`), DEBEN actualizarse y vaciarse simultáneamente todas las claves dinámicas asociadas (`anoItems`, `obsItems`), impidiendo que la última letra se restaure desde una propiedad secundaria y garantizando que el cuadro pueda vaciarse por completo.
 
+---
 
+## 119. Blindaje Inviolable de Prefijos Diferenciados (`PDV`, `PDR`, `PDI`, `PDA`), Columnas `NÚMERO` y `TÍTULO` Completo Adaptadas a Pantalla, Columnas `Dirección` en Clientes/Centros, Planificación a Ancho Completo y Rango de Fecha Programada en Calendario (`Reparaciones.tsx`, `Instalaciones.tsx`, `Urgencias.tsx`, `Clientes.tsx`, `Centros.tsx`, `Planificacion.tsx`, `Calendario.tsx`, `firebase.tsx`, `pdfGenerator.ts`)
+- **Prefijos Diferenciados de Número de Pedido y Botón Compacto "Generar" (`firebase.tsx`, `Reparaciones.tsx`, `Instalaciones.tsx`, `Urgencias.tsx`, `pdfGenerator.ts`)**:
+  - La función `obtenerSiguienteNumeroPedido(prefijo)` soporta los 4 prefijos oficiales compartiendo la misma secuencia correlativa anual no duplicable (`contadores/pedidos_secuencia`):
+    - **Ventas / Presupuestos**: `PDV.YYXXX`
+    - **Reparaciones**: `PDR.YYXXX`
+    - **Instalaciones**: `PDI.YYXXX`
+    - **Avisos / Urgencias**: `PDA.YYXXX`
+  - En el modal de creación/edición de `Reparaciones.tsx`, `Instalaciones.tsx` y `Urgencias.tsx`, a la derecha de la etiqueta `NÚMERO DE PEDIDO` se ubica el botón compacto **"Generar"** (`px-2 py-0.5 rounded-md text-[10px]`) que asigna un número correlativo único con su prefijo respectivo sólo si el campo está vacío.
+- **Columnas `NÚMERO` y `TÍTULO` Completo Adaptadas al Ancho de Pantalla (`Reparaciones.tsx`, `Instalaciones.tsx`, `Urgencias.tsx`)**:
+  - Las tablas de Reparaciones, Instalaciones y Avisos dividen las dos primeras columnas en **`NÚMERO`** (`w-[8%]`) y **`TÍTULO`** (`w-[28%]`).
+  - El título de la tarea se muestra siempre completo sin recortes (`whitespace-normal break-words leading-snug`), y el resto de columnas se distribuyen proporcionalmente al 100% del ancho de pantalla.
+- **Columna `Dirección` y Ancho Proporcional en Clientes y Centros (`Clientes.tsx`, `Centros.tsx`)**:
+  - En `Clientes.tsx` y `Centros.tsx`, se incorpora la columna **`Dirección`** y todas las columnas se adaptan proporcionalmente a la pantalla. En `Centros.tsx`, la columna `Código` cuenta con ancho ampliado (`w-40 lg:w-44 shrink-0 pr-5`) para alojar códigos de 18 caracteres sin solapamientos.
+- **Planificación a Pantalla Completa sin Scroll Horizontal (`Planificacion.tsx`)**:
+  - `Planificacion.tsx` utiliza ancho completo (`w-full max-w-full`), columna lateral ampliada (`lg:w-[30%] lg:min-w-[340px] lg:max-w-[460px]`) y oculta cualquier barra de desplazamiento horizontal en tarjetas y celdas del calendario (`overflow-x-hidden`).
+- **Ampliar Rango de Fecha Programada en Calendario (`Calendario.tsx`, `firebase.tsx`)**:
+  - En el modal de detalle de tarea de `Calendario.tsx`, junto a `Fecha programada` y `Fecha confirmada`, se incluye el botón y panel desplegable **"Ampliar rango de fecha programada"** (`mostrarAmpliarRango`, `editFechaInicio`, `editFechaFin`).
+  - Al definir un rango de fechas (`fechaFinProgramada`), la tarea se repite automáticamente en todos los días comprendidos dentro del rango en el calendario (`getDatesInRange`), y al finalizarse la tarea todos los días del rango quedan marcados como realizados.
 
+---
 
+## 120. Blindaje Inviolable de Reorganización del Módulo Operaciones ("Crear nuevo parte" y "Partes de Trabajo"), Formulario Directo sin Lista Subyacente (`CrearNuevoParte.tsx`, `Reparaciones.tsx`, `Instalaciones.tsx`, `Urgencias.tsx`, `PruebasTecnicas.tsx`, `Sidebar.tsx`, `App.tsx`)
+- **Menú Lateral Operaciones (`Sidebar.tsx`)**:
+  - En el submenú de Operaciones DEBEN mostrarse únicamente 2 opciones:
+    1. **"Crear nuevo parte"** (`/crear-parte`, icono `FilePlus2`).
+    2. **"Partes de Trabajo"** (`/partes-trabajo`, icono `FileText`).
+  - Queda prohibido volver a mostrar los accesos redundantes directos a listas separadas de Reparaciones, Instalaciones, Urgencias y Pruebas Técnicas en la barra lateral.
+  - La sección de Mantenimientos / Partes de Revisión (`/partes`) permite acceso tanto al rol oficina/superusuario como al rol `tecnico` (`r.id === 'partes'`).
+- **Selector Visual de 4 Opciones en `CrearNuevoParte.tsx` (`/crear-parte`)**:
+  - Presenta 4 tarjetas estilizadas con iconos y colores diferenciados:
+    1. **Reparación** (Azul, `Wrench`, enlace `/reparaciones`).
+    2. **Instalación** (Rojo, `HardHat`, enlace `/instalaciones`).
+    3. **Prueba técnica** (Púrpura/Lila, `Gauge`, enlace `/pruebas-tecnicas`).
+    4. **Aviso / Urgencia** (Ámbar/Naranja, `AlertTriangle`, enlace `/urgencias`).
+  - Cada botón navega a su ruta con el estado `{ abrirCrear: true }`.
+- **Apertura Directa del Formulario sin Parpadeo ni Tabla Subyacente (`Reparaciones.tsx`, `Instalaciones.tsx`, `Urgencias.tsx`, `PruebasTecnicas.tsx`)**:
+  - Al recibir `location.state?.abrirCrear === true`, el componente detecta mediante `desdeCrearParteRef` la intención de creación directa y activa de inmediato el modal/formulario (`isModalOpen = true` o `viewMode = 'form'`).
+  - La tabla de datos subyacente **no se renderiza** mientras `desdeCrearParteRef.current === true`, evitando parpadeos de carga de la lista antigua.
+  - Si el usuario pulsa en cerrar/cancelar en el formulario, regresa de inmediato a `/crear-parte` (`navigate('/crear-parte')`).
+  - Si el usuario guarda el parte satisfactoriamente, navega de inmediato al listado unificado `/partes-trabajo` (`navigate('/partes-trabajo')`).
+
+---
+
+## 121. Blindaje Inviolable del Módulo Unificado Partes de Trabajo de Operaciones (`PartesTrabajoOperaciones.tsx`), Tarjeta Alargada de Pestañas con Colores Reglamentarios, Tabla Limpia sin Botones Directos, Modal de Opciones al Clicar y Filtros Desacoplados
+- **Tarjeta Alargada de Pestañas con Colores Reglamentarios (`PartesTrabajoOperaciones.tsx`)**:
+  - En la parte superior, los tipos de operación se agrupan dentro de una tarjeta alargada horizontal blanca con borde suave y sombra (`bg-white p-2.5 rounded-2xl border border-zinc-200/80 shadow-sm mb-6 overflow-x-auto scrollbar-none`).
+  - Cada pestaña cuenta con su paleta de color reglamentaria tanto activa como inactiva:
+    1. **Todas las Operaciones**: Verde esmeralda (`bg-emerald-600 text-white border-emerald-600` / reposo `bg-emerald-50 text-emerald-800 border-emerald-300`).
+    2. **Reparaciones**: Azul (`bg-blue-600 text-white border-blue-600` / reposo `bg-blue-50 text-blue-800 border-blue-300`).
+    3. **Instalaciones**: Rojo (`bg-red-600 text-white border-red-600` / reposo `bg-red-50 text-red-800 border-red-300`).
+    4. **Pruebas Técnicas**: Lila / Púrpura (`bg-purple-600 text-white border-purple-600` / reposo `bg-purple-50 text-purple-800 border-purple-300`).
+    5. **Avisos y Urgencias**: Negro (`bg-zinc-950 text-white border-black` / reposo `bg-zinc-100 text-zinc-900 border-zinc-400`).
+- **Tabla Limpia sin Botones Directos de Acción y Modal Interactivo de Opciones (`tareaOpcionesModal`)**:
+  - Tanto en la tabla de escritorio como en las tarjetas móviles, se eliminan los botones directos individuales en las filas para ofrecer una interfaz limpia y despejada.
+  - Al hacer clic en cualquier parte de la fila de la tabla o de la tarjeta móvil, se abre el modal flotante unificado de opciones de tarea (`renderTareaOpcionesModal`):
+    - *Ver detalle* (`handleVerDetalle`)
+    - *Editar parte* (`handleOpenEditarParte`)
+    - *Crear albarán* (`handleCrearAlbaran`)
+- **Filtros de Estado Desacoplados e Independientes**:
+  - Los estados "Pendientes" y "En curso" funcionan como filtros estrictamente independientes y desacoplados (sin agruparlos en una sola opción).
+- **Paginación Predeterminada a 10 Líneas**:
+  - El selector de límite de partes inicia predeterminado en 10 filas (`useState<number | 'todos'>(10)`).
+- **Integración en Panel Técnico (`DashboardTecnico.tsx`)**:
+  - La tarjeta de operaciones en el Dashboard del Técnico enlaza directamente a Partes de Trabajo unificadas (`partes-trabajo`) y consolida los contadores globales de tareas activas de reparaciones, instalaciones, pruebas técnicas y urgencias.
 
 
 

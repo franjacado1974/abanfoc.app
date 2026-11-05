@@ -18,8 +18,8 @@ for (const p of desktopPaths) {
 }
 
 if (!targetDesktop) {
-  console.error('No se encontró la carpeta del Escritorio.');
-  process.exit(1);
+  console.warn('⚠️ No se encontró la carpeta del Escritorio (entorno aislado o sandbox). Omitiendo copia al escritorio.');
+  process.exit(0);
 }
 
 // 1. Limpiar carpetas anteriores de SALAMANDRA en el escritorio

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Users, CalendarDays, FileText, SearchCheck, Wrench,
@@ -27,12 +27,13 @@ interface NavItem {
 const navItems: NavItem[] = [
   { id: 'dashboard', path: '/', title: 'Inicio', Icon: LayoutDashboard, allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador'], section: 'gestion' },
   { id: 'clientes-centros', path: '/clientes-centros', title: 'Clientes', Icon: Users, allowedRoles: ['super-administrador', 'administrador', 'editor'], section: 'gestion' },
-  { id: 'catalogo', path: '/catalogo', title: 'Catálogo', Icon: Package, allowedRoles: ['super-administrador', 'administrador', 'editor'], section: 'gestion' },
-  { id: 'partes_trabajo', path: '/partes_trabajo', title: 'Planificación', Icon: CalendarDays, allowedRoles: ['super-administrador', 'administrador'], section: 'operaciones' },
-  { id: 'partes', path: '/partes', title: 'Partes de Trabajo', Icon: FileText, allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador'], section: 'operaciones' },
-  { id: 'revisiones', path: '/revisiones', title: 'Revisiones', Icon: SearchCheck, allowedRoles: ['super-administrador', 'administrador'], section: 'operaciones' },
+  { id: 'catalogo', path: '/catalogo', title: 'CatÃ¡logo', Icon: Package, allowedRoles: ['super-administrador', 'administrador', 'editor'], section: 'gestion' },
+  { id: 'partes_trabajo', path: '/partes_trabajo', title: 'PlanificaciÃ³n', Icon: CalendarDays, allowedRoles: ['super-administrador', 'administrador'], section: 'operaciones' },
+  { id: 'partes', path: '/partes', title: 'Partes de RevisiÃ³n', Icon: FileText, allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador'], section: 'operaciones' },
+  { id: 'revisiones', path: '/revisiones', title: 'Listman', Icon: SearchCheck, allowedRoles: ['super-administrador', 'administrador'], section: 'operaciones' },
   { id: 'reparaciones', path: '/reparaciones', title: 'Reparaciones', Icon: Wrench, allowedRoles: ['super-administrador', 'administrador'], section: 'operaciones' },
   { id: 'instalaciones', path: '/instalaciones', title: 'Instalaciones', Icon: HardHat, allowedRoles: ['super-administrador', 'administrador'], section: 'operaciones' },
+  { id: 'partes-operaciones', path: '/partes-trabajo', title: 'Partes de Trabajo', Icon: FileText, allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador', 'tecnico'], section: 'operaciones' },
   { id: 'certificados', path: '/certificados', title: 'Certificados', Icon: FileCheck, allowedRoles: ['super-administrador', 'administrador'], section: 'documentacion' },
   { id: 'presupuestos', path: '/presupuestos', title: 'Presupuestos', Icon: Calculator, allowedRoles: ['super-administrador', 'administrador'], section: 'documentacion' },
   { id: 'pedidos', path: '/pedidos', title: 'Pedidos', Icon: FileText, allowedRoles: ['super-administrador', 'administrador'], section: 'documentacion' },
@@ -75,7 +76,7 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
   const [displayLogo, setDisplayLogo] = useState(appLogo);
   const [hasUnreadBuzon, setHasUnreadBuzon] = useState(false);
 
-  // Escuchar cambios en buzon y versiones para activar la luz de notificación parpadeante
+  // Escuchar cambios en buzon y versiones para activar la luz de notificaciÃ³n parpadeante
   useEffect(() => {
     try {
       const qBuzon = query(collection(db, 'buzon'), orderBy('createdAt', 'desc'));
@@ -282,9 +283,9 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
 
   const normalizeRole = (r?: string) => {
     const clean = (r || '').toLowerCase().trim();
-    if (clean === 'administracion' || clean === 'administración' || clean === 'admin' || clean === 'administrador') return 'administrador';
+    if (clean === 'administracion' || clean === 'administraciÃ³n' || clean === 'admin' || clean === 'administrador') return 'administrador';
     if (clean === 'superadministrador' || clean === 'superusuario' || clean === 'super_administrador' || clean === 'super-usuario' || clean === 'super-administrador') return 'super-administrador';
-    if (clean === 'tecnico' || clean === 'técnico') return 'tecnico';
+    if (clean === 'tecnico' || clean === 'tÃ©cnico') return 'tecnico';
     return clean || 'visualizador';
   };
 
@@ -339,7 +340,7 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
                         ? 'text-red-600 bg-red-600/10'
                         : 'text-zinc-400 hover:text-red-500 hover:bg-white/10'
                     }`}
-                    title="Buzón"
+                    title="BuzÃ³n"
                   >
                     <Mail className="w-4 h-4" strokeWidth={1.75} />
                     {hasUnreadBuzon && !isActive('/buzon') && (
@@ -365,7 +366,7 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
                   type="button"
                   onClick={() => setShowLogoutModal(true)}
                   className="p-1.5 rounded-lg transition-all cursor-pointer text-zinc-400 hover:text-red-500 hover:bg-white/10"
-                  title="Cerrar Sesión"
+                  title="Cerrar SesiÃ³n"
                 >
                   <Power className="w-4 h-4" strokeWidth={1.75} />
                 </button>
@@ -385,7 +386,7 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
                     ? 'text-red-600 bg-red-600/10'
                     : 'text-zinc-400 hover:text-red-500 hover:bg-white/10'
                 }`}
-                title="Buzón"
+                title="BuzÃ³n"
               >
                 <Mail className="w-4 h-4" strokeWidth={1.75} />
                 {hasUnreadBuzon && !isActive('/buzon') && (
@@ -411,7 +412,7 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
               type="button"
               onClick={() => setShowLogoutModal(true)}
               className="p-1.5 rounded-lg transition-all cursor-pointer text-zinc-400 hover:text-red-500 hover:bg-white/10"
-              title="Cerrar Sesión"
+              title="Cerrar SesiÃ³n"
             >
               <Power className="w-4 h-4" strokeWidth={1.75} />
             </button>
@@ -454,7 +455,7 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
       {/* User Info */}
       <div className={`border-t border-zinc-900 px-3 py-3 shrink-0 ${collapsed ? 'flex flex-col items-center gap-2' : ''}`}>
         <div className="md:hidden mb-3 px-1">
-          <p className="text-white/70 text-[9px] font-bold uppercase tracking-widest">Sesión Activa</p>
+          <p className="text-white/70 text-[9px] font-bold uppercase tracking-widest">SesiÃ³n Activa</p>
           <p className="text-white/70 text-[9px] font-medium">{APP_VERSION}</p>
         </div>
         {!collapsed && user && (
@@ -480,7 +481,7 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
         onClick={() => setCollapsed(!collapsed)}
         className="absolute -right-3 top-1/2 transform -translate-y-1/2 w-6 h-6 border border-zinc-800 rounded-full flex items-center justify-center text-red-500 hover:text-red-400 hover:brightness-110 transition-all shadow-lg hidden md:flex"
         style={{ backgroundColor: sidebarBgColor }}
-        title={collapsed ? 'Expandir menú' : 'Contraer menú'}
+        title={collapsed ? 'Expandir menÃº' : 'Contraer menÃº'}
       >
         {collapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronLeft className="w-3 h-3" />}
       </button>
@@ -494,7 +495,7 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
         onClick={() => setMobileOpen(true)}
         className="fixed top-4 left-4 z-[100] w-10 h-10 text-red-500 rounded-xl flex items-center justify-center shadow-lg md:hidden border border-zinc-900"
         style={{ backgroundColor: sidebarBgColor }}
-        aria-label="Abrir menú"
+        aria-label="Abrir menÃº"
       >
         <Menu className="w-5 h-5" />
       </button>
@@ -525,7 +526,7 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
         </div>
       </aside>
 
-      {/* MODAL FLOTANTE CONFIRMACIÓN DE CERRAR SESIÓN */}
+      {/* MODAL FLOTANTE CONFIRMACIÃ“N DE CERRAR SESIÃ“N */}
       {showLogoutModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[9999] animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl w-full max-w-sm shadow-2xl flex flex-col animate-in zoom-in-95 duration-200 overflow-hidden text-left">
@@ -533,8 +534,8 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
               <div className="w-14 h-14 bg-red-100 rounded-2xl flex items-center justify-center mx-auto mb-3 text-red-600 shadow-sm">
                 <Power className="w-7 h-7 stroke-[2.5]" />
               </div>
-              <h2 className="text-lg font-bold text-red-950">¿Cerrar sesión?</h2>
-              <p className="text-sm text-red-600 mt-1">¿Estás seguro de que quieres cerrar la sesión actual?</p>
+              <h2 className="text-lg font-bold text-red-950">Â¿Cerrar sesiÃ³n?</h2>
+              <p className="text-sm text-red-600 mt-1">Â¿EstÃ¡s seguro de que quieres cerrar la sesiÃ³n actual?</p>
             </div>
             <div className="p-6 flex flex-col gap-3">
               <button
@@ -545,7 +546,7 @@ export default function Sidebar({ user, onLogout, appLogo }: SidebarProps) {
                 }}
                 className="w-full px-4 py-3 rounded-xl font-bold text-white bg-red-600 hover:bg-red-700 transition-colors shadow-sm cursor-pointer"
               >
-                Sí, cerrar sesión
+                SÃ­, cerrar sesiÃ³n
               </button>
               <button
                 onClick={() => setShowLogoutModal(false)}

@@ -2,11 +2,11 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Users, CalendarDays, Calendar, FileText, SearchCheck, Wrench,
-  HardHat, Calculator, Package, FileCheck, FileDigit, Receipt,
+  Calculator, Package, FileCheck, FileDigit, Receipt,
   Settings, Power, ChevronLeft, ChevronRight, LayoutDashboard,
-  Menu, X, Mail, Clock, Gauge, Trash2,
+  Menu, X, Mail, Clock, Trash2,
   ChevronDown, Building2, FolderKanban, ClipboardCheck, Files, GraduationCap,
-  AlertTriangle, BarChart3, StickyNote
+  FilePlus2, BarChart3, StickyNote
 } from 'lucide-react';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -68,39 +68,29 @@ const CATEGORIAS_MENU: NavCategory[] = [
     ]
   },
 
-  // 3. Mantenimientos (Planificación, Partes de trabajo, Revisiones)
+  // 3. Mantenimientos (Planificación, Partes de Revisión, Listman)
   {
     id: 'mantenimientos',
     title: 'Mantenimientos',
     Icon: ClipboardCheck,
-    allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador'],
+    allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador', 'tecnico'],
     subItems: [
       { id: 'planificacion', path: '/partes_trabajo', title: 'Planificación', Icon: CalendarDays, allowedRoles: ['super-administrador', 'administrador'] },
-      { id: 'partes', path: '/partes', title: 'Partes de Trabajo', Icon: FileText, allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador'] },
-      { id: 'revisiones', path: '/revisiones', title: 'Revisiones', Icon: SearchCheck, allowedRoles: ['super-administrador', 'administrador'] }
+      { id: 'partes', path: '/partes', title: 'Partes de Revisión', Icon: FileText, allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador', 'tecnico'] },
+      { id: 'revisiones', path: '/revisiones', title: 'Listman', Icon: SearchCheck, allowedRoles: ['super-administrador', 'administrador'] }
     ]
   },
 
-  // 4. Operaciones (Reparaciones, Instalaciones, Pruebas técnicas)
+  // 4. Operaciones (Crear nuevo parte y Partes de Trabajo)
   {
     id: 'operaciones',
     title: 'Operaciones',
     Icon: Wrench,
     allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador', 'tecnico'],
     subItems: [
-      { id: 'reparaciones', path: '/reparaciones', title: 'Reparaciones', Icon: Wrench, allowedRoles: ['super-administrador', 'administrador'] },
-      { id: 'instalaciones', path: '/instalaciones', title: 'Instalaciones', Icon: HardHat, allowedRoles: ['super-administrador', 'administrador'] },
-      { id: 'pruebas-tecnicas', path: '/pruebas-tecnicas', title: 'Pruebas Técnicas', Icon: Gauge, allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador', 'tecnico'] }
+      { id: 'crear-parte', path: '/crear-parte', title: 'Crear nuevo parte', Icon: FilePlus2, allowedRoles: ['super-administrador', 'administrador', 'editor', 'tecnico'] },
+      { id: 'partes-operaciones', path: '/partes-trabajo', title: 'Partes de Trabajo', Icon: FileText, allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador', 'tecnico'] }
     ]
-  },
-
-  // 4.1 Avisos / Urgencias (Acceso directo independiente a la vista entre Operaciones y Documentos)
-  {
-    id: 'urgencias',
-    title: 'Avisos',
-    Icon: AlertTriangle,
-    path: '/urgencias',
-    allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador', 'tecnico']
   },
 
   // 5. Documentos (Certificados, Presupuestos, Pedidos, Albaranes, Facturas, Notas)

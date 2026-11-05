@@ -1505,7 +1505,7 @@ export function extraerSufijoSecuencia(codigo?: string): string {
  *    (tanto en Firebase como en localStorage).
  * 3. Asigna de forma atómica y reserva el nuevo número en Firestore y en caché local para evitar colisiones.
  */
-export async function obtenerSiguienteNumeroPedido(): Promise<string> {
+export async function obtenerSiguienteNumeroPedido(prefijo: 'PDV' | 'PDR' | 'PDI' | 'PDA' = 'PDV'): Promise<string> {
   const currentYear = new Date().getFullYear();
   const yy = currentYear.toString().slice(-2);
   let maxCorrelativo = 0;
@@ -1578,13 +1578,13 @@ export async function obtenerSiguienteNumeroPedido(): Promise<string> {
 
     localStorage.setItem('firecheck_ultimo_pedido_secuencia', String(nextNum));
     const padded = String(nextNum).padStart(Math.max(3, String(nextNum).length), '0');
-    return `PDV.${yy}${padded}`;
+    return `${prefijo}.${yy}${padded}`;
   } catch (err) {
     console.warn('[obtenerSiguienteNumeroPedido] Fallback offline/local:', err);
     const nextNum = maxCorrelativo + 1;
     localStorage.setItem('firecheck_ultimo_pedido_secuencia', String(nextNum));
     const padded = String(nextNum).padStart(Math.max(3, String(nextNum).length), '0');
-    return `PDV.${yy}${padded}`;
+    return `${prefijo}.${yy}${padded}`;
   }
 }
 
@@ -2036,6 +2036,7 @@ export interface ParteFirestore {
   tipoTrabajo?: string;
   numeroMantenimiento?: string;
   fechaProgramada?: string;
+  fechaFinProgramada?: string;
   _docId?: string;
   retirarExtintoresRetimbrado?: boolean;
   dejarExtintoresDeposito?: boolean;
@@ -3065,6 +3066,7 @@ export interface ReparacionItem {
   estado: 'Pendiente' | 'En curso' | 'Parado' | 'Finalizado';
   fechaCreacion: string;
   fecha?: string;
+  fechaFinProgramada?: string;
   mes?: string;
   observaciones?: string;
   nota?: string;
@@ -3102,6 +3104,7 @@ export function subscribeReparaciones(callback: (items: ReparacionItem[]) => voi
           estado: data?.estado || 'Pendiente',
           fechaCreacion: data?.fechaCreacion || new Date().toISOString(),
           fecha: data?.fecha || (data?.fechaCreacion ? data.fechaCreacion.slice(0, 10) : ''),
+          fechaFinProgramada: data?.fechaFinProgramada || data?.fechaFin || '',
           mes: data?.mes || '',
           observaciones: data?.observaciones || '',
           nota: data?.nota || data?.observaciones || '',
@@ -3189,6 +3192,7 @@ export interface InstalacionItem {
   estado: 'Pendiente' | 'En curso' | 'Parado' | 'Finalizado';
   fechaCreacion: string;
   fecha?: string;
+  fechaFinProgramada?: string;
   mes?: string;
   observaciones?: string;
   nota?: string;
@@ -3226,6 +3230,7 @@ export function subscribeInstalaciones(callback: (items: InstalacionItem[]) => v
           estado: data?.estado || 'Pendiente',
           fechaCreacion: data?.fechaCreacion || new Date().toISOString(),
           fecha: data?.fecha || (data?.fechaCreacion ? data.fechaCreacion.slice(0, 10) : ''),
+          fechaFinProgramada: data?.fechaFinProgramada || data?.fechaFin || '',
           mes: data?.mes || '',
           observaciones: data?.observaciones || '',
           nota: data?.nota || data?.observaciones || '',
@@ -3314,6 +3319,7 @@ export interface UrgenciaItem {
   estado: 'Pendiente' | 'En curso' | 'Parado' | 'Finalizado';
   fechaCreacion: string;
   fecha?: string;
+  fechaFinProgramada?: string;
   mes?: string;
   observaciones?: string;
   nota?: string;
@@ -3351,6 +3357,7 @@ export function subscribeUrgencias(callback: (items: UrgenciaItem[]) => void) {
           estado: data?.estado || 'Pendiente',
           fechaCreacion: data?.fechaCreacion || new Date().toISOString(),
           fecha: data?.fecha || (data?.fechaCreacion ? data.fechaCreacion.slice(0, 10) : ''),
+          fechaFinProgramada: data?.fechaFinProgramada || data?.fechaFin || '',
           mes: data?.mes || '',
           observaciones: data?.observaciones || '',
           nota: data?.nota || data?.observaciones || '',

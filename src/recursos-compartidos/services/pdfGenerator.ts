@@ -1681,18 +1681,40 @@ export const generarActaExtintoresPDF = async (
 
     const getLineasAnomalias = (eq: any): string[] => {
       const checksFallados = checkItems
-        .filter(item => eq[item.key] === false || (typeof eq[item.key] === 'string' && String(eq[item.key]).trim().toLowerCase() === 'false'))
+        .filter(item => {
+          const val = eq[item.key];
+          if (val === false || (typeof val === 'string' && String(val).trim().toLowerCase() === 'false')) return true;
+          if (typeof val === 'string') {
+            const vUp = val.toUpperCase().trim();
+            return vUp === 'NO CORRECTO' || vUp.includes('NO CORRECTO') || vUp === 'INCORRECTO' || vUp === 'NO CONFORME' || vUp === 'DEFECTUOSO' || vUp === 'MAL' || vUp === 'NO';
+          }
+          return false;
+        })
         .map(item => item.label || '');
 
       const anomaliasItem = checkItemsDeSistema.find(item => {
         const lbl = (item.label || '').toLowerCase();
         return lbl.includes('anomal') || ((lbl.includes('notas') || lbl.includes('observaci')) && !checkItemsDeSistema.some(i => (i.label||'').toLowerCase().includes('anomal')));
       });
-      const anomaliasValue = anomaliasItem && eq[anomaliasItem.key] ? String(eq[anomaliasItem.key]).trim() : '';
+      let anomaliasValue = anomaliasItem && eq[anomaliasItem.key] ? String(eq[anomaliasItem.key]).trim() : '';
+      if (!anomaliasValue) {
+        for (const k of Object.keys(eq)) {
+          const kLower = k.toLowerCase();
+          if ((kLower.includes('anomal') || kLower.includes('nota')) && kLower !== 'observaciones') {
+            if (typeof eq[k] === 'string' && eq[k].trim() !== '') {
+              anomaliasValue = eq[k].trim();
+              break;
+            }
+          }
+        }
+      }
 
       let rawText = '';
       if (eq.anomalias && typeof eq.anomalias === 'string' && eq.anomalias.trim() !== '') {
         rawText = eq.anomalias;
+        if (anomaliasValue && !rawText.includes(anomaliasValue)) {
+          rawText = `${rawText}\n${anomaliasValue}`;
+        }
       } else {
         const fallosStr = checksFallados.length > 0 ? `Falló en: ${checksFallados.join(', ')}.` : '';
         const dateWarning = tieneFechaInvalida(eq) ? 'Fecha de fabricación/retimbrado caducada o próxima a caducar.' : '';
@@ -1712,13 +1734,16 @@ export const generarActaExtintoresPDF = async (
         lines.push(...subSplit);
       });
 
-      // Los sistemas y equipos que NO sean extintores ni BIEs (ej. Bombas, Espuma, etc.) jamás deben contener anomalías de retimbrado ni caducidad
+      // Los sistemas y equipos que NO sean extintores ni BIEs (ej. Bombas, Espuma, etc.) jamás deben contener anomalías automáticas de extintor ni BIE
       const sistOEquipoExtintor = (title || '').toLowerCase().includes('extintor') || (eq.nombre || '').toLowerCase().includes('extintor') || (eq.tipo || '').toLowerCase().includes('extintor');
       const sistOEquipoBie = (title || '').toLowerCase().includes('bie') || (title || '').toLowerCase().includes('boca') || (eq.nombre || '').toLowerCase().includes('bie') || (eq.tipo || '').toLowerCase().includes('bie');
       if (!sistOEquipoExtintor && !sistOEquipoBie) {
         lines = lines.filter(line => {
           const lLow = line.toLowerCase();
-          return !lLow.includes('retimbr') && !lLow.includes('caducad');
+          return !lLow.includes('extintor caducado') &&
+                 !lLow.includes('extintor necesita retimbr') &&
+                 !lLow.includes('bie caducado') &&
+                 !lLow.includes('bie necesita realizar prueba');
         });
       }
       return lines;
@@ -1730,8 +1755,22 @@ export const generarActaExtintoresPDF = async (
         return lbl.includes('observaci') && !lbl.includes('anomal');
       });
       const obsDirecto = eq.observaciones && typeof eq.observaciones === 'string' ? eq.observaciones.trim() : '';
-      const obsDinamico = observacionesItem && eq[observacionesItem.key] ? String(eq[observacionesItem.key]).trim() : '';
-      const textObservacion = obsDirecto || obsDinamico || '';
+      let obsDinamico = observacionesItem && eq[observacionesItem.key] ? String(eq[observacionesItem.key]).trim() : '';
+      if (!obsDinamico) {
+        for (const k of Object.keys(eq)) {
+          const kLower = k.toLowerCase();
+          if (kLower.includes('observaci') && !kLower.includes('anomal') && k !== 'observaciones') {
+            if (typeof eq[k] === 'string' && eq[k].trim() !== '') {
+              obsDinamico = eq[k].trim();
+              break;
+            }
+          }
+        }
+      }
+      let textObservacion = obsDirecto;
+      if (obsDinamico && !textObservacion.includes(obsDinamico)) {
+        textObservacion = textObservacion ? `${textObservacion}\n${obsDinamico}` : obsDinamico;
+      }
       return textObservacion.split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean);
     };
 
@@ -2375,13 +2414,95 @@ export const generarActaExtintoresPDF = async (
         return val;
     };
 
+    const formatMesAnoSlash = (val: any): string => {
+      if (!val || val === '-') return '-';
+      const str = String(val).trim();
+      if (!str || str === 'TICK' || str === 'X') return str;
+
+      // 1. Formato YYYY-MM-DD o YYYY/MM/DD (ej: 2014-04-01) -> 04/2014
+      const ymdMatch = str.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
+      if (ymdMatch) {
+        const y = ymdMatch[1];
+        const m = ymdMatch[2].padStart(2, '0');
+        return `${m}/${y}`;
+      }
+
+      // 2. Formato YYYY-MM o YYYY/MM (ej: 2014-04) -> 04/2014
+      const ymMatch = str.match(/^(\d{4})[-\/](\d{1,2})$/);
+      if (ymMatch) {
+        const y = ymMatch[1];
+        const m = ymMatch[2].padStart(2, '0');
+        return `${m}/${y}`;
+      }
+
+      // 3. Formato DD-MM-YYYY o DD/MM/YYYY (ej: 01/04/2014) -> 04/2014
+      const dmyMatch = str.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/);
+      if (dmyMatch) {
+        const m = dmyMatch[2].padStart(2, '0');
+        const y = dmyMatch[3];
+        return `${m}/${y}`;
+      }
+
+      // 4. Formato MM-YYYY o MM/YYYY (ej: 04/2014 o 4/2014) -> 04/2014
+      const myMatch = str.match(/^(\d{1,2})[-\/](\d{4})$/);
+      if (myMatch) {
+        const m = myMatch[1].padStart(2, '0');
+        const y = myMatch[2];
+        return `${m}/${y}`;
+      }
+
+      return str;
+    };
+
+
+    const parseFechaLocal = (val: any): Date | null => {
+      if (!val) return null;
+      if (val instanceof Date) return isNaN(val.getTime()) ? null : val;
+      if (typeof val !== 'string') return null;
+      const str = val.trim().toLowerCase();
+      if (!str || str === '-' || str === 'n/a') return null;
+      const myMatch = str.match(/^(\d{1,2})[\/\-](\d{4})$/);
+      if (myMatch) {
+        const mes = parseInt(myMatch[1], 10) - 1;
+        const anio = parseInt(myMatch[2], 10);
+        if (mes >= 0 && mes <= 11) return new Date(anio, mes, 1);
+      }
+      const ymMatch = str.match(/^(\d{4})[\/\-](\d{1,2})$/);
+      if (ymMatch) {
+        const anio = parseInt(ymMatch[1], 10);
+        const mes = parseInt(ymMatch[2], 10) - 1;
+        if (mes >= 0 && mes <= 11) return new Date(anio, mes, 1);
+      }
+      const dmyMatch = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+      if (dmyMatch) {
+        return new Date(parseInt(dmyMatch[3], 10), parseInt(dmyMatch[2], 10) - 1, parseInt(dmyMatch[1], 10));
+      }
+      const ymdMatch = str.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+      if (ymdMatch) {
+        return new Date(parseInt(ymdMatch[1], 10), parseInt(ymdMatch[2], 10) - 1, parseInt(ymdMatch[3], 10));
+      }
+      const yOnly = str.match(/^\b(19\d{2}|20\d{2})\b$/);
+      if (yOnly) {
+        return new Date(parseInt(yOnly[1], 10), 0, 1);
+      }
+      const d = new Date(str);
+      return isNaN(d.getTime()) ? null : d;
+    };
+
+    const esFechaMayor10AnosLocal = (val: any): boolean => {
+      const d = parseFechaLocal(val);
+      if (!d) return false;
+      const today = new Date();
+      let diffY = today.getFullYear() - d.getFullYear();
+      if (today.getMonth() < d.getMonth() || (today.getMonth() === d.getMonth() && today.getDate() < d.getDate())) {
+        diffY--;
+      }
+      return diffY >= 10;
+    };
+
     const formatMesAno = (val: any) => {
         if (!val || val === '-') return '-';
-        const str = String(val).trim();
-        const parts = str.split('-');
-        if (parts.length === 3) return `${parts[1]}-${parts[0]}`;
-        if (parts.length === 2 && parts[0].length === 4) return `${parts[1]}-${parts[0]}`;
-        return str;
+        return formatMesAnoSlash(val);
     };
 
     const padCodigo = (val: any) => {
@@ -2698,6 +2819,9 @@ export const generarActaExtintoresPDF = async (
         const str = String(val).trim();
         if (str.toLowerCase() === 'true') return 'SÍ';
         if (str.toLowerCase() === 'false') return 'NO';
+        if (/^\d{4}[-\/]\d{1,2}/.test(str) || /^\d{1,2}[-\/]\d{4}/.test(str)) {
+          return formatMesAnoSlash(str);
+        }
         return str;
       };
 
@@ -3124,7 +3248,18 @@ export const generarActaExtintoresPDF = async (
                   if (itemLblNorm.includes('5.7') && itemLblNorm.includes('arranque en manual')) {
                     labelPregunta = labelPregunta.trim().replace(/[:\s]+$/, '') + ':';
                   }
-                  const val = getMark(rawVal);
+                  let val = getMark(rawVal);
+                  const isFechaItem = item.tipoRespuesta === 'fecha' || 
+                                      itemLblNorm.includes('3.1') || 
+                                      itemLblNorm.includes('3.2') || 
+                                      itemLblNorm.includes('fecha de fab') || 
+                                      itemLblNorm.includes('fecha de ret') ||
+                                      itemLblNorm.includes('fecha fab') ||
+                                      itemLblNorm.includes('fecha ret');
+                  if (isFechaItem && rawVal && rawVal !== '-' && rawVal !== 'TICK' && rawVal !== 'X') {
+                    const formatted = formatMesAnoSlash(rawVal);
+                    if (formatted !== '-') val = formatted;
+                  }
                   checkRows.push([
                     labelPregunta,
                     val
@@ -3210,6 +3345,15 @@ export const generarActaExtintoresPDF = async (
                     }
                     if (data.column.index === 1) {
                       const item = normalItems[data.row.index];
+                      const itemLbl = (item?.label || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                      const isFechaField = item && (item.tipoRespuesta === 'fecha' || itemLbl.includes('3.1') || itemLbl.includes('3.2') || itemLbl.includes('fecha'));
+                      if (isFechaField) {
+                        const cellVal = data.cell.raw !== undefined && data.cell.raw !== null ? data.cell.raw : (data.cell.text ? data.cell.text[0] : '');
+                        const formatted = formatMesAnoSlash(cellVal);
+                        if (formatted !== '-') {
+                          data.cell.text = [formatted];
+                        }
+                      }
                       if (item && item.tipoRespuesta === 'fecha') {
                       const esExtintor = title.toUpperCase().includes('EXTINTOR') || (typeof eq.nombre === 'string' ? eq.nombre : '').toUpperCase().includes('EXTINTOR') || (typeof eq.clase === 'string' ? eq.clase : '').toUpperCase().includes('EXTINTOR');
                       const esBie = title.toUpperCase().includes('BIE') || title.toUpperCase().includes('BOCA') || (typeof eq.nombre === 'string' ? eq.nombre : '').toUpperCase().includes('BIE') || (typeof eq.clase === 'string' ? eq.clase : '').toUpperCase().includes('BIE');
@@ -3430,6 +3574,13 @@ export const generarActaExtintoresPDF = async (
                                       (tableItem.label || '').toLowerCase().includes('puesto') ||
                                       (tableHeaders.length >= 12 && tableHeaders.some(h => (h||'').toLowerCase().includes('gong') || (h||'').toLowerCase().includes('sprinkler')));
 
+              const isTablaRecipientesGas = (sec.title || '').toLowerCase().includes('recipiente') ||
+                                            (sec.title || '').toLowerCase().includes('deposito') ||
+                                            (sec.title || '').toLowerCase().includes('botella') ||
+                                            (tableItem.label || '').toLowerCase().includes('recipiente') ||
+                                            (tableItem.label || '').toLowerCase().includes('deposito') ||
+                                            (tableItem.label || '').toLowerCase().includes('botella');
+
               const formatHeader = (h: string) => {
                 let norm = String(h || '').trim();
                 const normLower = norm.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -3452,6 +3603,45 @@ export const generarActaExtintoresPDF = async (
                   if (normLower.includes('fabricacion') || normLower.includes('ano')) return 'Año\nfabricación';
                   if (normLower === 'orden' || normLower === 'nº' || normLower.startsWith('orden')) return 'Orden';
                   if (normLower === 'tipo' || normLower.startsWith('tipo')) return 'Tipo';
+                }
+
+                if (isTablaRecipientesGas) {
+                  if (normLower === 'nº' || normLower === 'no' || normLower === '#' || normLower === 'item' || normLower === 'orden' || (normLower.includes('recipiente') && (normLower.startsWith('n') || normLower.includes('nº')))) {
+                    return 'Nº';
+                  }
+                  if (normLower.includes('serie') || (normLower.includes('numero') && normLower.includes('serie')) || normLower.includes('fabricante')) {
+                    return 'Nº Serie';
+                  }
+                  if (normLower.includes('agente') || normLower.includes('gas') || normLower.includes('extintor')) {
+                    return 'Agente\nextintor';
+                  }
+                  if (normLower.includes('funcion') || normLower.includes('tipo') || normLower.includes('rol')) {
+                    return 'Función /\ntipo';
+                  }
+                  if (normLower.includes('volumen') || normLower.includes('capacidad') || normLower.includes('litro')) {
+                    return 'Volumen\n(L)';
+                  }
+                  if (normLower.includes('fabricac') || normLower.includes('fechafab') || normLower.includes('ano fab')) {
+                    return 'Fecha\nfabricación';
+                  }
+                  if (normLower.includes('retimbr') || normLower.includes('hidrostat') || normLower.includes('hidraul') || normLower === 'ph' || normLower.includes(' ph')) {
+                    return 'Prueba\nhidrostática';
+                  }
+                  if (normLower.includes('carga') || (normLower.includes('peso') && normLower.includes('neto'))) {
+                    return 'Carga\n(kg)';
+                  }
+                  if (normLower.includes('tara')) {
+                    return 'Tara\n(kg)';
+                  }
+                  if (normLower.includes('bruto') || (normLower.includes('peso') && (normLower.includes('total') || normLower.includes('bruto')))) {
+                    return 'Peso total\n(kg)';
+                  }
+                  if (normLower.includes('presion') || normLower.includes('bar')) {
+                    return 'Presión\n(bar)';
+                  }
+                  if (normLower.includes('estado') || normLower.includes('conforme') || normLower.includes('resultado')) {
+                    return 'Estado /\nconforme';
+                  }
                 }
 
                 norm = norm
@@ -3495,6 +3685,8 @@ export const generarActaExtintoresPDF = async (
 
               const colStyles: any = {};
               let ubicColIdx = -1;
+              const totalColsCount = hasVerticalHeaders ? tableHeaders.length + 1 : tableHeaders.length;
+              const maxTableWidth = 269; // Ancho total idéntico al de extintores (297 - 14 - 14)
               
               if (isPuestosControl) {
                 tableHeaders.forEach((h, index) => {
@@ -3532,6 +3724,74 @@ export const generarActaExtintoresPDF = async (
                     colStyles[colIdx] = { cellWidth: 18, halign: 'center' };
                   }
                 });
+              } else if (isTablaRecipientesGas) {
+                tableHeaders.forEach((h, index) => {
+                  const colIdx = hasVerticalHeaders ? index + 1 : index;
+                  const norm = String(h || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\./g, "").trim();
+
+                  if (norm === 'orden' || norm === 'nº' || norm === 'no' || norm === '#' || norm === 'item' || (norm.includes('recipiente') && (norm.startsWith('n') || norm.includes('nº')))) {
+                    colStyles[colIdx] = { cellWidth: 10, halign: 'center' };
+                  } else if (norm.includes('serie') || (norm.includes('numero') && norm.includes('serie')) || norm.includes('fabricante') || norm.includes('codigo')) {
+                    colStyles[colIdx] = { cellWidth: 26, halign: 'center' };
+                  } else if (norm.includes('agente') || norm.includes('gas') || norm.includes('extintor')) {
+                    colStyles[colIdx] = { cellWidth: 28, halign: 'center' };
+                  } else if (norm.includes('funcion') || norm.includes('tipo') || norm.includes('rol')) {
+                    colStyles[colIdx] = { cellWidth: 22, halign: 'center' };
+                  } else if (norm.includes('retimbr') || norm.includes('hidrostat') || norm.includes('hidraul') || norm === 'ph' || norm.includes(' ph')) {
+                    colStyles[colIdx] = { cellWidth: 28, halign: 'center' };
+                  } else if (norm.includes('fabricac') || norm.includes('fechafab') || norm.includes('ano fab')) {
+                    colStyles[colIdx] = { cellWidth: 26, halign: 'center' };
+                  } else if (norm.includes('volumen') || norm.includes('capacidad') || norm.includes('litro')) {
+                    colStyles[colIdx] = { cellWidth: 18, halign: 'center' };
+                  } else if (norm.includes('carga') || (norm.includes('peso') && norm.includes('neto'))) {
+                    colStyles[colIdx] = { cellWidth: 18, halign: 'center' };
+                  } else if (norm.includes('tara')) {
+                    colStyles[colIdx] = { cellWidth: 18, halign: 'center' };
+                  } else if (norm.includes('presion') || norm.includes('bar')) {
+                    colStyles[colIdx] = { cellWidth: 18, halign: 'center' };
+                  } else if (norm.includes('bruto') || norm.includes('total')) {
+                    colStyles[colIdx] = { cellWidth: 18, halign: 'center' };
+                  } else if (norm.includes('ubicacion') || norm.includes('zona') || norm.includes('planta')) {
+                    ubicColIdx = colIdx;
+                    colStyles[colIdx] = { cellWidth: 28, halign: 'left' };
+                  } else if (norm.includes('estado') || norm.includes('conforme') || norm.includes('resultado')) {
+                    colStyles[colIdx] = { cellWidth: 19, halign: 'center' };
+                  } else {
+                    colStyles[colIdx] = { cellWidth: 20, halign: 'center' };
+                  }
+                });
+
+                let totalW = 0;
+                for (let c = 0; c < totalColsCount; c++) {
+                  totalW += colStyles[c]?.cellWidth || 20;
+                }
+                if (totalW < maxTableWidth) {
+                  const diff = maxTableWidth - totalW;
+                  const colsToExpand: number[] = [];
+                  for (let c = 0; c < totalColsCount; c++) {
+                    const hText = hasVerticalHeaders ? (c === 0 ? '' : tableHeaders[c - 1]) : tableHeaders[c];
+                    const norm = String(hText || '').toLowerCase().trim();
+                    const isOrden = norm === 'orden' || norm === 'nº' || norm === 'no' || norm === '#' || (c === 0 && hasVerticalHeaders);
+                    if (!isOrden) {
+                      colsToExpand.push(c);
+                    }
+                  }
+                  if (colsToExpand.length > 0) {
+                    const add = diff / colsToExpand.length;
+                    colsToExpand.forEach(c => {
+                      if (colStyles[c]) {
+                        colStyles[c].cellWidth = Math.round(((colStyles[c].cellWidth || 20) + add) * 10) / 10;
+                      }
+                    });
+                  }
+                } else if (totalW > maxTableWidth) {
+                  const scale = maxTableWidth / totalW;
+                  for (let c = 0; c < totalColsCount; c++) {
+                    if (colStyles[c]?.cellWidth) {
+                      colStyles[c].cellWidth = Math.floor(colStyles[c].cellWidth * scale * 10) / 10;
+                    }
+                  }
+                }
               } else {
                 tableHeaders.forEach((h, index) => {
                   const colIdx = hasVerticalHeaders ? index + 1 : index;
@@ -3578,9 +3838,6 @@ export const generarActaExtintoresPDF = async (
               }
 
               // ─── BLINDAJE DE ANCHO 100% (269 mm) PARA LA TABLA SEGÚN REGLA 20 ───
-              const totalColsCount = hasVerticalHeaders ? tableHeaders.length + 1 : tableHeaders.length;
-              const maxTableWidth = 269; // Ancho total idéntico al de extintores (297 - 14 - 14)
-
               if (isPuestosControl) {
                 // Para Puesto de Control: Ubicación se mantiene equilibrada (~34mm) y el resto de columnas
                 // absorben el ancho restante proporcionalmente para verse grandes y espaciosas
@@ -3632,6 +3889,8 @@ export const generarActaExtintoresPDF = async (
                     }
                   }
                 }
+              } else if (isTablaRecipientesGas) {
+                // Ya ajustado al 100% (269 mm) proporcionalmente arriba
               } else {
                 // Identificar columna para absorber el ancho restante (Ubicación, Zona/Cobertura o la más descriptiva)
                 let colExpandible = ubicColIdx !== -1 ? ubicColIdx : -1;
@@ -3742,6 +4001,27 @@ export const generarActaExtintoresPDF = async (
                   if (data.section === 'body') {
                     data.cell.styles.valign = 'middle';
                     data.cell.styles.overflow = 'hidden';
+
+                    // Si es columna de fecha de retimbre o hidrostática
+                    const colHeader = hasVerticalHeaders 
+                      ? (data.column.index > 0 ? tableHeaders[data.column.index - 1] : '')
+                      : tableHeaders[data.column.index];
+                    const colHeaderNorm = String(colHeader || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\./g, "").trim();
+                    const isRetimbreCol = colHeaderNorm.includes('retimbr') || colHeaderNorm.includes('hidrostat') || colHeaderNorm.includes('hidraul') || colHeaderNorm === 'ph' || colHeaderNorm.includes(' ph');
+                    if (isRetimbreCol) {
+                      const cellRaw = data.cell.raw !== undefined && data.cell.raw !== null ? data.cell.raw : (data.cell.text ? data.cell.text[0] : '');
+                      const cellStr = Array.isArray(cellRaw) ? cellRaw.join(' ') : String(cellRaw || '');
+                      if (cellStr && cellStr !== '-') {
+                        const formatted = formatMesAnoSlash(cellStr);
+                        if (formatted !== '-') {
+                          data.cell.text = [formatted];
+                        }
+                        if (esFechaMayor10AnosLocal(cellStr)) {
+                          data.cell.styles.textColor = [200, 0, 0];
+                          data.cell.styles.fontStyle = 'bold';
+                        }
+                      }
+                    }
                     const colStyleWidth = colStyles[data.column.index]?.cellWidth;
                     if (typeof colStyleWidth === 'number') {
                       const availW = Math.max(6, colStyleWidth - 2.5);
@@ -3763,8 +4043,8 @@ export const generarActaExtintoresPDF = async (
                   const isColRendimiento = isGrafico || 
                     (tableItem.label || '').toUpperCase().includes('CAUDAL') || 
                     (sec.title || '').toUpperCase().includes('CAUDAL');
-                  if (data.section === 'head' && isPuestosControl) {
-                    data.cell.styles.cellPadding = { top: 2, bottom: 2, left: 1.2, right: 1.2 };
+                  if (data.section === 'head' && (isPuestosControl || isTablaRecipientesGas)) {
+                    data.cell.styles.cellPadding = { top: 2, bottom: 2, left: 1, right: 1 };
                   }
                   if (data.section === 'head' && data.row.index === 0) {
                     data.cell.styles.halign = 'left';

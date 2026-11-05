@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   ArrowLeft, Calendar, Search, X,
   ChevronRight, Layers, Clock, Filter,
@@ -97,7 +97,7 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
   const [downloadedPartesMap, setDownloadedPartesMap] = useState<Record<string, boolean>>({});
   const [showDiagModal, setShowDiagModal] = useState(false);
   const [diagInfo, setDiagInfo] = useState<any>(null);
-  const [showModoModal, setShowModoModal] = useState(true);
+  const [showModoModal, setShowModoModal] = useState(false);
   const [loadingAlertas, setLoadingAlertas] = useState(false);
   const [showPdfModal, setShowPdfModal] = useState(false);
   const [parteSeleccionadoPdf, setParteSeleccionadoPdf] = useState<{ target: Parte; esAnterior: boolean } | null>(null);
@@ -714,6 +714,15 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
     }
   };
 
+  // Vista rápida automática al entrar (sin modal de selección)
+  const vistaRapidaIniciadaRef = useRef(false);
+  useEffect(() => {
+    if (vistaRapidaIniciadaRef.current) return;
+    vistaRapidaIniciadaRef.current = true;
+    ejecutarCargaAlertas(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const getEstadoBadge = (estado: string) => {
     switch (estado) {
       case 'Planificado':
@@ -725,7 +734,7 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
       case 'Descargado (Offline)':
         return 'bg-sky-100 text-sky-700';
       case 'Finalizado':
-        return 'bg-blue-100 text-blue-700 border border-blue-200';
+        return 'bg-green-500 text-white border border-green-600';
       case 'Pre-Cerrado':
         return 'bg-emerald-100 text-emerald-700 border border-emerald-200';
       case 'Cerrado':
@@ -768,7 +777,7 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div className="flex-1 min-w-0">
-            <h1 className="text-base font-bold text-zinc-900">Mis Partes</h1>
+            <h1 className="text-base font-bold text-zinc-900">Partes de Revisión</h1>
             <p className="text-[11px] text-zinc-500">
               {tecnicoLogueado
                 ? `${tecnicoLogueado.nombre} ${tecnicoLogueado.apellidos}`
@@ -786,64 +795,62 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
           </button>
         </div>
 
-        {/* Buscador, Filtro de Estado y Rango de fechas */}
-        <div className="px-4 pb-3 flex flex-col gap-2">
-          <div className="flex items-center gap-2 bg-white px-3 py-2.5 rounded-xl border border-red-500/80 shadow-sm">
-            <Calendar className="w-4 h-4 text-zinc-400 shrink-0" />
+        {/* Fecha · Estado · Búsqueda — una sola línea */}
+        <div className="px-4 pb-3 flex items-center gap-2">
+          <div className="flex items-center gap-1 bg-white px-2.5 py-1.5 rounded-xl border border-red-500/80 shadow-xs shrink-0">
+            <Calendar className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
             <input 
               type="date" 
               value={startDate} 
               onChange={e => setStartDate(e.target.value)} 
-              className="text-sm outline-none text-zinc-600 bg-transparent flex-1"
+              className="text-[11px] outline-none text-zinc-700 bg-transparent w-[88px]"
             />
-            <span className="text-zinc-400 text-sm">a</span>
+            <span className="text-zinc-400 text-[11px]">–</span>
             <input 
               type="date" 
               value={endDate} 
               onChange={e => setEndDate(e.target.value)} 
-              className="text-sm outline-none text-zinc-600 bg-transparent flex-1"
+              className="text-[11px] outline-none text-zinc-700 bg-transparent w-[88px]"
             />
             {(startDate || endDate) && (
               <button 
                 onClick={() => { setStartDate(''); setEndDate(''); }}
-                className="p-1 text-zinc-400 hover:text-red-500 rounded-md transition-colors shrink-0"
+                className="p-0.5 text-zinc-400 hover:text-red-500 rounded-md transition-colors shrink-0"
               >
-                <X className="w-3.5 h-3.5" />
+                <X className="w-3 h-3" />
               </button>
             )}
           </div>
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <Filter className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 pointer-events-none z-10" />
-              <select
-                value={estadoFilter}
-                onChange={e => setEstadoFilter(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 bg-white border border-red-500/80 rounded-xl text-sm outline-none focus:border-red-600 focus:ring-2 focus:ring-red-500/10 transition-all shadow-sm text-zinc-950 appearance-none font-medium cursor-pointer"
-              >
-                <option value="TODOS">Todos los estados</option>
-                <option value="Abierto">Abierto / Planificado</option>
-                <option value="En revisión">En revisión / En curso</option>
-                <option value="Finalizado">Parte Finalizado / Firmado</option>
-                <option value="Pre-Cerrado">Pre-cerrado</option>
-                <option value="Cerrado">Cerrado</option>
-              </select>
-            </div>
+          <div className="relative shrink-0">
+            <Filter className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400 pointer-events-none z-10" />
+            <select
+              value={estadoFilter}
+              onChange={e => setEstadoFilter(e.target.value)}
+              className="pl-8 pr-3 py-1.5 bg-white border border-red-500/80 rounded-xl text-[11px] outline-none text-zinc-900 font-semibold cursor-pointer"
+            >
+              <option value="TODOS">Todos</option>
+              <option value="Abierto">Planificado</option>
+              <option value="En revisión">En curso</option>
+              <option value="Finalizado">Finalizado</option>
+              <option value="Pre-Cerrado">Pre-cerrado</option>
+              <option value="Cerrado">Cerrado</option>
+            </select>
           </div>
-          <div className="relative">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+          <div className="relative flex-1 min-w-0">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400" />
             <input
               type="text"
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
-              placeholder="Buscar por cliente, centro o fecha..."
-              className="w-full pl-10 pr-9 py-2.5 bg-white border border-red-500/80 rounded-xl text-sm outline-none focus:border-red-600 focus:ring-2 focus:ring-red-500/10 transition-all shadow-sm text-zinc-950"
+              placeholder="Buscar…"
+              className="w-full pl-8 pr-7 py-1.5 bg-white border border-red-500/80 rounded-xl text-[11px] outline-none text-zinc-950"
             />
             {searchTerm && (
               <button
                 onClick={() => setSearchTerm('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-700"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-700"
               >
-                <X className="w-4 h-4" />
+                <X className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
@@ -880,7 +887,7 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
                       : parte.estado === 'Abierto'
                       ? 'border-amber-200 hover:border-amber-400'
                       : parte.estado === 'Finalizado'
-                      ? 'border-blue-200 hover:border-blue-400'
+                      ? 'border-green-300 hover:border-green-500'
                       : parte.estado === 'Pre-Cerrado'
                       ? 'border-emerald-200 hover:border-emerald-400'
                       : parte.estado === 'Cerrado'

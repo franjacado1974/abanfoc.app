@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import SearchableSelect from './components/SearchableSelect';
 import { 
   HardHat, Plus, Search, Filter, Edit, Trash2, CheckCircle2, 
@@ -23,13 +23,6 @@ const formatMoneda = (valor: any) => {
   const parts = num.toFixed(2).split('.');
   parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
   return `${parts.join(',')} €`;
-};
-
-const truncar30 = (texto: string | undefined | null, max = 30): string => {
-  if (!texto) return '—';
-  const str = String(texto).trim();
-  if (str.length <= max) return str;
-  return str.slice(0, max) + '...';
 };
 
 const MESES = [
@@ -119,6 +112,8 @@ const MESES_CONFIG: Record<string, {
 
 export default function Instalaciones() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const desdeCrearParteRef = useRef<boolean>(!!(location.state as any)?.abrirCrear);
   const currentMonthName = MESES[new Date().getMonth()];
   const [activeMonth, setActiveMonth] = useState<string>(currentMonthName);
 
@@ -140,7 +135,7 @@ export default function Instalaciones() {
   const [trabajosConfig, setTrabajosConfig] = useState<TrabajoConfig[]>(() => { try { return JSON.parse(localStorage.getItem('firecheck_db_trabajos') || '[]'); } catch { return []; } });
 
   // Modales
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(() => !!(location.state as any)?.abrirCrear);
   const [editingItem, setEditingItem] = useState<InstalacionItem | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<{ id: string; docId?: string } | null>(null);
   const [editingDescriptionIndex, setEditingDescriptionIndex] = useState<number | null>(null);
@@ -383,7 +378,7 @@ export default function Instalaciones() {
   const handleOpenCreateModal = async () => {
     setEditingItem(null);
     const defaultEmpresaId = obtenerEmpresaPorDefecto(empresas);
-    const nextPedido = await obtenerSiguienteNumeroPedido();
+    const nextPedido = await obtenerSiguienteNumeroPedido('PDI');
     setFormData({
       titulo: '',
       empresaId: defaultEmpresaId,
@@ -406,6 +401,21 @@ export default function Instalaciones() {
     });
     setIsModalOpen(true);
   };
+
+  const handleCerrarModal = () => {
+    setIsModalOpen(false);
+    if (desdeCrearParteRef.current) {
+      navigate('/crear-parte');
+    }
+  };
+
+  // Apertura automática desde el menú "Crear nuevo parte"
+  useEffect(() => {
+    if (desdeCrearParteRef.current) {
+      handleOpenCreateModal();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Abrir modal para editar
   const handleOpenEditModal = (item: InstalacionItem) => {
@@ -663,13 +673,13 @@ export default function Instalaciones() {
       empresaSeleccionada = empresas.find(e => (e as any)._docId === defId || (e as any).id === defId) || empresas[0];
     }
 
-    // Código de pedido (ej: PDV XXXXXX)
-    let codigoPDV = item.pedidoId || matchPedido?.numeroPedido || '';
+    // Código de pedido (ej: PDI XXXXXX o PDV XXXXXX)
+    let codigoPDV = item.numeroPedido || item.pedidoId || matchPedido?.numeroPedido || '';
     if (!codigoPDV && matchPresupuesto?.numeroPresupuesto) {
       codigoPDV = `PDV ${matchPresupuesto.numeroPresupuesto.replace(/^(PDV|PRV|PRE)[-\s]*/i, '')}`;
     }
     if (!codigoPDV) {
-      codigoPDV = `PDV-${item.id.replace(/^[A-Z]+-/, '')}`;
+      codigoPDV = `PDI-${item.id.replace(/^[A-Z]+-/, '')}`;
     }
 
     // Líneas del pedido
@@ -774,7 +784,7 @@ export default function Instalaciones() {
       }
     } else {
       // Crear nuevo
-      const finalPedido = formData.numeroPedido?.trim() || await obtenerSiguienteNumeroPedido();
+      const finalPedido = formData.numeroPedido?.trim() || await obtenerSiguienteNumeroPedido('PDI');
       const newId = `INS-${Date.now().toString().slice(-6)}`;
       const newItem: InstalacionItem = {
         id: newId,
@@ -812,6 +822,10 @@ export default function Instalaciones() {
     }
 
     setIsModalOpen(false);
+    if (!editingItem && desdeCrearParteRef.current) {
+      desdeCrearParteRef.current = false;
+      navigate('/partes-trabajo');
+    }
   };
 
   // Eliminar
@@ -914,8 +928,10 @@ export default function Instalaciones() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] px-4 sm:px-8 py-6">
-      {/* Header & Title + Controles (Búsqueda, Filtro de Estado y Nueva Instalación) */}
+    <div className={`min-h-screen ${desdeCrearParteRef.current ? 'bg-slate-900/40' : 'bg-[#F8FAFC] px-4 sm:px-8 py-6'}`}>
+      {!desdeCrearParteRef.current && (
+        <>
+          {/* Header & Title + Controles (Búsqueda, Filtro de Estado y Nueva Instalación) */}
       <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 mb-6">
         <div className="shrink-0">
           <div className="flex items-center gap-2.5">
@@ -1028,30 +1044,31 @@ export default function Instalaciones() {
       </div>
 
       {/* Main Table */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
+      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden w-full">
+        <div className="overflow-x-auto w-full">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-zinc-200/90 border-b border-zinc-300 text-[11px] font-bold uppercase tracking-wider text-zinc-700 whitespace-nowrap">
-                <th className="px-5 py-3 whitespace-nowrap">INSTALACIÓN</th>
-                <th className="whitespace-nowrap px-4 py-3">FECHA</th>
-                <th className="whitespace-nowrap px-4 py-3">LUGAR</th>
-                <th className="whitespace-nowrap px-4 py-3">TÉCNICO ASIGNADO</th>
-                <th className="whitespace-nowrap px-4 py-3">COMERCIAL</th>
-                <th className="whitespace-nowrap px-4 py-3 text-center">ESTADO</th>
-                <th className="whitespace-nowrap px-3 py-3 text-center">NOTA</th>
+                <th className="w-[8%] px-4 py-3 whitespace-nowrap">NÚMERO</th>
+                <th className="w-[28%] px-4 py-3 whitespace-nowrap">TÍTULO</th>
+                <th className="w-[9%] whitespace-nowrap px-3 py-3">FECHA</th>
+                <th className="w-[22%] whitespace-nowrap px-4 py-3">LUGAR</th>
+                <th className="w-[12%] whitespace-nowrap px-3 py-3">TÉCNICO ASIGNADO</th>
+                <th className="w-[9%] whitespace-nowrap px-3 py-3">COMERCIAL</th>
+                <th className="w-[8%] whitespace-nowrap px-3 py-3 text-center">ESTADO</th>
+                <th className="w-[4%] whitespace-nowrap px-2 py-3 text-center">NOTA</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
+                  <td colSpan={8} className="px-6 py-12 text-center text-slate-400">
                     Cargando proyectos de instalación...
                   </td>
                 </tr>
               ) : instalacionesFiltradas.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-slate-400 font-medium">
+                  <td colSpan={8} className="px-6 py-12 text-center text-slate-400 font-medium">
                     {search || estadoFilter !== 'TODOS'
                       ? 'No se encontraron proyectos de instalación con los filtros aplicados.'
                       : `No hay proyectos de instalación registrados en ${activeMonth}.`}
@@ -1066,31 +1083,33 @@ export default function Instalaciones() {
                     <tr 
                       key={item.id} 
                       onClick={() => setAccionesModalItem(item)}
-                      className={`transition-all duration-150 group cursor-pointer whitespace-nowrap ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100/80'} hover:bg-amber-100/90 hover:shadow-xs`}
+                      className={`transition-all duration-150 group cursor-pointer ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100/80'} hover:bg-amber-100/90 hover:shadow-xs`}
                     >
-                      {/* INSTALACIÓN CON REFERENCIA SUSTITUYENDO AL ICONO */}
-                      <td className="px-5 py-2.5 whitespace-nowrap">
-                        <div className="flex items-center gap-2.5 whitespace-nowrap">
-                          {(item.pedidoId || item.numeroPedido) ? (
-                            <span className="font-mono text-xs font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200/80 shrink-0">
-                              {item.pedidoId || item.numeroPedido}
-                            </span>
-                          ) : (
-                            <span className="font-mono text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200/60 shrink-0">
-                              —
-                            </span>
-                          )}
-                          <span className="font-medium text-slate-800 text-sm whitespace-nowrap" title={item.instalacion || 'Sin título'}>
-                            {truncar30(item.instalacion || 'Sin título')}
+                      {/* 1. COLUMNA NÚMERO PDI */}
+                      <td className="px-4 py-2.5 whitespace-nowrap">
+                        {(item.pedidoId || item.numeroPedido) ? (
+                          <span className="inline-block font-mono text-xs font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200/80">
+                            {item.pedidoId || item.numeroPedido}
                           </span>
-                        </div>
+                        ) : (
+                          <span className="inline-block font-mono text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200/60">
+                            —
+                          </span>
+                        )}
                       </td>
 
-                      {/* FECHA */}
-                      <td className="w-28 whitespace-nowrap px-4 py-2.5 text-xs">
+                      {/* 2. COLUMNA TÍTULO / INSTALACIÓN COMPLETO */}
+                      <td className="px-4 py-2.5">
+                        <span className="block font-medium text-slate-800 text-sm whitespace-normal break-words leading-snug">
+                          {item.instalacion || item.titulo || 'Sin título'}
+                        </span>
+                      </td>
+
+                      {/* 3. FECHA */}
+                      <td className="whitespace-nowrap px-3 py-2.5 text-xs overflow-hidden">
                         {item.fecha ? (
                           <span className="inline-flex items-center gap-1.5 text-slate-600 font-medium whitespace-nowrap">
-                            <Calendar className="w-3.5 h-3.5 text-red-500" />
+                            <Calendar className="w-3.5 h-3.5 text-red-500 shrink-0" />
                             {formatearFecha(item.fecha)}
                           </span>
                         ) : (
@@ -1098,37 +1117,37 @@ export default function Instalaciones() {
                         )}
                       </td>
 
-                      {/* LUGAR */}
-                      <td className="px-4 py-2.5 text-xs text-slate-600 whitespace-nowrap">
-                        <div className="flex items-center gap-1.5 whitespace-nowrap">
+                      {/* 4. LUGAR */}
+                      <td className="px-4 py-2.5 text-xs text-slate-600 whitespace-nowrap overflow-hidden">
+                        <div className="flex items-center gap-1.5 min-w-0">
                           <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                          <span title={item.lugar || '—'}>{truncar30(item.lugar)}</span>
+                          <span className="truncate" title={item.lugar || '—'}>{item.lugar || '—'}</span>
                         </div>
                       </td>
 
-                      {/* TÉCNICO ASIGNADO */}
-                      <td className="whitespace-nowrap px-4 py-2.5 text-xs text-slate-600">
-                        <div className="flex items-center gap-1.5 whitespace-nowrap">
+                      {/* 5. TÉCNICO ASIGNADO */}
+                      <td className="whitespace-nowrap px-3 py-2.5 text-xs text-slate-600 overflow-hidden">
+                        <div className="flex items-center gap-1.5 min-w-0">
                           <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                          <span title={item.tecnicoAsignado || 'Sin asignar'}>{truncar30(item.tecnicoAsignado || 'Sin asignar')}</span>
+                          <span className="truncate" title={item.tecnicoAsignado || 'Sin asignar'}>{item.tecnicoAsignado || 'Sin asignar'}</span>
                         </div>
                       </td>
 
-                      {/* COMERCIAL */}
-                      <td className="whitespace-nowrap px-4 py-2.5 text-xs text-slate-600">
-                        <div className="flex items-center gap-1.5 whitespace-nowrap">
+                      {/* 6. COMERCIAL */}
+                      <td className="whitespace-nowrap px-3 py-2.5 text-xs text-slate-600 overflow-hidden">
+                        <div className="flex items-center gap-1.5 min-w-0">
                           <Briefcase className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                          <span title={item.comercial || '—'}>{truncar30(item.comercial || '—')}</span>
+                          <span className="truncate" title={item.comercial || '—'}>{item.comercial || '—'}</span>
                         </div>
                       </td>
 
-                      {/* ESTADO */}
-                      <td className="w-28 whitespace-nowrap px-4 py-2.5 text-center">
+                      {/* 7. ESTADO */}
+                      <td className="whitespace-nowrap px-3 py-2.5 text-center">
                         {renderEstadoBadge(item.estado)}
                       </td>
 
-                      {/* NOTA CON ICONO Y NOTIFICACIÓN SI EXISTE */}
-                      <td className="w-16 whitespace-nowrap px-3 py-2.5 text-center">
+                      {/* 8. NOTA CON ICONO Y NOTIFICACIÓN SI EXISTE */}
+                      <td className="whitespace-nowrap px-2 py-2.5 text-center">
                         <button
                           type="button"
                           onClick={(e) => {
@@ -1484,6 +1503,8 @@ export default function Instalaciones() {
           </div>
         </div>
       )}
+        </>
+      )}
 
       {/* MODAL CREAR / EDITAR COMPLETO */}
       {isModalOpen && (() => {
@@ -1511,7 +1532,7 @@ export default function Instalaciones() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setIsModalOpen(false)}
+                  onClick={handleCerrarModal}
                   className="p-2 text-slate-400 hover:text-white rounded-xl transition-colors cursor-pointer"
                 >
                   <X className="w-5 h-5" />
@@ -1650,14 +1671,37 @@ export default function Instalaciones() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">
-                      Número de Pedido
-                    </label>
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                      <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider">
+                        Número de Pedido
+                      </label>
+                      <button
+                        type="button"
+                        disabled={Boolean(formData.numeroPedido && formData.numeroPedido.trim() !== '')}
+                        onClick={async () => {
+                          if (formData.numeroPedido && formData.numeroPedido.trim() !== '') return;
+                          const nuevoNumero = await obtenerSiguienteNumeroPedido('PDI');
+                          setFormData(prev => ({ ...prev, numeroPedido: nuevoNumero }));
+                        }}
+                        className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider shrink-0 transition-all leading-tight ${
+                          formData.numeroPedido && formData.numeroPedido.trim() !== ''
+                            ? 'bg-zinc-100 text-zinc-400 border border-zinc-200 cursor-not-allowed'
+                            : 'bg-red-600 hover:bg-red-700 text-white shadow-2xs cursor-pointer active:scale-95'
+                        }`}
+                        title={
+                          formData.numeroPedido && formData.numeroPedido.trim() !== ''
+                            ? 'Esta tarea ya tiene un número de pedido asignado'
+                            : 'Generar nuevo número de pedido único'
+                        }
+                      >
+                        Generar
+                      </button>
+                    </div>
                     <input
                       type="text"
                       value={formData.numeroPedido}
                       onChange={e => setFormData({ ...formData, numeroPedido: e.target.value.toUpperCase() })}
-                      placeholder="Ej: PDV 26001 (Opcional)"
+                      placeholder="Ej: PDI.26001 (Opcional)"
                       className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-mono font-bold text-zinc-800 outline-none focus:ring-2 focus:ring-red-500/20"
                     />
                   </div>
@@ -1916,7 +1960,7 @@ export default function Instalaciones() {
                 <div className="flex items-center justify-end gap-3 pt-4 border-t border-zinc-100">
                   <button
                     type="button"
-                    onClick={() => setIsModalOpen(false)}
+                    onClick={handleCerrarModal}
                     className="px-5 py-2.5 rounded-xl font-bold text-sm text-zinc-700 bg-zinc-100 hover:bg-zinc-200 transition-colors cursor-pointer"
                   >
                     Cancelar

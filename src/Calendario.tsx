@@ -127,6 +127,8 @@ export interface EventoCalendario {
   comercial?: string;
   estado?: string;
   fecha: string; // YYYY-MM-DD
+  fechaInicio?: string; // YYYY-MM-DD
+  fechaFin?: string; // YYYY-MM-DD
   modulo: 'Mantenimientos' | 'Reparaciones' | 'Instalaciones' | 'Urgencias' | 'Festivo';
   tipoBadge: string;
   colorTag: string;
@@ -154,17 +156,28 @@ export default function Calendario() {
   const [editEstado, setEditEstado] = useState<string>('Pendiente');
   const [editNota, setEditNota] = useState<string>('');
   const [editFechaConfirmada, setEditFechaConfirmada] = useState<boolean>(false);
+  const [editFechaInicio, setEditFechaInicio] = useState<string>('');
+  const [editFechaFin, setEditFechaFin] = useState<string>('');
+  const [mostrarAmpliarRango, setMostrarAmpliarRango] = useState<boolean>(false);
   const [guardandoCambios, setGuardandoCambios] = useState(false);
 
   useEffect(() => {
     if (selectedEvento) {
+      const startIso = selectedEvento.fechaInicio || selectedEvento.fecha;
+      const endIso = selectedEvento.fechaFin && selectedEvento.fechaFin > startIso ? selectedEvento.fechaFin : startIso;
       setEditEstado(selectedEvento.estado || 'Pendiente');
       setEditNota(selectedEvento.detalles || '');
       setEditFechaConfirmada(!!selectedEvento.fechaConfirmada);
+      setEditFechaInicio(startIso);
+      setEditFechaFin(endIso);
+      setMostrarAmpliarRango(Boolean(selectedEvento.fechaFin && selectedEvento.fechaFin > startIso));
     } else {
       setEditEstado('Pendiente');
       setEditNota('');
       setEditFechaConfirmada(false);
+      setEditFechaInicio('');
+      setEditFechaFin('');
+      setMostrarAmpliarRango(false);
     }
   }, [selectedEvento]);
 
@@ -344,11 +357,43 @@ export default function Calendario() {
   const eventosPorFecha = useMemo(() => {
     const map: Record<string, EventoCalendario[]> = {};
 
-    const addEvento = (dateRaw: string | undefined | null, ev: EventoCalendario) => {
-      const dateStr = normalizeDate(dateRaw);
-      if (!dateStr) return;
-      if (!map[dateStr]) map[dateStr] = [];
-      map[dateStr].push({ ...ev, fecha: dateStr });
+    const getDatesInRange = (startRaw: string | undefined | null, endRaw?: string | undefined | null): string[] => {
+      const startStr = normalizeDate(startRaw);
+      if (!startStr) return [];
+      const endStr = normalizeDate(endRaw);
+      if (!endStr || endStr <= startStr) return [startStr];
+
+      const dates: string[] = [];
+      const [sy, sm, sd] = startStr.split('-').map(Number);
+      const [ey, em, ed] = endStr.split('-').map(Number);
+      const curr = new Date(sy, sm - 1, sd);
+      const end = new Date(ey, em - 1, ed);
+
+      let safety = 0;
+      while (curr <= end && safety < 90) {
+        dates.push(formatDateIso(curr));
+        curr.setDate(curr.getDate() + 1);
+        safety++;
+      }
+      return dates.length > 0 ? dates : [startStr];
+    };
+
+    const addEvento = (dateRaw: string | undefined | null, ev: EventoCalendario, endDateRaw?: string | undefined | null) => {
+      const startIso = normalizeDate(dateRaw);
+      if (!startIso) return;
+      const endIso = normalizeDate(endDateRaw);
+      const validEndIso = endIso && endIso > startIso ? endIso : undefined;
+      const dates = getDatesInRange(startIso, validEndIso);
+
+      dates.forEach((dateStr) => {
+        if (!map[dateStr]) map[dateStr] = [];
+        map[dateStr].push({
+          ...ev,
+          fecha: dateStr,
+          fechaInicio: startIso,
+          fechaFin: validEndIso
+        });
+      });
     };
 
     // 0. Festivos de Barcelona y España
@@ -420,7 +465,7 @@ export default function Calendario() {
         detalles: p.observacionesTecnico || p.comentariosPrivados || undefined,
         completado,
         fechaConfirmada: (p as any).fechaConfirmada === true
-      });
+      }, p.fechaFinProgramada || (p as any).fechaFin);
     });
 
     // 2. Operaciones - Reparaciones: "Rep. [Cliente / Lugar]" (Azul)
@@ -472,7 +517,7 @@ export default function Calendario() {
         completado,
         resueltaManual,
         fechaConfirmada: (r as any).fechaConfirmada === true
-      });
+      }, r.fechaFinProgramada || (r as any).fechaFin);
     });
 
     // 3. Operaciones - Instalaciones: "Inst. [Cliente / Lugar]" (Rojo)
@@ -523,7 +568,7 @@ export default function Calendario() {
         completado,
         resueltaManual,
         fechaConfirmada: (i as any).fechaConfirmada === true
-      });
+      }, i.fechaFinProgramada || (i as any).fechaFin);
     });
 
     // 4. Operaciones - Urgencias: "Urg. [Cliente / Lugar]" (Rosa/Rojo vibrante con AlertTriangle)
@@ -576,7 +621,7 @@ export default function Calendario() {
         completado,
         resueltaManual,
         fechaConfirmada: (u as any).fechaConfirmada === true
-      });
+      }, u.fechaFinProgramada || (u as any).fechaFin);
     });
 
     return map;
@@ -692,19 +737,39 @@ export default function Calendario() {
       return;
     }
 
-    const { modulo, rawDocId, sigla } = draggedEvento;
+    const { modulo, rawDocId, sigla, fechaInicio, fechaFin } = draggedEvento;
     setDraggedEvento(null);
+
+    // Si la tarea tiene rango de varios días, desplazar inicio y fin manteniendo la duración
+    let newStartIso = targetIso;
+    let newEndIso = '';
+    if (fechaInicio && fechaFin && fechaFin > fechaInicio) {
+      const [sy, sm, sd] = sourceIso.split('-').map(Number);
+      const [ty, tm, td] = targetIso.split('-').map(Number);
+      const deltaMs = new Date(ty, tm - 1, td).getTime() - new Date(sy, sm - 1, sd).getTime();
+      const deltaDays = Math.round(deltaMs / (1000 * 60 * 60 * 24));
+
+      const [iy, im, id] = fechaInicio.split('-').map(Number);
+      const dtStart = new Date(iy, im - 1, id);
+      dtStart.setDate(dtStart.getDate() + deltaDays);
+      newStartIso = formatDateIso(dtStart);
+
+      const [fy, fm, fd] = fechaFin.split('-').map(Number);
+      const dtEnd = new Date(fy, fm - 1, fd);
+      dtEnd.setDate(dtEnd.getDate() + deltaDays);
+      newEndIso = formatDateIso(dtEnd);
+    }
 
     // Mantenimientos / Planificación: actualiza fechaProgramada en DD-MM-YYYY
     if (modulo === 'Mantenimientos' || sigla === 'Rev.') {
-      const parts = targetIso.split('-'); // [YYYY, MM, DD]
+      const parts = newStartIso.split('-'); // [YYYY, MM, DD]
       const planificacionDateStr = `${parts[2]}-${parts[1]}-${parts[0]}`; // DD-MM-YYYY
 
       setPartes((prev) =>
         prev.map((p) => {
           const docId = (p as any)._docId || p.id;
           if (docId === rawDocId) {
-            return { ...p, fechaProgramada: planificacionDateStr };
+            return { ...p, fechaProgramada: planificacionDateStr, ...(newEndIso ? { fechaFinProgramada: newEndIso } : {}) };
           }
           return p;
         })
@@ -715,7 +780,7 @@ export default function Calendario() {
         const updated = stored.map((p: any) => {
           const docId = p._docId || p.id;
           if (docId === rawDocId) {
-            return { ...p, fechaProgramada: planificacionDateStr };
+            return { ...p, fechaProgramada: planificacionDateStr, ...(newEndIso ? { fechaFinProgramada: newEndIso } : {}) };
           }
           return p;
         });
@@ -723,16 +788,17 @@ export default function Calendario() {
       } catch {}
 
       try {
-        await updateParte(rawDocId, { fechaProgramada: planificacionDateStr });
+        await updateParte(rawDocId, { fechaProgramada: planificacionDateStr, ...(newEndIso ? { fechaFinProgramada: newEndIso } : {}) });
       } catch (err) {
         console.error('Error al mover revisión en Firestore:', err);
       }
     } else if (modulo === 'Reparaciones' || sigla === 'Rep.') {
+      const patch = { fecha: newStartIso, ...(newEndIso ? { fechaFinProgramada: newEndIso } : {}) };
       setReparaciones((prev) =>
         prev.map((r) => {
           const docId = (r as any)._docId || r.id;
           if (docId === rawDocId) {
-            return { ...r, fecha: targetIso };
+            return { ...r, ...patch };
           }
           return r;
         })
@@ -743,7 +809,7 @@ export default function Calendario() {
         const updated = stored.map((r: any) => {
           const docId = r._docId || r.id;
           if (docId === rawDocId) {
-            return { ...r, fecha: targetIso };
+            return { ...r, ...patch };
           }
           return r;
         });
@@ -751,16 +817,17 @@ export default function Calendario() {
       } catch {}
 
       try {
-        await updateReparacion(rawDocId, { fecha: targetIso });
+        await updateReparacion(rawDocId, patch);
       } catch (err) {
         console.error('Error al mover reparación en Firestore:', err);
       }
     } else if (modulo === 'Instalaciones' || sigla === 'Inst.') {
+      const patch = { fecha: newStartIso, ...(newEndIso ? { fechaFinProgramada: newEndIso } : {}) };
       setInstalaciones((prev) =>
         prev.map((i) => {
           const docId = (i as any)._docId || i.id;
           if (docId === rawDocId) {
-            return { ...i, fecha: targetIso };
+            return { ...i, ...patch };
           }
           return i;
         })
@@ -771,7 +838,7 @@ export default function Calendario() {
         const updated = stored.map((i: any) => {
           const docId = i._docId || i.id;
           if (docId === rawDocId) {
-            return { ...i, fecha: targetIso };
+            return { ...i, ...patch };
           }
           return i;
         });
@@ -779,16 +846,17 @@ export default function Calendario() {
       } catch {}
 
       try {
-        await updateInstalacion(rawDocId, { fecha: targetIso });
+        await updateInstalacion(rawDocId, patch);
       } catch (err) {
         console.error('Error al mover instalación en Firestore:', err);
       }
     } else if (modulo === 'Urgencias' || sigla === 'Urg.') {
+      const patch = { fecha: newStartIso, ...(newEndIso ? { fechaFinProgramada: newEndIso } : {}) };
       setUrgencias((prev) =>
         prev.map((u) => {
           const docId = (u as any)._docId || u.id;
           if (docId === rawDocId) {
-            return { ...u, fecha: targetIso };
+            return { ...u, ...patch };
           }
           return u;
         })
@@ -799,7 +867,7 @@ export default function Calendario() {
         const updated = stored.map((u: any) => {
           const docId = u._docId || u.id;
           if (docId === rawDocId) {
-            return { ...u, fecha: targetIso };
+            return { ...u, ...patch };
           }
           return u;
         });
@@ -807,7 +875,7 @@ export default function Calendario() {
       } catch {}
 
       try {
-        await updateUrgencia(rawDocId, { fecha: targetIso });
+        await updateUrgencia(rawDocId, patch);
       } catch (err) {
         console.error('Error al mover urgencia en Firestore:', err);
       }
@@ -864,7 +932,7 @@ export default function Calendario() {
     }
   };
 
-  // Guardar Estado, Nota y Fecha Confirmada editados desde el modal del Calendario
+  // Guardar Estado, Nota, Rango de Fecha Programada y Fecha Confirmada editados desde el modal del Calendario
   const handleGuardarCambiosEvento = async (ev: EventoCalendario) => {
     const { rawDocId, modulo, id: evId } = ev;
     if (!rawDocId || modulo === 'Festivo') return;
@@ -882,6 +950,8 @@ export default function Calendario() {
     const notaTrimmed = editNota.trim();
     const nuevoEstado = editEstado || ev.estado || 'Pendiente';
     const confirmadaVal = !!editFechaConfirmada;
+    const startIso = editFechaInicio || ev.fechaInicio || ev.fecha;
+    const endIso = editFechaFin && editFechaFin > startIso ? editFechaFin : '';
 
     const persistLocal = (key: string, updater: (it: any) => any) => {
       try {
@@ -895,22 +965,55 @@ export default function Calendario() {
     setGuardandoCambios(true);
     try {
       if (modulo === 'Reparaciones') {
-        const patch = { estado: nuevoEstado as any, nota: notaTrimmed, observaciones: notaTrimmed, fechaConfirmada: confirmadaVal } as any;
+        const patch = {
+          estado: nuevoEstado as any,
+          nota: notaTrimmed,
+          observaciones: notaTrimmed,
+          fechaConfirmada: confirmadaVal,
+          fecha: startIso,
+          fechaFinProgramada: endIso,
+          fechaFin: endIso
+        } as any;
         setReparaciones((prev) => prev.map((it) => (matchesItem(it) ? { ...it, ...patch } : it)));
         persistLocal('firecheck_db_reparaciones', (it) => ({ ...it, ...patch }));
         await updateReparacion(rawDocId, patch);
       } else if (modulo === 'Instalaciones') {
-        const patch = { estado: nuevoEstado as any, nota: notaTrimmed, observaciones: notaTrimmed, fechaConfirmada: confirmadaVal } as any;
+        const patch = {
+          estado: nuevoEstado as any,
+          nota: notaTrimmed,
+          observaciones: notaTrimmed,
+          fechaConfirmada: confirmadaVal,
+          fecha: startIso,
+          fechaFinProgramada: endIso,
+          fechaFin: endIso
+        } as any;
         setInstalaciones((prev) => prev.map((it) => (matchesItem(it) ? { ...it, ...patch } : it)));
         persistLocal('firecheck_db_instalaciones', (it) => ({ ...it, ...patch }));
         await updateInstalacion(rawDocId, patch);
       } else if (modulo === 'Urgencias') {
-        const patch = { estado: nuevoEstado as any, nota: notaTrimmed, observaciones: notaTrimmed, fechaConfirmada: confirmadaVal } as any;
+        const patch = {
+          estado: nuevoEstado as any,
+          nota: notaTrimmed,
+          observaciones: notaTrimmed,
+          fechaConfirmada: confirmadaVal,
+          fecha: startIso,
+          fechaFinProgramada: endIso,
+          fechaFin: endIso
+        } as any;
         setUrgencias((prev) => prev.map((it) => (matchesItem(it) ? { ...it, ...patch } : it)));
         persistLocal('firecheck_db_urgencias', (it) => ({ ...it, ...patch }));
         await updateUrgencia(rawDocId, patch);
       } else if (modulo === 'Mantenimientos') {
-        const patch = { estado: nuevoEstado as any, observacionesTecnico: notaTrimmed, fechaConfirmada: confirmadaVal } as any;
+        const parts = startIso.split('-');
+        const planificacionDateStr = parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : startIso;
+        const patch = {
+          estado: nuevoEstado as any,
+          observacionesTecnico: notaTrimmed,
+          fechaConfirmada: confirmadaVal,
+          fechaProgramada: planificacionDateStr,
+          fechaFinProgramada: endIso,
+          fechaFin: endIso
+        } as any;
         setPartes((prev) => prev.map((it) => (matchesItem(it) ? { ...it, ...patch } : it)));
         persistLocal('firecheck_db_partes', (it) => ({ ...it, ...patch }));
         await updateParte(rawDocId, patch);
@@ -1201,29 +1304,109 @@ export default function Calendario() {
 
             {/* Contenido del modal informativo */}
             <div className="p-5 space-y-3.5 text-xs text-slate-600 max-h-[70vh] overflow-y-auto">
-              <div className="flex items-center justify-between gap-2.5 p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                <div className="flex items-center gap-2.5">
-                  <CalendarDays className="w-4 h-4 text-red-500 shrink-0" />
-                  <div>
-                    <span className="text-[10px] text-slate-600 font-bold block uppercase">Fecha programada</span>
-                    <span className="font-extrabold text-slate-800 text-sm">
-                      {selectedEvento.fecha.split('-').reverse().join('/')}
-                    </span>
+              <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 space-y-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <CalendarDays className="w-4 h-4 text-red-500 shrink-0" />
+                    <div>
+                      <span className="text-[10px] text-slate-600 font-bold block uppercase">Fecha programada</span>
+                      <span className="font-extrabold text-slate-800 text-sm">
+                        {(editFechaInicio || selectedEvento.fecha).split('-').reverse().join('/')}
+                        {editFechaFin && editFechaFin > (editFechaInicio || selectedEvento.fecha) && (
+                          <span className="text-red-600">
+                            {' '}al {editFechaFin.split('-').reverse().join('/')}
+                          </span>
+                        )}
+                      </span>
+                    </div>
                   </div>
+
+                  {selectedEvento.modulo !== 'Festivo' && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setMostrarAmpliarRango((prev) => !prev)}
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-[11px] font-extrabold transition-all cursor-pointer shadow-2xs ${
+                          mostrarAmpliarRango || (editFechaFin && editFechaFin > editFechaInicio)
+                            ? 'bg-red-50 text-red-700 border-red-300 hover:bg-red-100'
+                            : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200'
+                        }`}
+                        title="Ampliar rango de fecha programada para que la tarea se repita varios días en el calendario"
+                      >
+                        <CalendarDays className="w-3.5 h-3.5 text-red-500 shrink-0" />
+                        <span>Ampliar rango de fecha programada</span>
+                      </button>
+
+                      <label className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border bg-white hover:bg-slate-50 border-slate-200 cursor-pointer select-none shadow-2xs transition-all">
+                        <input
+                          type="checkbox"
+                          checked={editFechaConfirmada}
+                          onChange={(e) => setEditFechaConfirmada(e.target.checked)}
+                          className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer accent-emerald-600"
+                        />
+                        <span className={`text-xs font-extrabold ${editFechaConfirmada ? 'text-emerald-700' : 'text-slate-700'}`}>
+                          Fecha confirmada
+                        </span>
+                      </label>
+                    </div>
+                  )}
                 </div>
 
-                {selectedEvento.modulo !== 'Festivo' && (
-                  <label className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border bg-white hover:bg-slate-50 border-slate-200 cursor-pointer select-none shadow-2xs transition-all">
-                    <input
-                      type="checkbox"
-                      checked={editFechaConfirmada}
-                      onChange={(e) => setEditFechaConfirmada(e.target.checked)}
-                      className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer accent-emerald-600"
-                    />
-                    <span className={`text-xs font-extrabold ${editFechaConfirmada ? 'text-emerald-700' : 'text-slate-700'}`}>
-                      Fecha confirmada
-                    </span>
-                  </label>
+                {selectedEvento.modulo !== 'Festivo' && mostrarAmpliarRango && (
+                  <div className="pt-2.5 border-t border-slate-200/80 space-y-2 animate-in fade-in duration-150">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-extrabold text-red-700 uppercase tracking-wider">
+                        Ampliar rango de fecha programada
+                      </span>
+                      {editFechaFin && editFechaFin > editFechaInicio && (
+                        <button
+                          type="button"
+                          onClick={() => setEditFechaFin(editFechaInicio)}
+                          className="text-[10px] font-bold text-slate-500 hover:text-red-600 underline cursor-pointer"
+                        >
+                          Dejar en 1 solo día
+                        </button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+                          Desde (Fecha inicio)
+                        </label>
+                        <input
+                          type="date"
+                          value={editFechaInicio}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setEditFechaInicio(val);
+                            if (!editFechaFin || val > editFechaFin) {
+                              setEditFechaFin(val);
+                            }
+                          }}
+                          className="w-full px-2.5 py-1.5 rounded-lg bg-white border border-slate-300 focus:border-red-500 focus:ring-2 focus:ring-red-500/20 text-xs font-bold text-slate-800 outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+                          Hasta (Fecha fin)
+                        </label>
+                        <input
+                          type="date"
+                          value={editFechaFin}
+                          min={editFechaInicio}
+                          onChange={(e) => setEditFechaFin(e.target.value)}
+                          className="w-full px-2.5 py-1.5 rounded-lg bg-white border border-slate-300 focus:border-red-500 focus:ring-2 focus:ring-red-500/20 text-xs font-bold text-slate-800 outline-none"
+                        />
+                      </div>
+                    </div>
+                    {editFechaFin && editFechaFin > editFechaInicio && (
+                      <p className="text-[11px] font-semibold text-red-700 bg-red-50/80 border border-red-200/80 rounded-lg px-2.5 py-1">
+                        La tarea se repetirá en el calendario del{' '}
+                        <span className="font-extrabold">{editFechaInicio.split('-').reverse().join('/')}</span> al{' '}
+                        <span className="font-extrabold">{editFechaFin.split('-').reverse().join('/')}</span>. Al finalizarse, todos los días quedarán como realizados.
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
 

@@ -14,6 +14,94 @@ interface TableInputProps {
   currentEquipo?: any;
 }
 
+function parseFechaTable(val: any): Date | null {
+  if (!val) return null;
+  if (val instanceof Date) return isNaN(val.getTime()) ? null : val;
+  if (typeof val !== 'string') return null;
+  const str = val.trim().toLowerCase();
+  if (!str || str === '-' || str === 'n/a' || str === 'ok') return null;
+
+  const myMatch = str.match(/^(\d{1,2})[\/\-](\d{4})$/);
+  if (myMatch) {
+    const mes = parseInt(myMatch[1], 10) - 1;
+    const anio = parseInt(myMatch[2], 10);
+    if (mes >= 0 && mes <= 11) return new Date(anio, mes, 1);
+  }
+
+  const ymMatch = str.match(/^(\d{4})[\/\-](\d{1,2})$/);
+  if (ymMatch) {
+    const anio = parseInt(ymMatch[1], 10);
+    const mes = parseInt(ymMatch[2], 10) - 1;
+    if (mes >= 0 && mes <= 11) return new Date(anio, mes, 1);
+  }
+
+  const dmyMatch = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (dmyMatch) {
+    return new Date(parseInt(dmyMatch[3], 10), parseInt(dmyMatch[2], 10) - 1, parseInt(dmyMatch[1], 10));
+  }
+
+  const ymdMatch = str.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+  if (ymdMatch) {
+    return new Date(parseInt(ymdMatch[1], 10), parseInt(ymdMatch[2], 10) - 1, parseInt(ymdMatch[3], 10));
+  }
+
+  const yearOnly = str.match(/^\b(19\d{2}|20\d{2})\b$/);
+  if (yearOnly) {
+    return new Date(parseInt(yearOnly[1], 10), 0, 1);
+  }
+
+  const d = new Date(str);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function esFechaMayor10Anos(val: any): boolean {
+  const d = parseFechaTable(val);
+  if (!d) return false;
+  const today = new Date();
+  let diffYears = today.getFullYear() - d.getFullYear();
+  if (today.getMonth() < d.getMonth() || (today.getMonth() === d.getMonth() && today.getDate() < d.getDate())) {
+    diffYears--;
+  }
+  return diffYears >= 10;
+}
+
+function esColumnaRetimbre(header: string): boolean {
+  if (!header || typeof header !== 'string') return false;
+  const norm = header.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\./g, "").trim();
+  return norm.includes('retimbr') ||
+         norm.includes('hidrostat') ||
+         norm.includes('hidraul') ||
+         norm === 'ph' ||
+         norm.includes(' ph') ||
+         norm.startsWith('ph ') ||
+         norm.includes('p h') ||
+         (norm.includes('prueba') && (norm.includes('hidr') || norm.includes('presion')));
+}
+
+function formatMesAnoSlash(val: any): string {
+  if (!val || val === '-') return '-';
+  const str = String(val).trim();
+  const ymdMatch = str.match(/^(\d{4})[-\/](\d{1,2})/);
+  if (ymdMatch) {
+    const y = ymdMatch[1];
+    const m = ymdMatch[2].padStart(2, '0');
+    return `${m}/${y}`;
+  }
+  const dmyMatch = str.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/);
+  if (dmyMatch) {
+    const m = dmyMatch[2].padStart(2, '0');
+    const y = dmyMatch[3];
+    return `${m}/${y}`;
+  }
+  const myMatch = str.match(/^(\d{1,2})[-\/](\d{4})/);
+  if (myMatch) {
+    const m = myMatch[1].padStart(2, '0');
+    const y = myMatch[2];
+    return `${m}/${y}`;
+  }
+  return str;
+}
+
 export default function TableInput({
   label,
   opciones = [],
@@ -355,9 +443,73 @@ export default function TableInput({
     onChange(JSON.stringify(newData));
   };
 
+const getColWidthClass = (col: string): string => {
+  const norm = String(col || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  if (norm === 'orden' || norm === 'nº' || norm === 'no' || norm === '#' || norm === 'item' || (norm.includes('recipiente') && (norm.startsWith('n') || norm.includes('nº')))) {
+    return 'w-12 min-w-[50px] max-w-[65px]';
+  }
+  if (norm.includes('volumen') || norm.includes('capacidad') || norm.includes('tara') || norm.includes('carga') || norm.includes('presion') || norm.includes('bar')) {
+    return 'w-24 min-w-[85px]';
+  }
+  if (norm.includes('retimbr') || norm.includes('hidrostat') || norm.includes('hidraul') || norm === 'ph' || norm.includes(' ph')) {
+    return 'w-36 min-w-[130px]';
+  }
+  if (norm.includes('fabricac') || norm.includes('fechafab') || norm.includes('ano fab')) {
+    return 'w-36 min-w-[130px]';
+  }
+  if (norm.includes('serie') || norm.includes('agente') || norm.includes('gas') || norm.includes('ubicacion')) {
+    return 'w-36 min-w-[130px]';
+  }
+  return 'min-w-[110px]';
+};
+
 const formatTableHeader = (col: string) => {
   const norm = String(col || '').trim();
   const lower = norm.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+  if (lower.includes('retimbr') || lower.includes('hidrostat') || lower.includes('hidraul') || lower === 'ph' || lower.includes(' ph')) {
+    return (
+      <div className="flex flex-col items-center justify-center leading-tight">
+        <span>PRUEBA</span>
+        <span>HIDROSTÁTICA</span>
+      </div>
+    );
+  }
+  if (lower.includes('fabricac') || lower.includes('ano fab') || lower.includes('fechafab')) {
+    return (
+      <div className="flex flex-col items-center justify-center leading-tight">
+        <span>FECHA</span>
+        <span>FABRICACIÓN</span>
+      </div>
+    );
+  }
+  if (lower.includes('agente') || lower.includes('gas')) {
+    return (
+      <div className="flex flex-col items-center justify-center leading-tight">
+        <span>AGENTE</span>
+        <span>EXTINTOR</span>
+      </div>
+    );
+  }
+  if (lower.includes('serie')) {
+    return (
+      <div className="flex flex-col items-center justify-center leading-tight">
+        <span>Nº DE</span>
+        <span>SERIE</span>
+      </div>
+    );
+  }
+  if (lower.includes('recipiente') && (lower.includes('nº') || lower.startsWith('no') || lower.startsWith('n'))) {
+    return (
+      <div className="flex flex-col items-center justify-center leading-tight">
+        <span>Nº</span>
+        <span>RECIP.</span>
+      </div>
+    );
+  }
+  if (lower === 'nº' || lower === 'no' || lower === '#' || lower === 'item' || lower === 'orden') {
+    return <span>Nº</span>;
+  }
   
   if (lower.includes('detector') && lower.includes('humo')) {
     return (
@@ -464,7 +616,7 @@ const formatTableHeader = (col: string) => {
                 </th>
               )}
               {effectiveOpciones.map((col, idx) => (
-                <th key={idx} className="px-3 py-2 font-bold uppercase text-[9px] tracking-wider border-r border-zinc-800 last:border-r-0 text-center min-w-[110px]">
+                <th key={idx} className={`px-2 py-2 font-bold uppercase text-[9px] tracking-wider border-r border-zinc-800 last:border-r-0 text-center ${getColWidthClass(col)}`}>
                   {formatTableHeader(col)}
                 </th>
               ))}
@@ -480,15 +632,43 @@ const formatTableHeader = (col: string) => {
               <tr key={rIdx} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
                 {row.map((cell, cIdx) => {
                   const isPredefinedHeaderCell = hasVerticalHeaders && cIdx === 0;
+                  const headerText = effectiveOpciones[hasVerticalHeaders ? cIdx - 1 : cIdx] || '';
+                  const isRetimbreCol = esColumnaRetimbre(headerText);
+                  const isDateOver10 = isRetimbreCol && esFechaMayor10Anos(cell);
+
                   return (
-                    <td key={cIdx} className={`p-1 border-r border-slate-100 last:border-r-0 ${isPredefinedHeaderCell ? 'bg-slate-50 font-bold text-slate-700 w-44 min-w-[150px]' : 'text-center min-w-[110px]'}`}>
+                    <td 
+                      key={cIdx} 
+                      className={`p-1 border-r border-slate-100 last:border-r-0 ${
+                        isPredefinedHeaderCell 
+                          ? 'bg-slate-50 font-bold text-slate-700 w-44 min-w-[150px]' 
+                          : isDateOver10 
+                          ? `bg-red-50/40 text-center ${getColWidthClass(headerText)}` 
+                          : `text-center ${getColWidthClass(headerText)}`
+                      }`}
+                    >
                       <input
                         type="text"
                         value={cell}
                         onChange={(e) => handleCellChange(rIdx, cIdx, e.target.value)}
+                        onBlur={() => {
+                          if (isRetimbreCol && cell) {
+                            const formatted = formatMesAnoSlash(cell);
+                            if (formatted !== '-' && formatted !== cell) {
+                              handleCellChange(rIdx, cIdx, formatted);
+                            }
+                          }
+                        }}
                         disabled={disabled || isPredefinedHeaderCell}
-                        className={`w-full px-2 py-1 bg-transparent border-0 rounded text-xs outline-none focus:bg-white focus:ring-1 focus:ring-indigo-500/30 ${isPredefinedHeaderCell ? 'font-bold text-slate-800 text-left' : 'font-medium text-center'}`}
-                        placeholder={isPredefinedHeaderCell ? '' : '...'}
+                        className={`w-full px-2 py-1 rounded text-xs outline-none transition-colors ${
+                          isPredefinedHeaderCell 
+                            ? 'font-bold text-slate-800 text-left bg-transparent border-0' 
+                            : isDateOver10
+                            ? 'bg-red-50 border-2 border-red-500 text-red-700 font-bold focus:bg-white focus:border-red-600 focus:ring-2 focus:ring-red-500/20 text-center shadow-xs'
+                            : 'bg-transparent border-0 font-medium text-center focus:bg-white focus:ring-1 focus:ring-indigo-500/30'
+                        }`}
+                        placeholder={isPredefinedHeaderCell ? '' : (isRetimbreCol ? 'MM/AAAA' : '...')}
+                        title={isDateOver10 ? 'Fecha de prueba hidrostática supera los 10 años. Se debe realizar retimbrado.' : undefined}
                       />
                     </td>
                   );

@@ -228,6 +228,7 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
     return (clientes || []).filter(c => 
       (c.nombre || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
       (c.cif || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (c.direccion || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (c.poblacion || '').toLowerCase().includes(searchTerm.toLowerCase())
     );
   }, [clientes, searchTerm]);
@@ -337,12 +338,13 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
           ) : (
             <div className="bg-white rounded-3xl border border-zinc-200 shadow-sm overflow-hidden overflow-x-auto">
               {/* Table header */}
-              <div className="hidden md:flex items-center bg-zinc-200/90 border-b border-zinc-300 px-4 py-3 text-[11px] font-extrabold uppercase tracking-wider text-zinc-700">
-                <div className="w-24 shrink-0">Código</div>
-                <div className="flex-1 min-w-0 pr-4">Cliente</div>
-                {!isTecnicoMode && <div className="w-36 shrink-0 pr-4">CIF / NIF</div>}
-                <div className="w-48 lg:w-60 shrink-0 pr-4">Población</div>
-                <div className="w-36 lg:w-48 shrink-0">Teléfono</div>
+              <div className="hidden md:flex items-center w-full bg-zinc-200/90 border-b border-zinc-300 px-4 py-3 text-[11px] font-extrabold uppercase tracking-wider text-zinc-700">
+                <div className="w-24 shrink-0 pr-3">Código</div>
+                <div className="flex-[1.5] min-w-0 pr-4">Cliente</div>
+                {!isTecnicoMode && <div className="w-28 lg:w-32 shrink-0 pr-4">CIF / NIF</div>}
+                <div className="flex-[1.5] min-w-0 pr-4">Dirección</div>
+                <div className="flex-1 min-w-0 pr-4">Población</div>
+                <div className="w-32 lg:w-36 shrink-0">Teléfono</div>
               </div>
 
               {/* Table rows */}
@@ -361,6 +363,7 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
                       <div className="flex md:hidden">
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-slate-800 truncate">{cliente.nombre}</p>
+                          {cliente.direccion && <p className="text-xs text-zinc-500 truncate">{cliente.direccion}</p>}
                           {cliente.poblacion && <p className="text-xs text-zinc-500 truncate">{cliente.poblacion}</p>}
                         </div>
                       </div>
@@ -371,21 +374,24 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
 
                       {/* Desktop cells */}
                       <div className="hidden md:flex items-center w-full">
-                        <div className="w-24 shrink-0">
+                        <div className="w-24 shrink-0 pr-3">
                           <span className="text-[11px] font-mono font-bold text-zinc-600 bg-white/90 border border-zinc-200/80 px-2 py-0.5 rounded-md shadow-2xs">{cliente.id}</span>
                         </div>
-                        <div className="flex-1 min-w-0 pr-4">
+                        <div className="flex-[1.5] min-w-0 pr-4">
                           <div className="flex items-center gap-2">
                             <Building2 className="w-4 h-4 text-blue-500 shrink-0" />
                             <p className="text-sm font-medium text-slate-800 truncate group-hover:text-blue-900 transition-colors">{cliente.nombre}</p>
                           </div>
                         </div>
-                        {!isTecnicoMode && <div className="w-36 shrink-0 text-xs font-mono text-slate-600 truncate pr-4">{cliente.cif || '—'}</div>}
-                        <div className="w-48 lg:w-60 shrink-0 text-xs text-slate-600 truncate pr-4 flex items-center gap-1.5">
+                        {!isTecnicoMode && <div className="w-28 lg:w-32 shrink-0 text-xs font-mono text-slate-600 truncate pr-4">{cliente.cif || '—'}</div>}
+                        <div className="flex-[1.5] min-w-0 text-xs text-slate-600 truncate pr-4">
+                          <span className="truncate">{cliente.direccion || '—'}</span>
+                        </div>
+                        <div className="flex-1 min-w-0 text-xs text-slate-600 truncate pr-4 flex items-center gap-1.5">
                           <MapPin className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
                           <span className="truncate">{cliente.poblacion || '—'}</span>
                         </div>
-                        <div className="w-36 lg:w-48 shrink-0 text-xs text-slate-600 truncate">
+                        <div className="w-32 lg:w-36 shrink-0 text-xs text-slate-600 truncate">
                           {cliente.telefono ? (
                             <div className="flex items-center gap-1.5">
                               <Phone className="w-3 h-3 text-zinc-400 shrink-0" />

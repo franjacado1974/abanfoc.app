@@ -1676,7 +1676,114 @@ if (fs.existsSync(pdfGenPath)) {
     }
   }
 
+  // 118. Verificación de Tabla de Recipientes en Extinción por Gas, Anomalía > 10 Años y Limpieza de Anomalías (AGENTS.md REGLA 118)
+  const tableInputPath118 = path.join(__dirname, '../src/components/TableInput.tsx');
+  if (fs.existsSync(tableInputPath118)) {
+    const tiContent118 = fs.readFileSync(tableInputPath118, 'utf8');
+    if (!tiContent118.includes('esFechaMayor10Anos') || !tiContent118.includes('getColWidthClass')) {
+      errors.push('CRÍTICO: TableInput.tsx carece de la validación de fechas > 10 años o adaptación de columnas para la tabla de recipientes (AGENTS.md REGLA 118).');
+    }
+  }
+  if (fs.existsSync(revChecklistPath)) {
+    const rcContent118 = fs.readFileSync(revChecklistPath, 'utf8');
+    if (!rcContent118.includes('evaluarAnomaliasTablasRecipientes') || !rcContent118.includes('Fecha de prueba hidrostatica supera los 10 años. Se debe realizar retimbrado.')) {
+      errors.push('CRÍTICO: RevisionChecklist.tsx carece de la autogeneración de anomalía por retimbrado > 10 años en tabla de recipientes (AGENTS.md REGLA 118).');
+    }
+    if (!rcContent118.includes("if (checkKey === 'anomalias')") || !rcContent118.includes('anoItems.forEach')) {
+      errors.push('CRÍTICO: RevisionChecklist.tsx carece de la limpieza sincronizada de claves secundarias al vaciar manualmente el campo anomalias (AGENTS.md REGLA 118).');
+    }
+  }
+  if (fs.existsSync(pdfGenPath)) {
+    const pdfContent118 = fs.readFileSync(pdfGenPath, 'utf8');
+    if (!pdfContent118.includes('isTablaRecipientesGas') || !pdfContent118.includes('formatMesAnoSlash')) {
+      errors.push('CRÍTICO: pdfGenerator.ts carece del formateo MM/YYYY o ajuste de columnas para la tabla de recipientes de gas (AGENTS.md REGLA 118).');
+    }
+  }
 
+  // 119. Verificación de Prefijos PDR/PDI/PDA/PDV, Columnas NÚMERO y TÍTULO Completo, y Ampliar Rango de Fecha Programada en Calendario (AGENTS.md REGLA 119)
+  if (fs.existsSync(firebasePath)) {
+    const fbContent119 = fs.readFileSync(firebasePath, 'utf8');
+    if (!fbContent119.includes("prefijo: 'PDV' | 'PDR' | 'PDI' | 'PDA' = 'PDV'") || !fbContent119.includes('fechaFinProgramada')) {
+      errors.push('CRÍTICO: firebase.tsx carece del soporte de prefijos diferenciados PDV/PDR/PDI/PDA o de fechaFinProgramada (AGENTS.md REGLA 119).');
+    }
+  }
+  [
+    { name: 'Reparaciones.tsx', path: reparacionesPath, pref: "'PDR'" },
+    { name: 'Instalaciones.tsx', path: instalacionesPath, pref: "'PDI'" },
+    { name: 'Urgencias.tsx', path: urgenciasPath, pref: "'PDA'" }
+  ].forEach(({ name, path: fPath, pref }) => {
+    if (fs.existsSync(fPath)) {
+      const fContent119 = fs.readFileSync(fPath, 'utf8');
+      if (!fContent119.includes(`obtenerSiguienteNumeroPedido(${pref})`) || !fContent119.includes('>NÚMERO<') || !fContent119.includes('>TÍTULO<') || !fContent119.includes('whitespace-normal break-words')) {
+        errors.push(`CRÍTICO: ${name} carece del prefijo ${pref}, de las columnas NÚMERO / TÍTULO o de la visualización completa del título (AGENTS.md REGLA 119).`);
+      }
+    }
+  });
+  if (fs.existsSync(calendarioPath)) {
+    const calContent119 = fs.readFileSync(calendarioPath, 'utf8');
+    if (!calContent119.includes('Ampliar rango de fecha programada') || !calContent119.includes('getDatesInRange') || !calContent119.includes('editFechaInicio') || !calContent119.includes('editFechaFin')) {
+      errors.push('CRÍTICO: Calendario.tsx carece de la funcionalidad "Ampliar rango de fecha programada" (AGENTS.md REGLA 119).');
+    }
+  }
+
+  // 120. Verificación de Reorganización de Operaciones y Apertura Directa sin Lista (AGENTS.md REGLA 120)
+  const sidebarPath120 = path.join(__dirname, '../src/components/Sidebar.tsx');
+  if (fs.existsSync(sidebarPath120)) {
+    const sbContent120 = fs.readFileSync(sidebarPath120, 'utf8');
+    if (!sbContent120.includes("path: '/crear-parte'") || !sbContent120.includes("title: 'Crear nuevo parte'")) {
+      errors.push('CRÍTICO: Sidebar.tsx carece de la opción "Crear nuevo parte" (/crear-parte) en Operaciones (AGENTS.md REGLA 120).');
+    }
+    if (!sbContent120.includes("path: '/partes-trabajo'") || !sbContent120.includes("title: 'Partes de Trabajo'")) {
+      errors.push('CRÍTICO: Sidebar.tsx carece de la opción "Partes de Trabajo" (/partes-trabajo) en Operaciones (AGENTS.md REGLA 120).');
+    }
+    if (!sbContent120.includes("path: '/partes', title: 'Partes de Revisión', Icon: FileText, allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador', 'tecnico']")) {
+      errors.push('CRÍTICO: Sidebar.tsx debe permitir acceso al rol tecnico en Mantenimiento / Partes de Revisión (AGENTS.md REGLA 120).');
+    }
+  }
+  const crearPartePath120 = path.join(__dirname, '../src/CrearNuevoParte.tsx');
+  if (!fs.existsSync(crearPartePath120)) {
+    errors.push('CRÍTICO: No se encontró el componente src/CrearNuevoParte.tsx (AGENTS.md REGLA 120).');
+  } else {
+    const cpContent120 = fs.readFileSync(crearPartePath120, 'utf8');
+    if (!cpContent120.includes("abrirCrear: true") || !cpContent120.includes("reparaciones") || !cpContent120.includes("instalaciones") || !cpContent120.includes("pruebas-tecnicas") || !cpContent120.includes("urgencias")) {
+      errors.push('CRÍTICO: CrearNuevoParte.tsx carece de las 4 opciones oficiales con estado abrirCrear: true (AGENTS.md REGLA 120).');
+    }
+  }
+  [
+    { name: 'Reparaciones.tsx', path: reparacionesPath },
+    { name: 'Instalaciones.tsx', path: instalacionesPath },
+    { name: 'Urgencias.tsx', path: urgenciasPath }
+  ].forEach(({ name, path: fPath }) => {
+    if (fs.existsSync(fPath)) {
+      const fc120 = fs.readFileSync(fPath, 'utf8');
+      if (!fc120.includes('desdeCrearParteRef') || !fc120.includes("navigate('/crear-parte')") || !fc120.includes("navigate('/partes-trabajo')")) {
+        errors.push(`CRÍTICO: ${name} carece del flujo directo desdeCrearParteRef o navegación a /crear-parte / /partes-trabajo (AGENTS.md REGLA 120).`);
+      }
+    }
+  });
+
+  // 121. Verificación del Módulo Unificado Partes de Trabajo de Operaciones (AGENTS.md REGLA 121)
+  const partesTrabajoPath121 = path.join(__dirname, '../src/PartesTrabajoOperaciones.tsx');
+  if (!fs.existsSync(partesTrabajoPath121)) {
+    errors.push('CRÍTICO: No se encontró el componente src/PartesTrabajoOperaciones.tsx (AGENTS.md REGLA 121).');
+  } else {
+    const ptContent121 = fs.readFileSync(partesTrabajoPath121, 'utf8');
+    if (!ptContent121.includes('bg-emerald-600 text-white border-emerald-600')) {
+      errors.push('CRÍTICO: PartesTrabajoOperaciones.tsx carece del color verde esmeralda en la pestaña Todas las Operaciones (AGENTS.md REGLA 121).');
+    }
+    if (!ptContent121.includes('bg-blue-600 text-white border-blue-600') || !ptContent121.includes('bg-red-600 text-white border-red-600') || !ptContent121.includes('bg-purple-600 text-white border-purple-600') || !ptContent121.includes('bg-zinc-950 text-white border-black')) {
+      errors.push('CRÍTICO: PartesTrabajoOperaciones.tsx carece de la paleta reglamentaria en pestañas de operaciones (AGENTS.md REGLA 121).');
+    }
+    if (!ptContent121.includes('rounded-2xl border border-zinc-200/80 shadow-sm mb-6')) {
+      errors.push('CRÍTICO: PartesTrabajoOperaciones.tsx carece de la tarjeta alargada contenedora estilo Listman (AGENTS.md REGLA 121).');
+    }
+    if (!ptContent121.includes('tareaOpcionesModal') || !ptContent121.includes('renderTareaOpcionesModal')) {
+      errors.push('CRÍTICO: PartesTrabajoOperaciones.tsx carece del modal interactivo de opciones al hacer clic en fila/tarjeta (AGENTS.md REGLA 121).');
+    }
+    if (!ptContent121.includes("limitePartes, setLimitePartes] = useState<number | 'todos'>(10)")) {
+      errors.push('CRÍTICO: PartesTrabajoOperaciones.tsx carece de la paginación predeterminada a 10 filas (AGENTS.md REGLA 121).');
+    }
+  }
 
 // Resultado de la verificación
 if (errors.length > 0) {

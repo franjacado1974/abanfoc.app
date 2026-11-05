@@ -2,5 +2,5 @@
 
 que lea:
 
-lee atentamente: documentacion.md, y también: .agents/AGENTS.md y después de leer abre local host para pruebas.
+lee atentamente: documentacion.md, y también: .agents/AGENTS.md y después de leer abre local host para pruebas. Y recuerda no saltarse las normas.
 

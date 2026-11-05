@@ -332,12 +332,147 @@ export function extraerFechasEquipo(eq: any): { dateFab: Date | null; dateRet: D
     };
 }
 
+export function esFechaMayor10Anos(val: any): boolean {
+    const d = parseFechaUniversal(val);
+    if (!d) return false;
+    const today = new Date();
+    let diffYears = today.getFullYear() - d.getFullYear();
+    if (today.getMonth() < d.getMonth() || (today.getMonth() === d.getMonth() && today.getDate() < d.getDate())) {
+        diffYears--;
+    }
+    return diffYears >= 10;
+}
+
+export function esColumnaRetimbre(header: string): boolean {
+    if (!header || typeof header !== 'string') return false;
+    const norm = header.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\./g, "").trim();
+    return norm.includes('retimbr') ||
+           norm.includes('hidrostat') ||
+           norm.includes('hidraul') ||
+           norm === 'ph' ||
+           norm.includes(' ph') ||
+           norm.startsWith('ph ') ||
+           norm.includes('p h') ||
+           (norm.includes('prueba') && (norm.includes('hidr') || norm.includes('presion')));
+}
+
+export function esColumnaFabricacion(header: string): boolean {
+    if (!header || typeof header !== 'string') return false;
+    const norm = header.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\./g, "").trim();
+    return norm.includes('fabricac') || norm.includes('fab') || norm.includes('ano fab') || norm.includes('ano de fab');
+}
+
+export function esColumnaRecipienteNum(header: string): boolean {
+    if (!header || typeof header !== 'string') return false;
+    const norm = header.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\./g, "").trim();
+    return norm.includes('recipiente') ||
+           norm.includes('botella') ||
+           norm.includes('deposito') ||
+           norm.includes('depósito') ||
+           norm === 'nº' ||
+           norm === 'no' ||
+           norm === 'num' ||
+           norm === 'n' ||
+           norm.startsWith('nº ') ||
+           norm.startsWith('no ') ||
+           norm.startsWith('num ');
+}
+
+export function getEtiquetaRecipiente(rawVal: string, rIdx: number): string {
+    const val = (rawVal || '').trim();
+    if (!val) {
+        return `Recipiente Nº ${rIdx + 1}`;
+    }
+    const valLow = val.toLowerCase();
+    if (valLow.startsWith('recipiente') || valLow.startsWith('botella') || valLow.startsWith('deposito') || valLow.startsWith('depósito')) {
+        return val;
+    }
+    if (valLow.startsWith('nº') || valLow.startsWith('no.') || valLow.startsWith('no ')) {
+        return `Recipiente ${val}`;
+    }
+    return `Recipiente Nº ${val}`;
+}
+
+export function evaluarAnomaliasTablasRecipientes(eq: any, _sistema?: any, items?: ChecklistItem[]): string[] {
+    const anomalias: string[] = [];
+    if (!eq) return anomalias;
+
+    const checklistItemsPorSistemaGlobal = (typeof window !== 'undefined' && (window as any).checklistItemsPorSistemaGlobal) || {};
+    const itemsDelSistema = items && items.length > 0 ? items : (eq.sistemaId ? (checklistItemsPorSistemaGlobal[eq.sistemaId] || []) : []);
+
+    for (const [k, v] of Object.entries(eq)) {
+        if (typeof v !== 'string' || !v.trim().startsWith('[[')) continue;
+
+        let matrix: string[][] = [];
+        try {
+            const parsed = JSON.parse(v);
+            if (Array.isArray(parsed) && parsed.length > 0 && Array.isArray(parsed[0])) {
+                matrix = parsed;
+            }
+        } catch {
+            continue;
+        }
+        if (matrix.length === 0) continue;
+
+        const item = itemsDelSistema.find((i: any) => i.key === k);
+        const itemLabel = (item?.label || '').toLowerCase();
+        const opciones: string[] = item?.opciones || [];
+
+        let retCol = -1;
+        let numCol = -1;
+        let fabCol = -1;
+
+        if (opciones.length > 0) {
+            retCol = opciones.findIndex(h => esColumnaRetimbre(h));
+            fabCol = opciones.findIndex(h => esColumnaFabricacion(h));
+            numCol = opciones.findIndex(h => esColumnaRecipienteNum(h));
+        }
+
+        const esTablaRecipientes = itemLabel.includes('recipiente') || itemLabel.includes('deposito') || itemLabel.includes('depósito') || itemLabel.includes('botella');
+
+        if (retCol === -1 && opciones.length > 0) {
+            retCol = opciones.findIndex(h => {
+                const norm = (h || '').toLowerCase();
+                return norm.includes('fecha') && (norm.includes('ret') || norm.includes('hidr') || norm.includes('p.h') || norm.includes('ph'));
+            });
+        }
+
+        if (retCol === -1 && esTablaRecipientes) {
+            for (let c = 0; c < (matrix[0]?.length || 0); c++) {
+                const hasDates = matrix.some(row => parseFechaUniversal(row[c]) !== null);
+                if (hasDates) {
+                    retCol = c;
+                    break;
+                }
+            }
+        }
+
+        if (retCol === -1) continue;
+
+        matrix.forEach((row, rIdx) => {
+            const retDateVal = row[retCol] ? String(row[retCol]).trim() : '';
+            const fabDateVal = (fabCol >= 0 && row[fabCol]) ? String(row[fabCol]).trim() : '';
+            const dateToEvaluate = retDateVal || fabDateVal;
+
+            if (!dateToEvaluate) return;
+
+            if (esFechaMayor10Anos(dateToEvaluate)) {
+                const rawNum = numCol >= 0 && row[numCol] ? String(row[numCol]).trim() : '';
+                const etiqueta = getEtiquetaRecipiente(rawNum, rIdx);
+                anomalias.push(`- ${etiqueta}: Fecha de prueba hidrostatica supera los 10 años. Se debe realizar retimbrado.`);
+            }
+        });
+    }
+
+    return anomalias;
+}
+
 /* ============================================================================
  * BLINDAJE CRÍTICO (AGENTS.md REGLA 9): NO MODIFICAR ESTA FUNCIÓN
  * Preserva espacios (tecla Espacio) y saltos de línea (tecla Enter) manuales.
  * Queda PROHIBIDO usar .map(l => l.trim()).filter(Boolean) en la división inicial.
  * ============================================================================ */
-export function evaluarAnomaliasPorFecha(eq: any, sistema?: any): string {
+export function evaluarAnomaliasPorFecha(eq: any, sistema?: any, items?: ChecklistItem[]): string {
     let rawAnom = typeof eq?.anomalias === 'string' ? eq.anomalias : '';
     
     // Capturar saltos de línea al final producidos al pulsar Enter en la textarea
@@ -385,7 +520,11 @@ export function evaluarAnomaliasPorFecha(eq: any, sistema?: any): string {
             !trimmed.includes("BIE caducado") &&
             !trimmed.includes("BIE necesita realizar prueba") &&
             !trimmed.includes("retimbrado obligatorio") &&
-            !trimmed.includes("Equipo necesita retimbr")
+            !trimmed.includes("Equipo necesita retimbr") &&
+            !(
+                (trimmed.includes("supera los 10") || trimmed.includes("supera 10")) &&
+                (trimmed.includes("retimbrado") || trimmed.includes("prueba hidrostatica") || trimmed.includes("prueba hidrostática"))
+            )
         );
     });
 
@@ -395,6 +534,14 @@ export function evaluarAnomaliasPorFecha(eq: any, sistema?: any): string {
     } else if (isBie) {
         if (caducado20 && !lineas.some((l: string) => l.includes("caducado + de 20 años"))) lineas.push("- BIE caducado + de 20 años, se debe sustituir tramo de manguera según normativa.");
         if (retimbre5 && !lineas.some((l: string) => l.includes("prueba hidráulica")))  lineas.push("- BIE necesita realizar prueba hidráulica obligatoria cada 5 años.");
+    }
+
+    // Evaluación de tablas de recipientes / depósitos (ej. Extinción por gas)
+    const anomaliasTablas = evaluarAnomaliasTablasRecipientes(eq, sistema, items);
+    for (const anom of anomaliasTablas) {
+        if (!lineas.some((l: string) => l.trim() === anom.trim())) {
+            lineas.push(anom);
+        }
     }
 
     const resultadoBase = lineas.join('\n');
@@ -885,7 +1032,11 @@ export default function RevisionChecklist() {
                 }));
                 setChecklistItemsPorSistema(prev => {
                     console.log(`💾 Actualizando checklistItemsPorSistema para ${sist.id}:`, checklistItems);
-                    return { ...prev, [sist.id]: checklistItems };
+                    const nextMap = { ...prev, [sist.id]: checklistItems };
+                    if (typeof window !== 'undefined') {
+                        (window as any).checklistItemsPorSistemaGlobal = nextMap;
+                    }
+                    return nextMap;
                 });
             });
             unsubs.push(unsub);
@@ -1582,23 +1733,64 @@ export default function RevisionChecklist() {
                     updated.pruebaHidraulica = value ? String(value) : '';
                 }
 
-                // Evaluar y actualizar eq.anomalias conservando notas manuales
-                updated.anomalias = evaluarAnomaliasPorFecha(updated, sistema);
-
-                const anoItem = itemsToUseForDates.find(i => (i.label||'').toLowerCase().includes('anomal') || (i.label||'').toLowerCase().includes('notas'));
-                if (anoItem && anoItem.key && anoItem.key !== 'anomalias') {
-                    (updated as any)[anoItem.key] = updated.anomalias;
+                // Sincronizar clave dinámica de anomalías con updated.anomalias
+                const anoItems = itemsToUseForDates.filter(i => (i.label||'').toLowerCase().includes('anomal') || (i.label||'').toLowerCase().includes('notas'));
+                const anoItem = anoItems[0];
+                if (checkKey === 'anomalias') {
+                    updated.anomalias = typeof value === 'string' ? value : String(value || '');
+                    anoItems.forEach(item => {
+                        if (item.key && item.key !== 'anomalias') {
+                            (updated as any)[item.key] = updated.anomalias;
+                        }
+                    });
+                    if (!updated.anomalias.trim()) {
+                        for (const k of Object.keys(updated)) {
+                            const kLow = k.toLowerCase();
+                            if ((kLow.includes('anomal') || kLow.includes('nota')) && k !== 'anomalias' && k !== 'observaciones') {
+                                (updated as any)[k] = '';
+                            }
+                        }
+                    }
+                } else if (anoItem && checkKey === anoItem.key) {
+                    updated.anomalias = typeof value === 'string' ? value : String(value || '');
+                } else if (anoItem && anoItem.key && anoItem.key !== 'anomalias') {
+                    if (eq.anomalias === undefined && typeof (updated as any)[anoItem.key] === 'string' && (updated as any)[anoItem.key].trim() !== '') {
+                        updated.anomalias = (updated as any)[anoItem.key];
+                    }
                 }
 
-                const obsItem = itemsToUseForDates.find(i => (i.label||'').toLowerCase().includes('observacion'));
-                if (obsItem && checkKey === obsItem.key) {
+                // Evaluar y actualizar eq.anomalias conservando notas manuales
+                updated.anomalias = evaluarAnomaliasPorFecha(updated, sistema, itemsToUseForDates);
+
+                anoItems.forEach(item => {
+                    if (item.key && item.key !== 'anomalias') {
+                        (updated as any)[item.key] = updated.anomalias;
+                    }
+                });
+
+                const obsItems = itemsToUseForDates.filter(i => (i.label||'').toLowerCase().includes('observacion'));
+                const obsItem = obsItems[0];
+                if (checkKey === 'observaciones') {
                     updated.observaciones = typeof value === 'string' ? value : String(value || '');
+                    obsItems.forEach(item => {
+                        if (item.key && item.key !== 'observaciones') {
+                            (updated as any)[item.key] = updated.observaciones;
+                        }
+                    });
+                } else if (obsItem && checkKey === obsItem.key) {
+                    updated.observaciones = typeof value === 'string' ? value : String(value || '');
+                } else if (obsItem && obsItem.key && obsItem.key !== 'observaciones') {
+                    if (eq.observaciones === undefined && typeof (updated as any)[obsItem.key] === 'string' && (updated as any)[obsItem.key].trim() !== '') {
+                        updated.observaciones = (updated as any)[obsItem.key];
+                    }
                 }
                 // Evaluar y actualizar eq.observaciones conservando notas manuales (aviso de proximidad de extintores)
                 updated.observaciones = evaluarObservacionesPorFecha(updated, sistema);
-                if (obsItem && obsItem.key && obsItem.key !== 'observaciones') {
-                    (updated as any)[obsItem.key] = updated.observaciones;
-                }
+                obsItems.forEach(item => {
+                    if (item.key && item.key !== 'observaciones') {
+                        (updated as any)[item.key] = updated.observaciones;
+                    }
+                });
 
                 
                 /* ============================================================================

@@ -2,7 +2,8 @@ import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
 import { 
   Building2, HardHat, Wrench, ClipboardCheck,
   ShieldCheck, ArrowLeft,
-  Clock, ArrowRightCircle, ArrowLeftCircle, CheckCircle2, AlertTriangle, KeyRound
+  Clock, ArrowRightCircle, ArrowLeftCircle, CheckCircle2, AlertTriangle, KeyRound,
+  CalendarDays, Package, Receipt, ArrowRight, User
 } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import Loader from './components/Loader';
@@ -22,6 +23,8 @@ import ConfiguracionEmpresa from './ConfiguracionEmpresa';
 import Pedidos from './Pedidos';
 import Planificacion from './Planificacion';
 import Partes from './Partes';
+import PartesTrabajoOperaciones from './PartesTrabajoOperaciones';
+import CrearNuevoParte from './CrearNuevoParte';
 import RevisionChecklist from './RevisionChecklist';
 import Revisiones from './Revisiones';
 import Reparaciones from './Reparaciones';
@@ -57,10 +60,16 @@ import {
   subscribeUrgencias,
   subscribeReparaciones,
   subscribeInstalaciones,
+  subscribeFacturas,
+  subscribeAvisosStock,
   type UrgenciaItem,
   type ReparacionItem,
   type InstalacionItem,
-  type ParteFirestore
+  type ParteFirestore,
+  type Albaran,
+  type Factura,
+  type Articulo,
+  type AvisoStock
 } from './firebase';
 import { APP_VERSION } from './constants';
 import { useRegisterSW } from 'virtual:pwa-register/react';
@@ -559,6 +568,38 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
       return JSON.parse(localStorage.getItem('firecheck_db_partes') || '[]');
     } catch { return []; }
   });
+  const [albaranesList, setAlbaranesList] = useState<Albaran[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('firecheck_db_albaranes') || '[]');
+    } catch { return []; }
+  });
+  const [facturasList, setFacturasList] = useState<Factura[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('firecheck_db_facturas') || '[]');
+    } catch { return []; }
+  });
+  const [articulosList, setArticulosList] = useState<Articulo[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('firecheck_db_articulos') || '[]');
+    } catch { return []; }
+  });
+  const [avisosStockList, setAvisosStockList] = useState<AvisoStock[]>([]);
+
+  const [clientesList, setClientesList] = useState<any[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('firecheck_db_clientes') || '[]');
+    } catch { return []; }
+  });
+  const [centrosList, setCentrosList] = useState<any[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('firecheck_db_centros') || '[]');
+    } catch { return []; }
+  });
+  const [tecnicosList, setTecnicosList] = useState<any[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('firecheck_db_tecnicos') || '[]');
+    } catch { return []; }
+  });
 
   const [clientesMap, setClientesMap] = useState<Record<string, string>>(() => {
     try {
@@ -568,7 +609,9 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
         if (Array.isArray(parsed)) {
           const map: Record<string, string> = {};
           parsed.forEach((c: any) => {
-            map[c.id] = c.nombreFiscal || c.nombre || 'Cliente Desconocido';
+            const nombre = c.nombreFiscal || c.nombre || 'Cliente Desconocido';
+            if (c.id) map[c.id] = nombre;
+            if (c._docId) map[c._docId] = nombre;
           });
           return map;
         }
@@ -585,7 +628,9 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
         if (Array.isArray(parsed)) {
           const map: Record<string, string> = {};
           parsed.forEach((c: any) => {
-            map[c.id] = c.nombre || 'Centro Desconocido';
+            const nombre = c.nombre || 'Centro Desconocido';
+            if (c.id) map[c.id] = nombre;
+            if (c._docId) map[c._docId] = nombre;
           });
           return map;
         }
@@ -635,9 +680,12 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
       unsubs.push(subscribeClientes((items) => {
         safeLocalSet('firecheck_db_clientes', JSON.stringify(items));
         if (Array.isArray(items)) {
+          setClientesList(items);
           const map: Record<string, string> = {};
           items.forEach((c: any) => {
-            map[c.id] = c.nombreFiscal || c.nombre || 'Cliente Desconocido';
+            const nombre = c.nombreFiscal || c.nombre || 'Cliente Desconocido';
+            if (c.id) map[c.id] = nombre;
+            if (c._docId) map[c._docId] = nombre;
           });
           setClientesMap(map);
         }
@@ -648,9 +696,12 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
       unsubs.push(subscribeCentros((items) => {
         safeLocalSet('firecheck_db_centros', JSON.stringify(items));
         if (Array.isArray(items)) {
+          setCentrosList(items);
           const map: Record<string, string> = {};
           items.forEach((c: any) => {
-            map[c.id] = c.nombre || 'Centro Desconocido';
+            const nombre = c.nombre || 'Centro Desconocido';
+            if (c.id) map[c.id] = nombre;
+            if (c._docId) map[c._docId] = nombre;
           });
           setCentrosMap(map);
         }
@@ -660,14 +711,29 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
     try {
       unsubs.push(subscribeArticulos((items) => {
         safeLocalSet('firecheck_db_articulos', JSON.stringify(items));
+        setArticulosList(items || []);
       }));
     } catch (e) { console.error('subscribeArticulos failed', e); }
 
     try {
       unsubs.push(subscribeAlbaranes((items) => {
         safeLocalSet('firecheck_db_albaranes', JSON.stringify(items));
+        setAlbaranesList(items || []);
       }));
     } catch (e) { console.error('subscribeAlbaranes failed', e); }
+
+    try {
+      unsubs.push(subscribeFacturas((items) => {
+        safeLocalSet('firecheck_db_facturas', JSON.stringify(items));
+        setFacturasList(items || []);
+      }));
+    } catch (e) { console.error('subscribeFacturas failed', e); }
+
+    try {
+      unsubs.push(subscribeAvisosStock((items) => {
+        setAvisosStockList(items || []);
+      }));
+    } catch (e) { console.error('subscribeAvisosStock failed', e); }
 
     try {
       unsubs.push(subscribeCertificados((items) => {
@@ -684,6 +750,7 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
     try {
       unsubs.push(subscribeTecnicos((items) => {
         safeLocalSet('firecheck_db_tecnicos', JSON.stringify(items));
+        setTecnicosList(items || []);
       }));
     } catch (e) { console.error('subscribeTecnicos failed', e); }
 
@@ -746,256 +813,739 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
     };
   }, []);
 
-  // 1. AVISOS PENDIENTES (Negro)
-  const avisosPendientes = useMemo(() => {
-    return urgencias
-      .filter(u => u.estado !== 'Finalizado' && !u.facturado)
-      .map(u => ({
-        id: u.id || u._docId,
-        lugar: u.lugar || (u.centroId && centrosMap[u.centroId]) || u.clienteNombre || 'Sin ubicación',
-        tarea: u.urgencia || u.titulo || 'Aviso de urgencia',
-      }));
-  }, [urgencias, centrosMap]);
+  // ─── HELPERS PARA TARJETAS DEL DASHBOARD ──────────────────────────────────
+  const isFirmaValida = (firma: string | undefined): boolean => {
+    if (!firma) return false;
+    if (firma.length <= 4400) return false;
+    if (firma.startsWith('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAlgAADICAYAAAA0n5+2')) return false;
+    return true;
+  };
 
-  // 2. REPARACIONES PENDIENTES (Azul)
-  const reparacionesPendientes = useMemo(() => {
-    return reparaciones
-      .filter(r => r.estado !== 'Finalizado' && !r.facturado)
-      .map(r => ({
-        id: r.id || r._docId,
-        lugar: r.lugar || (r.centroId && centrosMap[r.centroId]) || r.clienteNombre || 'Sin ubicación',
-        tarea: r.reparacion || r.titulo || 'Reparación / Avería',
-      }));
-  }, [reparaciones, centrosMap]);
+  const formatFechaCorta = (raw: string | undefined): string => {
+    if (!raw) return '—';
+    const clean = raw.trim();
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(clean)) return clean;
+    const isoMatch = clean.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (isoMatch) return `${isoMatch[3]}/${isoMatch[2]}/${isoMatch[1]}`;
+    const d = new Date(clean);
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    }
+    return clean;
+  };
 
-  // 3. REVISIONES PENDIENTES (Amarillo)
-  const revisionesPendientes = useMemo(() => {
-    return partesList
-      .filter(p => p.estado !== 'Cerrado' && p.estado !== 'Finalizado')
-      .map(p => {
-        const centerName = centrosMap[p.centroId] || p.nombreCentro || clientesMap[p.clienteId] || 'Centro sin especificar';
-        const tareaDesc = p.tipoTrabajo || (p.periodicidad ? `Revisión ${p.periodicidad}` : 'Revisión de mantenimiento') + (p.numeroMantenimiento ? ` (${p.numeroMantenimiento})` : '');
+  const normalizeDateIso = (raw: string | undefined | null): string | null => {
+    if (!raw || typeof raw !== 'string') return null;
+    const clean = raw.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(clean)) return clean;
+    const ddmmyyyy = clean.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+    if (ddmmyyyy) {
+      return `${ddmmyyyy[3]}-${ddmmyyyy[2].padStart(2, '0')}-${ddmmyyyy[1].padStart(2, '0')}`;
+    }
+    if (clean.length >= 10 && /^\d{4}-\d{2}-\d{2}/.test(clean)) {
+      return clean.slice(0, 10);
+    }
+    return null;
+  };
+
+  const isDateInRangeToday = (startRaw: string | undefined | null, endRaw: string | undefined | null, todayIso: string): boolean => {
+    const startIso = normalizeDateIso(startRaw);
+    if (!startIso) return false;
+    const endIso = normalizeDateIso(endRaw);
+    if (endIso && endIso >= startIso) {
+      return todayIso >= startIso && todayIso <= endIso;
+    }
+    return startIso === todayIso;
+  };
+
+  const extraerHoraTarea = (item: any): string => {
+    if (item?.hora && typeof item.hora === 'string' && item.hora.trim()) return item.hora.trim();
+    if (item?.horaProgramada && typeof item.horaProgramada === 'string' && item.horaProgramada.trim()) return item.horaProgramada.trim();
+    if (item?.fechaCreacion && typeof item.fechaCreacion === 'string' && item.fechaCreacion.includes('T')) {
+      const d = new Date(item.fechaCreacion);
+      if (!isNaN(d.getTime())) {
+        const hh = String(d.getHours()).padStart(2, '0');
+        const mm = String(d.getMinutes()).padStart(2, '0');
+        if (hh !== '00' || mm !== '00') return `${hh}:${mm}`;
+      }
+    }
+    return 'Jornada';
+  };
+
+  // ─── 1. TARJETA FACTURACIÓN (NARANJA): ALBARANES PENDIENTES DE FACTURAR ───
+  const albaranesPendientesFacturar = useMemo(() => {
+    return albaranesList
+      .filter(a => !a.facturado && !facturasList.some(f => f.albaranId === a.id))
+      .sort((a, b) => {
+        const firmaA = (isFirmaValida(a.firmaCliente) || isFirmaValida(a.firmaTecnico)) ? 1 : 0;
+        const firmaB = (isFirmaValida(b.firmaCliente) || isFirmaValida(b.firmaTecnico)) ? 1 : 0;
+        if (firmaA !== firmaB) return firmaB - firmaA;
+        return new Date(b.fechaCreacion || 0).getTime() - new Date(a.fechaCreacion || 0).getTime();
+      })
+      .map(a => {
+        const centroObj = centrosList.find(c => (c.id === a.centroId || c._docId === a.centroId));
+        const clienteNombre =
+          (a.clienteId && clientesMap[a.clienteId]) ||
+          a.clienteNombreLibre ||
+          (centroObj?.clienteId && clientesMap[centroObj.clienteId]) ||
+          (a.centroId && centrosMap[a.centroId]) ||
+          a.centroNombreLibre ||
+          'Cliente';
+        const firmado = isFirmaValida(a.firmaCliente) || isFirmaValida(a.firmaTecnico) || Boolean(a.firmaCliente || a.firmaTecnico);
         return {
-          id: p.id || p._docId,
-          lugar: centerName,
-          tarea: tareaDesc,
+          id: a.id || (a as any)._docId || 'ALB',
+          numero: a.id || (a as any).numeroMantenimiento || 'S/N',
+          cliente: clienteNombre,
+          fecha: formatFechaCorta(a.fechaCreacion),
+          firmado,
+          raw: a
         };
       });
-  }, [partesList, centrosMap, clientesMap]);
+  }, [albaranesList, facturasList, clientesMap, centrosMap, centrosList]);
 
-  // 4. INSTALACIONES PENDIENTES (Rojo)
-  const instalacionesPendientes = useMemo(() => {
-    return instalaciones
-      .filter(i => i.estado !== 'Finalizado' && !i.facturado)
-      .map(i => ({
-        id: i.id || i._docId,
-        lugar: i.lugar || (i.centroId && centrosMap[i.centroId]) || i.clienteNombre || 'Sin ubicación',
-        tarea: i.instalacion || i.titulo || 'Instalación / Montaje',
-      }));
-  }, [instalaciones, centrosMap]);
+  // ─── 2. TARJETA TAREAS DE HOY (AZUL): RESUMEN DE TRABAJOS PARA HOY ────────
+  const tareasDeHoy = useMemo(() => {
+    const now = new Date();
+    const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+    const lista: {
+      id: string;
+      hora: string;
+      cliente: string;
+      tipo: 'Revisión' | 'Reparación' | 'Instalación' | 'Aviso' | 'Visita programada';
+      detalle: string;
+      tecnico?: string;
+      completado: boolean;
+      badgeColor: string;
+      ruta: string;
+    }[] = [];
+
+    // A) Revisiones y Visitas programadas (colección partes)
+    partesList.forEach(p => {
+      if (!isDateInRangeToday(p.fechaProgramada, p.fechaFinProgramada || (p as any).fechaFin, todayIso)) return;
+      const c = centrosList.find(cent => (cent._docId || cent.id) === p.centroId);
+      const cl = clientesList.find(cli => (cli._docId || cli.id) === (p.clienteId || c?.clienteId));
+      const tec = tecnicosList.find(t => (t._docId || t.id) === p.tecnicoId);
+      const clienteNombre = p.nombreCentro || c?.nombre || cl?.nombre || clientesMap[p.clienteId] || centrosMap[p.centroId] || 'Centro programado';
+      const esVisita = (p.tipoTrabajo || '').toLowerCase().includes('visita');
+      const tipoLabel: 'Revisión' | 'Visita programadas' extends never ? any : 'Revisión' | 'Visita programada' = esVisita ? 'Visita programada' : 'Revisión';
+      const tieneAlbaran = albaranesList.some(a => a.parteId === p.id || a.parteId === (p as any)._docId || (p.numeroMantenimiento && a.numeroMantenimiento === p.numeroMantenimiento));
+      const completado = tieneAlbaran || p.estado === 'Finalizado' || p.estado === 'Cerrado';
+
+      lista.push({
+        id: `parte-${p.id || p._docId}`,
+        hora: extraerHoraTarea(p),
+        cliente: clienteNombre,
+        tipo: tipoLabel,
+        detalle: p.periodicidad ? `Revisión ${p.periodicidad}` : (p.tipoTrabajo || 'Mantenimiento PCI'),
+        tecnico: tec?.nombre ? `${tec.nombre} ${tec.apellidos || ''}`.trim() : undefined,
+        completado,
+        badgeColor: 'bg-amber-100 text-amber-800 border-amber-300',
+        ruta: '/calendario'
+      });
+    });
+
+    // B) Reparaciones
+    reparaciones.forEach(r => {
+      const fechaBase = r.fecha || (r.fechaCreacion ? r.fechaCreacion.slice(0, 10) : '');
+      if (!isDateInRangeToday(fechaBase, r.fechaFinProgramada || (r as any).fechaFin, todayIso)) return;
+      const c = centrosList.find(cent => (r.centroId && (cent._docId || cent.id) === r.centroId));
+      const cl = clientesList.find(cli => (cli._docId || cli.id) === r.clienteId || (cli._docId || cli.id) === c?.clienteId);
+      const clienteNombre = cl?.nombre || (r.clienteId && clientesMap[r.clienteId]) || r.clienteNombre || r.lugar || (r.centroId && centrosMap[r.centroId]) || 'Cliente';
+      const tieneAlbaran = Boolean(r.albaranId) || albaranesList.some(a => a.reparacionId === r.id || a.reparacionId === (r as any)._docId);
+      const completado = tieneAlbaran || r.estado === 'Finalizado' || Boolean((r as any).resueltaManual);
+
+      lista.push({
+        id: `rep-${r.id || r._docId}`,
+        hora: extraerHoraTarea(r),
+        cliente: clienteNombre,
+        tipo: 'Reparación',
+        detalle: r.reparacion || r.titulo || 'Reparación / Avería',
+        tecnico: r.tecnicoAsignado || undefined,
+        completado,
+        badgeColor: 'bg-sky-100 text-sky-800 border-sky-300',
+        ruta: '/calendario'
+      });
+    });
+
+    // C) Instalaciones
+    instalaciones.forEach(i => {
+      const fechaBase = i.fecha || (i.fechaCreacion ? i.fechaCreacion.slice(0, 10) : '');
+      if (!isDateInRangeToday(fechaBase, i.fechaFinProgramada || (i as any).fechaFin, todayIso)) return;
+      const c = centrosList.find(cent => (i.centroId && (cent._docId || cent.id) === i.centroId));
+      const cl = clientesList.find(cli => (cli._docId || cli.id) === i.clienteId || (cli._docId || cli.id) === c?.clienteId);
+      const clienteNombre = cl?.nombre || (i.clienteId && clientesMap[i.clienteId]) || i.clienteNombre || i.lugar || (i.centroId && centrosMap[i.centroId]) || 'Cliente';
+      const tieneAlbaran = Boolean(i.albaranId) || albaranesList.some(a => a.instalacionId === i.id || a.instalacionId === (i as any)._docId);
+      const completado = tieneAlbaran || i.estado === 'Finalizado' || Boolean((i as any).resueltaManual);
+
+      lista.push({
+        id: `inst-${i.id || i._docId}`,
+        hora: extraerHoraTarea(i),
+        cliente: clienteNombre,
+        tipo: 'Instalación',
+        detalle: i.instalacion || i.titulo || 'Instalación / Montaje',
+        tecnico: i.tecnicoAsignado || undefined,
+        completado,
+        badgeColor: 'bg-red-100 text-red-800 border-red-300',
+        ruta: '/calendario'
+      });
+    });
+
+    // D) Avisos / Urgencias
+    urgencias.forEach(u => {
+      const fechaBase = u.fecha || (u.fechaCreacion ? u.fechaCreacion.slice(0, 10) : '');
+      if (!isDateInRangeToday(fechaBase, u.fechaFinProgramada || (u as any).fechaFin, todayIso)) return;
+      const c = centrosList.find(cent => (u.centroId && (cent._docId || cent.id) === u.centroId));
+      const cl = clientesList.find(cli => (cli._docId || cli.id) === u.clienteId || (cli._docId || cli.id) === c?.clienteId);
+      const clienteNombre = cl?.nombre || (u.clienteId && clientesMap[u.clienteId]) || u.clienteNombre || u.lugar || (u.centroId && centrosMap[u.centroId]) || 'Cliente';
+      const tieneAlbaran = Boolean(u.albaranId) || albaranesList.some(a => (a as any).urgenciaId === u.id || (a as any).urgenciaId === (u as any)._docId);
+      const completado = tieneAlbaran || u.estado === 'Finalizado' || Boolean((u as any).resueltaManual);
+
+      lista.push({
+        id: `urg-${u.id || u._docId}`,
+        hora: extraerHoraTarea(u),
+        cliente: clienteNombre,
+        tipo: 'Aviso',
+        detalle: u.titulo || u.urgencia || 'Aviso de urgencia',
+        tecnico: u.tecnicoAsignado || undefined,
+        completado,
+        badgeColor: 'bg-zinc-900 text-white border-black',
+        ruta: '/calendario'
+      });
+    });
+
+    return lista.sort((a, b) => Number(a.completado) - Number(b.completado));
+  }, [partesList, reparaciones, instalaciones, urgencias, centrosList, clientesList, tecnicosList, clientesMap, centrosMap, albaranesList]);
+
+  // ─── 3. TARJETA STOCK (VERDE): MATERIALES CON EXISTENCIAS BAJAS ───────────
+  const materialesStockBajo = useMemo(() => {
+    const map = new Map<string, { id: string; codigo: string; nombre: string; cantidad: number; familia?: string }>();
+
+    articulosList.forEach(art => {
+      if (art.revisable === false) return; // Excluir servicios puros
+      if (art.cantidad !== undefined && art.cantidad !== null && String(art.cantidad).trim() !== '') {
+        const cantNum = Number(art.cantidad);
+        if (!isNaN(cantNum) && cantNum <= 2) {
+          map.set(art.id || art.codigo || art.nombre, {
+            id: art.id || art.codigo,
+            codigo: art.codigo || '—',
+            nombre: art.nombre || 'Material sin nombre',
+            cantidad: Math.max(0, cantNum),
+            familia: art.familia
+          });
+        }
+      }
+    });
+
+    avisosStockList.forEach(aviso => {
+      if (aviso.activo !== false) {
+        const key = aviso.articuloId || aviso.id || aviso.codigo || aviso.nombre;
+        if (!map.has(key)) {
+          map.set(key, {
+            id: key,
+            codigo: aviso.codigo || '—',
+            nombre: aviso.nombre || 'Material agotado',
+            cantidad: 0,
+            familia: aviso.familia
+          });
+        }
+      }
+    });
+
+    return Array.from(map.values()).sort((a, b) => a.cantidad - b.cantidad);
+  }, [articulosList, avisosStockList]);
+
+  const todoEnOrdenGlobal = albaranesPendientesFacturar.length === 0 && materialesStockBajo.length === 0;
 
   return (
-    <div className="flex h-screen bg-[#F8FAFC]">
+    <div className="flex h-screen bg-[#F4F7FB]">
       <Sidebar user={loggedUser} onLogout={handleLogout} appLogo={appLogo} />
       
-      <main className="flex-1 overflow-y-auto">
-        {/* Top Sticky Bar */}
-        <div className="sticky top-0 z-40 bg-[#F8FAFC]/80 backdrop-blur-md border-b border-zinc-200/60">
-          <div className="flex flex-col sm:flex-row items-center justify-between px-4 sm:px-8 py-3 sm:py-4 gap-2">
-            <div className="text-center sm:text-left flex-1">
-              <h1 className="text-xl font-black text-zinc-950 tracking-tight">Inicio</h1>
-              <p className="text-xs font-semibold text-zinc-500 mt-0.5">{formattedDate}</p>
-            </div>
+      <main className="flex-1 overflow-y-auto flex flex-col">
+        {/* Cabecera Superior Corporativa Azul Marino */}
+        <div className="sticky top-0 z-40 bg-gradient-to-r from-[#0F2342] via-[#162F56] to-[#1D3557] text-white shadow-md border-b border-white/10">
+          <div className="flex flex-col sm:flex-row items-center justify-between px-5 sm:px-8 py-3.5 gap-2 max-w-[1680px] mx-auto w-full">
             <div className="flex items-center gap-3">
-              <span className="text-xs font-bold bg-red-50 text-red-600 border border-red-200/60 px-3 py-1.5 rounded-full uppercase tracking-wider">
-                {loggedUser.rol}
-              </span>
+              <div className="w-9 h-9 rounded-xl bg-orange-500/20 border border-orange-400/40 flex items-center justify-center text-orange-400 shrink-0">
+                <CalendarDays className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="text-xs sm:text-sm font-bold text-white tracking-wide">{formattedDate}</p>
+                <p className="text-[11px] text-slate-300 font-medium">Panel de Control en Tiempo Real · Salamandra PCI</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 bg-white/10 hover:bg-white/15 border border-white/15 px-3.5 py-1.5 rounded-full transition-colors">
+                <User className="w-4 h-4 text-orange-400" />
+                <span className="text-xs font-bold text-white">{loggedUser.nombre}</span>
+                <span className="text-[10px] font-black bg-orange-500 text-white px-2 py-0.5 rounded-full uppercase tracking-wider">
+                  {loggedUser.rol}
+                </span>
+              </div>
             </div>
           </div>
         </div>
 
-        <div className="p-4 sm:p-6 lg:p-8 max-w-[1600px] mx-auto animate-in">
-          {/* Título de sección */}
-          <div className="mb-4 sm:mb-5">
-            <h2 className="text-sm sm:text-base font-extrabold text-slate-800 tracking-tight uppercase">
-              RESUMEN DE TAREAS pendientes
-            </h2>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Estado en tiempo real de los trabajos y servicios activos pendientes de finalizar.
-            </p>
+        <div className="p-4 sm:p-6 lg:p-8 max-w-[1680px] w-full mx-auto flex-1 flex flex-col justify-between gap-6 animate-in">
+          <div>
+            {/* Bienvenida e Indicador de Estado Global */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/80 shadow-xs">
+              <div>
+                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-[#0F2342] tracking-tight">
+                  ¡Hola, {loggedUser.nombre}!
+                </h1>
+                <p className="text-sm sm:text-base font-medium text-slate-500 mt-1">
+                  Resumen de tu jornada en Salamandra · Fotografía en tiempo real de facturación, trabajos de hoy y almacén.
+                </p>
+              </div>
+
+              {todoEnOrdenGlobal ? (
+                <div className="flex items-center gap-3.5 bg-emerald-50 border-2 border-emerald-200/80 px-5 py-3 rounded-2xl shrink-0 shadow-2xs">
+                  <div className="w-10 h-10 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+                    <CheckCircle2 className="w-6 h-6 stroke-[2.5]" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-black text-emerald-950 leading-tight">Todo al día</p>
+                    <p className="text-xs font-semibold text-emerald-700">Sin facturación ni stock pendiente</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3.5 bg-[#0F2342] text-white px-5 py-3 rounded-2xl shrink-0 shadow-sm border border-slate-800">
+                  <div className="w-10 h-10 rounded-full bg-orange-500 text-white flex items-center justify-center shrink-0 shadow-sm">
+                    <Clock className="w-5 h-5 stroke-[2.5]" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-black text-white leading-tight">Actividad en curso</p>
+                    <p className="text-xs font-medium text-slate-300">
+                      {albaranesPendientesFacturar.length} alb. por facturar · {tareasDeHoy.length} tareas hoy · {materialesStockBajo.length} avisos stock
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 3 TARJETAS PRINCIPALES DEL DASHBOARD */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              
+              {/* ═══════════════════════════════════════════════════════════════
+                  1. TARJETA FACTURACIÓN (COLOR NARANJA)
+              ═══════════════════════════════════════════════════════════════ */}
+              <div className="rounded-[2rem] bg-gradient-to-br from-orange-50 via-amber-50/60 to-white border-2 border-orange-200/90 shadow-md hover:shadow-xl transition-all flex flex-col justify-between overflow-hidden">
+                <div className="p-6 sm:p-7 flex-1 flex flex-col">
+                  {/* Cabecera con Icono Ilustrativo y Contador Destacado */}
+                  <div className="flex items-start gap-5 pb-5 border-b border-orange-200/70">
+                    <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-[#0F2342] to-[#1D3557] border-2 border-orange-400/40 flex items-center justify-center shrink-0 shadow-lg relative">
+                      <Receipt className="w-10 h-10 text-white stroke-[1.8]" />
+                      <span className="absolute -bottom-1.5 -right-1.5 w-8 h-8 rounded-full bg-orange-500 text-white font-black text-sm flex items-center justify-center border-2 border-white shadow">
+                        €
+                      </span>
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <span className="inline-block text-[11px] font-black uppercase tracking-widest text-orange-800 bg-orange-200/70 px-2.5 py-0.5 rounded-full mb-1">
+                        1. Facturación
+                      </span>
+                      <div className="flex items-baseline gap-2.5">
+                        <span className="text-5xl sm:text-6xl font-black text-orange-600 tracking-tight leading-none">
+                          {albaranesPendientesFacturar.length}
+                        </span>
+                        <span className="text-xs font-extrabold uppercase tracking-wider text-[#0F2342]">
+                          {albaranesPendientesFacturar.length === 1 ? 'albarán pendiente' : 'albaranes pendientes'}
+                        </span>
+                      </div>
+                      <p className="text-xs font-semibold text-slate-600 mt-1">
+                        Albaranes firmados listos para emitir factura
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Listado Real de Registros de Firestore */}
+                  <div className="mt-5 flex-1 flex flex-col">
+                    <div className="flex items-center justify-between mb-2.5">
+                      <span className="text-[11px] font-extrabold uppercase tracking-wider text-orange-900/80">
+                        Primeros registros pendientes
+                      </span>
+                      {albaranesPendientesFacturar.length > 0 && (
+                        <span className="text-[11px] font-bold text-orange-700">
+                          Mostrando {Math.min(5, albaranesPendientesFacturar.length)} de {albaranesPendientesFacturar.length}
+                        </span>
+                      )}
+                    </div>
+
+                    {albaranesPendientesFacturar.length === 0 ? (
+                      <div className="flex-1 min-h-[210px] rounded-2xl bg-white/80 border border-orange-200/60 flex flex-col items-center justify-center p-6 text-center">
+                        <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center mb-2.5">
+                          <CheckCircle2 className="w-7 h-7 stroke-[2.2]" />
+                        </div>
+                        <p className="text-base font-black text-[#0F2342]">Todo al día</p>
+                        <p className="text-xs font-medium text-slate-500 mt-0.5">
+                          No hay albaranes pendientes de facturar en este momento.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2 flex-1">
+                        {albaranesPendientesFacturar.slice(0, 5).map((item) => (
+                          <div
+                            key={item.id}
+                            onClick={() => navigate('/facturas', { state: { prefillFactura: { albaranId: item.raw.id, empresaId: item.raw.empresaId || '', clienteId: item.raw.clienteId || '', centroId: item.raw.centroId || '', clienteNombreLibre: item.raw.clienteNombreLibre || '', centroNombreLibre: item.raw.centroNombreLibre || '', numeroPedido: item.raw.numeroPedido || '', titulo: item.raw.titulo || `Factura de Albarán ${item.raw.id}`, fechaCreacion: new Date().toISOString(), items: item.raw.items || [] } } })}
+                            className="group bg-white hover:bg-orange-50/90 border border-orange-200/80 hover:border-orange-400 rounded-2xl px-3.5 py-2.5 flex items-center justify-between gap-2 transition-all cursor-pointer shadow-2xs"
+                            title="Clic para abrir en Facturación"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <span className="w-2 h-2 rounded-full bg-orange-500 shrink-0" />
+                                <p className="text-xs sm:text-sm font-bold text-[#0F2342] truncate group-hover:text-orange-700 transition-colors">
+                                  {item.cliente}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2 mt-0.5 pl-4">
+                                <span className="text-[11px] font-mono font-bold text-orange-800 bg-orange-100/90 px-2 py-0.5 rounded-md border border-orange-200">
+                                  Albarán {item.numero}
+                                </span>
+                                <span className="text-[11px] font-semibold text-slate-500">
+                                  {item.fecha}
+                                </span>
+                              </div>
+                            </div>
+
+                            <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border shrink-0 ${
+                              item.firmado
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                : 'bg-amber-50 text-amber-700 border-amber-200'
+                            }`}>
+                              {item.firmado ? 'Firmado' : 'Pendiente'}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Botón Inferior Naranja */}
+                <div className="px-6 pb-6 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => navigate('/facturas')}
+                    className="w-full py-3.5 px-5 rounded-2xl bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-black text-sm shadow-md shadow-orange-500/20 hover:shadow-lg transition-all flex items-center justify-center gap-2.5 cursor-pointer active:scale-[0.99]"
+                  >
+                    <ArrowRight className="w-4 h-4 stroke-[2.8]" />
+                    <span>Ver pendientes</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* ═══════════════════════════════════════════════════════════════
+                  2. TARJETA TAREAS DE HOY (COLOR AZUL)
+              ═══════════════════════════════════════════════════════════════ */}
+              <div className="rounded-[2rem] bg-gradient-to-br from-sky-50 via-blue-50/60 to-white border-2 border-sky-200/90 shadow-md hover:shadow-xl transition-all flex flex-col justify-between overflow-hidden">
+                <div className="p-6 sm:p-7 flex-1 flex flex-col">
+                  {/* Cabecera con Icono Ilustrativo y Contador Destacado */}
+                  <div className="flex items-start gap-5 pb-5 border-b border-sky-200/70">
+                    <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-[#0F2342] to-[#1D3557] border-2 border-sky-400/40 flex items-center justify-center shrink-0 shadow-lg relative">
+                      <CalendarDays className="w-10 h-10 text-white stroke-[1.8]" />
+                      <span className="absolute -bottom-1.5 -right-1.5 w-8 h-8 rounded-full bg-blue-600 text-white font-black text-xs flex items-center justify-center border-2 border-white shadow">
+                        HOY
+                      </span>
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <span className="inline-block text-[11px] font-black uppercase tracking-widest text-blue-800 bg-sky-200/70 px-2.5 py-0.5 rounded-full mb-1">
+                        2. Tareas de Hoy
+                      </span>
+                      <div className="flex items-baseline gap-2.5">
+                        <span className="text-5xl sm:text-6xl font-black text-blue-600 tracking-tight leading-none">
+                          {tareasDeHoy.length}
+                        </span>
+                        <span className="text-xs font-extrabold uppercase tracking-wider text-[#0F2342]">
+                          {tareasDeHoy.length === 1 ? 'tarea prevista' : 'tareas previstas'}
+                        </span>
+                      </div>
+                      <p className="text-xs font-semibold text-slate-600 mt-1">
+                        Revisiones, reparaciones, instalaciones y avisos
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Listado Real de Tareas del Día Actual */}
+                  <div className="mt-5 flex-1 flex flex-col">
+                    <div className="flex items-center justify-between mb-2.5">
+                      <span className="text-[11px] font-extrabold uppercase tracking-wider text-blue-900/80">
+                        Agenda operativa de hoy
+                      </span>
+                      {tareasDeHoy.length > 0 && (
+                        <span className="text-[11px] font-bold text-blue-700">
+                          Mostrando {Math.min(5, tareasDeHoy.length)} de {tareasDeHoy.length}
+                        </span>
+                      )}
+                    </div>
+
+                    {tareasDeHoy.length === 0 ? (
+                      <div className="flex-1 min-h-[210px] rounded-2xl bg-white/80 border border-sky-200/60 flex flex-col items-center justify-center p-6 text-center">
+                        <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center mb-2.5">
+                          <CheckCircle2 className="w-7 h-7 stroke-[2.2]" />
+                        </div>
+                        <p className="text-base font-black text-[#0F2342]">Todo al día</p>
+                        <p className="text-xs font-medium text-slate-500 mt-0.5">
+                          No hay tareas ni intervenciones programadas para la fecha de hoy.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2 flex-1">
+                        {tareasDeHoy.slice(0, 5).map((tarea) => (
+                          <div
+                            key={tarea.id}
+                            onClick={() => navigate('/calendario')}
+                            className={`group bg-white hover:bg-sky-50/90 border border-sky-200/80 hover:border-blue-400 rounded-2xl px-3.5 py-2.5 flex items-center justify-between gap-2 transition-all cursor-pointer shadow-2xs ${
+                              tarea.completado ? 'opacity-65' : ''
+                            }`}
+                            title={`${tarea.tipo}: ${tarea.cliente} — ${tarea.detalle}`}
+                          >
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <span className="text-[11px] font-mono font-extrabold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md shrink-0">
+                                  {tarea.hora}
+                                </span>
+                                <p className="text-xs sm:text-sm font-bold text-[#0F2342] truncate group-hover:text-blue-700 transition-colors">
+                                  {tarea.cliente}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2 mt-0.5 pl-1">
+                                <p className="text-[11px] font-medium text-slate-500 truncate">
+                                  {tarea.detalle}
+                                  {tarea.tecnico ? ` · Téc: ${tarea.tecnico}` : ''}
+                                </p>
+                              </div>
+                            </div>
+
+                            <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border shrink-0 ${tarea.badgeColor}`}>
+                              {tarea.tipo}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Botón Inferior Azul */}
+                <div className="px-6 pb-6 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => navigate('/calendario')}
+                    className="w-full py-3.5 px-5 rounded-2xl bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-black text-sm shadow-md shadow-blue-600/20 hover:shadow-lg transition-all flex items-center justify-center gap-2.5 cursor-pointer active:scale-[0.99]"
+                  >
+                    <ArrowRight className="w-4 h-4 stroke-[2.8]" />
+                    <span>Ver calendario</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* ═══════════════════════════════════════════════════════════════
+                  3. TARJETA STOCK (COLOR VERDE)
+              ═══════════════════════════════════════════════════════════════ */}
+              <div className="rounded-[2rem] bg-gradient-to-br from-emerald-50 via-green-50/60 to-white border-2 border-emerald-200/90 shadow-md hover:shadow-xl transition-all flex flex-col justify-between overflow-hidden">
+                <div className="p-6 sm:p-7 flex-1 flex flex-col">
+                  {/* Cabecera con Icono Ilustrativo y Contador Destacado */}
+                  <div className="flex items-start gap-5 pb-5 border-b border-emerald-200/70">
+                    <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-[#0F2342] to-[#1D3557] border-2 border-emerald-400/40 flex items-center justify-center shrink-0 shadow-lg relative">
+                      <Package className="w-10 h-10 text-white stroke-[1.8]" />
+                      <span className={`absolute -bottom-1.5 -right-1.5 w-8 h-8 rounded-full text-white font-black text-xs flex items-center justify-center border-2 border-white shadow ${
+                        materialesStockBajo.length > 0 ? 'bg-red-600' : 'bg-emerald-600'
+                      }`}>
+                        {materialesStockBajo.length > 0 ? '!' : '✓'}
+                      </span>
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <span className="inline-block text-[11px] font-black uppercase tracking-widest text-emerald-900 bg-emerald-200/70 px-2.5 py-0.5 rounded-full mb-1">
+                        3. Stock
+                      </span>
+                      <div className="flex items-baseline gap-2.5">
+                        <span className="text-5xl sm:text-6xl font-black text-emerald-600 tracking-tight leading-none">
+                          {materialesStockBajo.length}
+                        </span>
+                        <span className="text-xs font-extrabold uppercase tracking-wider text-[#0F2342]">
+                          {materialesStockBajo.length === 1 ? 'material con stock bajo' : 'materiales con stock bajo'}
+                        </span>
+                      </div>
+                      <p className="text-xs font-semibold text-slate-600 mt-1">
+                        Artículos de almacén que necesitan reposición
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Listado Real de Materiales con Existencias Bajas */}
+                  <div className="mt-5 flex-1 flex flex-col">
+                    <div className="flex items-center justify-between mb-2.5">
+                      <span className="text-[11px] font-extrabold uppercase tracking-wider text-emerald-900/80">
+                        Materiales a reponer
+                      </span>
+                      {materialesStockBajo.length > 0 && (
+                        <span className="text-[11px] font-bold text-emerald-700">
+                          Mostrando {Math.min(5, materialesStockBajo.length)} de {materialesStockBajo.length}
+                        </span>
+                      )}
+                    </div>
+
+                    {materialesStockBajo.length === 0 ? (
+                      <div className="flex-1 min-h-[210px] rounded-2xl bg-white/80 border border-emerald-200/60 flex flex-col items-center justify-center p-6 text-center">
+                        <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center mb-2.5">
+                          <CheckCircle2 className="w-7 h-7 stroke-[2.2]" />
+                        </div>
+                        <p className="text-base font-black text-[#0F2342]">Todo al día</p>
+                        <p className="text-xs font-medium text-slate-500 mt-0.5">
+                          Todos los materiales del catálogo tienen existencias suficientes.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2 flex-1">
+                        {materialesStockBajo.slice(0, 5).map((mat) => (
+                          <div
+                            key={mat.id}
+                            onClick={() => navigate('/catalogo')}
+                            className="group bg-white hover:bg-emerald-50/90 border border-emerald-200/80 hover:border-emerald-400 rounded-2xl px-3.5 py-2.5 flex items-center justify-between gap-2 transition-all cursor-pointer shadow-2xs"
+                            title="Ir al Catálogo para reponer stock"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <AlertTriangle className={`w-3.5 h-3.5 shrink-0 ${mat.cantidad === 0 ? 'text-red-600' : 'text-amber-500'}`} />
+                                <p className="text-xs sm:text-sm font-bold text-[#0F2342] truncate group-hover:text-emerald-800 transition-colors">
+                                  {mat.nombre}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2 mt-0.5 pl-5">
+                                <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                                  {mat.codigo}
+                                </span>
+                                {mat.familia && (
+                                  <span className="text-[11px] font-medium text-slate-500 truncate">
+                                    {mat.familia}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="flex flex-col items-end shrink-0">
+                              <span className={`text-[11px] font-black px-2.5 py-0.5 rounded-full border ${
+                                mat.cantidad === 0
+                                  ? 'bg-red-100 text-red-700 border-red-300'
+                                  : 'bg-amber-100 text-amber-800 border-amber-300'
+                              }`}>
+                                {mat.cantidad} {mat.cantidad === 1 ? 'ud.' : 'uds.'}
+                              </span>
+                              <span className={`text-[9px] font-extrabold uppercase tracking-wider mt-0.5 ${
+                                mat.cantidad === 0 ? 'text-red-600' : 'text-amber-700'
+                              }`}>
+                                {mat.cantidad === 0 ? 'Stock agotado' : 'Stock bajo'}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Botón Inferior Verde */}
+                <div className="px-6 pb-6 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => navigate('/catalogo')}
+                    className="w-full py-3.5 px-5 rounded-2xl bg-gradient-to-r from-emerald-600 to-green-700 hover:from-emerald-700 hover:to-green-800 text-white font-black text-sm shadow-md shadow-emerald-600/20 hover:shadow-lg transition-all flex items-center justify-center gap-2.5 cursor-pointer active:scale-[0.99]"
+                  >
+                    <ArrowRight className="w-4 h-4 stroke-[2.8]" />
+                    <span>Ver catálogo</span>
+                  </button>
+                </div>
+              </div>
+
+            </div>
           </div>
 
-          {/* Cuadrícula de 4 tablas pequeñas: Desktop (4 cols en paralelo), Tablet (2 y 2 debajo) */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-            
-            {/* 1. TABLA AVISOS (NEGRO) */}
-            <div className="bg-white border border-slate-200/80 rounded-2xl shadow-xs flex flex-col overflow-hidden">
-              <div 
-                onClick={() => navigate('/urgencias')}
-                className="px-4 py-3 border-b border-slate-200/80 bg-slate-50/50 flex items-center justify-between cursor-pointer hover:bg-slate-100/60 transition-colors"
-                title="Ir al módulo Avisos"
+          {/* Barra Inferior de Accesos Rápidos (inspirada en el diseño de referencia) */}
+          <div className="bg-white/90 border border-slate-200/90 rounded-2xl px-5 py-3.5 shadow-2xs flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-4">
+              <span className="text-xs font-black uppercase tracking-wider text-[#0F2342] flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-orange-500"></span>
+                Acceso rápido:
+              </span>
+              <button
+                type="button"
+                onClick={() => navigate('/analisis')}
+                className="text-xs font-bold text-slate-600 hover:text-orange-600 transition-colors cursor-pointer px-2 py-1 rounded-lg hover:bg-orange-50"
               >
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-extrabold px-3 py-1 rounded-xl bg-zinc-950 text-white border border-black flex items-center gap-1.5 shadow-xs tracking-wider">
-                    <span className="w-2 h-2 rounded-full bg-white animate-pulse"></span>
-                    <AlertTriangle className="w-3.5 h-3.5 text-white" />
-                    AVISOS
-                  </span>
-                </div>
-                <span className="text-[11px] font-bold text-slate-500 bg-white border border-slate-200 px-2.5 py-0.5 rounded-full shadow-2xs">
-                  {avisosPendientes.length} pendientes
-                </span>
-              </div>
-              <div className="flex-1 overflow-y-auto divide-y divide-slate-200 max-h-[520px] scrollbar-thin">
-                {avisosPendientes.length === 0 ? (
-                  <div className="py-16 text-center text-xs font-semibold text-slate-400">
-                    No hay avisos pendientes
-                  </div>
-                ) : (
-                  avisosPendientes.map((item, idx) => (
-                    <div 
-                      key={item.id || idx}
-                      onClick={() => navigate('/urgencias')}
-                      className="px-4 py-2.5 hover:bg-slate-50/80 transition-colors cursor-pointer group"
-                    >
-                      <p className="text-xs font-semibold text-slate-700 truncate tracking-normal group-hover:text-black transition-colors">
-                        {item.lugar}
-                      </p>
-                      <p className="text-[11px] font-normal text-slate-400 truncate mt-0.5">
-                        {item.tarea}
-                      </p>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-
-            {/* 2. TABLA REPARACIONES (AZUL) */}
-            <div className="bg-white border border-slate-200/80 rounded-2xl shadow-xs flex flex-col overflow-hidden">
-              <div 
-                onClick={() => navigate('/reparaciones')}
-                className="px-4 py-3 border-b border-slate-200/80 bg-sky-50/30 flex items-center justify-between cursor-pointer hover:bg-sky-50/60 transition-colors"
-                title="Ir al módulo Reparaciones"
+                Análisis
+              </button>
+              <span className="text-slate-300">|</span>
+              <button
+                type="button"
+                onClick={() => navigate('/pedidos')}
+                className="text-xs font-bold text-slate-600 hover:text-orange-600 transition-colors cursor-pointer px-2 py-1 rounded-lg hover:bg-orange-50"
               >
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-extrabold px-3 py-1 rounded-xl bg-sky-50 text-sky-800 border border-sky-200 flex items-center gap-1.5 shadow-xs tracking-wider">
-                    <span className="w-2 h-2 rounded-full bg-sky-600"></span>
-                    <Wrench className="w-3.5 h-3.5 text-sky-600" />
-                    REPARACIONES
-                  </span>
-                </div>
-                <span className="text-[11px] font-bold text-sky-800 bg-white border border-sky-200 px-2.5 py-0.5 rounded-full shadow-2xs">
-                  {reparacionesPendientes.length} pendientes
-                </span>
-              </div>
-              <div className="flex-1 overflow-y-auto divide-y divide-slate-200 max-h-[520px] scrollbar-thin">
-                {reparacionesPendientes.length === 0 ? (
-                  <div className="py-16 text-center text-xs font-semibold text-slate-400">
-                    No hay reparaciones pendientes
-                  </div>
-                ) : (
-                  reparacionesPendientes.map((item, idx) => (
-                    <div 
-                      key={item.id || idx}
-                      onClick={() => navigate('/reparaciones')}
-                      className="px-4 py-2.5 hover:bg-sky-50/30 transition-colors cursor-pointer group"
-                    >
-                      <p className="text-xs font-semibold text-slate-700 truncate tracking-normal group-hover:text-sky-900 transition-colors">
-                        {item.lugar}
-                      </p>
-                      <p className="text-[11px] font-normal text-slate-400 truncate mt-0.5">
-                        {item.tarea}
-                      </p>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-
-            {/* 3. TABLA REVISIONES (AMARILLO) */}
-            <div className="bg-white border border-slate-200/80 rounded-2xl shadow-xs flex flex-col overflow-hidden">
-              <div 
-                onClick={() => navigate('/partes_trabajo')}
-                className="px-4 py-3 border-b border-slate-200/80 bg-amber-50/30 flex items-center justify-between cursor-pointer hover:bg-amber-50/60 transition-colors"
+                Pedidos
+              </button>
+              <span className="text-slate-300">|</span>
+              <button
+                type="button"
+                onClick={() => navigate('/albaranes')}
+                className="text-xs font-bold text-slate-600 hover:text-orange-600 transition-colors cursor-pointer px-2 py-1 rounded-lg hover:bg-orange-50"
+              >
+                Albaranes
+              </button>
+              <span className="text-slate-300">|</span>
+              <button
+                type="button"
+                onClick={() => navigate('/facturas')}
+                className="text-xs font-bold text-slate-600 hover:text-orange-600 transition-colors cursor-pointer px-2 py-1 rounded-lg hover:bg-orange-50"
+              >
+                Facturas
+              </button>
+              <span className="text-slate-300">|</span>
+              <button
+                type="button"
+                onClick={() => navigate('/revisiones')}
                 title={'Ir al módulo Listado de mantenimientos anuales "LISTMAN"'}
+                className="text-xs font-bold text-slate-600 hover:text-orange-600 transition-colors cursor-pointer px-2 py-1 rounded-lg hover:bg-orange-50"
               >
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-extrabold px-3 py-1 rounded-xl bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1.5 shadow-xs tracking-wider">
-                    <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-                    <ClipboardCheck className="w-3.5 h-3.5 text-amber-600" />
-                    REVISIONES
-                  </span>
-                </div>
-                <span className="text-[11px] font-bold text-amber-800 bg-white border border-amber-200 px-2.5 py-0.5 rounded-full shadow-2xs">
-                  {revisionesPendientes.length} pendientes
-                </span>
-              </div>
-              <div className="flex-1 overflow-y-auto divide-y divide-slate-200 max-h-[520px] scrollbar-thin">
-                {revisionesPendientes.length === 0 ? (
-                  <div className="py-16 text-center text-xs font-semibold text-slate-400">
-                    No hay revisiones pendientes
-                  </div>
-                ) : (
-                  revisionesPendientes.map((item, idx) => (
-                    <div 
-                      key={item.id || idx}
-                      onClick={() => navigate('/partes_trabajo')}
-                      className="px-4 py-2.5 hover:bg-amber-50/30 transition-colors cursor-pointer group"
-                    >
-                      <p className="text-xs font-semibold text-slate-700 truncate tracking-normal group-hover:text-amber-950 transition-colors">
-                        {item.lugar}
-                      </p>
-                      <p className="text-[11px] font-normal text-slate-400 truncate mt-0.5">
-                        {item.tarea}
-                      </p>
-                    </div>
-                  ))
-                )}
-              </div>
+                Listman
+              </button>
             </div>
 
-            {/* 4. TABLA INSTALACIONES (ROJO) */}
-            <div className="bg-white border border-slate-200/80 rounded-2xl shadow-xs flex flex-col overflow-hidden">
-              <div 
+            <div className="flex items-center gap-3 text-[11px] font-bold text-slate-500">
+              <button
+                type="button"
+                onClick={() => navigate('/reparaciones')}
+                className="hover:text-[#0F2342] transition-colors cursor-pointer flex items-center gap-1"
+              >
+                <Wrench className="w-3.5 h-3.5 text-sky-600" /> Reparaciones
+              </button>
+              <span>·</span>
+              <button
+                type="button"
                 onClick={() => navigate('/instalaciones')}
-                className="px-4 py-3 border-b border-slate-200/80 bg-red-50/30 flex items-center justify-between cursor-pointer hover:bg-red-50/60 transition-colors"
-                title="Ir al módulo Instalaciones"
+                className="hover:text-[#0F2342] transition-colors cursor-pointer flex items-center gap-1"
               >
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-extrabold px-3 py-1 rounded-xl bg-red-50 text-red-700 border border-red-200 flex items-center gap-1.5 shadow-xs tracking-wider">
-                    <span className="w-2 h-2 rounded-full bg-red-600"></span>
-                    <HardHat className="w-3.5 h-3.5 text-red-600" />
-                    INSTALACIONES
-                  </span>
-                </div>
-                <span className="text-[11px] font-bold text-red-700 bg-white border border-red-200 px-2.5 py-0.5 rounded-full shadow-2xs">
-                  {instalacionesPendientes.length} pendientes
-                </span>
-              </div>
-              <div className="flex-1 overflow-y-auto divide-y divide-slate-200 max-h-[520px] scrollbar-thin">
-                {instalacionesPendientes.length === 0 ? (
-                  <div className="py-16 text-center text-xs font-semibold text-slate-400">
-                    No hay instalaciones pendientes
-                  </div>
-                ) : (
-                  instalacionesPendientes.map((item, idx) => (
-                    <div 
-                      key={item.id || idx}
-                      onClick={() => navigate('/instalaciones')}
-                      className="px-4 py-2.5 hover:bg-red-50/30 transition-colors cursor-pointer group"
-                    >
-                      <p className="text-xs font-semibold text-slate-700 truncate tracking-normal group-hover:text-red-950 transition-colors">
-                        {item.lugar}
-                      </p>
-                      <p className="text-[11px] font-normal text-slate-400 truncate mt-0.5">
-                        {item.tarea}
-                      </p>
-                    </div>
-                  ))
-                )}
-              </div>
+                <HardHat className="w-3.5 h-3.5 text-red-600" /> Instalaciones
+              </button>
+              <span>·</span>
+              <button
+                type="button"
+                onClick={() => navigate('/urgencias')}
+                className="hover:text-[#0F2342] transition-colors cursor-pointer flex items-center gap-1"
+              >
+                <AlertTriangle className="w-3.5 h-3.5 text-zinc-900" /> Avisos y Urgencias
+              </button>
+              <span>·</span>
+              <button
+                type="button"
+                onClick={() => navigate('/partes')}
+                className="hover:text-[#0F2342] transition-colors cursor-pointer flex items-center gap-1"
+              >
+                <ClipboardCheck className="w-3.5 h-3.5 text-amber-600" /> Partes
+              </button>
             </div>
-
           </div>
         </div>
       </main>
@@ -1355,8 +1905,18 @@ export default function App() {
           </ProtectedRoute>
         } />
         <Route path="/partes" element={
-          <ProtectedRoute allowedRoles={['super-administrador', 'administrador', 'editor', 'visualizador']} user={loggedUser}>
+          <ProtectedRoute allowedRoles={['super-administrador', 'administrador', 'editor', 'visualizador', 'tecnico']} user={loggedUser}>
             <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Partes /></PageLayout>
+          </ProtectedRoute>
+        } />
+        <Route path="/partes-trabajo" element={
+          <ProtectedRoute allowedRoles={['super-administrador', 'administrador', 'editor', 'visualizador']} user={loggedUser}>
+            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><PartesTrabajoOperaciones loggedUser={loggedUser} /></PageLayout>
+          </ProtectedRoute>
+        } />
+        <Route path="/crear-parte" element={
+          <ProtectedRoute allowedRoles={['super-administrador', 'administrador', 'editor', 'tecnico']} user={loggedUser}>
+            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><CrearNuevoParte /></PageLayout>
           </ProtectedRoute>
         } />
         <Route path="/certificados" element={
@@ -1365,7 +1925,7 @@ export default function App() {
           </ProtectedRoute>
         } />
         <Route path="/instalaciones" element={
-          <ProtectedRoute allowedRoles={['super-administrador', 'administrador']} user={loggedUser}>
+          <ProtectedRoute allowedRoles={['super-administrador', 'administrador', 'tecnico']} user={loggedUser}>
             <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Instalaciones /></PageLayout>
           </ProtectedRoute>
         } />
@@ -1375,7 +1935,7 @@ export default function App() {
           </ProtectedRoute>
         } />
         <Route path="/reparaciones" element={
-          <ProtectedRoute allowedRoles={['super-administrador', 'administrador']} user={loggedUser}>
+          <ProtectedRoute allowedRoles={['super-administrador', 'administrador', 'tecnico']} user={loggedUser}>
             <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Reparaciones /></PageLayout>
           </ProtectedRoute>
         } />

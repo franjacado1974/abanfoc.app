@@ -189,7 +189,7 @@ export default function SistemaExtincionGas({
                                                                                              currentEquipo={eq}
                                                                                              equiposInstalados={equiposInstalados}
                                                                                              value={String(val || '')}
-                                                                                             onChange={(newVal) => handleCheckChange(eq.id, item.key, newVal)}
+                                                                                             onChange={(newVal) => handleCheckChange(eq.id, item.key, newVal, item.label)}
                                                                                          />
                                                                                      </div>
                                                                                  );
@@ -251,9 +251,17 @@ export default function SistemaExtincionGas({
                                                                                                   (() => {
                                                                                                       const labelLower = (item.label || '').toLowerCase();
                                                                                                       const isFechaRevision = labelLower.includes('fecha de revision') || labelLower.includes('fecha de revisión');
-                                                                                                      const fechaVal = typeof val === 'string' && val 
-                                                                                                          ? (isFechaRevision ? val.substring(0, 10) : val.substring(0, 7)) 
-                                                                                                          : '';
+                                                                                                      let fechaVal = typeof val === 'string' && val ? val.trim() : '';
+                                                                                                      if (!isFechaRevision && fechaVal) {
+                                                                                                          const myMatch = fechaVal.match(/^(\d{1,2})[-\/](\d{4})$/);
+                                                                                                          if (myMatch) {
+                                                                                                              fechaVal = `${myMatch[2]}-${myMatch[1].padStart(2, '0')}`;
+                                                                                                          } else if (fechaVal.length >= 7 && fechaVal.includes('-')) {
+                                                                                                              fechaVal = fechaVal.substring(0, 7);
+                                                                                                          }
+                                                                                                      } else if (isFechaRevision && fechaVal) {
+                                                                                                          fechaVal = fechaVal.substring(0, 10);
+                                                                                                      }
                                                                                                       const isErrorDate = (caducado || necesitaRetimbre || seAproxima) && (item.key === fabItemKey || item.key === retItemKey);
                                                                                                        const hoyStr = new Date().toISOString().split('T')[0];
                                                                                                        const noEsHoy = isFechaRevision && fechaVal !== '' && fechaVal !== hoyStr;
@@ -261,7 +269,7 @@ export default function SistemaExtincionGas({
                                                                                                            <input
                                                                                                                type={isFechaRevision ? 'date' : 'month'}
                                                                                                                value={fechaVal}
-                                                                                                               onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value ? (isFechaRevision ? e.target.value : e.target.value + '-01') : '')}
+                                                                                                               onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value ? (isFechaRevision ? e.target.value : e.target.value + '-01') : '', item.label)}
                                                                                                                className={`w-full px-2 py-1.5 border rounded-lg text-xs outline-none focus:ring-2 transition-colors ${
                                                                                                                    isErrorDate
                                                                                                                    ? 'bg-red-50 border-red-400 text-red-700 focus:border-red-500 focus:ring-red-500/20'
@@ -436,9 +444,17 @@ export default function SistemaExtincionGas({
                                                                                 } else if (tipo === 'fecha') {
                                                                                      const labelLower = (item.label || '').toLowerCase();
                                                                                      const isFechaRevision = labelLower.includes('fecha de revision') || labelLower.includes('fecha de revisión');
-                                                                                     const fechaVal = typeof val === 'string' && val 
-                                                                                         ? (isFechaRevision ? val.substring(0, 10) : val.substring(0, 7)) 
-                                                                                         : '';
+                                                                                     let fechaVal = typeof val === 'string' && val ? val.trim() : '';
+                                                                                     if (!isFechaRevision && fechaVal) {
+                                                                                         const myMatch = fechaVal.match(/^(\d{1,2})[-\/](\d{4})$/);
+                                                                                         if (myMatch) {
+                                                                                             fechaVal = `${myMatch[2]}-${myMatch[1].padStart(2, '0')}`;
+                                                                                         } else if (fechaVal.length >= 7 && fechaVal.includes('-')) {
+                                                                                             fechaVal = fechaVal.substring(0, 7);
+                                                                                         }
+                                                                                     } else if (isFechaRevision && fechaVal) {
+                                                                                         fechaVal = fechaVal.substring(0, 10);
+                                                                                     }
                                                                                      const isErrorDate = (caducado || necesitaRetimbre || seAproxima) && (item.key === fabItemKey || item.key === retItemKey);
                                                                                      const hoyStr = new Date().toISOString().split('T')[0];
                                                                                      const noEsHoy = isFechaRevision && fechaVal !== '' && fechaVal !== hoyStr;
@@ -448,7 +464,7 @@ export default function SistemaExtincionGas({
                                                                                              <input
                                                                                                  type={isFechaRevision ? 'date' : 'month'}
                                                                                                  value={fechaVal}
-                                                                                                 onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value ? (isFechaRevision ? e.target.value : e.target.value + '-01') : '')}
+                                                                                                 onChange={(e) => handleCheckChange(eq.id, item.key, e.target.value ? (isFechaRevision ? e.target.value : e.target.value + '-01') : '', item.label)}
                                                                                                  className={`w-full px-2 py-1.5 border rounded-lg text-xs outline-none focus:ring-2 transition-colors ${
                                                                                                      isErrorDate
                                                                                                      ? 'bg-red-50 border-red-400 text-red-700 focus:border-red-500 focus:ring-red-500/20'
