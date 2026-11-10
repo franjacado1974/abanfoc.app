@@ -4,6 +4,7 @@ import { Package, Plus, Search, Edit, Trash2, X, Download, Upload } from 'lucide
 import { HandOptionsIcon } from './components/HandOptionsIcon';
 import ConfirmationModal from './ConfirmationModal'; // Import the new modal component
 import * as XLSX from 'xlsx';
+import { FAMILIAS_SISTEMAS_EXISTENTES } from './constants';
 import { 
   subscribeArticulos, 
   saveArticulo, 
@@ -234,20 +235,39 @@ export default function Articulos() {
   }, [filteredArticulos, limiteArticulos]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const currentFamiliaIsAvailable = familias.some(familia =>
-    familia.id === formData.familiaId || familia.nombre === formData.familia
-  );
-  const selectFamiliaOptions = formData.familia && !currentFamiliaIsAvailable
-    ? [{ id: '__current__', nombre: formData.familia }, ...familias]
-    : familias;
+  const selectFamiliaOptions = useMemo(() => {
+    const map = new Map<string, { id: string; nombre: string }>();
+
+    // 1. Incluir todas las familias de los sistemas existentes
+    FAMILIAS_SISTEMAS_EXISTENTES.forEach(nombre => {
+      map.set(nombre.toUpperCase(), { id: nombre, nombre });
+    });
+
+    // 2. Incluir familias sincronizadas desde Firestore
+    familias.forEach(f => {
+      if (f.nombre && f.nombre.trim()) {
+        map.set(f.nombre.trim().toUpperCase(), { id: f.id, nombre: f.nombre.trim() });
+      }
+    });
+
+    // 3. Incluir familia actual si es personalizada
+    if (formData.familia && !map.has(formData.familia.trim().toUpperCase())) {
+      map.set(formData.familia.trim().toUpperCase(), {
+        id: formData.familiaId || '__current__',
+        nombre: formData.familia.trim(),
+      });
+    }
+
+    return Array.from(map.values()).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' }));
+  }, [familias, formData.familia, formData.familiaId]);
 
   const handleFamiliaChange = (familiaId: string) => {
     if (familiaId === '__current__') return;
-    const selectedFamilia = familias.find(familia => familia.id === familiaId);
+    const selectedOption = selectFamiliaOptions.find(f => f.id === familiaId || f.nombre === familiaId);
     setFormData({
       ...formData,
-      familiaId,
-      familia: selectedFamilia?.nombre || '',
+      familiaId: selectedOption && selectedOption.id !== selectedOption.nombre ? selectedOption.id : '',
+      familia: selectedOption?.nombre || familiaId,
     });
   };
 

@@ -1030,10 +1030,10 @@ export default function Calendario() {
     <div className="h-screen max-h-screen bg-[#F8FAFC] flex flex-col p-3 sm:p-4 lg:p-5 select-none overflow-hidden">
       {/* Barra de cabecera del Calendario */}
       <div className="bg-white rounded-2xl border border-slate-200/80 px-4 py-3 sm:px-5 sm:py-3.5 shadow-sm mb-3 shrink-0">
-        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
-          <div className="w-full lg:w-auto text-center">
+        <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between gap-4">
+          <div className="w-full xl:w-auto text-left">
             <div>
-              <div className="flex items-center justify-center gap-2">
+              <div className="flex items-center justify-start gap-2">
                 <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight capitalize">
                   {MESES[month]} {year}
                 </h1>
@@ -1044,114 +1044,120 @@ export default function Calendario() {
                 )}
               </div>
               <p className="text-xs text-slate-500 font-medium mt-0.5">
-                Calendario unificado en tiempo real · Arrastra tareas entre días para reprogramar
+                Calendario unificado de todas las tareas.
               </p>
             </div>
           </div>
 
-          {/* Leyenda y Conteo de Etiquetas con Filtros Interactivos */}
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => toggleFiltro('revisiones')}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
-                filtrosVisibles.revisiones
-                  ? 'bg-amber-50 text-amber-900 border-amber-300 shadow-xs'
-                  : 'bg-slate-50 text-slate-400 border-slate-200 opacity-60 line-through'
-              }`}
-              title={filtrosVisibles.revisiones ? 'Clic para ocultar Revisiones' : 'Clic para mostrar Revisiones'}
-            >
-              <span className={`font-extrabold ${filtrosVisibles.revisiones ? 'text-amber-700' : 'text-slate-400'}`}>Rev.</span>
-              <span>Revisiones ({statsMes.mantCount})</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => toggleFiltro('reparaciones')}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
-                filtrosVisibles.reparaciones
-                  ? 'bg-sky-50 text-sky-900 border-sky-300 shadow-xs'
-                  : 'bg-slate-50 text-slate-400 border-slate-200 opacity-60 line-through'
-              }`}
-              title={filtrosVisibles.reparaciones ? 'Clic para ocultar Reparaciones' : 'Clic para mostrar Reparaciones'}
-            >
-              <span className={`font-extrabold ${filtrosVisibles.reparaciones ? 'text-sky-700' : 'text-slate-400'}`}>Rep.</span>
-              <span>Reparaciones ({statsMes.repCount})</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => toggleFiltro('instalaciones')}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
-                filtrosVisibles.instalaciones
-                  ? 'bg-red-50 text-red-900 border-red-300 shadow-xs'
-                  : 'bg-slate-50 text-slate-400 border-slate-200 opacity-60 line-through'
-              }`}
-              title={filtrosVisibles.instalaciones ? 'Clic para ocultar Instalaciones' : 'Clic para mostrar Instalaciones'}
-            >
-              <span className={`font-extrabold ${filtrosVisibles.instalaciones ? 'text-red-700' : 'text-slate-400'}`}>Inst.</span>
-              <span>Instalaciones ({statsMes.instCount})</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => toggleFiltro('urgencias')}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
-                filtrosVisibles.urgencias
-                  ? 'bg-black text-white border-zinc-950 shadow-xs'
-                  : 'bg-slate-50 text-slate-400 border-slate-200 opacity-60 line-through'
-              }`}
-              title={filtrosVisibles.urgencias ? 'Clic para ocultar Urgencias' : 'Clic para mostrar Urgencias'}
-            >
-              <span className={`font-extrabold ${filtrosVisibles.urgencias ? 'text-white' : 'text-slate-400'}`}>Urg.</span>
-              <span>Urgencias ({statsMes.urgCount})</span>
-            </button>
-          </div>
-
-          <div className="flex items-center gap-2 w-full lg:w-auto justify-end">
-            <button
-              type="button"
-              onClick={handleToday}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition-all shadow-sm cursor-pointer active:scale-95"
-            >
-              <Clock className="w-3.5 h-3.5 text-slate-500" />
-              <span>Hoy</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setMostrarFinSemana((prev) => !prev)}
-              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-bold transition-all shadow-sm cursor-pointer active:scale-95 ${
-                mostrarFinSemana
-                  ? 'border-amber-400 bg-amber-50 text-amber-950 hover:bg-amber-100 shadow-xs'
-                  : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
-              }`}
-              title={mostrarFinSemana ? 'Ocultar sábado y domingo' : 'Mostrar sábado y domingo'}
-            >
-              <CalendarDays className={`w-3.5 h-3.5 ${mostrarFinSemana ? 'text-amber-700' : 'text-slate-500'}`} />
-              <span>{mostrarFinSemana ? 'Ocultar Finde' : 'Mostrar Finde'}</span>
-            </button>
-
-            <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/80">
+          {/* Botones de filtrado y acciones unificados en la misma línea */}
+          <div className="flex flex-wrap items-center justify-between xl:justify-end gap-2.5 w-full xl:w-auto">
+            {/* Leyenda y Conteo de Etiquetas con Filtros Interactivos (todos en línea) */}
+            <div className="flex items-center gap-2 overflow-x-auto scrollbar-none">
               <button
                 type="button"
-                onClick={handlePrevMonth}
-                className="p-1.5 rounded-lg hover:bg-white text-slate-600 hover:text-slate-900 transition-all cursor-pointer"
-                title="Mes anterior"
+                onClick={() => toggleFiltro('revisiones')}
+                className={`h-9 inline-flex items-center gap-1.5 px-3 rounded-xl text-xs font-bold border transition-all cursor-pointer whitespace-nowrap ${
+                  filtrosVisibles.revisiones
+                    ? 'bg-amber-50 text-amber-900 border-amber-300 shadow-xs'
+                    : 'bg-slate-50 text-slate-400 border-slate-200 opacity-60 line-through'
+                }`}
+                title={filtrosVisibles.revisiones ? 'Clic para ocultar Revisiones' : 'Clic para mostrar Revisiones'}
               >
-                <ChevronLeft className="w-4 h-4" />
+                <span className={`font-extrabold ${filtrosVisibles.revisiones ? 'text-amber-700' : 'text-slate-400'}`}>Rev.</span>
+                <span>Revisiones ({statsMes.mantCount})</span>
               </button>
-              <span className="px-3 text-xs font-black text-slate-700 min-w-[80px] text-center capitalize">
-                {MESES[month].slice(0, 3)}
-              </span>
+
               <button
                 type="button"
-                onClick={handleNextMonth}
-                className="p-1.5 rounded-lg hover:bg-white text-slate-600 hover:text-slate-900 transition-all cursor-pointer"
-                title="Mes siguiente"
+                onClick={() => toggleFiltro('reparaciones')}
+                className={`h-9 inline-flex items-center gap-1.5 px-3 rounded-xl text-xs font-bold border transition-all cursor-pointer whitespace-nowrap ${
+                  filtrosVisibles.reparaciones
+                    ? 'bg-sky-50 text-sky-900 border-sky-300 shadow-xs'
+                    : 'bg-slate-50 text-slate-400 border-slate-200 opacity-60 line-through'
+                }`}
+                title={filtrosVisibles.reparaciones ? 'Clic para ocultar Reparaciones' : 'Clic para mostrar Reparaciones'}
               >
-                <ChevronRight className="w-4 h-4" />
+                <span className={`font-extrabold ${filtrosVisibles.reparaciones ? 'text-sky-700' : 'text-slate-400'}`}>Rep.</span>
+                <span>Reparaciones ({statsMes.repCount})</span>
               </button>
+
+              <button
+                type="button"
+                onClick={() => toggleFiltro('instalaciones')}
+                className={`h-9 inline-flex items-center gap-1.5 px-3 rounded-xl text-xs font-bold border transition-all cursor-pointer whitespace-nowrap ${
+                  filtrosVisibles.instalaciones
+                    ? 'bg-red-50 text-red-900 border-red-300 shadow-xs'
+                    : 'bg-slate-50 text-slate-400 border-slate-200 opacity-60 line-through'
+                }`}
+                title={filtrosVisibles.instalaciones ? 'Clic para ocultar Instalaciones' : 'Clic para mostrar Instalaciones'}
+              >
+                <span className={`font-extrabold ${filtrosVisibles.instalaciones ? 'text-red-700' : 'text-slate-400'}`}>Inst.</span>
+                <span>Instalaciones ({statsMes.instCount})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => toggleFiltro('urgencias')}
+                className={`h-9 inline-flex items-center gap-1.5 px-3 rounded-xl text-xs font-bold border transition-all cursor-pointer whitespace-nowrap ${
+                  filtrosVisibles.urgencias
+                    ? 'bg-black text-white border-zinc-950 shadow-xs'
+                    : 'bg-slate-50 text-slate-400 border-slate-200 opacity-60 line-through'
+                }`}
+                title={filtrosVisibles.urgencias ? 'Clic para ocultar Urgencias' : 'Clic para mostrar Urgencias'}
+              >
+                <span className={`font-extrabold ${filtrosVisibles.urgencias ? 'text-white' : 'text-slate-400'}`}>Urg.</span>
+                <span>Urgencias ({statsMes.urgCount})</span>
+              </button>
+            </div>
+
+            <div className="hidden sm:block h-5 w-px bg-slate-200 shrink-0 mx-0.5" />
+
+            {/* Demás botones a la derecha del mismo tamaño uniforme */}
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleToday}
+                className="h-9 inline-flex items-center justify-center gap-1.5 px-3.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95 whitespace-nowrap"
+              >
+                <Clock className="w-3.5 h-3.5 text-slate-500" />
+                <span>Hoy</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setMostrarFinSemana((prev) => !prev)}
+                className={`h-9 inline-flex items-center justify-center gap-1.5 px-3.5 rounded-xl border text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95 whitespace-nowrap ${
+                  mostrarFinSemana
+                    ? 'border-amber-400 bg-amber-50 text-amber-950 hover:bg-amber-100 shadow-xs'
+                    : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                }`}
+                title={mostrarFinSemana ? 'Ocultar sábado y domingo' : 'Mostrar sábado y domingo'}
+              >
+                <CalendarDays className={`w-3.5 h-3.5 ${mostrarFinSemana ? 'text-amber-700' : 'text-slate-500'}`} />
+                <span>{mostrarFinSemana ? 'Ocultar Finde' : 'Mostrar Finde'}</span>
+              </button>
+
+              <div className="h-9 inline-flex items-center bg-slate-100 px-1 rounded-xl border border-slate-200/80 shadow-2xs">
+                <button
+                  type="button"
+                  onClick={handlePrevMonth}
+                  className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-white text-slate-600 hover:text-slate-900 transition-all cursor-pointer"
+                  title="Mes anterior"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <span className="px-2.5 text-xs font-black text-slate-700 min-w-[70px] text-center capitalize select-none">
+                  {MESES[month].slice(0, 3)}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleNextMonth}
+                  className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-white text-slate-600 hover:text-slate-900 transition-all cursor-pointer"
+                  title="Mes siguiente"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           </div>
         </div>

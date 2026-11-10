@@ -84,7 +84,7 @@ export interface Albaran {
   clienteId: string;
   centroId: string;
   fechaCreacion: string;
-  items: { cantidad: number; concepto: string; descripcion: string; precioUnidad: number; subtotal: number; }[];
+  items: { cantidad: number; concepto: string; descripcion: string; precioUnidad: number; descuento?: number; subtotal: number; }[];
   nombreFirmante: string;
   tecnicoId: string;
   facturado: boolean;
@@ -260,6 +260,7 @@ export interface Presupuesto {
   seguimiento?: PresupuestoSeguimiento;
   pedidoId?: string;
   tipoTrabajo?: 'Reparación' | 'Instalación' | 'Prueba técnica' | string;
+  anomaliasReporte?: any[];
 }
 
 const app = initializeApp(firebaseConfig);
@@ -3077,7 +3078,7 @@ export interface ReparacionItem {
   presupuestoId?: string;
   resueltaManual?: boolean;
   fechaConfirmada?: boolean;
-  items?: { cantidad: number; concepto: string; descripcion: string; precioUnidad: number; subtotal: number; }[];
+  items?: { cantidad: number; concepto: string; descripcion: string; precioUnidad: number; descuento?: number; subtotal: number; }[];
   total?: number;
 }
 
@@ -3203,7 +3204,7 @@ export interface InstalacionItem {
   presupuestoId?: string;
   resueltaManual?: boolean;
   fechaConfirmada?: boolean;
-  items?: { cantidad: number; concepto: string; descripcion: string; precioUnidad: number; subtotal: number; }[];
+  items?: { cantidad: number; concepto: string; descripcion: string; precioUnidad: number; descuento?: number; subtotal: number; }[];
   total?: number;
 }
 
@@ -3329,7 +3330,7 @@ export interface UrgenciaItem {
   numeroPedido?: string;
   resueltaManual?: boolean;
   fechaConfirmada?: boolean;
-  items?: { cantidad: number; concepto: string; descripcion: string; precioUnidad: number; subtotal: number; }[];
+  items?: { cantidad: number; concepto: string; descripcion: string; precioUnidad: number; descuento?: number; subtotal: number; }[];
   total?: number;
 }
 
@@ -4166,6 +4167,124 @@ export async function deleteFactura(docId: string) {
     await deleteDoc(docRef);
   } catch (e) {
     console.error('deleteFactura error:', e);
+    throw e;
+  }
+}
+
+// ─── VEHÍCULOS ──────────────────────────────────────────────────────────────
+export interface AlertaVehiculo {
+  id: string;
+  tipo: 'seguro' | 'itv' | 'mantenimiento' | 'otro';
+  titulo: string; // ej: "Caducidad de Seguro", "Vencimiento ITV", "Cambio de Aceite"
+  fecha: string; // YYYY-MM-DD
+  diasAviso: number; // por defecto 15
+  descripcion?: string; // ej: "Póliza Mapfre nº 987654"
+  resuelta?: boolean;
+}
+
+export interface VehiculoItem {
+  id: string;
+  _docId?: string;
+  matricula: string;
+  marcaModelo: string;
+  tipo?: string; // Furgoneta, Camión, Coche, etc.
+  tecnicoAsignadoId?: string;
+  tecnicoAsignadoNombre?: string;
+  kilometraje?: number | string;
+  imagenUrl?: string;
+  observaciones?: string;
+  alertas?: AlertaVehiculo[];
+  // Respuestas del checklist de la plantilla (respuestas dinámicas indexadas por key o id)
+  respuestasChecklist?: Record<string, any>;
+  fechaUltimaRevision?: string;
+  fechaCreacion?: string;
+  updatedAt?: string;
+}
+
+export function subscribeVehiculos(callback: (items: VehiculoItem[]) => void) {
+  try {
+    const col = collection(db, 'vehiculos');
+    const unsub = onSnapshot(col, (snap) => {
+      const items = snap.docs.map(d => {
+        const data = d.data() as any;
+        return {
+          _docId: d.id,
+          id: data?.id ?? d.id,
+          matricula: data?.matricula || '',
+          marcaModelo: data?.marcaModelo || '',
+          tipo: data?.tipo || 'Furgoneta',
+          tecnicoAsignadoId: data?.tecnicoAsignadoId || '',
+          tecnicoAsignadoNombre: data?.tecnicoAsignadoNombre || '',
+          kilometraje: data?.kilometraje || '',
+          imagenUrl: data?.imagenUrl || '',
+          observaciones: data?.observaciones || '',
+          alertas: Array.isArray(data?.alertas) ? data.alertas : [],
+          respuestasChecklist: data?.respuestasChecklist || {},
+          fechaUltimaRevision: data?.fechaUltimaRevision || '',
+          fechaCreacion: data?.fechaCreacion || new Date().toISOString(),
+          updatedAt: data?.updatedAt || ''
+        } as VehiculoItem;
+      });
+      // Sincronizar localmente para latencia cero
+      try {
+        localStorage.setItem('firecheck_db_vehiculos', JSON.stringify(items));
+      } catch (err) { /* ignore */ }
+      callback(items);
+    }, (err) => {
+      console.error('subscribeVehiculos error:', err);
+      // Fallback a localStorage
+      try {
+        const local = localStorage.getItem('firecheck_db_vehiculos');
+        if (local) callback(JSON.parse(local));
+      } catch { callback([]); }
+    });
+    return unsub;
+  } catch (e) {
+    console.error('subscribeVehiculos error:', e);
+    try {
+      const local = localStorage.getItem('firecheck_db_vehiculos');
+      if (local) callback(JSON.parse(local));
+    } catch { callback([]); }
+    return () => {};
+  }
+}
+
+export async function addVehiculo(data: VehiculoItem): Promise<VehiculoItem> {
+  try {
+    const col = collection(db, 'vehiculos');
+    const dataToSave = cleanUndefinedForFirestore({
+      ...data,
+      fechaCreacion: data.fechaCreacion || new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+    const docRef = await addDoc(col, dataToSave);
+    return { ...dataToSave, _docId: docRef.id, id: data.id || docRef.id };
+  } catch (e) {
+    console.error('addVehiculo error:', e);
+    throw e;
+  }
+}
+
+export async function updateVehiculo(docId: string, data: Partial<VehiculoItem>): Promise<void> {
+  try {
+    const docRef = doc(db, 'vehiculos', docId);
+    const dataToSave = cleanUndefinedForFirestore({
+      ...data,
+      updatedAt: new Date().toISOString()
+    });
+    await updateDoc(docRef, dataToSave as any);
+  } catch (e) {
+    console.error('updateVehiculo error:', e);
+    throw e;
+  }
+}
+
+export async function deleteVehiculo(docId: string): Promise<void> {
+  try {
+    const docRef = doc(db, 'vehiculos', docId);
+    await deleteDoc(docRef);
+  } catch (e) {
+    console.error('deleteVehiculo error:', e);
     throw e;
   }
 }

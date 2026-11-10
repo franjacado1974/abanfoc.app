@@ -26,11 +26,18 @@ import {
   subscribePlantillas, subscribeItemsDePlantilla,
   addPlantilla, updatePlantilla, deletePlantilla,
   addItemAPlantilla, updateItemDePlantilla, deleteItemDePlantilla,
-  reemplazarItemsDePlantilla, inicializarPlantillasPorDefecto, duplicarPlantilla,
+  reemplazarItemsDePlantilla, inicializarPlantillasPorDefecto, inicializarOtrasPlantillasPorDefecto, duplicarPlantilla,
+  COLECCION_PLANTILLAS,
   type Plantilla, type ItemPlantillaInput, type PlantillaInput, type TipoRespuestaChecklist
 } from './plantillas';
 
 // ─── TIPOS LOCALES ──────────────────────────────────────────────────────────
+
+export interface FormBuilderPlantillasProps {
+  coleccion?: string;
+  titulo?: string;
+  isOtrasPlantillas?: boolean;
+}
 
 interface ItemLocal {
   id: string;           // ID del documento en Firestore (o temporal si es nuevo)
@@ -74,7 +81,11 @@ const OpcionesInput = ({ opciones, onUpdate }: { opciones: string[], onUpdate: (
   );
 };
 
-export default function FormBuilderPlantillas() {
+export default function FormBuilderPlantillas({
+  coleccion = COLECCION_PLANTILLAS,
+  titulo,
+  isOtrasPlantillas = false,
+}: FormBuilderPlantillasProps = {}) {
   // ─── ESTADOS ──────────────────────────────────────────────────────────────
   const [plantillas, setPlantillas] = useState<Plantilla[]>([]);
   const [plantillaSeleccionada, setPlantillaSeleccionada] = useState<string | null>(null);
@@ -115,25 +126,26 @@ export default function FormBuilderPlantillas() {
   // Suscripción a la lista de plantillas
   useEffect(() => {
     const unsub = subscribePlantillas((lista) => {
-      console.log('📋 Plantillas cargadas desde Firestore:', lista.length);
+      console.log(`📋 Plantillas (${coleccion}) cargadas desde Firestore:`, lista.length);
       setPlantillas(lista);
       if (lista.length === 0 && !inicializado) {
-        console.log('⚠️ No hay plantillas. Inicializando plantillas por defecto...');
-        inicializarPlantillasPorDefecto()
+        console.log(`⚠️ No hay plantillas en ${coleccion}. Inicializando plantillas por defecto...`);
+        const initFn = isOtrasPlantillas ? inicializarOtrasPlantillasPorDefecto : inicializarPlantillasPorDefecto;
+        initFn()
           .then(() => {
-            console.log('✅ Plantillas por defecto inicializadas correctamente');
+            console.log(`✅ Plantillas (${coleccion}) por defecto inicializadas correctamente`);
             setInicializado(true);
           })
           .catch((err) => {
-            console.error('❌ Error inicializando plantillas por defecto:', err);
+            console.error(`❌ Error inicializando plantillas (${coleccion}) por defecto:`, err);
             mostrarMensaje('error', 'Error al inicializar plantillas: ' + err.message);
           });
       } else if (lista.length > 0) {
         setInicializado(true);
       }
-    });
+    }, coleccion);
     return () => unsub();
-  }, [inicializado]);
+  }, [inicializado, coleccion, isOtrasPlantillas]);
 
   // Suscripción a los items de la plantilla seleccionada
   useEffect(() => {
@@ -157,9 +169,9 @@ export default function FormBuilderPlantillas() {
         valorPredeterminado: it.valorPredeterminado || '',
         esNuevo: false,
       })));
-    });
+    }, coleccion);
     return () => unsub();
-  }, [plantillaSeleccionada]);
+  }, [plantillaSeleccionada, coleccion]);
 
   // Cargar datos de la plantilla al seleccionar
   useEffect(() => {
@@ -169,9 +181,9 @@ export default function FormBuilderPlantillas() {
       let num = '';
       let nom = p.nombre || '';
       if (p.codigo) {
-        num = p.codigo.replace(/^S/i, '').trim();
+        num = p.codigo.replace(/^[A-Za-z]+/i, '').trim();
       } else {
-        const match = nom.match(/^S(\d+)\s*[-:]?\s*(.*)/i);
+        const match = nom.match(/^(?:[A-Za-z]+)?(\d+)\s*[-:]?\s*(.*)/i);
         if (match) {
           num = match[1];
           nom = match[2].trim() || nom;
@@ -194,14 +206,17 @@ export default function FormBuilderPlantillas() {
   // ─── MANEJADORES DE PLANTILLA ─────────────────────────────────────────────
 
   const handleCrearPlantilla = async () => {
-    const nombre = prompt('Nombre de la nueva plantilla (ej: 01 EXTINTORES o S01 EXTINTORES):');
+    const promptMsg = isOtrasPlantillas
+      ? 'Nombre del nuevo equipo, artículo o plantilla (ej: VEHÍCULOS, FURGONETAS, HERRAMIENTAS, TALLER):'
+      : 'Nombre de la nueva plantilla (ej: 01 EXTINTORES o S01 EXTINTORES):';
+    const nombre = prompt(promptMsg);
     if (!nombre || !nombre.trim()) return;
     try {
       let cod = '';
       let nom = nombre.trim();
-      const match = nom.match(/^(?:S)?(\d+)\s*[-:]?\s*(.*)/i);
+      const match = nom.match(/^(?:[A-Za-z]+)?(\d+)\s*[-:]?\s*(.*)/i);
       if (match && match[2]) {
-        cod = `S${match[1]}`;
+        cod = isOtrasPlantillas ? `OP${match[1]}` : `S${match[1]}`;
         nom = match[2].trim();
       }
       const input: PlantillaInput = {
@@ -209,12 +224,12 @@ export default function FormBuilderPlantillas() {
         codigo: cod,
         activa: true
       };
-      const creada = await addPlantilla(input);
+      const creada = await addPlantilla(input, coleccion);
       setPlantillaSeleccionada(creada.id);
-      setNumeroSistema(cod.replace(/^S/i, ''));
+      setNumeroSistema(cod ? cod.replace(/^[A-Za-z]+/i, '') : '');
       setNombrePlantilla(creada.nombre);
       setDescripcionPlantilla('');
-      mostrarMensaje('ok', 'Plantilla creada correctamente');
+      mostrarMensaje('ok', isOtrasPlantillas ? 'Equipo / plantilla creado correctamente' : 'Plantilla creada correctamente');
     } catch (e) {
       console.error(e);
       mostrarMensaje('error', 'Error al crear la plantilla');
@@ -224,7 +239,7 @@ export default function FormBuilderPlantillas() {
   const handleEliminarPlantilla = async (id: string) => {
     if (!confirm('¿Eliminar esta plantilla y todos sus items?\nEsta acción no se puede deshacer.')) return;
     try {
-      await deletePlantilla(id);
+      await deletePlantilla(id, coleccion);
       if (plantillaSeleccionada === id) {
         setPlantillaSeleccionada(null);
         setItems([]);
@@ -240,7 +255,7 @@ export default function FormBuilderPlantillas() {
     e.stopPropagation();
     try {
       mostrarMensaje('ok', 'Duplicando plantilla...');
-      const nueva = await duplicarPlantilla(id);
+      const nueva = await duplicarPlantilla(id, coleccion);
       setPlantillaSeleccionada(nueva.id);
       setNombrePlantilla(nueva.nombre);
       setDescripcionPlantilla(nueva.descripcion || '');
@@ -262,7 +277,7 @@ export default function FormBuilderPlantillas() {
     try {
       const path = `plantillas_imagenes/${plantillaSeleccionada}_${Date.now()}`;
       const url = await uploadFile(file, path);
-      await updatePlantilla(plantillaSeleccionada, { imagenUrl: url });
+      await updatePlantilla(plantillaSeleccionada, { imagenUrl: url }, coleccion);
       setImagenPlantilla(url);
       mostrarMensaje('ok', 'Imagen actualizada correctamente');
     } catch (err: any) {
@@ -278,7 +293,7 @@ export default function FormBuilderPlantillas() {
     if (!plantillaSeleccionada) return;
     if (!confirm('¿Eliminar la imagen de esta plantilla?')) return;
     try {
-      await updatePlantilla(plantillaSeleccionada, { imagenUrl: '' });
+      await updatePlantilla(plantillaSeleccionada, { imagenUrl: '' }, coleccion);
       setImagenPlantilla('');
       mostrarMensaje('ok', 'Imagen eliminada');
     } catch (err: any) {
@@ -290,8 +305,9 @@ export default function FormBuilderPlantillas() {
   const handleGuardarNombre = async () => {
     if (!plantillaSeleccionada || !nombrePlantilla.trim()) return;
     try {
-      const numLimpio = numeroSistema.replace(/^S+/i, '').trim();
-      const codigoFormateado = numLimpio ? `S${numLimpio.toUpperCase()}` : '';
+      const numLimpio = numeroSistema.replace(/^[A-Za-z]+/i, '').trim();
+      const prefix = isOtrasPlantillas ? 'OP' : 'S';
+      const codigoFormateado = numLimpio ? `${prefix}${numLimpio.toUpperCase()}` : '';
       const datos: any = {
         nombre: nombrePlantilla.trim(),
         codigo: codigoFormateado,
@@ -302,7 +318,7 @@ export default function FormBuilderPlantillas() {
       if (imagenPlantilla) {
         datos.imagenUrl = imagenPlantilla;
       }
-      await updatePlantilla(plantillaSeleccionada, datos);
+      await updatePlantilla(plantillaSeleccionada, datos, coleccion);
       setEditandoNombre(false);
       mostrarMensaje('ok', 'Plantilla actualizada');
     } catch (e) {
@@ -325,7 +341,7 @@ export default function FormBuilderPlantillas() {
       requerido: true,
     };
     try {
-      await addItemAPlantilla(nuevoItem);
+      await addItemAPlantilla(nuevoItem, coleccion);
       mostrarMensaje('ok', 'Pregunta añadida');
     } catch (e) {
       console.error(e);
@@ -361,7 +377,7 @@ export default function FormBuilderPlantillas() {
     } as any;
     
     try {
-      await addItemAPlantilla(nuevoItem);
+      await addItemAPlantilla(nuevoItem, coleccion);
       setModalTablaOpen(false);
       mostrarMensaje('ok', 'Tabla añadida al checklist');
     } catch (e) {
@@ -387,7 +403,7 @@ export default function FormBuilderPlantillas() {
     } as any;
     
     try {
-      await addItemAPlantilla(nuevoItem);
+      await addItemAPlantilla(nuevoItem, coleccion);
       mostrarMensaje('ok', 'Gráfico Q-H añadido al checklist');
     } catch (e) {
       console.error(e);
@@ -398,7 +414,7 @@ export default function FormBuilderPlantillas() {
   const handleUpdateItem = async (itemId: string, cambios: Partial<ItemPlantillaInput>) => {
     if (!plantillaSeleccionada) return;
     try {
-      await updateItemDePlantilla(plantillaSeleccionada, itemId, cambios);
+      await updateItemDePlantilla(plantillaSeleccionada, itemId, cambios, coleccion);
     } catch (e) {
       console.error(e);
       mostrarMensaje('error', 'Error al actualizar');
@@ -408,7 +424,7 @@ export default function FormBuilderPlantillas() {
   const handleDeleteItem = async (itemId: string) => {
     if (!plantillaSeleccionada) return;
     try {
-      await deleteItemDePlantilla(plantillaSeleccionada, itemId);
+      await deleteItemDePlantilla(plantillaSeleccionada, itemId, coleccion);
       mostrarMensaje('ok', 'Pregunta eliminada');
     } catch (e) {
       console.error(e);
@@ -460,7 +476,7 @@ export default function FormBuilderPlantillas() {
     }));
 
     try {
-      await reemplazarItemsDePlantilla(plantillaSeleccionada, itemsFinal);
+      await reemplazarItemsDePlantilla(plantillaSeleccionada, itemsFinal, coleccion);
       mostrarMensaje('ok', 'Pregunta duplicada');
     } catch (e) {
       console.error(e);
@@ -496,7 +512,7 @@ export default function FormBuilderPlantillas() {
     }));
 
     try {
-      await reemplazarItemsDePlantilla(plantillaSeleccionada, itemsFinal);
+      await reemplazarItemsDePlantilla(plantillaSeleccionada, itemsFinal, coleccion);
       mostrarMensaje('ok', 'Orden actualizado');
     } catch (e) {
       console.error(e);
@@ -516,7 +532,7 @@ export default function FormBuilderPlantillas() {
       if (descripcionPlantilla.trim()) {
         datos.descripcion = descripcionPlantilla.trim();
       }
-      await updatePlantilla(plantillaSeleccionada, datos);
+      await updatePlantilla(plantillaSeleccionada, datos, coleccion);
       mostrarMensaje('ok', '✅ Plantilla guardada correctamente');
     } catch (e: any) {
       console.error('Error detallado al guardar plantilla:', e);
@@ -872,13 +888,13 @@ export default function FormBuilderPlantillas() {
               onClick={handleCrearPlantilla}
               className="w-full flex items-center justify-center gap-2 bg-teal-600 hover:bg-teal-700 text-white px-4 py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm"
             >
-              <Plus className="w-4 h-4" /> Nueva Plantilla
+              <Plus className="w-4 h-4" /> {isOtrasPlantillas ? 'Nuevo equipo / plantilla' : 'Nueva Plantilla'}
             </button>
 
             {/* Lista */}
             <div className="space-y-1">
               <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider px-1">
-                Plantillas ({plantillas.length})
+                {titulo || (isOtrasPlantillas ? 'Otras plantillas' : 'Plantillas de sistemas')} ({plantillas.length})
               </p>
               {plantillas.length === 0 ? (
                 <div className="p-4 text-center text-zinc-400 text-xs">

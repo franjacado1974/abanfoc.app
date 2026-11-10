@@ -2857,7 +2857,7 @@ export default function RevisionChecklist() {
                                 </button>
                             )}
                             {isSuperAdmin ? (
-                                <div className="flex items-center gap-1.5 text-sm bg-white px-3 py-1 rounded-lg border border-slate-300 shadow-sm focus-within:ring-2 focus-within:ring-indigo-500/30">
+                                <div className="flex items-center gap-1.5 text-sm bg-white px-3 py-1 rounded-lg border border-slate-300 shadow-sm focus-within:ring-2 focus-within:ring-indigo-500/30 min-w-[220px]">
                                     <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${parte.estado === 'En revisión' ? 'bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.8)]' : parte.estado === 'Pre-Cerrado' ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.8)]' : parte.estado === 'Finalizado' ? 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.8)]' : parte.estado === 'Cerrado' ? 'bg-black shadow-[0_0_8px_rgba(0,0,0,0.6)]' : 'bg-zinc-400'}`}></div>
                                     <span className="text-slate-500 font-medium">Estado:</span>
                                     <select

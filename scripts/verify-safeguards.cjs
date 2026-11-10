@@ -504,8 +504,8 @@ if (fs.existsSync(dashTecnicoPath)) {
 const calendarioPath = path.join(__dirname, '../src/Calendario.tsx');
 if (fs.existsSync(calendarioPath)) {
   const calContent = fs.readFileSync(calendarioPath, 'utf8');
-  if (calContent.includes('CalendarIcon') || !calContent.includes('justify-center gap-2')) {
-    errors.push('CRÍTICO: Calendario.tsx debe mantener centrado el mes y no tener CalendarIcon en cabecera (AGENTS.md REGLA 37).');
+  if (calContent.includes('CalendarIcon') || (!calContent.includes('justify-center gap-2') && !calContent.includes('Calendario unificado de todas las tareas.'))) {
+    errors.push('CRÍTICO: Calendario.tsx debe mantener el título sin CalendarIcon en cabecera (AGENTS.md REGLA 37 y 123).');
   }
 }
 
@@ -1782,6 +1782,178 @@ if (fs.existsSync(pdfGenPath)) {
     }
     if (!ptContent121.includes("limitePartes, setLimitePartes] = useState<number | 'todos'>(10)")) {
       errors.push('CRÍTICO: PartesTrabajoOperaciones.tsx carece de la paginación predeterminada a 10 filas (AGENTS.md REGLA 121).');
+    }
+    if (!ptContent121.includes('countsPorEstado') || !ptContent121.includes('( {selectedOption.count} )')) {
+      errors.push('CRÍTICO: PartesTrabajoOperaciones.tsx carece del recuento reactivo o marca de conteo en el filtro de estados (AGENTS.md REGLA 121).');
+    }
+  }
+
+  // 122. Verificación del Campo Descuento ("Dto. %") en Albaranes Multiorigen y Generador de PDF (AGENTS.md REGLA 122)
+  const albaranesMainPath = path.join(__dirname, '../src/Albaranes.tsx');
+  if (fs.existsSync(albaranesMainPath)) {
+    const albContent = fs.readFileSync(albaranesMainPath, 'utf8');
+    if (!albContent.includes('Dto. %') || !albContent.includes('item.descuento')) {
+      errors.push('CRÍTICO: Albaranes.tsx carece de la columna o campo de descuento "Dto. %" (AGENTS.md REGLA 122).');
+    }
+    if (!albContent.includes('1 - dto / 100')) {
+      errors.push('CRÍTICO: Albaranes.tsx carece del cálculo matemático de subtotal con descuento (AGENTS.md REGLA 122).');
+    }
+  }
+
+  const ptoPath122 = path.join(__dirname, '../src/PartesTrabajoOperaciones.tsx');
+  if (fs.existsSync(ptoPath122)) {
+    const ptoContent122 = fs.readFileSync(ptoPath122, 'utf8');
+    if (!ptoContent122.includes('Dto. %') || !ptoContent122.includes('1 - dto / 100')) {
+      errors.push('CRÍTICO: PartesTrabajoOperaciones.tsx carece de la columna "Dto. %" o del cálculo con descuento en albaranes (AGENTS.md REGLA 122).');
+    }
+  }
+
+  [
+    { name: 'Reparaciones.tsx', path: reparacionesPath },
+    { name: 'Instalaciones.tsx', path: instalacionesPath },
+    { name: 'Urgencias.tsx', path: urgenciasPath }
+  ].forEach(({ name, path: fPath }) => {
+    if (fs.existsSync(fPath)) {
+      const fc = fs.readFileSync(fPath, 'utf8');
+      if (!fc.includes('Dto. %') || !fc.includes('1 - dto / 100')) {
+        errors.push(`CRÍTICO: ${name} carece de la columna "Dto. %" o del cálculo de subtotal con descuento (AGENTS.md REGLA 122).`);
+      }
+    }
+  });
+
+  const pdfPath122 = path.join(__dirname, '../src/pdfGenerator.ts');
+  if (fs.existsSync(pdfPath122)) {
+    const pdfContent122 = fs.readFileSync(pdfPath122, 'utf8');
+    if (!pdfContent122.includes("'Dto. %'") && !pdfContent122.includes('"Dto. %"')) {
+      errors.push('CRÍTICO: pdfGenerator.ts carece de la columna "Dto. %" en la tabla del Albarán oficial (AGENTS.md REGLA 122).');
+    }
+  }
+
+  const rcPdfPath122 = path.join(__dirname, '../src/recursos-compartidos/services/pdfGenerator.ts');
+  if (fs.existsSync(rcPdfPath122)) {
+    const rcPdfContent122 = fs.readFileSync(rcPdfPath122, 'utf8');
+    if (!rcPdfContent122.includes("'Dto. %'") && !rcPdfContent122.includes('"Dto. %"')) {
+      errors.push('CRÍTICO: recursos-compartidos/services/pdfGenerator.ts carece de la columna "Dto. %" en la tabla del Albarán oficial (AGENTS.md REGLA 122).');
+    }
+  }
+
+  // 123. Verificación de Cabecera y Barra de Filtros en Calendario (AGENTS.md REGLA 123)
+  if (fs.existsSync(calendarioPath)) {
+    const calContent123 = fs.readFileSync(calendarioPath, 'utf8');
+    if (!calContent123.includes('Calendario unificado de todas las tareas.')) {
+      errors.push('CRÍTICO: Calendario.tsx carece del subtítulo oficial "Calendario unificado de todas las tareas." (AGENTS.md REGLA 123).');
+    }
+  }
+
+  // 124. Verificación del Botón Rápido "+ Crear artículo" y 25 Familias (AGENTS.md REGLA 124)
+  const presPath124 = path.join(__dirname, '../src/Presupuestos.tsx');
+  const constPath124 = path.join(__dirname, '../src/constants.ts');
+  if (fs.existsSync(presPath124)) {
+    const pContent124 = fs.readFileSync(presPath124, 'utf8');
+    if (!pContent124.includes('Crear artículo') && !pContent124.includes('Crear art')) {
+      errors.push('CRÍTICO: Presupuestos.tsx carece del botón rápido "Crear artículo" (AGENTS.md REGLA 124).');
+    }
+  }
+  if (fs.existsSync(constPath124)) {
+    const cContent124 = fs.readFileSync(constPath124, 'utf8');
+    if (!cContent124.includes('FAMILIAS_SISTEMAS_EXISTENTES')) {
+      errors.push('CRÍTICO: constants.ts carece de FAMILIAS_SISTEMAS_EXISTENTES (AGENTS.md REGLA 124).');
+    }
+  }
+
+  // 125. Verificación del Subtítulo Oficial de Partes de Trabajo (AGENTS.md REGLA 125)
+  if (fs.existsSync(partesTrabajoPath121)) {
+    const ptContent125 = fs.readFileSync(partesTrabajoPath121, 'utf8');
+    if (!ptContent125.includes('seguimiento de los partes y tareas.')) {
+      errors.push('CRÍTICO: PartesTrabajoOperaciones.tsx carece del subtítulo oficial "...seguimiento de los partes y tareas." (AGENTS.md REGLA 125).');
+    }
+  }
+
+  // 126. Verificación de Plantillas de Sistemas y Otras Plantillas (AGENTS.md REGLA 126)
+  const ajustesPath126 = path.join(__dirname, '../src/Ajustes.tsx');
+  const plantillasPath126 = path.join(__dirname, '../src/plantillas.ts');
+  const formBuilderPath126 = path.join(__dirname, '../src/FormBuilderPlantillas.tsx');
+  if (fs.existsSync(ajustesPath126)) {
+    const ajContent126 = fs.readFileSync(ajustesPath126, 'utf8');
+    if (!ajContent126.includes('Plantillas de sistemas') || !ajContent126.includes('Otras plantillas')) {
+      errors.push('CRÍTICO: Ajustes.tsx carece de los menús independientes "Plantillas de sistemas" y "Otras plantillas" (AGENTS.md REGLA 126).');
+    }
+  }
+  if (fs.existsSync(plantillasPath126)) {
+    const plContent126 = fs.readFileSync(plantillasPath126, 'utf8');
+    if (!plContent126.includes('coleccionNom') || !plContent126.includes('OTRAS_PLANTILLAS_POR_DEFECTO')) {
+      errors.push('CRÍTICO: plantillas.ts carece del soporte multi-colección o de OTRAS_PLANTILLAS_POR_DEFECTO (AGENTS.md REGLA 126).');
+    }
+  }
+  if (fs.existsSync(formBuilderPath126)) {
+    const fbContent126 = fs.readFileSync(formBuilderPath126, 'utf8');
+    if (!fbContent126.includes('isOtrasPlantillas')) {
+      errors.push('CRÍTICO: FormBuilderPlantillas.tsx carece de soporte para isOtrasPlantillas (AGENTS.md REGLA 126).');
+    }
+  }
+
+  // 127. Verificación del Módulo Vehículos, Ficha Interior y 4 Tarjetas en HOY con Alertas de 15 Días (AGENTS.md REGLA 127)
+  const vehiculosPath127 = path.join(__dirname, '../src/Vehiculos.tsx');
+  if (fs.existsSync(vehiculosPath127)) {
+    const vehContent127 = fs.readFileSync(vehiculosPath127, 'utf8');
+    if (!vehContent127.includes('vehiculoSeleccionadoId')) {
+      errors.push('CRÍTICO: Vehiculos.tsx carece de estado para vista de tarjeta exterior y ficha interior (AGENTS.md REGLA 127).');
+    }
+    if (!vehContent127.includes('Volver al listado de vehículos')) {
+      errors.push('CRÍTICO: Vehiculos.tsx carece del botón para volver al listado de vehículos (AGENTS.md REGLA 127).');
+    }
+    if (!vehContent127.includes('previewImagenModal')) {
+      errors.push('CRÍTICO: Vehiculos.tsx carece del visor a pantalla completa de fotos de checklist (AGENTS.md REGLA 127).');
+    }
+    if (!vehContent127.includes('bg-blue-50/40') || vehContent127.includes('* Requerido') || vehContent127.includes('>Tipo<')) {
+      errors.push('CRÍTICO: Vehiculos.tsx carece del diseño cebra blanco/azul suave, o contiene la columna Tipo o la etiqueta * Requerido (AGENTS.md REGLA 127).');
+    }
+    if (!vehContent127.includes('PlacaMatriculaReal') || !vehContent127.includes('INFORMACIÓN DEL VEHICULO')) {
+      errors.push('CRÍTICO: Vehiculos.tsx carece de PlacaMatriculaReal o del título INFORMACIÓN DEL VEHICULO (AGENTS.md REGLA 127).');
+    }
+  }
+  if (fs.existsSync(appPath114)) {
+    const appContent127 = fs.readFileSync(appPath114, 'utf8');
+    if (!appContent127.includes('xl:grid-cols-4') || !appContent127.includes('4. Notificaciones') || !appContent127.includes('notificacionesAlertas')) {
+      errors.push('CRÍTICO: App.tsx carece de la cuadrícula de 4 tarjetas en HOY o del sistema de alertas de vehículos a 15 días (AGENTS.md REGLA 127).');
+    }
+  }
+
+  // 128. Reporte de Anomalías en PDF Apaisado, Presupuesto Borrador y Pantalla Dividida Split-Screen
+  const repAnomPath = path.join(__dirname, '../src/pdfReporteAnomaliasGenerator.ts');
+  const servPresupPath = path.join(__dirname, '../src/services/presupuestoBorradorFromAnomalias.ts');
+  const partesPath128 = path.join(__dirname, '../src/Partes.tsx');
+  const presupPath128 = path.join(__dirname, '../src/Presupuestos.tsx');
+
+  if (!fs.existsSync(repAnomPath)) {
+    errors.push('CRÍTICO: No existe src/pdfReporteAnomaliasGenerator.ts (AGENTS.md REGLA 128).');
+  } else {
+    const repContent = fs.readFileSync(repAnomPath, 'utf8');
+    if (!repContent.includes("new jsPDF('l', 'mm', 'a4')") || !repContent.includes('REPORTE DE ANOMALÍAS')) {
+      errors.push("CRÍTICO: pdfReporteAnomaliasGenerator.ts carece de orientación apaisada ('l', 'mm', 'a4') (AGENTS.md REGLA 128).");
+    }
+  }
+
+  if (!fs.existsSync(servPresupPath)) {
+    errors.push('CRÍTICO: No existe src/services/presupuestoBorradorFromAnomalias.ts (AGENTS.md REGLA 128).');
+  } else {
+    const servContent = fs.readFileSync(servPresupPath, 'utf8');
+    if (!servContent.includes('generarPresupuestoBorradorDesdeAnomalias') || !servContent.includes('anomaliasReporte')) {
+      errors.push('CRÍTICO: presupuestoBorradorFromAnomalias.ts carece de generarPresupuestoBorradorDesdeAnomalias o anomaliasReporte (AGENTS.md REGLA 128).');
+    }
+  }
+
+  if (fs.existsSync(partesPath128)) {
+    const partesContent128 = fs.readFileSync(partesPath128, 'utf8');
+    if (!partesContent128.includes('reporteAnomalias') || !partesContent128.includes('generarPresupuesto')) {
+      errors.push('CRÍTICO: Partes.tsx carece de las opciones de reporteAnomalias o generarPresupuesto en el modal de descarga (AGENTS.md REGLA 128).');
+    }
+  }
+
+  if (fs.existsSync(presupPath128)) {
+    const presupContent128 = fs.readFileSync(presupPath128, 'utf8');
+    if (!presupContent128.includes('anomaliasSplitList') || !presupContent128.includes('handleAgregarLineaDesdeAnomalia')) {
+      errors.push('CRÍTICO: Presupuestos.tsx carece del soporte de pantalla dividida (Split-Screen) para anomalías vinculadas (AGENTS.md REGLA 128).');
     }
   }
 

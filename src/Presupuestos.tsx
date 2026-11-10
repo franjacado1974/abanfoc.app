@@ -1,15 +1,18 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Search, X, Download, Edit, Send, Trash2, Save, Package, PackagePlus, Wrench, Type, Calculator, CheckCircle, Clock, Ban, ChevronDown, ChevronUp, GripVertical, FileText, Plus, HardHat, Gauge, Check, Mail, Eye, Copy, ExternalLink, Activity, ShieldCheck, ArrowUp, ArrowDown, ArrowUpDown, Layers } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
+import { Search, X, Download, Edit, Send, Trash2, Save, Package, PackagePlus, Wrench, Type, Calculator, CheckCircle, Clock, Ban, ChevronDown, ChevronUp, GripVertical, FileText, Plus, HardHat, Gauge, Check, Mail, Eye, Copy, ExternalLink, Activity, ShieldCheck, ArrowUp, ArrowDown, ArrowUpDown, Layers, ArrowLeft, Image as ImageIcon, Camera, AlertTriangle } from 'lucide-react';
 import { 
   subscribePresupuestos, addPresupuesto, updatePresupuesto, deletePresupuesto, 
   subscribeClientes, subscribeArticulos, subscribeCentros, subscribeImpuestos, subscribeEmpresas,
   addPedido, addReparacion, addInstalacion, db,
-  extraerSufijoSecuencia
+  extraerSufijoSecuencia,
+  saveArticulo, subscribeSistemasCategorias, uploadFile
 } from './firebase';
 import { collection, addDoc } from 'firebase/firestore';
-import type { Presupuesto, PresupuestoLinea, Cliente, Articulo, Centro, ReparacionItem, InstalacionItem } from './firebase';
-import { generarPresupuestoPDF } from './pdfGenerator';
-import { APP_VERSION } from './constants';
+import type { Presupuesto, PresupuestoLinea, Cliente, Articulo, Centro, ReparacionItem, InstalacionItem, SistemaCategoria } from './firebase';
+import { generarPresupuestoPDF, removeWhiteBackground } from './pdfGenerator';
+import { APP_VERSION, FAMILIAS_SISTEMAS_EXISTENTES } from './constants';
+import { encontrarArticuloMasCercano } from './services/presupuestoBorradorFromAnomalias';
 
 export function formatCodigoPresupuesto(numero?: string, fallbackId?: string): string {
   if (!numero && !fallbackId) return 'PRE. —';
@@ -96,6 +99,13 @@ export default function Presupuestos() {
   const [catalogoSearch, setCatalogoSearch] = useState('');
   const [limitePresupuestos, setLimitePresupuestos] = useState<number | 'todos'>(10);
 
+  // Estados para pantalla dividida con anomalías
+  const location = useLocation();
+  const [anomaliasSplitList, setAnomaliasSplitList] = useState<any[]>([]);
+  const [filtroAnomaliaSearch, setFiltroAnomaliaSearch] = useState('');
+  const [mostrarPanelAnomalias, setMostrarPanelAnomalias] = useState(true);
+  const locationProcessedRef = useRef(false);
+
   // Estados para ordenación de la tabla
   const [sortField, setSortField] = useState<'fecha' | 'referencia' | 'estado'>('fecha');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
@@ -126,6 +136,52 @@ export default function Presupuestos() {
   // Estados para modal de auditoría y seguimiento
   const [presupuestoParaSeguimiento, setPresupuestoParaSeguimiento] = useState<Presupuesto | null>(null);
   const [copiadoSeguimiento, setCopiadoSeguimiento] = useState(false);
+
+  // Estados para modal de creación rápida de artículos desde presupuesto
+  const [familias, setFamilias] = useState<SistemaCategoria[]>([]);
+  const [showCrearArticuloModal, setShowCrearArticuloModal] = useState(false);
+  const [nuevoArticuloForm, setNuevoArticuloForm] = useState({
+    codigo: '',
+    nombre: '',
+    familiaId: '',
+    familia: '',
+    precioCompra: '',
+    precioVenta: '',
+    revisable: true,
+  });
+  const [nuevoArticuloFotoFile, setNuevoArticuloFotoFile] = useState<File | null>(null);
+  const [nuevoArticuloFotoPreview, setNuevoArticuloFotoPreview] = useState<string>('');
+  const [guardandoArticulo, setGuardandoArticulo] = useState(false);
+
+  // Lista exhaustiva y unificada de todas las familias de los sistemas existentes
+  const todasFamiliasSistemas = useMemo(() => {
+    const mapFamilias = new Map<string, { id?: string; nombre: string }>();
+
+    // 1. Añadir todas las familias oficiales de los sistemas existentes
+    FAMILIAS_SISTEMAS_EXISTENTES.forEach(nombre => {
+      mapFamilias.set(nombre.toUpperCase(), { nombre });
+    });
+
+    // 2. Vincular o agregar familias desde Firestore si existen
+    familias.forEach(f => {
+      if (f.nombre && f.nombre.trim()) {
+        const upper = f.nombre.trim().toUpperCase();
+        mapFamilias.set(upper, { id: f.id, nombre: f.nombre.trim() });
+      }
+    });
+
+    // 3. Añadir familias adicionales que ya estén registradas en artículos
+    articulos.forEach(a => {
+      if (a.familia && a.familia.trim()) {
+        const upper = a.familia.trim().toUpperCase();
+        if (!mapFamilias.has(upper)) {
+          mapFamilias.set(upper, { id: a.familiaId, nombre: a.familia.trim() });
+        }
+      }
+    });
+
+    return Array.from(mapFamilias.values()).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' }));
+  }, [familias, articulos]);
 
   // Form state
   const [formTitulo, setFormTitulo] = useState('');
@@ -213,6 +269,9 @@ export default function Presupuestos() {
     const unsub6 = subscribeEmpresas(items => {
       try { setEmpresas(Array.isArray(items) ? items : []); } catch {}
     });
+    const unsub7 = subscribeSistemasCategorias(items => {
+      try { setFamilias(Array.isArray(items) ? items : []); } catch {}
+    });
 
     // Cargar desde localStorage como fallback
     try {
@@ -223,8 +282,84 @@ export default function Presupuestos() {
       }
     } catch {}
 
-    return () => { try { unsub1(); } catch {} try { unsub2(); } catch {} try { unsub3(); } catch {} try { unsub4(); } catch {} try { unsub5(); } catch {} try { unsub6(); } catch {} };
+    return () => { try { unsub1(); } catch {} try { unsub2(); } catch {} try { unsub3(); } catch {} try { unsub4(); } catch {} try { unsub5(); } catch {} try { unsub6(); } catch {} try { unsub7(); } catch {} };
   }, []);
+
+  // Detección de redirección con anomalías y edición directa
+  useEffect(() => {
+    if (location.state?.editarPresupuestoId && !locationProcessedRef.current) {
+      const targetId = location.state.editarPresupuestoId;
+      const anoms = location.state.anomalias || [];
+      const found = presupuestos.find(p => p.id === targetId || p._docId === targetId);
+      if (found) {
+        locationProcessedRef.current = true;
+        setAnomaliasSplitList(anoms.length > 0 ? anoms : (found.anomaliasReporte || []));
+        setMostrarPanelAnomalias(true);
+        handleEditar(found);
+      } else {
+        try {
+          const list = JSON.parse(localStorage.getItem('firecheck_db_presupuestos') || '[]');
+          const f = list.find((p: any) => p.id === targetId || p._docId === targetId);
+          if (f) {
+            locationProcessedRef.current = true;
+            setAnomaliasSplitList(anoms.length > 0 ? anoms : (f.anomaliasReporte || []));
+            setMostrarPanelAnomalias(true);
+            handleEditar(f);
+          }
+        } catch { /* ignore */ }
+      }
+    }
+  }, [location.state, presupuestos]);
+
+  const anomaliasFiltradas = useMemo(() => {
+    if (!anomaliasSplitList || anomaliasSplitList.length === 0) return [];
+    if (!filtroAnomaliaSearch.trim()) return anomaliasSplitList;
+    const q = filtroAnomaliaSearch.toLowerCase().trim();
+    return anomaliasSplitList.filter((a: any) =>
+      (a.sistemaNombre || '').toLowerCase().includes(q) ||
+      (a.codigo || '').toLowerCase().includes(q) ||
+      (a.tipo || '').toLowerCase().includes(q) ||
+      (a.ubicacion || '').toLowerCase().includes(q) ||
+      (a.anomalia || '').toLowerCase().includes(q)
+    );
+  }, [anomaliasSplitList, filtroAnomaliaSearch]);
+
+  const handleAgregarLineaDesdeAnomalia = (anomItem: any) => {
+    const artCoincidente = encontrarArticuloMasCercano(anomItem.anomalia, anomItem, articulos);
+    if (artCoincidente) {
+      const pUnit = typeof artCoincidente.precioVenta === 'number' ? artCoincidente.precioVenta : parseFloat(String(artCoincidente.precioVenta || 0)) || 0;
+      const newLine: any = {
+        id: `linea_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        tipo: 'articulo',
+        codigo: artCoincidente.codigo || '',
+        concepto: artCoincidente.nombre,
+        descripcion: `Subsanación en ${anomItem.sistemaNombre} - Eq. ${anomItem.codigo} (${anomItem.ubicacion}): ${anomItem.anomalia}`,
+        cantidad: 1,
+        precioUnidad: pUnit,
+        precioUnidadInput: formatDecimalInput(pUnit),
+        descuento: 0,
+        subtotal: pUnit,
+        capitulo: anomItem.sistemaNombre,
+        familia: artCoincidente.familia || ''
+      };
+      setFormLineas(prev => [...prev, newLine]);
+    } else {
+      const newLine: any = {
+        id: `linea_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        tipo: 'manual',
+        concepto: `Reparación: ${anomItem.anomalia}`,
+        descripcion: `Equipo ${anomItem.codigo} (${anomItem.tipo}) en ${anomItem.ubicacion} - Sistema: ${anomItem.sistemaNombre}`,
+        cantidad: 1,
+        precioUnidad: 0,
+        precioUnidadInput: '0',
+        descuento: 0,
+        subtotal: 0,
+        capitulo: anomItem.sistemaNombre,
+        familia: ''
+      };
+      setFormLineas(prev => [...prev, newLine]);
+    }
+  };
 
   // Filtrar y ordenar presupuestos
   const filteredPresupuestos = useMemo(() => {
@@ -295,6 +430,7 @@ export default function Presupuestos() {
   // Abrir formulario para nuevo presupuesto
   const handleNuevo = () => {
     setEditingPresupuesto(null);
+    setAnomaliasSplitList([]);
     setFormTitulo('');
     setFormClienteId('');
     setFormFechaValidez(new Date().toISOString().slice(0, 10));
@@ -312,6 +448,10 @@ export default function Presupuestos() {
   // Abrir formulario para editar
   const handleEditar = (p: Presupuesto) => {
     setEditingPresupuesto(p);
+    if (p.anomaliasReporte && Array.isArray(p.anomaliasReporte) && p.anomaliasReporte.length > 0) {
+      setAnomaliasSplitList(p.anomaliasReporte);
+      setMostrarPanelAnomalias(true);
+    }
     setFormTitulo(p.titulo);
     setFormClienteId(p.clienteId);
     setFormCentroId(p.centroId || '');
@@ -413,6 +553,158 @@ export default function Presupuestos() {
     }
     setShowCatalogo(null);
     setTargetCapituloId(null);
+  };
+
+  // Abrir modal de creación rápida de artículo
+  const handleOpenCrearArticulo = (capId?: string | null) => {
+    if (capId !== undefined) {
+      setTargetCapituloId(capId);
+    }
+    setNuevoArticuloForm({
+      codigo: '',
+      nombre: '',
+      familiaId: '',
+      familia: '',
+      precioCompra: '',
+      precioVenta: '',
+      revisable: true,
+    });
+    setNuevoArticuloFotoFile(null);
+    setNuevoArticuloFotoPreview('');
+    setShowCrearArticuloModal(true);
+  };
+
+  // Manejar selección de foto para el nuevo artículo
+  const handleNuevoArticuloFotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const rawBase64 = reader.result as string;
+        try {
+          const sinFondo = await removeWhiteBackground(rawBase64, 800);
+          setNuevoArticuloFotoPreview(sinFondo);
+          const res = await fetch(sinFondo);
+          const blob = await res.blob();
+          const cleanFile = new File([blob], `${file.name.replace(/\.[^/.]+$/, '')}_nobg.png`, { type: 'image/png' });
+          setNuevoArticuloFotoFile(cleanFile);
+        } catch {
+          setNuevoArticuloFotoPreview(rawBase64);
+          setNuevoArticuloFotoFile(file);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // Guardar nuevo artículo e insertarlo directamente al presupuesto y catálogo
+  const handleGuardarNuevoArticulo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!nuevoArticuloForm.nombre.trim()) {
+      alert('Debes indicar el nombre o descripción del artículo.');
+      return;
+    }
+    if (!nuevoArticuloForm.familia.trim()) {
+      alert('Debes seleccionar o indicar una familia para el artículo.');
+      return;
+    }
+
+    setGuardandoArticulo(true);
+    try {
+      const generatedCode = nuevoArticuloForm.codigo.trim() || `ART-${generateId().slice(0, 4)}`;
+      const pCompra = parseFloat(nuevoArticuloForm.precioCompra.replace(',', '.')) || 0;
+      const pVenta = parseFloat(nuevoArticuloForm.precioVenta.replace(',', '.')) || 0;
+
+      // Subir imagen a Firebase Storage o usar base64 de respaldo
+      let finalFotoUrl: string | undefined = undefined;
+      if (nuevoArticuloFotoFile) {
+        try {
+          finalFotoUrl = await uploadFile(nuevoArticuloFotoFile, `articulos/${crypto.randomUUID()}_${nuevoArticuloFotoFile.name}`);
+        } catch (uploadErr) {
+          console.warn('No se pudo subir imagen a Firebase Storage, usando vista previa:', uploadErr);
+          finalFotoUrl = nuevoArticuloFotoPreview || undefined;
+        }
+      } else if (nuevoArticuloFotoPreview) {
+        finalFotoUrl = nuevoArticuloFotoPreview;
+      }
+
+      const newArticulo: Articulo = {
+        id: crypto.randomUUID(),
+        codigo: generatedCode,
+        nombre: nuevoArticuloForm.nombre.trim(),
+        familiaId: nuevoArticuloForm.familiaId && nuevoArticuloForm.familiaId !== '__current__' ? nuevoArticuloForm.familiaId : undefined,
+        familia: nuevoArticuloForm.familia.trim(),
+        precioCompra: pCompra,
+        precioVenta: pVenta,
+        revisable: nuevoArticuloForm.revisable,
+        fotoUrl: finalFotoUrl,
+        tipo: 'Material Nuevo',
+        estado: 'Nuevo',
+      };
+
+      // Guardar en Firestore (colección articulos del catálogo)
+      await saveArticulo(newArticulo);
+
+      // Actualizar backup en localStorage para el catálogo
+      try {
+        const localSaved = localStorage.getItem('firecheck_db_articulos');
+        const currentArr: Articulo[] = localSaved ? JSON.parse(localSaved) : [];
+        const filtered = currentArr.filter(a => a.id !== newArticulo.id);
+        localStorage.setItem('firecheck_db_articulos', JSON.stringify([...filtered, newArticulo]));
+      } catch {}
+
+      // Actualizar catálogo local de artículos inmediatamente
+      if (newArticulo.revisable) {
+        setArticulos(prev => [...prev.filter(a => a.id !== newArticulo.id), newArticulo]);
+      } else {
+        setServicios(prev => [...prev.filter(a => a.id !== newArticulo.id), newArticulo]);
+      }
+
+      // Añadir la partida directamente a las líneas del presupuesto con su foto
+      const nuevaLinea: EditablePresupuestoLinea = {
+        id: `L-${generateId()}`,
+        tipo: 'articulo',
+        codigo: newArticulo.codigo,
+        familia: newArticulo.familia || '',
+        concepto: newArticulo.nombre,
+        descripcion: '',
+        fotoUrl: newArticulo.fotoUrl,
+        cantidad: 1,
+        precioUnidad: newArticulo.precioVenta,
+        subtotal: newArticulo.precioVenta,
+        precioUnidadInput: formatDecimalInput(newArticulo.precioVenta),
+        capituloId: targetCapituloId || undefined,
+      };
+
+      if (targetCapituloId) {
+        setFormLineas(prev => {
+          const capIdx = prev.findIndex(l => l.id === targetCapituloId);
+          if (capIdx === -1) return [...prev, nuevaLinea];
+          let insertIdx = capIdx + 1;
+          while (insertIdx < prev.length && prev[insertIdx].tipo !== 'capitulo') {
+            insertIdx++;
+          }
+          const updated = [...prev];
+          updated.splice(insertIdx, 0, nuevaLinea);
+          return updated;
+        });
+      } else {
+        setFormLineas(prev => [...prev, nuevaLinea]);
+      }
+
+      setNuevoArticuloFotoFile(null);
+      setNuevoArticuloFotoPreview('');
+      setShowCrearArticuloModal(false);
+      setShowCatalogo(null);
+      setTargetCapituloId(null);
+      setToastExito(`Artículo "${newArticulo.nombre}" guardado en el catálogo y añadido al presupuesto.`);
+      setTimeout(() => setToastExito(null), 4000);
+    } catch (error) {
+      console.error('Error al guardar artículo:', error);
+      alert('Error al guardar el artículo. Por favor, inténtalo de nuevo.');
+    } finally {
+      setGuardandoArticulo(false);
+    }
   };
 
   // Añadir línea manual
@@ -571,6 +863,11 @@ export default function Presupuestos() {
     if (usuarioActual) {
       presupuestoData.usuarioRealizado = `${usuarioActual.nombre}${usuarioActual.apellidos ? ' ' + usuarioActual.apellidos : ''}`.trim();
     }
+    if (anomaliasSplitList.length > 0) {
+      presupuestoData.anomaliasReporte = anomaliasSplitList;
+    } else if (editingPresupuesto?.anomaliasReporte) {
+      presupuestoData.anomaliasReporte = editingPresupuesto.anomaliasReporte;
+    }
 
     try {
       if (editingPresupuesto) {
@@ -585,6 +882,7 @@ export default function Presupuestos() {
       }
       setShowForm(false);
       setEditingPresupuesto(null);
+      setAnomaliasSplitList([]);
     } catch (e: any) {
       console.error('Error guardando presupuesto:', e);
       alert(`Error al guardar el presupuesto: ${e?.message || 'Error desconocido'}`);
@@ -1448,20 +1746,168 @@ export default function Presupuestos() {
       )}
 
       {/* MODAL FORMULARIO (CREAR/EDITAR) */}
-      {showForm && (
+      {showForm && (() => {
+        const tieneAnomalias = anomaliasSplitList.length > 0;
+        return (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-2 sm:p-4">
-          <div className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-6xl xl:max-w-7xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+          <div className={`bg-white rounded-2xl sm:rounded-3xl w-full shadow-2xl overflow-hidden flex flex-col transition-all duration-200 ${
+            tieneAnomalias && mostrarPanelAnomalias
+              ? 'max-w-[98vw] xl:max-w-[97vw] h-[95vh]'
+              : 'max-w-6xl xl:max-w-7xl max-h-[92vh]'
+          }`}>
             {/* Header */}
             <div className="px-4 sm:px-6 py-3.5 sm:py-4 border-b border-zinc-100 flex items-center justify-between bg-white shrink-0">
-              <h2 className="text-base sm:text-lg font-bold text-zinc-900">
-                {editingPresupuesto ? 'Editar presupuesto' : 'Nuevo presupuesto'}
-              </h2>
-              <button onClick={() => setShowForm(false)} className="p-1.5 sm:p-2 text-zinc-400 hover:text-black hover:bg-white rounded-xl transition-colors cursor-pointer">
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-3">
+                <h2 className="text-base sm:text-lg font-bold text-zinc-900">
+                  {editingPresupuesto ? 'Editar presupuesto' : 'Nuevo presupuesto'}
+                </h2>
+                {tieneAnomalias && (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-red-50 text-red-700 border border-red-200">
+                    <AlertTriangle className="w-3.5 h-3.5 text-red-600" />
+                    {anomaliasSplitList.length} {anomaliasSplitList.length === 1 ? 'anomalía' : 'anomalías'} vinculadas
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {tieneAnomalias && (
+                  <button
+                    type="button"
+                    onClick={() => setMostrarPanelAnomalias(prev => !prev)}
+                    className="px-3 py-1.5 rounded-xl text-xs font-bold border border-zinc-200 hover:bg-zinc-100 text-zinc-700 transition-colors flex items-center gap-1.5 cursor-pointer"
+                  >
+                    {mostrarPanelAnomalias ? 'Ocultar panel anomalías' : 'Ver anomalías al lado'}
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    setShowForm(false);
+                    setAnomaliasSplitList([]);
+                  }}
+                  className="p-1.5 sm:p-2 text-zinc-400 hover:text-black hover:bg-white rounded-xl transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
-            <div className="p-4 sm:p-6 overflow-y-auto space-y-5 sm:space-y-6 flex-1">
+            {/* Contenedor principal: Split si hay anomalías */}
+            <div className="flex-1 overflow-hidden flex flex-col lg:flex-row min-h-0">
+              {/* PANEL IZQUIERDO: VISTA PREVIA DE ANOMALÍAS */}
+              {tieneAnomalias && mostrarPanelAnomalias && (
+                <div className="w-full lg:w-[38%] xl:w-[35%] bg-slate-50/90 border-b lg:border-b-0 lg:border-r border-zinc-200/90 flex flex-col shrink-0 min-h-0">
+                  {/* Cabecera del panel izquierdo */}
+                  <div className="p-3.5 sm:p-4 border-b border-zinc-200/80 bg-white shrink-0 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-lg bg-red-100 text-red-600 flex items-center justify-center font-bold">
+                          <AlertTriangle className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <h3 className="text-xs sm:text-sm font-black text-zinc-900 uppercase tracking-wide">
+                            Anomalías de la Revisión
+                          </h3>
+                          <p className="text-[11px] text-zinc-500 font-medium">
+                            {anomaliasFiltradas.length} {anomaliasFiltradas.length === 1 ? 'incidencia detectada' : 'incidencias detectadas'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    {/* Buscador dentro de anomalías */}
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={filtroAnomaliaSearch}
+                        onChange={(e) => setFiltroAnomaliaSearch(e.target.value)}
+                        placeholder="Buscar por equipo, sistema o defecto..."
+                        className="w-full pl-8 pr-3 py-1.5 bg-zinc-100/80 hover:bg-white focus:bg-white border border-zinc-200 rounded-xl text-xs text-zinc-800 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all"
+                      />
+                      {filtroAnomaliaSearch && (
+                        <button
+                          type="button"
+                          onClick={() => setFiltroAnomaliaSearch('')}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 p-0.5"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Lista con scroll de anomalías */}
+                  <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3">
+                    {anomaliasFiltradas.length === 0 ? (
+                      <div className="text-center py-8 text-zinc-400 text-xs">
+                        No hay anomalías que coincidan con la búsqueda.
+                      </div>
+                    ) : (
+                      anomaliasFiltradas.map((anomItem: any, aIdx: number) => {
+                        const yaEnPresupuesto = formLineas.some(
+                          l => (l.descripcion || '').includes(anomItem.anomalia) ||
+                               (l.concepto || '').includes(anomItem.anomalia)
+                        );
+                        return (
+                          <div
+                            key={`anom_preview_${aIdx}`}
+                            className={`p-3 rounded-2xl border transition-all text-xs space-y-2 ${
+                              yaEnPresupuesto
+                                ? 'bg-white border-zinc-200/90 shadow-2xs'
+                                : 'bg-red-50/40 border-red-200/90 shadow-xs'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-extrabold text-[10px] uppercase px-2 py-0.5 rounded-md bg-zinc-200/90 text-zinc-700 tracking-wider">
+                                {anomItem.sistemaNombre || 'SISTEMA'}
+                              </span>
+                              {yaEnPresupuesto ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/80">
+                                  <Check className="w-3 h-3" /> En presupuesto
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200/80">
+                                  Pendiente
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2 text-[11px] text-zinc-600">
+                              <div>
+                                <span className="font-bold text-zinc-500">Equipo: </span>
+                                <span className="font-semibold text-zinc-900">{anomItem.codigo}</span>
+                                {anomItem.tipo && anomItem.tipo !== '-' && (
+                                  <span className="text-zinc-500"> ({anomItem.tipo})</span>
+                                )}
+                              </div>
+                              <div>
+                                <span className="font-bold text-zinc-500">Ubicación: </span>
+                                <span className="font-semibold text-zinc-800">{anomItem.ubicacion}</span>
+                              </div>
+                            </div>
+
+                            <div className="p-2.5 rounded-xl bg-red-100/70 border border-red-200/80 text-red-900 font-semibold text-[11px] leading-relaxed">
+                              {anomItem.anomalia}
+                            </div>
+
+                            {!yaEnPresupuesto && (
+                              <button
+                                type="button"
+                                onClick={() => handleAgregarLineaDesdeAnomalia(anomItem)}
+                                className="w-full mt-1 py-1.5 px-2.5 rounded-xl font-bold text-[11px] bg-red-600 hover:bg-red-700 text-white transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                                Añadir partida a presupuesto
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* PANEL DERECHO: FORMULARIO EXISTENTE DEL PRESUPUESTO */}
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 sm:space-y-6 min-h-0">
               {/* Datos generales */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2 relative">
@@ -1553,11 +1999,19 @@ export default function Presupuestos() {
                     >
                       <Layers className="w-3.5 h-3.5 text-amber-800" /> Añadir capítulo
                     </button>
-                    <button onClick={() => { setTargetCapituloId(null); setShowCatalogo('articulo'); }} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-zinc-600 bg-zinc-100 hover:bg-zinc-200 rounded-xl transition-colors">
+                    <button onClick={() => { setTargetCapituloId(null); setShowCatalogo('articulo'); }} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-zinc-600 bg-zinc-100 hover:bg-zinc-200 rounded-xl transition-colors cursor-pointer">
                       <Package className="w-3.5 h-3.5" /> Añadir artículo
                     </button>
-                    <button onClick={() => { setTargetCapituloId(null); setShowCatalogo('servicio'); }} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-zinc-600 bg-zinc-100 hover:bg-zinc-200 rounded-xl transition-colors">
+                    <button onClick={() => { setTargetCapituloId(null); setShowCatalogo('servicio'); }} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-zinc-600 bg-zinc-100 hover:bg-zinc-200 rounded-xl transition-colors cursor-pointer">
                       <Wrench className="w-3.5 h-3.5" /> Añadir servicio
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenCrearArticulo(null)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-xl transition-colors cursor-pointer shadow-xs active:scale-95"
+                      title="Crear un nuevo artículo en el catálogo y volver al presupuesto"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Crear artículo
                     </button>
                   </div>
                 </div>
@@ -1670,6 +2124,14 @@ export default function Presupuestos() {
                                           title="Añadir servicio a este capítulo"
                                         >
                                           <Wrench className="w-3 h-3 text-amber-700" /> + Serv.
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleOpenCrearArticulo(l.id)}
+                                          className="flex items-center gap-1 px-2 py-1 text-[11px] font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors cursor-pointer shadow-xs active:scale-95"
+                                          title="Crear nuevo artículo y añadir a este capítulo"
+                                        >
+                                          <Plus className="w-3 h-3" /> + Crear
                                         </button>
                                       </div>
                                     </div>
@@ -2035,19 +2497,27 @@ export default function Presupuestos() {
                 )}
               </div>
             </div>
+          </div>
 
-            {/* Footer */}
-            <div className="px-4 sm:px-6 py-3 sm:py-4 bg-white border-t border-zinc-100 flex items-center justify-between gap-3 shrink-0">
-              <button onClick={() => setShowForm(false)} className="px-4 sm:px-6 py-2 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm text-zinc-500 hover:bg-zinc-100 transition-colors cursor-pointer">
-                Cancelar
-              </button>
-              <button onClick={handleGuardar} className="flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl font-bold text-xs sm:text-sm shadow-lg shadow-orange-200 transition-all cursor-pointer">
-                <Save className="w-4 h-4" /> {editingPresupuesto ? 'Guardar cambios' : 'Crear presupuesto'}
-              </button>
-            </div>
+          {/* Footer */}
+          <div className="px-4 sm:px-6 py-3 sm:py-4 bg-white border-t border-zinc-100 flex items-center justify-between gap-3 shrink-0">
+            <button
+              onClick={() => {
+                setShowForm(false);
+                setAnomaliasSplitList([]);
+              }}
+              className="px-4 sm:px-6 py-2 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm text-zinc-500 hover:bg-zinc-100 transition-colors cursor-pointer"
+            >
+              Cancelar
+            </button>
+            <button onClick={handleGuardar} className="flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl font-bold text-xs sm:text-sm shadow-lg shadow-orange-200 transition-all cursor-pointer">
+              <Save className="w-4 h-4" /> {editingPresupuesto ? 'Guardar cambios' : 'Crear presupuesto'}
+            </button>
           </div>
         </div>
-      )}
+      </div>
+      );
+      })()}
 
       {/* MODAL CATÁLOGO (seleccionar artículo/servicio) */}
       {showCatalogo && (
@@ -2058,9 +2528,24 @@ export default function Presupuestos() {
                 {showCatalogo === 'articulo' ? <Package className="w-5 h-5 text-orange-500" /> : <Wrench className="w-5 h-5 text-red-600" />}
                 {showCatalogo === 'articulo' ? 'Seleccionar artículo' : 'Seleccionar servicio'}
               </h2>
-              <button onClick={() => { setShowCatalogo(null); setCatalogoSearch(''); }} className="p-2 text-zinc-400 hover:text-black hover:bg-white rounded-xl transition-colors">
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                {showCatalogo === 'articulo' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowCatalogo(null);
+                      handleOpenCrearArticulo(targetCapituloId);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-xl transition-colors cursor-pointer shadow-xs active:scale-95"
+                    title="Crear un nuevo artículo y volver al presupuesto"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Crear artículo
+                  </button>
+                )}
+                <button onClick={() => { setShowCatalogo(null); setCatalogoSearch(''); }} className="p-2 text-zinc-400 hover:text-black hover:bg-white rounded-xl transition-colors cursor-pointer">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
             {/* Buscador dentro del catálogo */}
             <div className="px-4 pt-2 pb-1">
@@ -2104,6 +2589,216 @@ export default function Presupuestos() {
                 ))
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CREAR ARTÍCULO RÁPIDO DESDE PRESUPUESTO */}
+      {showCrearArticuloModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[120] flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[92vh] animate-in fade-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-zinc-100 flex items-center justify-between bg-gradient-to-r from-red-600 via-rose-600 to-red-700 text-white shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-white/20 backdrop-blur-xs border border-white/30 flex items-center justify-center text-white shrink-0">
+                  <Package className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-white leading-tight">Crear Nuevo Artículo</h2>
+                  <p className="text-xs text-red-100">Se guardará en el catálogo y se insertará en el presupuesto</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCrearArticuloModal(false)}
+                className="p-1.5 text-white/80 hover:text-white hover:bg-white/20 rounded-xl transition-colors cursor-pointer"
+                title="Volver al presupuesto"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Formulario */}
+            <form onSubmit={handleGuardarNuevoArticulo} className="p-6 overflow-y-auto space-y-4 flex-1">
+              {/* Foto o imagen del artículo */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-zinc-600 uppercase tracking-wider">
+                    Foto o Imagen del Artículo (Opcional)
+                  </label>
+                  {nuevoArticuloFotoPreview && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setNuevoArticuloFotoPreview('');
+                        setNuevoArticuloFotoFile(null);
+                      }}
+                      className="text-[11px] font-bold text-red-600 hover:text-red-700 hover:underline cursor-pointer flex items-center gap-1"
+                    >
+                      <X className="w-3.5 h-3.5" /> Quitar imagen
+                    </button>
+                  )}
+                </div>
+                <div className="relative w-full h-28 sm:h-32 bg-zinc-50 border-2 border-dashed border-zinc-200 hover:border-red-400 hover:bg-red-50/20 rounded-2xl flex items-center justify-center overflow-hidden transition-all group cursor-pointer">
+                  {nuevoArticuloFotoPreview ? (
+                    <div className="w-full h-full p-2 flex items-center justify-center relative">
+                      <img
+                        src={nuevoArticuloFotoPreview}
+                        alt="Vista previa del artículo"
+                        className="max-h-full max-w-full object-contain img-no-bg"
+                      />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-bold gap-1.5 backdrop-blur-[2px]">
+                        <Camera className="w-4 h-4" /> Cambiar imagen
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center text-zinc-400 group-hover:text-red-600 transition-colors py-2">
+                      <div className="w-9 h-9 rounded-xl bg-white border border-zinc-200 shadow-2xs flex items-center justify-center mb-1 group-hover:scale-105 transition-transform">
+                        <ImageIcon className="w-5 h-5 text-zinc-400 group-hover:text-red-600" />
+                      </div>
+                      <span className="text-xs font-bold text-zinc-700 group-hover:text-red-700">Haz clic para añadir imagen</span>
+                      <span className="text-[10px] text-zinc-400">PNG, JPG o WebP</span>
+                    </div>
+                  )}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleNuevoArticuloFotoChange}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    title="Subir foto del artículo"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Código */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-zinc-600 uppercase tracking-wider">Código</label>
+                  <input
+                    type="text"
+                    value={nuevoArticuloForm.codigo}
+                    onChange={e => setNuevoArticuloForm({ ...nuevoArticuloForm, codigo: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm text-zinc-800 placeholder-zinc-400 focus:bg-white focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none transition-all"
+                    placeholder="Ej: EXT-001 (opcional)"
+                  />
+                </div>
+
+                {/* Familia */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-zinc-600 uppercase tracking-wider">
+                    Familia de Sistema <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    required
+                    value={nuevoArticuloForm.familia || nuevoArticuloForm.familiaId}
+                    onChange={e => {
+                      const val = e.target.value;
+                      const fam = todasFamiliasSistemas.find(f => (f.id && f.id === val) || f.nombre === val);
+                      setNuevoArticuloForm({
+                        ...nuevoArticuloForm,
+                        familiaId: fam?.id || '',
+                        familia: fam?.nombre || val,
+                      });
+                    }}
+                    className="w-full px-3.5 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm text-zinc-800 focus:bg-white focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none transition-all cursor-pointer font-medium"
+                  >
+                    <option value="">-- Selecciona familia de sistema ({todasFamiliasSistemas.length} disponibles) --</option>
+                    {todasFamiliasSistemas.map(f => (
+                      <option key={f.nombre} value={f.nombre}>
+                        {f.nombre}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Nombre / Descripción */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-zinc-600 uppercase tracking-wider">
+                  Nombre / Concepto <span className="text-red-500">*</span>
+                </label>
+                <input
+                  required
+                  type="text"
+                  value={nuevoArticuloForm.nombre}
+                  onChange={e => setNuevoArticuloForm({ ...nuevoArticuloForm, nombre: e.target.value })}
+                  className="w-full px-3.5 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm text-zinc-800 placeholder-zinc-400 focus:bg-white focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none transition-all"
+                  placeholder="Ej: Extintor Polvo ABC 6kg con soporte pared"
+                />
+              </div>
+
+              {/* Precios */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-zinc-600 uppercase tracking-wider">Precio Compra (€ s/IVA)</label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={nuevoArticuloForm.precioCompra}
+                    onChange={e => setNuevoArticuloForm({ ...nuevoArticuloForm, precioCompra: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm text-zinc-800 placeholder-zinc-400 focus:bg-white focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none transition-all"
+                    placeholder="0,00"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-zinc-600 uppercase tracking-wider">Precio Venta (€ s/IVA)</label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={nuevoArticuloForm.precioVenta}
+                    onChange={e => setNuevoArticuloForm({ ...nuevoArticuloForm, precioVenta: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm text-zinc-800 placeholder-zinc-400 focus:bg-white focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none transition-all font-bold"
+                    placeholder="0,00"
+                  />
+                </div>
+              </div>
+
+              {/* Revisable en mantenimientos */}
+              <div className="flex items-center gap-3 pt-1">
+                <input
+                  type="checkbox"
+                  id="nuevoArticuloRevisable"
+                  checked={nuevoArticuloForm.revisable}
+                  onChange={e => setNuevoArticuloForm({ ...nuevoArticuloForm, revisable: e.target.checked })}
+                  className="w-4 h-4 rounded text-red-600 focus:ring-red-500 border-zinc-300 cursor-pointer"
+                />
+                <label htmlFor="nuevoArticuloRevisable" className="text-xs font-bold text-zinc-700 cursor-pointer select-none">
+                  Equipo revisable en los mantenimientos
+                </label>
+              </div>
+
+              {/* Vista previa PVP estimado con IVA */}
+              <div className="p-3 bg-red-50/60 rounded-2xl border border-red-200/80 flex items-center justify-between">
+                <div>
+                  <span className="text-[11px] font-bold text-red-800 uppercase tracking-wider block">PVP estimado con IVA (21%)</span>
+                  <span className="text-[10px] text-red-600">Calculado sobre el precio de venta sin IVA</span>
+                </div>
+                <span className="text-base font-black text-red-950">
+                  {formatMoneda((parseFloat(nuevoArticuloForm.precioVenta.replace(',', '.')) || 0) * 1.21)}
+                </span>
+              </div>
+
+              {/* Footer con botones: Volver al presupuesto & Guardar */}
+              <div className="pt-4 border-t border-zinc-100 flex flex-col-reverse sm:flex-row items-center justify-between gap-2.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setShowCrearArticuloModal(false)}
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-zinc-300 text-xs font-bold text-zinc-700 hover:bg-zinc-100 transition-colors cursor-pointer"
+                >
+                  <ArrowLeft className="w-4 h-4 text-zinc-500" />
+                  Volver al presupuesto
+                </button>
+                <button
+                  type="submit"
+                  disabled={guardandoArticulo}
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold shadow-md shadow-red-600/20 transition-all cursor-pointer disabled:opacity-50 active:scale-95"
+                >
+                  <Check className="w-4 h-4" />
+                  {guardandoArticulo ? 'Guardando...' : 'Guardar y añadir al presupuesto'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -2930,12 +3625,12 @@ export default function Presupuestos() {
 
       {/* TOAST DE ÉXITO */}
       {toastExito && (
-        <div className="fixed bottom-6 right-6 z-50 bg-zinc-900 text-white px-5 py-3.5 rounded-2xl shadow-2xl border border-zinc-700/80 flex items-center gap-3 animate-in fade-in slide-in-from-bottom-5 duration-200">
+        <div className="fixed bottom-6 right-6 z-[150] bg-zinc-900 text-white px-5 py-3.5 rounded-2xl shadow-2xl border border-zinc-700/80 flex items-center gap-3 animate-in fade-in slide-in-from-bottom-5 duration-200">
           <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
             <CheckCircle className="w-4 h-4" />
           </div>
           <p className="text-xs font-semibold">{toastExito}</p>
-          <button onClick={() => setToastExito(null)} className="ml-2 text-zinc-400 hover:text-white">
+          <button onClick={() => setToastExito(null)} className="ml-2 text-zinc-400 hover:text-white cursor-pointer">
             <X className="w-4 h-4" />
           </button>
         </div>

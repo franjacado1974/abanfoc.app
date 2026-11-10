@@ -97,6 +97,7 @@ export interface TareaOperacionUnificada {
     concepto: string;
     descripcion: string;
     precioUnidad: number;
+    descuento?: number;
     subtotal: number;
   }[];
   albaranId?: string;
@@ -246,7 +247,7 @@ export default function PartesTrabajoOperaciones({
     lugar: string;
     tecnicoAsignado: string;
     nota: string;
-    items: { cantidad: number; concepto: string; descripcion: string; precioUnidad: number; subtotal: number }[];
+    items: { cantidad: number; concepto: string; descripcion: string; precioUnidad: number; descuento?: number; subtotal: number }[];
   }>({
     titulo: '',
     numeroPedido: '',
@@ -636,9 +637,47 @@ export default function PartesTrabajoOperaciones({
       'prueba-tecnica': todasLasTareas.filter(t => t.origen === 'prueba-tecnica').length,
       urgencia: todasLasTareas.filter(t => t.origen === 'urgencia').length,
     };
-
-
   }, [todasLasTareas]);
+
+  // Contadores por estado según el tipo de operación actual y búsqueda/fechas
+  const countsPorEstado = useMemo(() => {
+    const base = todasLasTareas.filter(t => {
+      // 1. Tipo de operación actual
+      if (tipoFilter !== 'TODOS' && t.origen !== tipoFilter) return false;
+
+      // 2. Búsqueda por texto si está activa
+      if (searchTerm.trim()) {
+        const q = searchTerm.toLowerCase().trim();
+        const fDisp = formatFechaDisplay(t.fecha).toLowerCase();
+        const haystack = `${t.clienteNombre} ${t.centroNombre} ${t.poblacion} ${t.lugar} ${t.titulo} ${t.numeroPedido} ${t.tecnicoAsignado} ${t.tipoLabel} ${t.fecha} ${fDisp} ${t.nota}`.toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
+
+      // 3. Rango de fechas si está activo
+      if (startDate || endDate) {
+        const dNum = parseDateToNum(t.fecha);
+        if (!dNum) return false;
+        if (startDate) {
+          const sNum = parseDateToNum(startDate);
+          if (dNum < sNum) return false;
+        }
+        if (endDate) {
+          const eNum = parseDateToNum(endDate);
+          if (dNum > eNum) return false;
+        }
+      }
+
+      return true;
+    });
+
+    return {
+      TODOS: base.length,
+      Pendiente: base.filter(t => t.estado === 'Pendiente').length,
+      'En curso': base.filter(t => t.estado === 'En curso').length,
+      Parado: base.filter(t => t.estado === 'Parado').length,
+      Finalizado: base.filter(t => t.estado === 'Finalizado').length,
+    };
+  }, [todasLasTareas, tipoFilter, searchTerm, startDate, endDate]);
 
   // Filtrado y ordenación
   const tareasFiltradas = useMemo(() => {
@@ -892,7 +931,7 @@ export default function PartesTrabajoOperaciones({
   const addItem = () => {
     setForm(prev => ({
       ...prev,
-      items: [...prev.items, { cantidad: 1, concepto: '', descripcion: '', precioUnidad: 0, subtotal: 0 }]
+      items: [...prev.items, { cantidad: 1, concepto: '', descripcion: '', precioUnidad: 0, descuento: 0, subtotal: 0 }]
     }));
   };
 
@@ -912,8 +951,11 @@ export default function PartesTrabajoOperaciones({
       const newItems = prev.items.map((item, i) => {
         if (i === index) {
           const updatedItem = { ...item, [field]: value } as Albaran['items'][0];
-          if (field === 'cantidad' || field === 'precioUnidad') {
-            updatedItem.subtotal = (Number(updatedItem.cantidad) || 0) * (Number(updatedItem.precioUnidad) || 0);
+          if (field === 'cantidad' || field === 'precioUnidad' || field === 'descuento') {
+            const cant = Number(updatedItem.cantidad) || 0;
+            const precio = Number(updatedItem.precioUnidad) || 0;
+            const dto = Number(updatedItem.descuento) || 0;
+            updatedItem.subtotal = cant * precio * (1 - dto / 100);
           }
           return updatedItem;
         }
@@ -1088,8 +1130,8 @@ export default function PartesTrabajoOperaciones({
       tecnicoAsignado: tarea.tecnicoAsignado || '',
       nota: tarea.nota || '',
       items: tarea.items && tarea.items.length > 0
-        ? tarea.items.map(it => ({ ...it }))
-        : [{ cantidad: 1, concepto: tarea.tipoLabel, descripcion: tarea.titulo, precioUnidad: 0, subtotal: 0 }]
+        ? tarea.items.map(it => ({ ...it, descuento: it.descuento || 0 }))
+        : [{ cantidad: 1, concepto: tarea.tipoLabel, descripcion: tarea.titulo, precioUnidad: 0, descuento: 0, subtotal: 0 }]
     });
   };
 
@@ -1711,8 +1753,9 @@ export default function PartesTrabajoOperaciones({
                           <th className="px-4 py-3 text-left w-20">Cant.</th>
                           <th className="px-4 py-3 text-left w-48">Concepto</th>
                           <th className="px-4 py-3 text-left">Descripción</th>
-                          <th className="px-4 py-3 text-right w-32">P. Unidad</th>
-                          <th className="px-4 py-3 text-right w-32">Subtotal</th>
+                          <th className="px-4 py-3 text-right w-28">P. Unidad</th>
+                          <th className="px-3 py-3 text-right w-20">Dto. %</th>
+                          <th className="px-4 py-3 text-right w-28">Subtotal</th>
                           <th className="px-2 py-3 rounded-r-xl w-10"></th>
                         </tr>
                       </thead>
@@ -1818,6 +1861,18 @@ export default function PartesTrabajoOperaciones({
                                 className="w-full text-right bg-transparent border-b border-transparent group-hover:border-zinc-200 outline-none p-1"
                               />
                             </td>
+                            <td className="p-2">
+                              <input
+                                type="number"
+                                step="0.5"
+                                min="0"
+                                max="100"
+                                value={item.descuento === 0 ? '' : (item.descuento ?? '')}
+                                onChange={e => updateItem(index, 'descuento', parseFloat(e.target.value) || 0)}
+                                placeholder="0"
+                                className="w-full text-right bg-transparent border-b border-transparent group-hover:border-zinc-200 outline-none p-1 font-semibold"
+                              />
+                            </td>
                             <td className="px-4 py-2 text-right font-bold text-zinc-900">
                               {formatMoneda(item.subtotal)}
                             </td>
@@ -1874,7 +1929,10 @@ export default function PartesTrabajoOperaciones({
                           </div>
                           <div className="text-right shrink-0">
                             <p className="text-sm font-bold text-zinc-900">{formatMoneda(item.subtotal)}</p>
-                            <p className="text-[11px] font-medium text-zinc-500 mt-0.5">{item.cantidad} x {formatMoneda(item.precioUnidad)}</p>
+                            <p className="text-[11px] font-medium text-zinc-500 mt-0.5">
+                              {item.cantidad} x {formatMoneda(item.precioUnidad)}
+                              {Number(item.descuento) > 0 ? ` (Dto. ${item.descuento}%)` : ''}
+                            </p>
                           </div>
                         </div>
                         <div className="flex justify-end gap-2 mt-2 pt-3 border-t border-zinc-100">
@@ -2151,9 +2209,9 @@ export default function PartesTrabajoOperaciones({
                     placeholder="Detalle del trabajo o materiales..."
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-3 gap-3">
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-zinc-500 uppercase">Precio Unidad</label>
+                    <label className="text-xs font-bold text-zinc-500 uppercase">P. Unidad</label>
                     <input
                       type="text"
                       inputMode="decimal"
@@ -2164,12 +2222,25 @@ export default function PartesTrabajoOperaciones({
                         const parsedVal = parseFloat(val.replace(',', '.'));
                         updateItem(editingLineIndex, 'precioUnidad', !isNaN(parsedVal) ? parsedVal : 0);
                       }}
-                      className="w-full px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl outline-none text-right font-bold"
+                      className="w-full px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl outline-none text-right font-bold text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-zinc-500 uppercase">Dto. %</label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      min="0"
+                      max="100"
+                      value={form.items[editingLineIndex].descuento ?? 0}
+                      onChange={e => updateItem(editingLineIndex, 'descuento', parseFloat(e.target.value) || 0)}
+                      placeholder="0"
+                      className="w-full px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl outline-none text-right font-bold text-xs"
                     />
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold text-zinc-500 uppercase">Subtotal</label>
-                    <div className="w-full px-3 py-2.5 bg-zinc-100 border border-zinc-200 rounded-xl text-right font-bold text-zinc-700">
+                    <div className="w-full px-3 py-2.5 bg-zinc-100 border border-zinc-200 rounded-xl text-right font-bold text-zinc-700 text-xs truncate">
                       {formatMoneda(form.items[editingLineIndex].subtotal)}
                     </div>
                   </div>
@@ -2536,7 +2607,9 @@ export default function PartesTrabajoOperaciones({
                       onChange={e => {
                         const cant = parseInt(e.target.value) || 1;
                         const next = [...editParteForm.items];
-                        next[idx] = { ...next[idx], cantidad: cant, subtotal: cant * (next[idx].precioUnidad || 0) };
+                        const pUn = next[idx].precioUnidad || 0;
+                        const dto = next[idx].descuento || 0;
+                        next[idx] = { ...next[idx], cantidad: cant, subtotal: cant * pUn * (1 - dto / 100) };
                         setEditParteForm({ ...editParteForm, items: next });
                       }}
                       className="w-16 px-2.5 py-1.5 bg-white border border-zinc-200 rounded-lg text-xs font-bold text-center outline-none"
@@ -2861,11 +2934,11 @@ export default function PartesTrabajoOperaciones({
                 onChange={e => setEstadoFilter(e.target.value)}
                 className="pl-8 pr-3 py-1.5 bg-white border border-zinc-300 rounded-xl text-[11px] outline-none text-zinc-900 font-semibold cursor-pointer"
               >
-                <option value="TODOS">Todos</option>
-                <option value="Pendiente">Pendientes</option>
-                <option value="En curso">En curso</option>
-                <option value="Parado">Parados</option>
-                <option value="Finalizado">Finalizados</option>
+                <option value="TODOS">Todos ( {countsPorEstado.TODOS} )</option>
+                <option value="Pendiente">Pendientes ( {countsPorEstado.Pendiente} )</option>
+                <option value="En curso">En curso ( {countsPorEstado['En curso']} )</option>
+                <option value="Parado">Parados ( {countsPorEstado.Parado} )</option>
+                <option value="Finalizado">Finalizados ( {countsPorEstado.Finalizado} )</option>
               </select>
             </div>
 
@@ -2998,11 +3071,11 @@ export default function PartesTrabajoOperaciones({
 
   // Versión Escritorio (/partes-trabajo en menú Operaciones, idéntica en estructura y estética a Partes de Revisión)
   const opcionesEstado = [
-    { value: 'TODOS', label: 'Todos los estados', colorClass: '' },
-    { value: 'Pendiente', label: 'Pendientes', colorClass: 'bg-zinc-400 shadow-[0_0_8px_rgba(161,161,170,0.8)]' },
-    { value: 'En curso', label: 'En curso', colorClass: 'bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.8)]' },
-    { value: 'Parado', label: 'Parado', colorClass: 'bg-red-600 shadow-[0_0_8px_rgba(220,38,38,0.8)]' },
-    { value: 'Finalizado', label: 'Finalizado (Firmado)', colorClass: 'bg-emerald-500 shadow-[0_0_8px_rgba(34,197,94,0.8)]' },
+    { value: 'TODOS', label: 'Todos los estados', count: countsPorEstado.TODOS, colorClass: '' },
+    { value: 'Pendiente', label: 'Pendientes', count: countsPorEstado.Pendiente, colorClass: 'bg-zinc-400 shadow-[0_0_8px_rgba(161,161,170,0.8)]' },
+    { value: 'En curso', label: 'En curso', count: countsPorEstado['En curso'], colorClass: 'bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.8)]' },
+    { value: 'Parado', label: 'Parado', count: countsPorEstado.Parado, colorClass: 'bg-red-600 shadow-[0_0_8px_rgba(220,38,38,0.8)]' },
+    { value: 'Finalizado', label: 'Finalizado (Firmado)', count: countsPorEstado.Finalizado, colorClass: 'bg-emerald-500 shadow-[0_0_8px_rgba(34,197,94,0.8)]' },
   ];
   const selectedOption = opcionesEstado.find(o => o.value === estadoFilter) || opcionesEstado[0];
 
@@ -3016,7 +3089,7 @@ export default function PartesTrabajoOperaciones({
               Partes de Trabajo
             </h1>
             <p className="text-xs font-semibold text-zinc-500 mt-1">
-              Gestión, seguimiento, albarán y firma de tareas de reparaciones, instalaciones, pruebas técnicas y avisos.
+              Gestión y seguimiento de los partes y tareas.
             </p>
           </div>
 
@@ -3063,26 +3136,29 @@ export default function PartesTrabajoOperaciones({
               />
             </div>
 
-            {/* Filtro por Estado con Indicador de Color */}
+            {/* Filtro por Estado con Indicador de Color y Contador */}
             <div className="relative shrink-0 h-[52px]" ref={filterRef}>
               <button
                 type="button"
                 onClick={() => setIsFilterOpen(!isFilterOpen)}
-                className="h-full px-4 bg-white border border-zinc-200/80 rounded-xl text-sm flex items-center justify-between gap-3 text-zinc-900 shadow-sm font-medium hover:border-zinc-300 transition-all min-w-[215px] cursor-pointer"
+                className="h-full px-4 bg-white border border-zinc-200/80 rounded-xl text-sm flex items-center justify-between gap-3 text-zinc-900 shadow-sm font-medium hover:border-zinc-300 transition-all min-w-[235px] cursor-pointer"
                 title="Filtrar partes de trabajo por estado"
               >
-                <div className="flex items-center gap-2.5">
+                <div className="flex items-center gap-2 min-w-0">
                   <Filter className="w-4 h-4 text-zinc-400 shrink-0" />
                   {selectedOption.colorClass && (
                     <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${selectedOption.colorClass}`} />
                   )}
-                  <span className="truncate">{selectedOption.label}</span>
+                  <span className="truncate font-semibold text-zinc-900">{selectedOption.label}</span>
+                  <span className="px-2 py-0.5 rounded-md text-xs font-black bg-zinc-100 text-zinc-800 border border-zinc-200/90 shrink-0 shadow-2xs">
+                    ( {selectedOption.count} )
+                  </span>
                 </div>
-                <ChevronDown className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ${isFilterOpen ? 'rotate-180' : ''}`} />
+                <ChevronDown className={`w-4 h-4 text-zinc-400 shrink-0 transition-transform duration-200 ${isFilterOpen ? 'rotate-180' : ''}`} />
               </button>
 
               {isFilterOpen && (
-                <div className="absolute right-0 top-full mt-1 bg-white border border-zinc-200 rounded-xl shadow-xl z-50 py-1.5 overflow-hidden min-w-[215px]">
+                <div className="absolute right-0 top-full mt-1 bg-white border border-zinc-200 rounded-xl shadow-xl z-50 py-1.5 overflow-hidden min-w-[235px]">
                   {opcionesEstado.map((op) => (
                     <button
                       key={op.value}
@@ -3091,7 +3167,7 @@ export default function PartesTrabajoOperaciones({
                         setEstadoFilter(op.value);
                         setIsFilterOpen(false);
                       }}
-                      className={`w-full px-3.5 py-2.5 text-left text-xs font-semibold flex items-center gap-3 transition-colors cursor-pointer ${
+                      className={`w-full px-3.5 py-2.5 text-left text-xs font-semibold flex items-center gap-2.5 transition-colors cursor-pointer ${
                         estadoFilter === op.value
                           ? 'bg-red-50 text-red-700 font-bold'
                           : 'text-zinc-700 hover:bg-zinc-50'
@@ -3103,6 +3179,13 @@ export default function PartesTrabajoOperaciones({
                         <span className="w-2.5 h-2.5 rounded-full border border-zinc-300 shrink-0" />
                       )}
                       <span className="flex-1">{op.label}</span>
+                      <span className={`text-[11px] px-1.5 py-0.5 rounded-md font-extrabold shrink-0 ${
+                        estadoFilter === op.value
+                          ? 'bg-red-100 text-red-800'
+                          : 'bg-zinc-100 text-zinc-700'
+                      }`}>
+                        ( {op.count} )
+                      </span>
                       {estadoFilter === op.value && <Check className="w-3.5 h-3.5 text-red-600 shrink-0" />}
                     </button>
                   ))}

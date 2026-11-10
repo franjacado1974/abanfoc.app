@@ -90,7 +90,8 @@ export interface PlantillaConItems extends Plantilla {
 
 // ─── CONSTANTES ──────────────────────────────────────────────────────────────
 
-const COLECCION_PLANTILLAS = 'plantillas';
+export const COLECCION_PLANTILLAS = 'plantillas';
+export const COLECCION_OTRAS_PLANTILLAS = 'otras_plantillas';
 const SUBCOLECCION_ITEMS = 'items';
 
 // ─── FUNCIONES CRUD: PLANTILLAS ──────────────────────────────────────────────
@@ -98,9 +99,9 @@ const SUBCOLECCION_ITEMS = 'items';
 /**
  * Obtiene todas las plantillas activas.
  */
-export async function getPlantillas(): Promise<Plantilla[]> {
+export async function getPlantillas(coleccionNom: string = COLECCION_PLANTILLAS): Promise<Plantilla[]> {
   try {
-    const col = collection(db, COLECCION_PLANTILLAS);
+    const col = collection(db, coleccionNom);
     const q = query(col, orderBy('nombre', 'asc'));
     const snap = await getDocs(q);
     return snap.docs.map((d) => {
@@ -117,7 +118,7 @@ export async function getPlantillas(): Promise<Plantilla[]> {
       } as Plantilla;
     });
   } catch (e) {
-    console.error('getPlantillas error:', e);
+    console.error(`getPlantillas(${coleccionNom}) error:`, e);
     throw e;
   }
 }
@@ -125,9 +126,9 @@ export async function getPlantillas(): Promise<Plantilla[]> {
 /**
  * Obtiene una plantilla por su ID.
  */
-export async function getPlantilla(id: string): Promise<Plantilla | null> {
+export async function getPlantilla(id: string, coleccionNom: string = COLECCION_PLANTILLAS): Promise<Plantilla | null> {
   try {
-    const ref = doc(db, COLECCION_PLANTILLAS, id);
+    const ref = doc(db, coleccionNom, id);
     const snap = await getDoc(ref);
     if (!snap.exists()) return null;
     const data = snap.data() as any;
@@ -142,7 +143,7 @@ export async function getPlantilla(id: string): Promise<Plantilla | null> {
       updatedAt: data.updatedAt || '',
     } as Plantilla;
   } catch (e) {
-    console.error('getPlantilla error:', e);
+    console.error(`getPlantilla(${id}, ${coleccionNom}) error:`, e);
     throw e;
   }
 }
@@ -151,9 +152,9 @@ export async function getPlantilla(id: string): Promise<Plantilla | null> {
  * Crea una nueva plantilla.
  * @returns La plantilla creada con su ID.
  */
-export async function addPlantilla(input: PlantillaInput): Promise<Plantilla> {
+export async function addPlantilla(input: PlantillaInput, coleccionNom: string = COLECCION_PLANTILLAS): Promise<Plantilla> {
   try {
-    const col = collection(db, COLECCION_PLANTILLAS);
+    const col = collection(db, coleccionNom);
     const data = {
       ...input,
       activa: input.activa !== false,
@@ -163,7 +164,7 @@ export async function addPlantilla(input: PlantillaInput): Promise<Plantilla> {
     const ref = await addDoc(col, data);
     return { id: ref.id, ...data };
   } catch (e) {
-    console.error('addPlantilla error:', e);
+    console.error(`addPlantilla(${coleccionNom}) error:`, e);
     throw e;
   }
 }
@@ -171,15 +172,15 @@ export async function addPlantilla(input: PlantillaInput): Promise<Plantilla> {
 /**
  * Actualiza una plantilla existente.
  */
-export async function updatePlantilla(id: string, input: Partial<PlantillaInput>): Promise<void> {
+export async function updatePlantilla(id: string, input: Partial<PlantillaInput>, coleccionNom: string = COLECCION_PLANTILLAS): Promise<void> {
   try {
-    const ref = doc(db, COLECCION_PLANTILLAS, id);
+    const ref = doc(db, coleccionNom, id);
     await updateDoc(ref, {
       ...input,
       updatedAt: new Date().toISOString(),
     });
   } catch (e) {
-    console.error('updatePlantilla error:', e);
+    console.error(`updatePlantilla(${id}, ${coleccionNom}) error:`, e);
     throw e;
   }
 }
@@ -187,10 +188,10 @@ export async function updatePlantilla(id: string, input: Partial<PlantillaInput>
 /**
  * Elimina una plantilla y todos sus ítems (subcolección).
  */
-export async function deletePlantilla(id: string): Promise<void> {
+export async function deletePlantilla(id: string, coleccionNom: string = COLECCION_PLANTILLAS): Promise<void> {
   try {
     // Primero eliminar todos los ítems de la subcolección
-    const itemsRef = collection(db, COLECCION_PLANTILLAS, id, SUBCOLECCION_ITEMS);
+    const itemsRef = collection(db, coleccionNom, id, SUBCOLECCION_ITEMS);
     const itemsSnap = await getDocs(itemsRef);
 
     const batch = writeBatch(db);
@@ -200,10 +201,10 @@ export async function deletePlantilla(id: string): Promise<void> {
     await batch.commit();
 
     // Luego eliminar el documento principal
-    const ref = doc(db, COLECCION_PLANTILLAS, id);
+    const ref = doc(db, coleccionNom, id);
     await deleteDoc(ref);
   } catch (e) {
-    console.error('deletePlantilla error:', e);
+    console.error(`deletePlantilla(${id}, ${coleccionNom}) error:`, e);
     throw e;
   }
 }
@@ -211,9 +212,9 @@ export async function deletePlantilla(id: string): Promise<void> {
 /**
  * Suscripción en tiempo real a todas las plantillas activas.
  */
-export function subscribePlantillas(callback: (plantillas: Plantilla[]) => void): () => void {
+export function subscribePlantillas(callback: (plantillas: Plantilla[]) => void, coleccionNom: string = COLECCION_PLANTILLAS): () => void {
   try {
-    const col = collection(db, COLECCION_PLANTILLAS);
+    const col = collection(db, coleccionNom);
     const q = query(col, orderBy('nombre', 'asc'));
     const unsub = onSnapshot(
       q,
@@ -234,13 +235,13 @@ export function subscribePlantillas(callback: (plantillas: Plantilla[]) => void)
         callback(items);
       },
       (err) => {
-        console.error('subscribePlantillas error:', err);
+        console.error(`subscribePlantillas(${coleccionNom}) error:`, err);
         callback([]);
       }
     );
     return unsub;
   } catch (e) {
-    console.error('subscribePlantillas error:', e);
+    console.error(`subscribePlantillas(${coleccionNom}) error:`, e);
     return () => {};
   }
 }
@@ -250,9 +251,9 @@ export function subscribePlantillas(callback: (plantillas: Plantilla[]) => void)
 /**
  * Obtiene todos los ítems de una plantilla, ordenados por 'orden'.
  */
-export async function getItemsDePlantilla(plantillaId: string): Promise<ItemPlantilla[]> {
+export async function getItemsDePlantilla(plantillaId: string, coleccionNom: string = COLECCION_PLANTILLAS): Promise<ItemPlantilla[]> {
   try {
-    const col = collection(db, COLECCION_PLANTILLAS, plantillaId, SUBCOLECCION_ITEMS);
+    const col = collection(db, coleccionNom, plantillaId, SUBCOLECCION_ITEMS);
     const q = query(col, orderBy('orden', 'asc'));
     const snap = await getDocs(q);
     return snap.docs.map((d) => {
@@ -275,7 +276,7 @@ export async function getItemsDePlantilla(plantillaId: string): Promise<ItemPlan
       } as ItemPlantilla;
     });
   } catch (e) {
-    console.error('getItemsDePlantilla error:', e);
+    console.error(`getItemsDePlantilla(${plantillaId}, ${coleccionNom}) error:`, e);
     throw e;
   }
 }
@@ -293,9 +294,9 @@ function cleanUndefined<T extends object>(obj: T): T {
 /**
  * Añade un ítem a una plantilla.
  */
-export async function addItemAPlantilla(input: ItemPlantillaInput): Promise<ItemPlantilla> {
+export async function addItemAPlantilla(input: ItemPlantillaInput, coleccionNom: string = COLECCION_PLANTILLAS): Promise<ItemPlantilla> {
   try {
-    const col = collection(db, COLECCION_PLANTILLAS, input.plantillaId, SUBCOLECCION_ITEMS);
+    const col = collection(db, coleccionNom, input.plantillaId, SUBCOLECCION_ITEMS);
     const data = cleanUndefined({
       ...input,
       requerido: input.requerido !== false,
@@ -305,7 +306,7 @@ export async function addItemAPlantilla(input: ItemPlantillaInput): Promise<Item
     const ref = await addDoc(col, data);
     return { id: ref.id, ...data };
   } catch (e) {
-    console.error('addItemAPlantilla error:', e);
+    console.error(`addItemAPlantilla(${coleccionNom}) error:`, e);
     throw e;
   }
 }
@@ -316,16 +317,17 @@ export async function addItemAPlantilla(input: ItemPlantillaInput): Promise<Item
 export async function updateItemDePlantilla(
   plantillaId: string,
   itemId: string,
-  input: Partial<ItemPlantillaInput>
+  input: Partial<ItemPlantillaInput>,
+  coleccionNom: string = COLECCION_PLANTILLAS
 ): Promise<void> {
   try {
-    const ref = doc(db, COLECCION_PLANTILLAS, plantillaId, SUBCOLECCION_ITEMS, itemId);
+    const ref = doc(db, coleccionNom, plantillaId, SUBCOLECCION_ITEMS, itemId);
     await updateDoc(ref, cleanUndefined({
       ...input,
       updatedAt: new Date().toISOString(),
     }));
   } catch (e) {
-    console.error('updateItemDePlantilla error:', e);
+    console.error(`updateItemDePlantilla(${itemId}, ${coleccionNom}) error:`, e);
     throw e;
   }
 }
@@ -333,12 +335,12 @@ export async function updateItemDePlantilla(
 /**
  * Elimina un ítem de una plantilla.
  */
-export async function deleteItemDePlantilla(plantillaId: string, itemId: string): Promise<void> {
+export async function deleteItemDePlantilla(plantillaId: string, itemId: string, coleccionNom: string = COLECCION_PLANTILLAS): Promise<void> {
   try {
-    const ref = doc(db, COLECCION_PLANTILLAS, plantillaId, SUBCOLECCION_ITEMS, itemId);
+    const ref = doc(db, coleccionNom, plantillaId, SUBCOLECCION_ITEMS, itemId);
     await deleteDoc(ref);
   } catch (e) {
-    console.error('deleteItemDePlantilla error:', e);
+    console.error(`deleteItemDePlantilla(${itemId}, ${coleccionNom}) error:`, e);
     throw e;
   }
 }
@@ -348,10 +350,11 @@ export async function deleteItemDePlantilla(plantillaId: string, itemId: string)
  */
 export function subscribeItemsDePlantilla(
   plantillaId: string,
-  callback: (items: ItemPlantilla[]) => void
+  callback: (items: ItemPlantilla[]) => void,
+  coleccionNom: string = COLECCION_PLANTILLAS
 ): () => void {
   try {
-    const col = collection(db, COLECCION_PLANTILLAS, plantillaId, SUBCOLECCION_ITEMS);
+    const col = collection(db, coleccionNom, plantillaId, SUBCOLECCION_ITEMS);
     const q = query(col, orderBy('orden', 'asc'));
     const unsub = onSnapshot(
       q,
@@ -378,13 +381,13 @@ export function subscribeItemsDePlantilla(
         callback(items);
       },
       (err) => {
-        console.error(`subscribeItemsDePlantilla(${plantillaId}) error:`, err);
+        console.error(`subscribeItemsDePlantilla(${plantillaId}, ${coleccionNom}) error:`, err);
         callback([]);
       }
     );
     return unsub;
   } catch (e) {
-    console.error('subscribeItemsDePlantilla error:', e);
+    console.error(`subscribeItemsDePlantilla(${plantillaId}, ${coleccionNom}) error:`, e);
     return () => {};
   }
 }
@@ -392,14 +395,14 @@ export function subscribeItemsDePlantilla(
 /**
  * Obtiene una plantilla completa con todos sus ítems.
  */
-export async function getPlantillaConItems(plantillaId: string): Promise<PlantillaConItems | null> {
+export async function getPlantillaConItems(plantillaId: string, coleccionNom: string = COLECCION_PLANTILLAS): Promise<PlantillaConItems | null> {
   try {
-    const plantilla = await getPlantilla(plantillaId);
+    const plantilla = await getPlantilla(plantillaId, coleccionNom);
     if (!plantilla) return null;
-    const items = await getItemsDePlantilla(plantillaId);
+    const items = await getItemsDePlantilla(plantillaId, coleccionNom);
     return { ...plantilla, items };
   } catch (e) {
-    console.error('getPlantillaConItems error:', e);
+    console.error(`getPlantillaConItems(${plantillaId}, ${coleccionNom}) error:`, e);
     throw e;
   }
 }
@@ -411,11 +414,12 @@ export async function getPlantillaConItems(plantillaId: string): Promise<Plantil
  */
 export async function savePlantillaConItems(
   plantillaInput: PlantillaInput,
-  itemsInput: ItemPlantillaInput[]
+  itemsInput: ItemPlantillaInput[],
+  coleccionNom: string = COLECCION_PLANTILLAS
 ): Promise<PlantillaConItems> {
   try {
     // 1. Crear o actualizar la plantilla
-    const col = collection(db, COLECCION_PLANTILLAS);
+    const col = collection(db, coleccionNom);
     const plantillaData = {
       ...plantillaInput,
       activa: plantillaInput.activa !== false,
@@ -426,7 +430,7 @@ export async function savePlantillaConItems(
     const plantillaId = ref.id;
 
     // 2. Crear todos los ítems
-    const itemsCol = collection(db, COLECCION_PLANTILLAS, plantillaId, SUBCOLECCION_ITEMS);
+    const itemsCol = collection(db, coleccionNom, plantillaId, SUBCOLECCION_ITEMS);
     const itemsPromises = itemsInput.map((item, index) => {
       const itemData = {
         ...item,
@@ -457,7 +461,7 @@ export async function savePlantillaConItems(
       items,
     };
   } catch (e) {
-    console.error('savePlantillaConItems error:', e);
+    console.error(`savePlantillaConItems(${coleccionNom}) error:`, e);
     throw e;
   }
 }
@@ -468,13 +472,14 @@ export async function savePlantillaConItems(
  */
 export async function reemplazarItemsDePlantilla(
   plantillaId: string,
-  nuevosItems: ItemPlantillaInput[]
+  nuevosItems: ItemPlantillaInput[],
+  coleccionNom: string = COLECCION_PLANTILLAS
 ): Promise<ItemPlantilla[]> {
   try {
     const batch = writeBatch(db);
 
     // 1. Eliminar todos los ítems existentes
-    const itemsCol = collection(db, COLECCION_PLANTILLAS, plantillaId, SUBCOLECCION_ITEMS);
+    const itemsCol = collection(db, coleccionNom, plantillaId, SUBCOLECCION_ITEMS);
     const existingSnap = await getDocs(itemsCol);
     existingSnap.docs.forEach((docItem) => {
       batch.delete(docItem.ref);
@@ -507,7 +512,7 @@ export async function reemplazarItemsDePlantilla(
     await batch.commit();
     return createdItems;
   } catch (e) {
-    console.error('reemplazarItemsDePlantilla error:', e);
+    console.error(`reemplazarItemsDePlantilla(${coleccionNom}) error:`, e);
     throw e;
   }
 }
@@ -614,21 +619,68 @@ export const PLANTILLAS_POR_DEFECTO: Array<{
 ];
 
 /**
+ * Plantillas por defecto para Otras Plantillas (Vehículos, taller, equipos auxiliares)
+ */
+export const OTRAS_PLANTILLAS_POR_DEFECTO: Array<{
+  plantilla: PlantillaInput;
+  items: ItemPlantillaInput[];
+}> = [
+  {
+    plantilla: {
+      codigo: 'V01',
+      nombre: 'REVISIÓN DE VEHÍCULOS / FURGONETAS',
+      descripcion: 'Control periódico y estado del vehículo de empresa',
+      activa: true,
+    },
+    items: [
+      { plantillaId: '', label: 'Kilometraje actual del vehículo', key: 'kmActual', orden: 1, tipoRespuesta: 'numero', requerido: true },
+      { plantillaId: '', label: 'Nivel de aceite de motor', key: 'nivelAceite', orden: 2, tipoRespuesta: 'check', requerido: true },
+      { plantillaId: '', label: 'Nivel de líquido refrigerante', key: 'nivelRefrigerante', orden: 3, tipoRespuesta: 'check', requerido: true },
+      { plantillaId: '', label: 'Nivel líquido de frenos', key: 'liquidoFrenos', orden: 4, tipoRespuesta: 'check', requerido: true },
+      { plantillaId: '', label: 'Presión y dibujo de neumáticos', key: 'neumaticos', orden: 5, tipoRespuesta: 'check', requerido: true },
+      { plantillaId: '', label: 'Luces delanteras, traseras e intermitentes', key: 'luces', orden: 6, tipoRespuesta: 'check', requerido: true },
+      { plantillaId: '', label: 'Limpiaparabrisas y líquido lavaparabrisas', key: 'limpiaparabrisas', orden: 7, tipoRespuesta: 'check', requerido: true },
+      { plantillaId: '', label: 'Documentación obligatoria e ITV al día', key: 'documentacion', orden: 8, tipoRespuesta: 'check', requerido: true },
+      { plantillaId: '', label: 'Extintor, triángulos / señal V16 y chaleco', key: 'seguridad', orden: 9, tipoRespuesta: 'check', requerido: true },
+      { plantillaId: '', label: 'Kit de herramientas y rueda de repuesto', key: 'herramientas', orden: 10, tipoRespuesta: 'check', requerido: true },
+      { plantillaId: '', label: 'Observaciones / Daños de chapa o incidencias', key: 'observacionesVehiculo', orden: 11, tipoRespuesta: 'texto-largo', requerido: false },
+    ],
+  },
+  {
+    plantilla: {
+      codigo: 'T01',
+      nombre: 'REVISIÓN DE TALLER Y MAQUINARIA',
+      descripcion: 'Checklist de orden, seguridad y maquinaria en taller',
+      activa: true,
+    },
+    items: [
+      { plantillaId: '', label: 'Orden y limpieza general del puesto', key: 'ordenTaller', orden: 1, tipoRespuesta: 'check', requerido: true },
+      { plantillaId: '', label: 'Estado de herramientas manuales', key: 'herramientasManuales', orden: 2, tipoRespuesta: 'check', requerido: true },
+      { plantillaId: '', label: 'Maquinaria eléctrica, enchufes y cables', key: 'maquinariaElectrica', orden: 3, tipoRespuesta: 'check', requerido: true },
+      { plantillaId: '', label: 'Compresor de aire y manómetros', key: 'compresor', orden: 4, tipoRespuesta: 'check', requerido: true },
+      { plantillaId: '', label: 'EPIs disponibles y en buen estado', key: 'epis', orden: 5, tipoRespuesta: 'check', requerido: true },
+      { plantillaId: '', label: 'Botiquín de primeros auxilios revisado', key: 'botiquin', orden: 6, tipoRespuesta: 'check', requerido: true },
+      { plantillaId: '', label: 'Notas de reposición o material defectuoso', key: 'notasTaller', orden: 7, tipoRespuesta: 'texto-largo', requerido: false },
+    ],
+  },
+];
+
+/**
  * Duplica una plantilla existente con todos sus ítems.
  * Crea un nuevo documento con un ID único y copia todos los ítems.
  * @returns La nueva plantilla duplicada.
  */
-export async function duplicarPlantilla(plantillaId: string): Promise<Plantilla> {
+export async function duplicarPlantilla(plantillaId: string, coleccionNom: string = COLECCION_PLANTILLAS): Promise<Plantilla> {
   try {
     // 1. Obtener la plantilla original
-    const original = await getPlantilla(plantillaId);
+    const original = await getPlantilla(plantillaId, coleccionNom);
     if (!original) throw new Error(`Plantilla ${plantillaId} no encontrada`);
 
     // 2. Obtener los ítems originales
-    const itemsOriginales = await getItemsDePlantilla(plantillaId);
+    const itemsOriginales = await getItemsDePlantilla(plantillaId, coleccionNom);
 
     // 3. Crear la nueva plantilla con nombre "COPIA - ..."
-    const col = collection(db, COLECCION_PLANTILLAS);
+    const col = collection(db, coleccionNom);
     const nuevaPlantillaData = {
       codigo: original.codigo ? `${original.codigo}-COPIA` : '',
       nombre: `COPIA - ${original.nombre}`,
@@ -644,7 +696,7 @@ export async function duplicarPlantilla(plantillaId: string): Promise<Plantilla>
     // 4. Copiar todos los ítems a la nueva plantilla usando batch
     if (itemsOriginales.length > 0) {
       const batch = writeBatch(db);
-      const itemsCol = collection(db, COLECCION_PLANTILLAS, nuevaPlantillaId, SUBCOLECCION_ITEMS);
+      const itemsCol = collection(db, coleccionNom, nuevaPlantillaId, SUBCOLECCION_ITEMS);
       itemsOriginales.forEach((item) => {
         const itemRef = doc(itemsCol);
         batch.set(itemRef, cleanUndefined({
@@ -666,7 +718,7 @@ export async function duplicarPlantilla(plantillaId: string): Promise<Plantilla>
 
     return { id: nuevaPlantillaId, ...nuevaPlantillaData };
   } catch (e) {
-    console.error('duplicarPlantilla error:', e);
+    console.error(`duplicarPlantilla(${coleccionNom}) error:`, e);
     throw e;
   }
 }
@@ -677,7 +729,7 @@ export async function duplicarPlantilla(plantillaId: string): Promise<Plantilla>
  */
 export async function inicializarPlantillasPorDefecto(): Promise<void> {
   try {
-    const existentes = await getPlantillas();
+    const existentes = await getPlantillas(COLECCION_PLANTILLAS);
     const nombresExistentes = new Set(existentes.map((p) => p.nombre));
 
     for (const template of PLANTILLAS_POR_DEFECTO) {
@@ -687,12 +739,32 @@ export async function inicializarPlantillasPorDefecto(): Promise<void> {
       }
 
       console.log(`Creando plantilla por defecto: "${template.plantilla.nombre}"...`);
-      await savePlantillaConItems(template.plantilla, template.items);
+      await savePlantillaConItems(template.plantilla, template.items, COLECCION_PLANTILLAS);
     }
 
     console.log('Plantillas por defecto inicializadas correctamente.');
   } catch (e) {
     console.error('inicializarPlantillasPorDefecto error:', e);
+    throw e;
+  }
+}
+
+/**
+ * Inicializa las plantillas por defecto para Otras Plantillas (Vehículos, taller, etc.).
+ */
+export async function inicializarOtrasPlantillasPorDefecto(): Promise<void> {
+  try {
+    const existentes = await getPlantillas(COLECCION_OTRAS_PLANTILLAS);
+    const nombresExistentes = new Set(existentes.map((p) => p.nombre));
+
+    for (const template of OTRAS_PLANTILLAS_POR_DEFECTO) {
+      if (nombresExistentes.has(template.plantilla.nombre)) {
+        continue;
+      }
+      await savePlantillaConItems(template.plantilla, template.items, COLECCION_OTRAS_PLANTILLAS);
+    }
+  } catch (e) {
+    console.error('inicializarOtrasPlantillasPorDefecto error:', e);
     throw e;
   }
 }

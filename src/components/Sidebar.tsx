@@ -6,7 +6,7 @@ import {
   Settings, Power, ChevronLeft, ChevronRight, LayoutDashboard,
   Menu, X, Mail, Clock, Trash2,
   ChevronDown, Building2, FolderKanban, ClipboardCheck, Files, GraduationCap,
-  FilePlus2, BarChart3, StickyNote
+  FilePlus2, BarChart3, StickyNote, Hammer, Truck
 } from 'lucide-react';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -37,10 +37,10 @@ interface NavCategory {
 }
 
 const CATEGORIAS_MENU: NavCategory[] = [
-  // 1. Inicio
+  // 1. Hoy (Dashboard)
   {
     id: 'inicio',
-    title: 'Inicio',
+    title: 'Hoy',
     Icon: LayoutDashboard,
     path: '/',
     allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador']
@@ -55,7 +55,7 @@ const CATEGORIAS_MENU: NavCategory[] = [
     allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador']
   },
 
-  // 2. Gestión (Clientes, Centros, Catálogo)
+  // 2. Gestión (Clientes, Centros, Catálogo, Taller, Vehículos)
   {
     id: 'gestion',
     title: 'Gestión',
@@ -64,7 +64,9 @@ const CATEGORIAS_MENU: NavCategory[] = [
     subItems: [
       { id: 'clientes', path: '/clientes', title: 'Clientes', Icon: Users, allowedRoles: ['super-administrador', 'administrador', 'editor'] },
       { id: 'centros', path: '/centros', title: 'Centros', Icon: Building2, allowedRoles: ['super-administrador', 'administrador'] },
-      { id: 'catalogo', path: '/catalogo', title: 'Catálogo', Icon: Package, allowedRoles: ['super-administrador', 'administrador', 'editor', 'tecnico'] }
+      { id: 'catalogo', path: '/catalogo', title: 'Catálogo', Icon: Package, allowedRoles: ['super-administrador', 'administrador', 'editor', 'tecnico'] },
+      { id: 'taller', path: '/taller', title: 'Taller', Icon: Hammer, allowedRoles: ['super-administrador', 'administrador', 'editor', 'tecnico'] },
+      { id: 'vehiculos', path: '/vehiculos', title: 'Vehículos', Icon: Truck, allowedRoles: ['super-administrador', 'administrador', 'editor', 'tecnico'] }
     ]
   },
 

@@ -6,6 +6,8 @@ import { subscribePartes, subscribeCentros, subscribeClientes, subscribeTecnicos
 import { collection, getDocs, doc, getDoc, query, where } from 'firebase/firestore';
 import { generarActaExtintoresPDF, generarAlbaranPDF, generarCertificadoPDF } from './pdfGenerator';
 import { generarContratoPDF } from './pdfContratoGenerator';
+import { generarReporteAnomaliasPDF } from './pdfReporteAnomaliasGenerator';
+import { generarPresupuestoBorradorDesdeAnomalias } from './services/presupuestoBorradorFromAnomalias';
 import { calcularAlertasExtintores, calcularAlertasBies, esEquipoExtintor, esEquipoBie, esSistemaExtintores, esSistemaBies, type ExtintorAlertas, type BieAlertas } from './recursos-compartidos/services/sistemasUtils';
 import { evaluarObservacionesPorFecha, evaluarAnomaliasPorFecha } from './RevisionChecklist';
 
@@ -142,7 +144,14 @@ export default function Partes() {
   const [pasoConfirmacionRetimbre, setPasoConfirmacionRetimbre] = useState<1 | 2>(1);
   const [accionesModalItem, setAccionesModalItem] = useState<ParteItem | null>(null);
   const [isUpdatingRetimbre, setIsUpdatingRetimbre] = useState(false);
-  const [downloadOptions, setDownloadOptions] = useState({ acta: true, certificado: true, albaran: true, contrato: false });
+  const [downloadOptions, setDownloadOptions] = useState({
+    acta: true,
+    certificado: true,
+    albaran: true,
+    contrato: false,
+    reporteAnomalias: false,
+    generarPresupuesto: false
+  });
   const [isGeneratingPDFs, setIsGeneratingPDFs] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [downloadStepText, setDownloadStepText] = useState('');
@@ -689,7 +698,14 @@ export default function Partes() {
 
   const openDownloadModal = (parte: ParteItem) => {
     setSelectedParteToDownload(parte);
-    setDownloadOptions({ acta: true, certificado: true, albaran: true, contrato: false });
+    setDownloadOptions({
+      acta: true,
+      certificado: true,
+      albaran: true,
+      contrato: false,
+      reporteAnomalias: false,
+      generarPresupuesto: false
+    });
     setShowDownloadModal(true);
   };
 
@@ -1014,8 +1030,46 @@ export default function Partes() {
         );
       }
 
+      // 5. Reporte de Anomalías
+      if (downloadOptions.reporteAnomalias) {
+        setDownloadProgress(96);
+        setDownloadStepText('Generando Reporte de Anomalías...');
+        await new Promise(r => setTimeout(r, 60));
+        await generarReporteAnomaliasPDF(
+          cliente,
+          centro,
+          sistemasDelCentro,
+          equiposTodos,
+          numeroMantenimiento,
+          parte.fechaCreacion || new Date().toISOString().slice(0, 10),
+          tecnicoNombre,
+          empresaSeleccionada
+        );
+      }
+
+      // 6. Generar Presupuesto Borrador desde Anomalías
+      let resultadoPresupuesto: { success: boolean; message: string; anomaliasCount: number; presupuesto?: any; anomalias?: any[] } | null = null;
+      if (downloadOptions.generarPresupuesto) {
+        setDownloadProgress(98);
+        setDownloadStepText('Analizando anomalías y catálogo de artículos...');
+        await new Promise(r => setTimeout(r, 60));
+        resultadoPresupuesto = await generarPresupuestoBorradorDesdeAnomalias(
+          cliente,
+          centro,
+          sistemasDelCentro,
+          equiposTodos,
+          numeroMantenimiento,
+          tecnicoNombre
+        );
+      }
+
       setDownloadProgress(100);
-      setDownloadStepText('¡Documentos generados y descargados con éxito!');
+      const textoFinal = resultadoPresupuesto
+        ? (resultadoPresupuesto.success
+            ? `¡Listo! ${resultadoPresupuesto.message} Redirigiendo a pantalla dividida...`
+            : `Proceso finalizado. ${resultadoPresupuesto.message}`)
+        : '¡Documentos generados y descargados con éxito!';
+      setDownloadStepText(textoFinal);
       setDownloadCompleted(true);
 
       setTimeout(() => {
@@ -1023,7 +1077,15 @@ export default function Partes() {
         setDownloadCompleted(false);
         setDownloadProgress(0);
         setDownloadStepText('');
-      }, 1400);
+        if (resultadoPresupuesto?.success && resultadoPresupuesto.presupuesto) {
+          navigate('/presupuestos', {
+            state: {
+              editarPresupuestoId: resultadoPresupuesto.presupuesto.id,
+              anomalias: resultadoPresupuesto.anomalias || []
+            }
+          });
+        }
+      }, resultadoPresupuesto?.success ? 1600 : 1400);
 
     } catch (error) {
       console.error('Error generando PDFs:', error);
@@ -1185,7 +1247,7 @@ export default function Partes() {
                   { value: 'TODOS', label: 'Todos los estados', colorClass: '' },
                   { value: 'Abierto', label: 'Planificado', colorClass: 'bg-zinc-400 shadow-[0_0_8px_rgba(161,161,170,0.8)]' },
                   { value: 'En revisión', label: 'En curso', colorClass: 'bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.8)]' },
-                  { value: 'Finalizado', label: 'Parte Finalizado (Firmado)', colorClass: 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.8)]' },
+                  { value: 'Finalizado', label: 'Finalizado (Firmado)', colorClass: 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.8)]' },
                   { value: 'Retimbrando', label: 'Retimbrando', colorClass: 'bg-red-600 shadow-[0_0_12px_rgba(220,38,38,0.9)] animate-pulse' },
                   { value: 'Pre-Cerrado', label: 'Pre-cerrado', colorClass: 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.8)]' },
                   { value: 'Cerrado', label: 'Cerrado', colorClass: 'bg-black shadow-[0_0_8px_rgba(0,0,0,0.6)]' },
@@ -1197,21 +1259,21 @@ export default function Partes() {
                     <button
                       type="button"
                       onClick={() => setIsFilterOpen(!isFilterOpen)}
-                      className="h-full px-3 bg-white border border-zinc-200/80 rounded-xl text-xs flex items-center justify-between gap-2 text-zinc-900 shadow-sm font-medium hover:border-zinc-300 transition-all min-w-[150px] max-w-[190px]"
+                      className="h-full px-3.5 bg-white border border-zinc-200/80 rounded-xl text-xs flex items-center justify-between gap-2.5 text-zinc-900 shadow-sm font-medium hover:border-zinc-300 transition-all min-w-[210px] sm:min-w-[230px]"
                       title="Filtrar partes por estado"
                     >
-                      <div className="flex items-center gap-2.5">
+                      <div className="flex items-center gap-2.5 min-w-0">
                         <Filter className="w-4 h-4 text-zinc-400 shrink-0" />
                         {selectedOption.colorClass && (
                           <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${selectedOption.colorClass}`} />
                         )}
-                        <span className="truncate">{selectedOption.label}</span>
+                        <span className="whitespace-nowrap">{selectedOption.label}</span>
                       </div>
-                      <ChevronDown className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ${isFilterOpen ? 'rotate-180' : ''}`} />
+                      <ChevronDown className={`w-4 h-4 text-zinc-400 shrink-0 transition-transform duration-200 ${isFilterOpen ? 'rotate-180' : ''}`} />
                     </button>
 
                     {isFilterOpen && (
-                      <div className="absolute right-0 top-full mt-1 bg-white border border-zinc-200 rounded-xl shadow-xl z-50 py-1.5 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150 min-w-[200px]">
+                      <div className="absolute right-0 top-full mt-1 bg-white border border-zinc-200 rounded-xl shadow-xl z-50 py-1.5 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150 min-w-[230px]">
                         {opcionesEstado.map((op) => (
                           <button
                             key={op.value}
@@ -1975,8 +2037,8 @@ export default function Partes() {
       {/* Modal de Opciones de Descarga PDF */}
       {showDownloadModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between p-5 border-b border-zinc-100 bg-white">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200 max-h-[92vh] flex flex-col">
+            <div className="flex items-center justify-between p-5 border-b border-zinc-100 bg-white shrink-0">
               <h3 className="font-bold text-zinc-800 text-lg flex items-center gap-2">
                 <FileText className="w-5 h-5 text-red-500" />
                 Descargar Documentos
@@ -1989,12 +2051,12 @@ export default function Partes() {
               </button>
             </div>
             
-            <div className="p-6">
+            <div className="p-6 overflow-y-auto flex-1">
               <p className="text-sm text-zinc-600 mb-5">Selecciona los documentos que deseas generar y descargar:</p>
               
               <div className="space-y-3">
                 <label className="flex items-center p-3 rounded-xl border border-zinc-200 hover:bg-zinc-50 cursor-pointer transition-colors">
-                  <div className={`w-5 h-5 rounded flex items-center justify-center mr-3 transition-colors ${downloadOptions.acta ? 'bg-red-600 border-red-600' : 'border-2 border-zinc-300'}`}>
+                  <div className={`w-5 h-5 rounded flex items-center justify-center mr-3 transition-colors shrink-0 ${downloadOptions.acta ? 'bg-red-600 border-red-600' : 'border-2 border-zinc-300'}`}>
                     {downloadOptions.acta && <Check className="w-3.5 h-3.5 text-white" />}
                   </div>
                   <input 
@@ -2007,7 +2069,7 @@ export default function Partes() {
                 </label>
                 
                 <label className="flex items-center p-3 rounded-xl border border-zinc-200 hover:bg-zinc-50 cursor-pointer transition-colors">
-                  <div className={`w-5 h-5 rounded flex items-center justify-center mr-3 transition-colors ${downloadOptions.certificado ? 'bg-red-600 border-red-600' : 'border-2 border-zinc-300'}`}>
+                  <div className={`w-5 h-5 rounded flex items-center justify-center mr-3 transition-colors shrink-0 ${downloadOptions.certificado ? 'bg-red-600 border-red-600' : 'border-2 border-zinc-300'}`}>
                     {downloadOptions.certificado && <Check className="w-3.5 h-3.5 text-white" />}
                   </div>
                   <input 
@@ -2020,7 +2082,7 @@ export default function Partes() {
                 </label>
                 
                 <label className="flex items-center p-3 rounded-xl border border-zinc-200 hover:bg-zinc-50 cursor-pointer transition-colors">
-                  <div className={`w-5 h-5 rounded flex items-center justify-center mr-3 transition-colors ${downloadOptions.albaran ? 'bg-red-600 border-red-600' : 'border-2 border-zinc-300'}`}>
+                  <div className={`w-5 h-5 rounded flex items-center justify-center mr-3 transition-colors shrink-0 ${downloadOptions.albaran ? 'bg-red-600 border-red-600' : 'border-2 border-zinc-300'}`}>
                     {downloadOptions.albaran && <Check className="w-3.5 h-3.5 text-white" />}
                   </div>
                   <input 
@@ -2033,7 +2095,7 @@ export default function Partes() {
                 </label>
  
                 <label className="flex items-center p-3 rounded-xl border border-zinc-200 hover:bg-zinc-50 cursor-pointer transition-colors">
-                  <div className={`w-5 h-5 rounded flex items-center justify-center mr-3 transition-colors ${downloadOptions.contrato ? 'bg-red-600 border-red-600' : 'border-2 border-zinc-300'}`}>
+                  <div className={`w-5 h-5 rounded flex items-center justify-center mr-3 transition-colors shrink-0 ${downloadOptions.contrato ? 'bg-red-600 border-red-600' : 'border-2 border-zinc-300'}`}>
                     {downloadOptions.contrato && <Check className="w-3.5 h-3.5 text-white" />}
                   </div>
                   <input 
@@ -2043,6 +2105,40 @@ export default function Partes() {
                     onChange={(e) => setDownloadOptions(prev => ({ ...prev, contrato: e.target.checked }))}
                   />
                   <span className="font-medium text-zinc-700">Contrato de Mantenimiento</span>
+                </label>
+
+                {/* 5. Reporte de Anomalías */}
+                <label className="flex items-center p-3 rounded-xl border border-zinc-200 hover:bg-zinc-50 cursor-pointer transition-colors">
+                  <div className={`w-5 h-5 rounded flex items-center justify-center mr-3 transition-colors shrink-0 ${downloadOptions.reporteAnomalias ? 'bg-red-600 border-red-600' : 'border-2 border-zinc-300'}`}>
+                    {downloadOptions.reporteAnomalias && <Check className="w-3.5 h-3.5 text-white" />}
+                  </div>
+                  <input 
+                    type="checkbox" 
+                    className="hidden"
+                    checked={downloadOptions.reporteAnomalias}
+                    onChange={(e) => setDownloadOptions(prev => ({ ...prev, reporteAnomalias: e.target.checked }))}
+                  />
+                  <div className="flex-1">
+                    <span className="font-medium text-zinc-700">Reporte de anomalías (PDF)</span>
+                    <p className="text-[11px] text-zinc-400">Listado agrupado por sistemas con equipo, ubicación y defecto.</p>
+                  </div>
+                </label>
+
+                {/* 6. Generar Presupuesto Borrador */}
+                <label className="flex items-center p-3 rounded-xl border border-amber-200/90 bg-amber-50/40 hover:bg-amber-50/80 cursor-pointer transition-colors">
+                  <div className={`w-5 h-5 rounded flex items-center justify-center mr-3 transition-colors shrink-0 ${downloadOptions.generarPresupuesto ? 'bg-amber-600 border-amber-600' : 'border-2 border-amber-300 bg-white'}`}>
+                    {downloadOptions.generarPresupuesto && <Check className="w-3.5 h-3.5 text-white" />}
+                  </div>
+                  <input 
+                    type="checkbox" 
+                    className="hidden"
+                    checked={downloadOptions.generarPresupuesto}
+                    onChange={(e) => setDownloadOptions(prev => ({ ...prev, generarPresupuesto: e.target.checked }))}
+                  />
+                  <div className="flex-1">
+                    <span className="font-semibold text-amber-950">Generar presupuesto borrador</span>
+                    <p className="text-[11px] text-amber-700/90">Crea un presupuesto vinculando anomalías con artículos del catálogo.</p>
+                  </div>
                 </label>
               </div>
  
@@ -2055,11 +2151,11 @@ export default function Partes() {
                 </button>
                 <button
                   onClick={confirmDownloadPDFs}
-                  disabled={!downloadOptions.acta && !downloadOptions.certificado && !downloadOptions.albaran && !downloadOptions.contrato}
+                  disabled={!downloadOptions.acta && !downloadOptions.certificado && !downloadOptions.albaran && !downloadOptions.contrato && !downloadOptions.reporteAnomalias && !downloadOptions.generarPresupuesto}
                   className="flex-1 py-2.5 px-4 rounded-xl font-medium bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   <Download className="w-4 h-4" />
-                  Descargar
+                  Descargar / Generar
                 </button>
               </div>
             </div>

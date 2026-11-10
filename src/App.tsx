@@ -1,9 +1,9 @@
 import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
 import { 
-  Building2, HardHat, Wrench, ClipboardCheck,
+  Building2,
   ShieldCheck, ArrowLeft,
   Clock, ArrowRightCircle, ArrowLeftCircle, CheckCircle2, AlertTriangle, KeyRound,
-  CalendarDays, Package, Receipt, ArrowRight, User
+  CalendarDays, Package, Receipt, ArrowRight, Bell, Truck
 } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import Loader from './components/Loader';
@@ -38,6 +38,8 @@ import Papelera from './Papelera';
 import Metodos from './Metodos';
 import Analisis from './Analisis';
 import Calendario from './Calendario';
+import Taller from './Taller';
+import Vehiculos from './Vehiculos';
 import Notas from './Notas';
 import AvisoStockModal from './components/AvisoStockModal';
 import Sidebar from './components/Sidebar';
@@ -62,6 +64,7 @@ import {
   subscribeInstalaciones,
   subscribeFacturas,
   subscribeAvisosStock,
+  subscribeVehiculos,
   type UrgenciaItem,
   type ReparacionItem,
   type InstalacionItem,
@@ -69,7 +72,8 @@ import {
   type Albaran,
   type Factura,
   type Articulo,
-  type AvisoStock
+  type AvisoStock,
+  type VehiculoItem
 } from './firebase';
 import { APP_VERSION } from './constants';
 import { useRegisterSW } from 'virtual:pwa-register/react';
@@ -584,6 +588,11 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
     } catch { return []; }
   });
   const [avisosStockList, setAvisosStockList] = useState<AvisoStock[]>([]);
+  const [vehiculosList, setVehiculosList] = useState<VehiculoItem[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('firecheck_db_vehiculos') || '[]');
+    } catch { return []; }
+  });
 
   const [clientesList, setClientesList] = useState<any[]>(() => {
     try {
@@ -805,6 +814,13 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
         setPartesList(items || []);
       }));
     } catch (e) { console.error('subscribePartes failed', e); }
+
+    try {
+      unsubs.push(subscribeVehiculos((items) => {
+        safeLocalSet('firecheck_db_vehiculos', JSON.stringify(items));
+        setVehiculosList(items || []);
+      }));
+    } catch (e) { console.error('subscribeVehiculos failed', e); }
 
     return () => {
       unsubs.forEach(unsub => {
@@ -1055,155 +1071,163 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
     return Array.from(map.values()).sort((a, b) => a.cantidad - b.cantidad);
   }, [articulosList, avisosStockList]);
 
-  const todoEnOrdenGlobal = albaranesPendientesFacturar.length === 0 && materialesStockBajo.length === 0;
+  // ─── 4. TARJETA NOTIFICACIONES (PÚRPURA): ALERTAS DE VEHÍCULOS, SEGURO, ITV ─
+  const notificacionesAlertas = useMemo(() => {
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+
+    const lista: {
+      id: string;
+      vehiculoId: string;
+      matricula: string;
+      marcaModelo: string;
+      titulo: string;
+      fecha: string;
+      diasRestantes: number;
+      tipo: 'seguro' | 'itv' | 'mantenimiento' | 'otro';
+      descripcion?: string;
+      estado: 'vencido' | 'hoy' | 'urgente' | 'aviso';
+    }[] = [];
+
+    vehiculosList.forEach(veh => {
+      if (!veh.alertas || !Array.isArray(veh.alertas)) return;
+      veh.alertas.forEach(alerta => {
+        if (!alerta.fecha || alerta.resuelta) return;
+        const fechaObj = new Date(alerta.fecha);
+        if (isNaN(fechaObj.getTime())) return;
+        fechaObj.setHours(0, 0, 0, 0);
+
+        const diffMs = fechaObj.getTime() - hoy.getTime();
+        const diasRestantes = Math.round(diffMs / (1000 * 60 * 60 * 24));
+        const diasAviso = typeof alerta.diasAviso === 'number' ? alerta.diasAviso : 15;
+
+        // Notificar si está dentro del umbral de días de preaviso (ej: 15 días antes) o si ya venció
+        if (diasRestantes <= diasAviso) {
+          let estado: 'vencido' | 'hoy' | 'urgente' | 'aviso' = 'aviso';
+          if (diasRestantes < 0) estado = 'vencido';
+          else if (diasRestantes === 0) estado = 'hoy';
+          else if (diasRestantes <= 5) estado = 'urgente';
+
+          lista.push({
+            id: `${veh.id}-${alerta.id}`,
+            vehiculoId: veh.id,
+            matricula: veh.matricula || 'S/M',
+            marcaModelo: veh.marcaModelo || 'Vehículo',
+            titulo: alerta.titulo || 'Alerta',
+            fecha: formatFechaCorta(alerta.fecha),
+            diasRestantes,
+            tipo: alerta.tipo,
+            descripcion: alerta.descripcion,
+            estado
+          });
+        }
+      });
+    });
+
+    return lista.sort((a, b) => a.diasRestantes - b.diasRestantes);
+  }, [vehiculosList]);
 
   return (
     <div className="flex h-screen bg-[#F4F7FB]">
       <Sidebar user={loggedUser} onLogout={handleLogout} appLogo={appLogo} />
       
       <main className="flex-1 overflow-y-auto flex flex-col">
-        {/* Cabecera Superior Corporativa Azul Marino */}
-        <div className="sticky top-0 z-40 bg-gradient-to-r from-[#0F2342] via-[#162F56] to-[#1D3557] text-white shadow-md border-b border-white/10">
-          <div className="flex flex-col sm:flex-row items-center justify-between px-5 sm:px-8 py-3.5 gap-2 max-w-[1680px] mx-auto w-full">
+        {/* Cabecera Superior Corporativa Negra */}
+        <div className="sticky top-0 z-40 bg-black text-white shadow-md border-b border-zinc-800">
+          <div className="flex items-center justify-end px-5 sm:px-8 py-3.5 max-w-[1680px] mx-auto w-full">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-xl bg-orange-500/20 border border-orange-400/40 flex items-center justify-center text-orange-400 shrink-0">
                 <CalendarDays className="w-5 h-5" />
               </div>
               <div>
                 <p className="text-xs sm:text-sm font-bold text-white tracking-wide">{formattedDate}</p>
-                <p className="text-[11px] text-slate-300 font-medium">Panel de Control en Tiempo Real · Salamandra PCI</p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2 bg-white/10 hover:bg-white/15 border border-white/15 px-3.5 py-1.5 rounded-full transition-colors">
-                <User className="w-4 h-4 text-orange-400" />
-                <span className="text-xs font-bold text-white">{loggedUser.nombre}</span>
-                <span className="text-[10px] font-black bg-orange-500 text-white px-2 py-0.5 rounded-full uppercase tracking-wider">
-                  {loggedUser.rol}
-                </span>
+                <p className="text-[11px] text-slate-300 font-medium">Panel de Control Salamandra</p>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="p-4 sm:p-6 lg:p-8 max-w-[1680px] w-full mx-auto flex-1 flex flex-col justify-between gap-6 animate-in">
-          <div>
-            {/* Bienvenida e Indicador de Estado Global */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/80 shadow-xs">
-              <div>
-                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-[#0F2342] tracking-tight">
-                  ¡Hola, {loggedUser.nombre}!
-                </h1>
-                <p className="text-sm sm:text-base font-medium text-slate-500 mt-1">
-                  Resumen de tu jornada en Salamandra · Fotografía en tiempo real de facturación, trabajos de hoy y almacén.
-                </p>
-              </div>
-
-              {todoEnOrdenGlobal ? (
-                <div className="flex items-center gap-3.5 bg-emerald-50 border-2 border-emerald-200/80 px-5 py-3 rounded-2xl shrink-0 shadow-2xs">
-                  <div className="w-10 h-10 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-sm">
-                    <CheckCircle2 className="w-6 h-6 stroke-[2.5]" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-black text-emerald-950 leading-tight">Todo al día</p>
-                    <p className="text-xs font-semibold text-emerald-700">Sin facturación ni stock pendiente</p>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-center gap-3.5 bg-[#0F2342] text-white px-5 py-3 rounded-2xl shrink-0 shadow-sm border border-slate-800">
-                  <div className="w-10 h-10 rounded-full bg-orange-500 text-white flex items-center justify-center shrink-0 shadow-sm">
-                    <Clock className="w-5 h-5 stroke-[2.5]" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-black text-white leading-tight">Actividad en curso</p>
-                    <p className="text-xs font-medium text-slate-300">
-                      {albaranesPendientesFacturar.length} alb. por facturar · {tareasDeHoy.length} tareas hoy · {materialesStockBajo.length} avisos stock
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* 3 TARJETAS PRINCIPALES DEL DASHBOARD */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="p-4 sm:p-6 lg:p-8 max-w-[1720px] w-full mx-auto flex-1 flex flex-col min-h-0 animate-in">
+          <div className="flex-1 flex flex-col min-h-0">
+            {/* 4 TARJETAS PRINCIPALES DEL DASHBOARD */}
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 flex-1 min-h-0">
               
               {/* ═══════════════════════════════════════════════════════════════
                   1. TARJETA FACTURACIÓN (COLOR NARANJA)
               ═══════════════════════════════════════════════════════════════ */}
-              <div className="rounded-[2rem] bg-gradient-to-br from-orange-50 via-amber-50/60 to-white border-2 border-orange-200/90 shadow-md hover:shadow-xl transition-all flex flex-col justify-between overflow-hidden">
-                <div className="p-6 sm:p-7 flex-1 flex flex-col">
+              <div className="rounded-2xl bg-gradient-to-br from-orange-50 via-amber-50/60 to-white border border-orange-200/90 shadow-sm hover:shadow-md transition-all flex flex-col justify-between overflow-hidden h-full">
+                <div className="p-4 sm:p-5 flex-1 flex flex-col min-h-0">
                   {/* Cabecera con Icono Ilustrativo y Contador Destacado */}
-                  <div className="flex items-start gap-5 pb-5 border-b border-orange-200/70">
-                    <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-[#0F2342] to-[#1D3557] border-2 border-orange-400/40 flex items-center justify-center shrink-0 shadow-lg relative">
-                      <Receipt className="w-10 h-10 text-white stroke-[1.8]" />
-                      <span className="absolute -bottom-1.5 -right-1.5 w-8 h-8 rounded-full bg-orange-500 text-white font-black text-sm flex items-center justify-center border-2 border-white shadow">
+                  <div className="flex items-center gap-3.5 pb-3.5 border-b border-orange-200/70 shrink-0">
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#0F2342] to-[#1D3557] border border-orange-400/40 flex items-center justify-center shrink-0 shadow-sm relative">
+                      <Receipt className="w-6 h-6 text-white stroke-[1.8]" />
+                      <span className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-orange-500 text-white font-black text-[10px] flex items-center justify-center border border-white shadow-xs">
                         €
                       </span>
                     </div>
 
                     <div className="min-w-0 flex-1">
-                      <span className="inline-block text-[11px] font-black uppercase tracking-widest text-orange-800 bg-orange-200/70 px-2.5 py-0.5 rounded-full mb-1">
+                      <span className="inline-block text-[10px] font-black uppercase tracking-wider text-orange-800 bg-orange-200/70 px-2 py-0.5 rounded-full mb-0.5">
                         1. Facturación
                       </span>
-                      <div className="flex items-baseline gap-2.5">
-                        <span className="text-5xl sm:text-6xl font-black text-orange-600 tracking-tight leading-none">
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-3xl sm:text-4xl font-black text-orange-600 tracking-tight leading-none">
                           {albaranesPendientesFacturar.length}
                         </span>
                         <span className="text-xs font-extrabold uppercase tracking-wider text-[#0F2342]">
                           {albaranesPendientesFacturar.length === 1 ? 'albarán pendiente' : 'albaranes pendientes'}
                         </span>
                       </div>
-                      <p className="text-xs font-semibold text-slate-600 mt-1">
+                      <p className="text-[11px] font-semibold text-slate-600 mt-0.5">
                         Albaranes firmados listos para emitir factura
                       </p>
                     </div>
                   </div>
 
                   {/* Listado Real de Registros de Firestore */}
-                  <div className="mt-5 flex-1 flex flex-col">
-                    <div className="flex items-center justify-between mb-2.5">
-                      <span className="text-[11px] font-extrabold uppercase tracking-wider text-orange-900/80">
-                        Primeros registros pendientes
+                  <div className="mt-3.5 flex-1 flex flex-col min-h-0">
+                    <div className="flex items-center justify-between mb-2 shrink-0">
+                      <span className="text-[10px] font-extrabold uppercase tracking-wider text-orange-900/80">
+                        Todos los registros pendientes
                       </span>
                       {albaranesPendientesFacturar.length > 0 && (
-                        <span className="text-[11px] font-bold text-orange-700">
-                          Mostrando {Math.min(5, albaranesPendientesFacturar.length)} de {albaranesPendientesFacturar.length}
+                        <span className="text-[10px] font-bold text-orange-700">
+                          {albaranesPendientesFacturar.length} {albaranesPendientesFacturar.length === 1 ? 'pendiente' : 'pendientes'}
                         </span>
                       )}
                     </div>
 
                     {albaranesPendientesFacturar.length === 0 ? (
-                      <div className="flex-1 min-h-[210px] rounded-2xl bg-white/80 border border-orange-200/60 flex flex-col items-center justify-center p-6 text-center">
-                        <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center mb-2.5">
-                          <CheckCircle2 className="w-7 h-7 stroke-[2.2]" />
+                      <div className="flex-1 min-h-[140px] rounded-xl bg-white/80 border border-orange-200/60 flex flex-col items-center justify-center p-4 text-center">
+                        <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center mb-1.5">
+                          <CheckCircle2 className="w-5 h-5 stroke-[2.2]" />
                         </div>
-                        <p className="text-base font-black text-[#0F2342]">Todo al día</p>
-                        <p className="text-xs font-medium text-slate-500 mt-0.5">
+                        <p className="text-sm font-black text-[#0F2342]">Todo al día</p>
+                        <p className="text-[11px] font-medium text-slate-500 mt-0.5">
                           No hay albaranes pendientes de facturar en este momento.
                         </p>
                       </div>
                     ) : (
-                      <div className="space-y-2 flex-1">
-                        {albaranesPendientesFacturar.slice(0, 5).map((item) => (
+                      <div className="space-y-1.5 flex-1 overflow-y-auto pr-1">
+                        {albaranesPendientesFacturar.map((item) => (
                           <div
                             key={item.id}
                             onClick={() => navigate('/facturas', { state: { prefillFactura: { albaranId: item.raw.id, empresaId: item.raw.empresaId || '', clienteId: item.raw.clienteId || '', centroId: item.raw.centroId || '', clienteNombreLibre: item.raw.clienteNombreLibre || '', centroNombreLibre: item.raw.centroNombreLibre || '', numeroPedido: item.raw.numeroPedido || '', titulo: item.raw.titulo || `Factura de Albarán ${item.raw.id}`, fechaCreacion: new Date().toISOString(), items: item.raw.items || [] } } })}
-                            className="group bg-white hover:bg-orange-50/90 border border-orange-200/80 hover:border-orange-400 rounded-2xl px-3.5 py-2.5 flex items-center justify-between gap-2 transition-all cursor-pointer shadow-2xs"
+                            className="group bg-white hover:bg-orange-50/90 border border-orange-200/80 hover:border-orange-400 rounded-xl px-3 py-2 flex items-center justify-between gap-2 transition-all cursor-pointer shadow-2xs"
                             title="Clic para abrir en Facturación"
                           >
                             <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2">
-                                <span className="w-2 h-2 rounded-full bg-orange-500 shrink-0" />
-                                <p className="text-xs sm:text-sm font-bold text-[#0F2342] truncate group-hover:text-orange-700 transition-colors">
+                              <div className="flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-orange-500 shrink-0" />
+                                <p className="text-xs font-bold text-[#0F2342] truncate group-hover:text-orange-700 transition-colors">
                                   {item.cliente}
                                 </p>
                               </div>
-                              <div className="flex items-center gap-2 mt-0.5 pl-4">
-                                <span className="text-[11px] font-mono font-bold text-orange-800 bg-orange-100/90 px-2 py-0.5 rounded-md border border-orange-200">
+                              <div className="flex items-center gap-2 mt-0.5 pl-3">
+                                <span className="text-[10px] font-mono font-bold text-orange-800 bg-orange-100/90 px-1.5 py-0.5 rounded border border-orange-200">
                                   Albarán {item.numero}
                                 </span>
-                                <span className="text-[11px] font-semibold text-slate-500">
+                                <span className="text-[10px] font-semibold text-slate-500">
                                   {item.fecha}
                                 </span>
                               </div>
@@ -1224,13 +1248,13 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
                 </div>
 
                 {/* Botón Inferior Naranja */}
-                <div className="px-6 pb-6 pt-2">
+                <div className="px-4 pb-4 pt-1 shrink-0">
                   <button
                     type="button"
                     onClick={() => navigate('/facturas')}
-                    className="w-full py-3.5 px-5 rounded-2xl bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-black text-sm shadow-md shadow-orange-500/20 hover:shadow-lg transition-all flex items-center justify-center gap-2.5 cursor-pointer active:scale-[0.99]"
+                    className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-bold text-xs sm:text-sm shadow-sm hover:shadow transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
                   >
-                    <ArrowRight className="w-4 h-4 stroke-[2.8]" />
+                    <ArrowRight className="w-3.5 h-3.5 stroke-[2.5]" />
                     <span>Ver pendientes</span>
                   </button>
                 </div>
@@ -1239,87 +1263,90 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
               {/* ═══════════════════════════════════════════════════════════════
                   2. TARJETA TAREAS DE HOY (COLOR AZUL)
               ═══════════════════════════════════════════════════════════════ */}
-              <div className="rounded-[2rem] bg-gradient-to-br from-sky-50 via-blue-50/60 to-white border-2 border-sky-200/90 shadow-md hover:shadow-xl transition-all flex flex-col justify-between overflow-hidden">
-                <div className="p-6 sm:p-7 flex-1 flex flex-col">
+              <div className="rounded-2xl bg-gradient-to-br from-sky-50 via-blue-50/60 to-white border border-sky-200/90 shadow-sm hover:shadow-md transition-all flex flex-col justify-between overflow-hidden h-full">
+                <div className="p-4 sm:p-5 flex-1 flex flex-col min-h-0">
                   {/* Cabecera con Icono Ilustrativo y Contador Destacado */}
-                  <div className="flex items-start gap-5 pb-5 border-b border-sky-200/70">
-                    <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-[#0F2342] to-[#1D3557] border-2 border-sky-400/40 flex items-center justify-center shrink-0 shadow-lg relative">
-                      <CalendarDays className="w-10 h-10 text-white stroke-[1.8]" />
-                      <span className="absolute -bottom-1.5 -right-1.5 w-8 h-8 rounded-full bg-blue-600 text-white font-black text-xs flex items-center justify-center border-2 border-white shadow">
+                  <div className="flex items-center gap-3.5 pb-3.5 border-b border-sky-200/70 shrink-0">
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#0F2342] to-[#1D3557] border border-sky-400/40 flex items-center justify-center shrink-0 shadow-sm relative">
+                      <CalendarDays className="w-6 h-6 text-white stroke-[1.8]" />
+                      <span className="absolute -bottom-1 -right-1 px-1 py-0.2 rounded-full bg-blue-600 text-white font-black text-[9px] flex items-center justify-center border border-white shadow-xs">
                         HOY
                       </span>
                     </div>
 
                     <div className="min-w-0 flex-1">
-                      <span className="inline-block text-[11px] font-black uppercase tracking-widest text-blue-800 bg-sky-200/70 px-2.5 py-0.5 rounded-full mb-1">
+                      <span 
+                        title={'Ir al módulo Listado de mantenimientos anuales "LISTMAN"'}
+                        className="inline-block text-[10px] font-black uppercase tracking-wider text-blue-800 bg-sky-200/70 px-2 py-0.5 rounded-full mb-0.5"
+                      >
                         2. Tareas de Hoy
                       </span>
-                      <div className="flex items-baseline gap-2.5">
-                        <span className="text-5xl sm:text-6xl font-black text-blue-600 tracking-tight leading-none">
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-3xl sm:text-4xl font-black text-blue-600 tracking-tight leading-none">
                           {tareasDeHoy.length}
                         </span>
                         <span className="text-xs font-extrabold uppercase tracking-wider text-[#0F2342]">
                           {tareasDeHoy.length === 1 ? 'tarea prevista' : 'tareas previstas'}
                         </span>
                       </div>
-                      <p className="text-xs font-semibold text-slate-600 mt-1">
+                      <p className="text-[11px] font-semibold text-slate-600 mt-0.5">
                         Revisiones, reparaciones, instalaciones y avisos
                       </p>
                     </div>
                   </div>
 
                   {/* Listado Real de Tareas del Día Actual */}
-                  <div className="mt-5 flex-1 flex flex-col">
-                    <div className="flex items-center justify-between mb-2.5">
-                      <span className="text-[11px] font-extrabold uppercase tracking-wider text-blue-900/80">
+                  <div className="mt-3.5 flex-1 flex flex-col min-h-0">
+                    <div className="flex items-center justify-between mb-2 shrink-0">
+                      <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-900/80">
                         Agenda operativa de hoy
                       </span>
                       {tareasDeHoy.length > 0 && (
-                        <span className="text-[11px] font-bold text-blue-700">
+                        <span className="text-[10px] font-bold text-blue-700">
                           Mostrando {Math.min(5, tareasDeHoy.length)} de {tareasDeHoy.length}
                         </span>
                       )}
                     </div>
 
                     {tareasDeHoy.length === 0 ? (
-                      <div className="flex-1 min-h-[210px] rounded-2xl bg-white/80 border border-sky-200/60 flex flex-col items-center justify-center p-6 text-center">
-                        <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center mb-2.5">
-                          <CheckCircle2 className="w-7 h-7 stroke-[2.2]" />
+                      <div className="flex-1 min-h-[140px] rounded-xl bg-white/80 border border-sky-200/60 flex flex-col items-center justify-center p-4 text-center">
+                        <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center mb-1.5">
+                          <CheckCircle2 className="w-5 h-5 stroke-[2.2]" />
                         </div>
-                        <p className="text-base font-black text-[#0F2342]">Todo al día</p>
-                        <p className="text-xs font-medium text-slate-500 mt-0.5">
+                        <p className="text-sm font-black text-[#0F2342]">Todo al día</p>
+                        <p className="text-[11px] font-medium text-slate-500 mt-0.5">
                           No hay tareas ni intervenciones programadas para la fecha de hoy.
                         </p>
                       </div>
                     ) : (
-                      <div className="space-y-2 flex-1">
+                      <div className="space-y-1.5 flex-1 overflow-y-auto pr-1">
                         {tareasDeHoy.slice(0, 5).map((tarea) => (
                           <div
                             key={tarea.id}
                             onClick={() => navigate('/calendario')}
-                            className={`group bg-white hover:bg-sky-50/90 border border-sky-200/80 hover:border-blue-400 rounded-2xl px-3.5 py-2.5 flex items-center justify-between gap-2 transition-all cursor-pointer shadow-2xs ${
+                            className={`group bg-white hover:bg-sky-50/90 border border-sky-200/80 hover:border-blue-400 rounded-xl px-3 py-2 flex items-center justify-between gap-2 transition-all cursor-pointer shadow-2xs ${
                               tarea.completado ? 'opacity-65' : ''
                             }`}
                             title={`${tarea.tipo}: ${tarea.cliente} — ${tarea.detalle}`}
                           >
                             <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2">
-                                <span className="text-[11px] font-mono font-extrabold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md shrink-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] font-mono font-extrabold text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded shrink-0">
                                   {tarea.hora}
                                 </span>
-                                <p className="text-xs sm:text-sm font-bold text-[#0F2342] truncate group-hover:text-blue-700 transition-colors">
+                                <p className="text-xs font-bold text-[#0F2342] truncate group-hover:text-blue-700 transition-colors">
                                   {tarea.cliente}
                                 </p>
                               </div>
                               <div className="flex items-center gap-2 mt-0.5 pl-1">
-                                <p className="text-[11px] font-medium text-slate-500 truncate">
+                                <p className="text-[10px] font-medium text-slate-500 truncate">
                                   {tarea.detalle}
                                   {tarea.tecnico ? ` · Téc: ${tarea.tecnico}` : ''}
                                 </p>
                               </div>
                             </div>
 
-                            <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border shrink-0 ${tarea.badgeColor}`}>
+                            <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border shrink-0 ${tarea.badgeColor}`}>
                               {tarea.tipo}
                             </span>
                           </div>
@@ -1330,13 +1357,13 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
                 </div>
 
                 {/* Botón Inferior Azul */}
-                <div className="px-6 pb-6 pt-2">
+                <div className="px-4 pb-4 pt-1 shrink-0">
                   <button
                     type="button"
                     onClick={() => navigate('/calendario')}
-                    className="w-full py-3.5 px-5 rounded-2xl bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-black text-sm shadow-md shadow-blue-600/20 hover:shadow-lg transition-all flex items-center justify-center gap-2.5 cursor-pointer active:scale-[0.99]"
+                    className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-bold text-xs sm:text-sm shadow-sm hover:shadow transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
                   >
-                    <ArrowRight className="w-4 h-4 stroke-[2.8]" />
+                    <ArrowRight className="w-3.5 h-3.5 stroke-[2.5]" />
                     <span>Ver calendario</span>
                   </button>
                 </div>
@@ -1345,13 +1372,13 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
               {/* ═══════════════════════════════════════════════════════════════
                   3. TARJETA STOCK (COLOR VERDE)
               ═══════════════════════════════════════════════════════════════ */}
-              <div className="rounded-[2rem] bg-gradient-to-br from-emerald-50 via-green-50/60 to-white border-2 border-emerald-200/90 shadow-md hover:shadow-xl transition-all flex flex-col justify-between overflow-hidden">
-                <div className="p-6 sm:p-7 flex-1 flex flex-col">
+              <div className="rounded-2xl bg-gradient-to-br from-emerald-50 via-green-50/60 to-white border border-emerald-200/90 shadow-sm hover:shadow-md transition-all flex flex-col justify-between overflow-hidden h-full">
+                <div className="p-4 sm:p-5 flex-1 flex flex-col min-h-0">
                   {/* Cabecera con Icono Ilustrativo y Contador Destacado */}
-                  <div className="flex items-start gap-5 pb-5 border-b border-emerald-200/70">
-                    <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-[#0F2342] to-[#1D3557] border-2 border-emerald-400/40 flex items-center justify-center shrink-0 shadow-lg relative">
-                      <Package className="w-10 h-10 text-white stroke-[1.8]" />
-                      <span className={`absolute -bottom-1.5 -right-1.5 w-8 h-8 rounded-full text-white font-black text-xs flex items-center justify-center border-2 border-white shadow ${
+                  <div className="flex items-center gap-3.5 pb-3.5 border-b border-emerald-200/70 shrink-0">
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#0F2342] to-[#1D3557] border border-emerald-400/40 flex items-center justify-center shrink-0 shadow-sm relative">
+                      <Package className="w-6 h-6 text-white stroke-[1.8]" />
+                      <span className={`absolute -bottom-1 -right-1 w-5 h-5 rounded-full text-white font-black text-[10px] flex items-center justify-center border border-white shadow-xs ${
                         materialesStockBajo.length > 0 ? 'bg-red-600' : 'bg-emerald-600'
                       }`}>
                         {materialesStockBajo.length > 0 ? '!' : '✓'}
@@ -1359,68 +1386,68 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
                     </div>
 
                     <div className="min-w-0 flex-1">
-                      <span className="inline-block text-[11px] font-black uppercase tracking-widest text-emerald-900 bg-emerald-200/70 px-2.5 py-0.5 rounded-full mb-1">
+                      <span className="inline-block text-[10px] font-black uppercase tracking-wider text-emerald-900 bg-emerald-200/70 px-2 py-0.5 rounded-full mb-0.5">
                         3. Stock
                       </span>
-                      <div className="flex items-baseline gap-2.5">
-                        <span className="text-5xl sm:text-6xl font-black text-emerald-600 tracking-tight leading-none">
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-3xl sm:text-4xl font-black text-emerald-600 tracking-tight leading-none">
                           {materialesStockBajo.length}
                         </span>
                         <span className="text-xs font-extrabold uppercase tracking-wider text-[#0F2342]">
                           {materialesStockBajo.length === 1 ? 'material con stock bajo' : 'materiales con stock bajo'}
                         </span>
                       </div>
-                      <p className="text-xs font-semibold text-slate-600 mt-1">
+                      <p className="text-[11px] font-semibold text-slate-600 mt-0.5">
                         Artículos de almacén que necesitan reposición
                       </p>
                     </div>
                   </div>
 
                   {/* Listado Real de Materiales con Existencias Bajas */}
-                  <div className="mt-5 flex-1 flex flex-col">
-                    <div className="flex items-center justify-between mb-2.5">
-                      <span className="text-[11px] font-extrabold uppercase tracking-wider text-emerald-900/80">
+                  <div className="mt-3.5 flex-1 flex flex-col min-h-0">
+                    <div className="flex items-center justify-between mb-2 shrink-0">
+                      <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-900/80">
                         Materiales a reponer
                       </span>
                       {materialesStockBajo.length > 0 && (
-                        <span className="text-[11px] font-bold text-emerald-700">
+                        <span className="text-[10px] font-bold text-emerald-700">
                           Mostrando {Math.min(5, materialesStockBajo.length)} de {materialesStockBajo.length}
                         </span>
                       )}
                     </div>
 
                     {materialesStockBajo.length === 0 ? (
-                      <div className="flex-1 min-h-[210px] rounded-2xl bg-white/80 border border-emerald-200/60 flex flex-col items-center justify-center p-6 text-center">
-                        <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center mb-2.5">
-                          <CheckCircle2 className="w-7 h-7 stroke-[2.2]" />
+                      <div className="flex-1 min-h-[140px] rounded-xl bg-white/80 border border-emerald-200/60 flex flex-col items-center justify-center p-4 text-center">
+                        <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center mb-1.5">
+                          <CheckCircle2 className="w-5 h-5 stroke-[2.2]" />
                         </div>
-                        <p className="text-base font-black text-[#0F2342]">Todo al día</p>
-                        <p className="text-xs font-medium text-slate-500 mt-0.5">
+                        <p className="text-sm font-black text-[#0F2342]">Todo al día</p>
+                        <p className="text-[11px] font-medium text-slate-500 mt-0.5">
                           Todos los materiales del catálogo tienen existencias suficientes.
                         </p>
                       </div>
                     ) : (
-                      <div className="space-y-2 flex-1">
+                      <div className="space-y-1.5 flex-1 overflow-y-auto pr-1">
                         {materialesStockBajo.slice(0, 5).map((mat) => (
                           <div
                             key={mat.id}
                             onClick={() => navigate('/catalogo')}
-                            className="group bg-white hover:bg-emerald-50/90 border border-emerald-200/80 hover:border-emerald-400 rounded-2xl px-3.5 py-2.5 flex items-center justify-between gap-2 transition-all cursor-pointer shadow-2xs"
+                            className="group bg-white hover:bg-emerald-50/90 border border-emerald-200/80 hover:border-emerald-400 rounded-xl px-3 py-2 flex items-center justify-between gap-2 transition-all cursor-pointer shadow-2xs"
                             title="Ir al Catálogo para reponer stock"
                           >
                             <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-1.5">
                                 <AlertTriangle className={`w-3.5 h-3.5 shrink-0 ${mat.cantidad === 0 ? 'text-red-600' : 'text-amber-500'}`} />
-                                <p className="text-xs sm:text-sm font-bold text-[#0F2342] truncate group-hover:text-emerald-800 transition-colors">
+                                <p className="text-xs font-bold text-[#0F2342] truncate group-hover:text-emerald-800 transition-colors">
                                   {mat.nombre}
                                 </p>
                               </div>
-                              <div className="flex items-center gap-2 mt-0.5 pl-5">
+                              <div className="flex items-center gap-2 mt-0.5 pl-4">
                                 <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
                                   {mat.codigo}
                                 </span>
                                 {mat.familia && (
-                                  <span className="text-[11px] font-medium text-slate-500 truncate">
+                                  <span className="text-[10px] font-medium text-slate-500 truncate">
                                     {mat.familia}
                                   </span>
                                 )}
@@ -1428,7 +1455,7 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
                             </div>
 
                             <div className="flex flex-col items-end shrink-0">
-                              <span className={`text-[11px] font-black px-2.5 py-0.5 rounded-full border ${
+                              <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${
                                 mat.cantidad === 0
                                   ? 'bg-red-100 text-red-700 border-red-300'
                                   : 'bg-amber-100 text-amber-800 border-amber-300'
@@ -1449,102 +1476,135 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
                 </div>
 
                 {/* Botón Inferior Verde */}
-                <div className="px-6 pb-6 pt-2">
+                <div className="px-4 pb-4 pt-1 shrink-0">
                   <button
                     type="button"
                     onClick={() => navigate('/catalogo')}
-                    className="w-full py-3.5 px-5 rounded-2xl bg-gradient-to-r from-emerald-600 to-green-700 hover:from-emerald-700 hover:to-green-800 text-white font-black text-sm shadow-md shadow-emerald-600/20 hover:shadow-lg transition-all flex items-center justify-center gap-2.5 cursor-pointer active:scale-[0.99]"
+                    className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-green-700 hover:from-emerald-700 hover:to-green-800 text-white font-bold text-xs sm:text-sm shadow-sm hover:shadow transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
                   >
-                    <ArrowRight className="w-4 h-4 stroke-[2.8]" />
+                    <ArrowRight className="w-3.5 h-3.5 stroke-[2.5]" />
                     <span>Ver catálogo</span>
                   </button>
                 </div>
               </div>
 
-            </div>
-          </div>
+              {/* ═══════════════════════════════════════════════════════════════
+                  4. TARJETA NOTIFICACIONES (COLOR PÚRPURA / CARMESÍ)
+              ═══════════════════════════════════════════════════════════════ */}
+              <div className="rounded-2xl bg-gradient-to-br from-purple-50 via-pink-50/50 to-white border border-purple-200/90 shadow-sm hover:shadow-md transition-all flex flex-col justify-between overflow-hidden h-full">
+                <div className="p-4 sm:p-5 flex-1 flex flex-col min-h-0">
+                  {/* Cabecera con Icono Ilustrativo y Contador Destacado */}
+                  <div className="flex items-center gap-3.5 pb-3.5 border-b border-purple-200/70 shrink-0">
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#0F2342] to-[#1D3557] border border-purple-400/40 flex items-center justify-center shrink-0 shadow-sm relative">
+                      <Bell className="w-6 h-6 text-white stroke-[1.8]" />
+                      <span className={`absolute -bottom-1 -right-1 w-5 h-5 rounded-full text-white font-black text-[10px] flex items-center justify-center border border-white shadow-xs ${
+                        notificacionesAlertas.length > 0 ? 'bg-rose-600 animate-pulse' : 'bg-purple-600'
+                      }`}>
+                        {notificacionesAlertas.length > 0 ? '!' : '✓'}
+                      </span>
+                    </div>
 
-          {/* Barra Inferior de Accesos Rápidos (inspirada en el diseño de referencia) */}
-          <div className="bg-white/90 border border-slate-200/90 rounded-2xl px-5 py-3.5 shadow-2xs flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-2 sm:gap-4">
-              <span className="text-xs font-black uppercase tracking-wider text-[#0F2342] flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-orange-500"></span>
-                Acceso rápido:
-              </span>
-              <button
-                type="button"
-                onClick={() => navigate('/analisis')}
-                className="text-xs font-bold text-slate-600 hover:text-orange-600 transition-colors cursor-pointer px-2 py-1 rounded-lg hover:bg-orange-50"
-              >
-                Análisis
-              </button>
-              <span className="text-slate-300">|</span>
-              <button
-                type="button"
-                onClick={() => navigate('/pedidos')}
-                className="text-xs font-bold text-slate-600 hover:text-orange-600 transition-colors cursor-pointer px-2 py-1 rounded-lg hover:bg-orange-50"
-              >
-                Pedidos
-              </button>
-              <span className="text-slate-300">|</span>
-              <button
-                type="button"
-                onClick={() => navigate('/albaranes')}
-                className="text-xs font-bold text-slate-600 hover:text-orange-600 transition-colors cursor-pointer px-2 py-1 rounded-lg hover:bg-orange-50"
-              >
-                Albaranes
-              </button>
-              <span className="text-slate-300">|</span>
-              <button
-                type="button"
-                onClick={() => navigate('/facturas')}
-                className="text-xs font-bold text-slate-600 hover:text-orange-600 transition-colors cursor-pointer px-2 py-1 rounded-lg hover:bg-orange-50"
-              >
-                Facturas
-              </button>
-              <span className="text-slate-300">|</span>
-              <button
-                type="button"
-                onClick={() => navigate('/revisiones')}
-                title={'Ir al módulo Listado de mantenimientos anuales "LISTMAN"'}
-                className="text-xs font-bold text-slate-600 hover:text-orange-600 transition-colors cursor-pointer px-2 py-1 rounded-lg hover:bg-orange-50"
-              >
-                Listman
-              </button>
-            </div>
+                    <div className="min-w-0 flex-1">
+                      <span className="inline-block text-[10px] font-black uppercase tracking-wider text-purple-900 bg-purple-200/70 px-2 py-0.5 rounded-full mb-0.5">
+                        4. Notificaciones
+                      </span>
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-3xl sm:text-4xl font-black text-purple-600 tracking-tight leading-none">
+                          {notificacionesAlertas.length}
+                        </span>
+                        <span className="text-xs font-extrabold uppercase tracking-wider text-[#0F2342]">
+                          {notificacionesAlertas.length === 1 ? 'aviso activo' : 'avisos activos'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] font-semibold text-slate-600 mt-0.5">
+                        Alertas de vehículos, seguros e ITV
+                      </p>
+                    </div>
+                  </div>
 
-            <div className="flex items-center gap-3 text-[11px] font-bold text-slate-500">
-              <button
-                type="button"
-                onClick={() => navigate('/reparaciones')}
-                className="hover:text-[#0F2342] transition-colors cursor-pointer flex items-center gap-1"
-              >
-                <Wrench className="w-3.5 h-3.5 text-sky-600" /> Reparaciones
-              </button>
-              <span>·</span>
-              <button
-                type="button"
-                onClick={() => navigate('/instalaciones')}
-                className="hover:text-[#0F2342] transition-colors cursor-pointer flex items-center gap-1"
-              >
-                <HardHat className="w-3.5 h-3.5 text-red-600" /> Instalaciones
-              </button>
-              <span>·</span>
-              <button
-                type="button"
-                onClick={() => navigate('/urgencias')}
-                className="hover:text-[#0F2342] transition-colors cursor-pointer flex items-center gap-1"
-              >
-                <AlertTriangle className="w-3.5 h-3.5 text-zinc-900" /> Avisos y Urgencias
-              </button>
-              <span>·</span>
-              <button
-                type="button"
-                onClick={() => navigate('/partes')}
-                className="hover:text-[#0F2342] transition-colors cursor-pointer flex items-center gap-1"
-              >
-                <ClipboardCheck className="w-3.5 h-3.5 text-amber-600" /> Partes
-              </button>
+                  {/* Listado de Notificaciones */}
+                  <div className="mt-3.5 flex-1 flex flex-col min-h-0">
+                    <div className="flex items-center justify-between mb-2 shrink-0">
+                      <span className="text-[10px] font-extrabold uppercase tracking-wider text-purple-900/80">
+                        Vencimientos de flota
+                      </span>
+                      {notificacionesAlertas.length > 0 && (
+                        <span className="text-[10px] font-bold text-purple-700">
+                          {notificacionesAlertas.length} {notificacionesAlertas.length === 1 ? 'alerta' : 'alertas'}
+                        </span>
+                      )}
+                    </div>
+
+                    {notificacionesAlertas.length === 0 ? (
+                      <div className="flex-1 min-h-[140px] rounded-xl bg-white/80 border border-purple-200/60 flex flex-col items-center justify-center p-4 text-center">
+                        <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center mb-1.5">
+                          <CheckCircle2 className="w-5 h-5 stroke-[2.2]" />
+                        </div>
+                        <p className="text-sm font-black text-[#0F2342]">Todo al día</p>
+                        <p className="text-[11px] font-medium text-slate-500 mt-0.5">
+                          No hay vencimientos de vehículos ni seguros en los próximos 15 días.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5 flex-1 overflow-y-auto pr-1">
+                        {notificacionesAlertas.map((notif) => (
+                          <div
+                            key={notif.id}
+                            onClick={() => navigate('/vehiculos')}
+                            className="group bg-white hover:bg-purple-50/90 border border-purple-200/80 hover:border-purple-400 rounded-xl px-3 py-2 flex items-center justify-between gap-2 transition-all cursor-pointer shadow-2xs"
+                            title={`Ir a Vehículos: ${notif.matricula} - ${notif.titulo}`}
+                          >
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] font-mono font-black text-purple-900 bg-purple-100 px-1.5 py-0.5 rounded border border-purple-200 shrink-0">
+                                  {notif.matricula}
+                                </span>
+                                <p className="text-xs font-bold text-[#0F2342] truncate group-hover:text-purple-700 transition-colors">
+                                  {notif.titulo}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2 mt-0.5 pl-1">
+                                <p className="text-[10px] font-semibold text-slate-600 truncate">
+                                  {notif.marcaModelo} · {notif.fecha}
+                                </p>
+                              </div>
+                            </div>
+
+                            <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border shrink-0 ${
+                              notif.diasRestantes < 0
+                                ? 'bg-red-100 text-red-700 border-red-300 animate-pulse'
+                                : notif.diasRestantes === 0
+                                ? 'bg-rose-100 text-rose-800 border-rose-300 animate-pulse font-black'
+                                : notif.diasRestantes <= 5
+                                ? 'bg-amber-100 text-amber-800 border-amber-300'
+                                : 'bg-purple-100 text-purple-800 border-purple-300'
+                            }`}>
+                              {notif.diasRestantes < 0
+                                ? `Venció hace ${Math.abs(notif.diasRestantes)}d`
+                                : notif.diasRestantes === 0
+                                ? '¡Hoy!'
+                                : `En ${notif.diasRestantes}d`}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Botón Inferior Púrpura */}
+                <div className="px-4 pb-4 pt-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => navigate('/vehiculos')}
+                    className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-700 hover:from-purple-700 hover:to-indigo-800 text-white font-bold text-xs sm:text-sm shadow-sm hover:shadow transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
+                  >
+                    <Truck className="w-3.5 h-3.5 stroke-[2.5]" />
+                    <span>Ver vehículos</span>
+                  </button>
+                </div>
+              </div>
+
             </div>
           </div>
         </div>
@@ -1942,6 +2002,16 @@ export default function App() {
         <Route path="/catalogo" element={
           <ProtectedRoute allowedRoles={['super-administrador', 'administrador', 'editor', 'tecnico']} user={loggedUser}>
             <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Catalogo user={loggedUser} isTecnicoMode={loggedUser?.rol === 'tecnico'} /></PageLayout>
+          </ProtectedRoute>
+        } />
+        <Route path="/taller" element={
+          <ProtectedRoute allowedRoles={['super-administrador', 'administrador', 'editor', 'tecnico']} user={loggedUser}>
+            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Taller /></PageLayout>
+          </ProtectedRoute>
+        } />
+        <Route path="/vehiculos" element={
+          <ProtectedRoute allowedRoles={['super-administrador', 'administrador', 'editor', 'tecnico']} user={loggedUser}>
+            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Vehiculos /></PageLayout>
           </ProtectedRoute>
         } />
         <Route path="/articulos" element={

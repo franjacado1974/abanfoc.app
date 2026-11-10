@@ -2774,10 +2774,46 @@ export const generarActaExtintoresPDF = async (
         key: string;
       }
 
+      // Reordenar items para DETECCIÓN DE MONÓXIDO (CO) o cualquier sistema con Cobertura y Ubicación de Central:
+      // Colocar "Ubicación de la central" justo después de "Área de cobertura de este sistema"
+      let itemsParaAgrupar = [...checkItemsDeSistema];
+
+      const isItemUbicCentral = (it: any) => {
+        if (!it) return false;
+        const l = (it.label || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        const k = (it.key || '').toLowerCase();
+        return l.includes('ubicacion de la central') ||
+               l.includes('ubicacion central') ||
+               l.includes('centralita') ||
+               (l.includes('central') && (l.includes('ubicaci') || l.includes('situaci') || l.includes('emplazamiento') || l.includes('donde') || l.includes('lugar'))) ||
+               (l.includes('ubicaci') && (k.includes('central') || l.includes('central'))) ||
+               k === 'item_1784698128934';
+      };
+
+      const isItemCobertura = (it: any) => {
+        if (!it) return false;
+        const l = (it.label || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        const k = (it.key || '').toLowerCase();
+        return l.includes('cobertura') || k.includes('cobertura') || k === 'item_1783446879754';
+      };
+
+      const ubicCentralIdx = itemsParaAgrupar.findIndex(isItemUbicCentral);
+      const coberturaIdx = itemsParaAgrupar.findIndex(isItemCobertura);
+
+      if (ubicCentralIdx !== -1 && coberturaIdx !== -1 && ubicCentralIdx !== coberturaIdx + 1) {
+        const [ubicItem] = itemsParaAgrupar.splice(ubicCentralIdx, 1);
+        const newCoberturaIdx = itemsParaAgrupar.findIndex(isItemCobertura);
+        if (newCoberturaIdx !== -1) {
+          itemsParaAgrupar.splice(newCoberturaIdx + 1, 0, ubicItem);
+        } else {
+          itemsParaAgrupar.splice(coberturaIdx + 1, 0, ubicItem);
+        }
+      }
+
       const sectionsList: SectionData[] = [];
       let currentSection: SectionData | null = null;
 
-      for (const item of checkItemsDeSistema) {
+      for (const item of itemsParaAgrupar) {
         if (item.tipoRespuesta === 'seccion' || item.tipoRespuesta === 'titulo') {
           currentSection = {
             title: item.label || 'Sección',
@@ -2885,7 +2921,8 @@ export const generarActaExtintoresPDF = async (
                                lbl.includes('imagen') ||
                                lbl.includes('fecha de revision') ||
                                lbl.includes('fecha revision') ||
-                               item.tipoRespuesta === 'imagen';
+                               item.tipoRespuesta === 'imagen' ||
+                               (sec.title.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes('DATOS INSTALACI') && isItemUbicCentral(item));
                                
             const bypassFixed = esSistemaVerticalPuro || nombreSistemaUpper.includes('DETECCIÓN') || nombreSistemaUpper.includes('DETECCION');
             
@@ -3222,7 +3259,8 @@ export const generarActaExtintoresPDF = async (
                 const isCheckItem = isCheckOInspeccion(itemLblNorm, item);
                 const isAbastecePregunta = !isCheckItem && (itemLblNorm.includes('instalaciones que abastece') || (itemLblNorm.includes('abastece') && !itemLblNorm.includes('quedo') && !itemLblNorm.includes('quedó') && !itemLblNorm.includes('comprobacion')));
                 const isCuadroControlPregunta = !isCheckItem && ((itemLblNorm.includes('cuadro') && (itemLblNorm.includes('control') || itemLblNorm.includes('mando'))) || itemLblNorm.includes('ubicacion del cuadro') || itemLblNorm.includes('ubicacion cuadro'));
-                const isAreaCobertura = !isCheckItem && (itemLblNorm.includes('cobertura') || isManifoldRefOUbic || isAbastecePregunta || isCuadroControlPregunta);
+                const isUbicacionCentralPregunta = !isCheckItem && isItemUbicCentral(item);
+                const isAreaCobertura = !isCheckItem && (isItemCobertura(item) || isManifoldRefOUbic || isAbastecePregunta || isCuadroControlPregunta || isUbicacionCentralPregunta);
 
                 if (isAreaCobertura) {
                   let labelText = (item.label || '').trim().replace(/[\.:\s]+$/, '') + ':';
@@ -3310,7 +3348,8 @@ export const generarActaExtintoresPDF = async (
                     const lblNorm = itemNorm ? (itemNorm.label || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") : '';
                     const isCheckNorm = isCheckOInspeccion(lblNorm, itemNorm);
                     const isCuadroControlPregunta = !isCheckNorm && ((lblNorm.includes('cuadro') && (lblNorm.includes('control') || lblNorm.includes('mando'))) || lblNorm.includes('ubicacion del cuadro') || lblNorm.includes('ubicacion cuadro'));
-                    const isAreaCobertura = !isCheckNorm && (lblNorm.includes('cobertura') || data.cell.colSpan === 2 || isCuadroControlPregunta);
+                    const isUbicacionCentralPregunta = !isCheckNorm && isItemUbicCentral(itemNorm);
+                    const isAreaCobertura = !isCheckNorm && (isItemCobertura(itemNorm) || data.cell.colSpan === 2 || isCuadroControlPregunta || isUbicacionCentralPregunta);
 
                     if (isAreaCobertura) {
                       data.cell.styles.fillColor = [255, 249, 196]; // amarillo claro #FFF9C4
@@ -3394,7 +3433,8 @@ export const generarActaExtintoresPDF = async (
                     const lblNorm = itemNorm ? (itemNorm.label || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") : '';
                     const isCheckNorm = isCheckOInspeccion(lblNorm, itemNorm);
                     const isCuadroControlPregunta = !isCheckNorm && ((lblNorm.includes('cuadro') && (lblNorm.includes('control') || lblNorm.includes('mando'))) || lblNorm.includes('ubicacion del cuadro') || lblNorm.includes('ubicacion cuadro'));
-                    const isAreaCobertura = !isCheckNorm && (lblNorm.includes('cobertura') || data.cell.colSpan === 2 || isCuadroControlPregunta);
+                    const isUbicacionCentralPregunta = !isCheckNorm && isItemUbicCentral(itemNorm);
+                    const isAreaCobertura = !isCheckNorm && (isItemCobertura(itemNorm) || data.cell.colSpan === 2 || isCuadroControlPregunta || isUbicacionCentralPregunta);
 
                     if (isAreaCobertura) {
                       const { x, y, height } = data.cell;
@@ -3408,6 +3448,8 @@ export const generarActaExtintoresPDF = async (
                         const lLower = (itemNorm.label || '').toLowerCase();
                         if (lLower.includes('cuadro')) {
                           rawVal = eq[itemNorm.key] || (eq as any).cuadroControl || (eq as any).ubicacionCuadro || (eq as any).cuadro || '';
+                        } else if (isItemUbicCentral(itemNorm) || lLower.includes('central')) {
+                          rawVal = eq[itemNorm.key] || (eq as any).ubicacionCentral || (eq as any).central || eq.ubicacion || '';
                         } else if (lLower.includes('ubicacion') || lLower.includes('cobertura')) {
                           rawVal = eq.ubicacion || eq.cobertura || rawVal;
                         } else if (lLower.includes('referencia')) {
@@ -4996,7 +5038,7 @@ export const generarAlbaranPDF = async (
   firmaCliente?: string,
   firmaTecnico?: string,
   nombreFirmante?: string,
-  items?: { cantidad: number; concepto: string; descripcion: string; precioUnidad: number; subtotal: number }[],
+  items?: { cantidad: number; concepto: string; descripcion: string; precioUnidad: number; descuento?: number; subtotal: number }[],
   empresa?: Record<string, any>,
   noSave?: boolean,
   titulo?: string,
@@ -5105,6 +5147,7 @@ export const generarAlbaranPDF = async (
         item.concepto || '',
         formattedDesc,
         formatM(item.precioUnidad),
+        ((item as any).descuento && (item as any).descuento > 0) ? `${(item as any).descuento}%` : '0%',
         formatM(item.subtotal)
       ];
     });
@@ -5205,6 +5248,7 @@ export const generarAlbaranPDF = async (
         conceptoStr,
         formattedDesc,
         '',
+        '',
         ''
       ];
     });
@@ -5218,24 +5262,25 @@ export const generarAlbaranPDF = async (
 
   const tableDataConTotales = [
     ...tableData,
-    ['', '', '', 'Total:', formatM(subtotalTotal)],
-    ['', '', '', `IVA (${ivaPorc}%):`, formatM(ivaImporte)],
-    ['', '', '', 'Total + IVA:', formatM(totalConIva)],
+    ['', '', '', '', 'Total:', formatM(subtotalTotal)],
+    ['', '', '', '', `IVA (${ivaPorc}%):`, formatM(ivaImporte)],
+    ['', '', '', '', 'Total + IVA:', formatM(totalConIva)],
   ];
 
   autoTable(doc, {
     startY: headerY + 65,
-    head: [['Cant.', 'Concepto', 'Descripción', 'Precio ud.', 'Subtotal']],
+    head: [['Cant.', 'Concepto', 'Descripción', 'Precio ud.', 'Dto. %', 'Subtotal']],
     body: tableDataConTotales,
     theme: 'grid',
     headStyles: { fillColor: [128, 0, 32], halign: 'center', lineColor: [255, 255, 255], lineWidth: 0.3 },
     bodyStyles: { lineColor: [255, 255, 255], lineWidth: 0.3 },
     columnStyles: {
       0: { halign: 'center', cellWidth: 16 },
-      1: { cellWidth: 40 },
+      1: { cellWidth: 38 },
       2: { cellWidth: 'auto' },
-      3: { halign: 'right', cellWidth: 25 },
-      4: { halign: 'right', cellWidth: 25 }
+      3: { halign: 'right', cellWidth: 22 },
+      4: { halign: 'center', cellWidth: 16 },
+      5: { halign: 'right', cellWidth: 22 }
     },
     didParseCell: (data: any) => {
       if (data.section === 'body' && data.row.index >= totalRows) {
@@ -5324,7 +5369,7 @@ export const generarAlbaranPDFView = async (
   firmaCliente?: string,
   firmaTecnico?: string,
   nombreFirmante?: string,
-  items?: { cantidad: number; concepto: string; descripcion: string; precioUnidad: number; subtotal: number }[],
+  items?: { cantidad: number; concepto: string; descripcion: string; precioUnidad: number; descuento?: number; subtotal: number }[],
   empresa?: Record<string, any>,
   titulo?: string,
   periodicidad?: string,

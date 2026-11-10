@@ -165,7 +165,7 @@ export default function Urgencias() {
     estado: 'Pendiente' as 'Pendiente' | 'En curso' | 'Parado' | 'Finalizado',
     observaciones: '',
     items: [
-      { cantidad: 1, concepto: 'Aviso', descripcion: '', precioUnidad: 0, subtotal: 0 }
+      { cantidad: 1, concepto: 'Aviso', descripcion: '', precioUnidad: 0, descuento: 0, subtotal: 0 }
     ]
   });
 
@@ -174,7 +174,7 @@ export default function Urgencias() {
       ...prev,
       items: [
         ...prev.items,
-        { cantidad: 1, concepto: 'Aviso', descripcion: '', precioUnidad: 0, subtotal: 0 }
+        { cantidad: 1, concepto: 'Aviso', descripcion: '', precioUnidad: 0, descuento: 0, subtotal: 0 }
       ]
     }));
   };
@@ -190,10 +190,11 @@ export default function Urgencias() {
     setFormData(prev => {
       const newItems = [...prev.items];
       const item = { ...newItems[index], [field]: value };
-      if (field === 'cantidad' || field === 'precioUnidad') {
+      if (field === 'cantidad' || field === 'precioUnidad' || field === 'descuento') {
         const cant = field === 'cantidad' ? (Number(value) || 0) : (Number(item.cantidad) || 0);
         const pUnidad = field === 'precioUnidad' ? (Number(value) || 0) : (Number(item.precioUnidad) || 0);
-        item.subtotal = cant * pUnidad;
+        const dto = field === 'descuento' ? (Number(value) || 0) : (Number(item.descuento) || 0);
+        item.subtotal = cant * pUnidad * (1 - dto / 100);
       }
       newItems[index] = item;
       return { ...prev, items: newItems };
@@ -385,7 +386,7 @@ export default function Urgencias() {
       estado: 'Pendiente',
       observaciones: '',
       items: [
-        { cantidad: 1, concepto: 'Aviso', descripcion: '', precioUnidad: 0, subtotal: 0 }
+        { cantidad: 1, concepto: 'Aviso', descripcion: '', precioUnidad: 0, descuento: 0, subtotal: 0 }
       ]
     });
     setIsModalOpen(true);
@@ -427,13 +428,21 @@ export default function Urgencias() {
       estado: item.estado || 'Pendiente',
       observaciones: item.nota || item.observaciones || '',
       items: item.items && item.items.length > 0
-        ? item.items
+        ? item.items.map(it => ({
+            cantidad: it.cantidad,
+            concepto: it.concepto,
+            descripcion: it.descripcion,
+            precioUnidad: it.precioUnidad,
+            descuento: it.descuento || 0,
+            subtotal: it.subtotal
+          }))
         : [
             {
               cantidad: 1,
               concepto: 'Aviso',
               descripcion: item.titulo || item.urgencia || item.nota || item.observaciones || '',
               precioUnidad: item.total || 0,
+              descuento: 0,
               subtotal: item.total || 0
             }
           ]
@@ -1740,8 +1749,9 @@ export default function Urgencias() {
                             <th className="px-3 py-2.5 text-center w-16">Cant.</th>
                             <th className="px-3 py-2.5 text-left w-52">Concepto</th>
                             <th className="px-3 py-2.5 text-left">Descripción</th>
-                            <th className="px-3 py-2.5 text-right w-28">P. Unidad</th>
-                            <th className="px-3 py-2.5 text-right w-28">Subtotal</th>
+                            <th className="px-3 py-2.5 text-right w-24">P. Unidad</th>
+                            <th className="px-3 py-2.5 text-right w-20">Dto. %</th>
+                            <th className="px-3 py-2.5 text-right w-24">Subtotal</th>
                             <th className="px-2 py-2.5 text-center w-10"></th>
                           </tr>
                         </thead>
@@ -1852,6 +1862,18 @@ export default function Urgencias() {
                                   onChange={e => updateItem(index, 'precioUnidad', parseFloat(e.target.value) || 0)}
                                   placeholder="0,00"
                                   className="w-full bg-zinc-50 border border-zinc-200 rounded-lg p-1.5 text-right font-mono text-xs outline-none focus:ring-1 focus:ring-red-500"
+                                />
+                              </td>
+                              <td className="p-2">
+                                <input
+                                  type="number"
+                                  step="0.5"
+                                  min="0"
+                                  max="100"
+                                  value={item.descuento === 0 ? '' : (item.descuento ?? '')}
+                                  onChange={e => updateItem(index, 'descuento', parseFloat(e.target.value) || 0)}
+                                  placeholder="0"
+                                  className="w-full bg-zinc-50 border border-zinc-200 rounded-lg p-1.5 text-right font-mono text-xs outline-none focus:ring-1 focus:ring-red-500 font-semibold"
                                 />
                               </td>
                               <td className="px-3 py-2 text-right font-bold text-zinc-900 font-mono text-xs whitespace-nowrap">

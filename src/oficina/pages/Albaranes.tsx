@@ -95,7 +95,7 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
     clienteId: '',
     centroId: '',
     fechaCreacion: new Date().toISOString(),
-    items: [{ cantidad: 1, concepto: '', descripcion: '', precioUnidad: 0, subtotal: 0 }],
+    items: [{ cantidad: 1, concepto: '', descripcion: '', precioUnidad: 0, descuento: 0, subtotal: 0 }],
     nombreFirmante: '',
     tecnicoId: '',
     facturado: false,
@@ -321,7 +321,7 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
   const addItem = () => {
     setForm({
       ...form,
-      items: [...form.items, { cantidad: 1, concepto: '', descripcion: '', precioUnidad: 0, subtotal: 0 }]
+      items: [...form.items, { cantidad: 1, concepto: '', descripcion: '', precioUnidad: 0, descuento: 0, subtotal: 0 }]
     });
   };
 
@@ -334,8 +334,11 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
     const newItems = form.items.map((item, i) => {
       if (i === index) {
         const updatedItem = { ...item, [field]: value } as Albaran['items'][0];
-        if (field === 'cantidad' || field === 'precioUnidad') {
-          updatedItem.subtotal = (updatedItem.cantidad || 0) * (updatedItem.precioUnidad || 0);
+        if (field === 'cantidad' || field === 'precioUnidad' || field === 'descuento') {
+          const cant = Number(updatedItem.cantidad) || 0;
+          const precio = Number(updatedItem.precioUnidad) || 0;
+          const dto = Number(updatedItem.descuento) || 0;
+          updatedItem.subtotal = cant * precio * (1 - dto / 100);
         }
         return updatedItem;
       }
@@ -455,7 +458,7 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
       clienteId: '',
       centroId: '',
       fechaCreacion: new Date().toISOString(),
-      items: [{ cantidad: 1, concepto: 'Revisión', descripcion: '', precioUnidad: 0, subtotal: 0 }],
+      items: [{ cantidad: 1, concepto: 'Revisión', descripcion: '', precioUnidad: 0, descuento: 0, subtotal: 0 }],
       nombreFirmante: '',
       tecnicoId: '',
       facturado: false,
@@ -524,7 +527,7 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
               onClick={() => {
                 setEditingId(null);
                 const nextId = generateNextAlbaranId();
-                setForm({ id: nextId, empresaId: '', clienteId: '', centroId: '', fechaCreacion: new Date().toISOString(), items: [{ cantidad: 1, concepto: '', descripcion: '', precioUnidad: 0, subtotal: 0 }], nombreFirmante: '', tecnicoId: '', facturado: false, numeroPedido: '' });
+                setForm({ id: nextId, empresaId: '', clienteId: '', centroId: '', fechaCreacion: new Date().toISOString(), items: [{ cantidad: 1, concepto: '', descripcion: '', precioUnidad: 0, descuento: 0, subtotal: 0 }], nombreFirmante: '', tecnicoId: '', facturado: false, numeroPedido: '' });
                 setView('form');
               }}
               className="ml-auto flex items-center justify-center gap-1.5 bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-xl font-bold shadow-md shadow-red-500/10 hover:shadow-lg hover:shadow-red-500/20 active:scale-95 transition-all text-xs cursor-pointer w-full sm:w-auto"
@@ -906,6 +909,7 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                         <th className="px-4 py-3 text-left w-48">Concepto</th>
                         <th className="px-4 py-3 text-left">Descripción</th>
                         <th className="px-4 py-3 text-right w-32">P. Unidad</th>
+                        <th className="px-3 py-3 text-right w-20">Dto. %</th>
                         <th className="px-4 py-3 text-right w-32">Subtotal</th>
                         <th className="px-2 py-3 rounded-r-xl w-10"></th>
                       </tr>
@@ -937,6 +941,7 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                             </div>
                           </td>
                           <td className="p-2"><input type="number" step="0.01" value={item.precioUnidad} onChange={e => updateItem(index, 'precioUnidad', parseFloat(e.target.value))} className="w-full text-right bg-transparent border-b border-transparent group-hover:border-zinc-200 outline-none p-1" /></td>
+                          <td className="p-2"><input type="number" min="0" max="100" step="1" value={item.descuento ?? 0} onChange={e => updateItem(index, 'descuento', parseFloat(e.target.value) || 0)} className="w-full text-right bg-transparent border-b border-transparent group-hover:border-zinc-200 outline-none p-1" /></td>
                           <td className="px-4 py-2 text-right font-bold text-zinc-900">{formatMoneda(item.subtotal)}</td>
                           <td className="p-2"><button type="button" onClick={() => removeItem(index)} className="p-1 text-zinc-300 hover:text-red-500 transition-colors"><Trash className="w-4 h-4" /></button></td>
                         </tr>
@@ -956,7 +961,7 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                         </div>
                         <div className="text-right shrink-0">
                           <p className="text-sm font-bold text-zinc-900">{formatMoneda(item.subtotal)}</p>
-                          <p className="text-[11px] font-medium text-zinc-500 mt-0.5">{item.cantidad} x {formatMoneda(item.precioUnidad)}</p>
+                          <p className="text-[11px] font-medium text-zinc-500 mt-0.5">{item.cantidad} x {formatMoneda(item.precioUnidad)}{item.descuento ? ` (Dto. ${item.descuento}%)` : ''}</p>
                         </div>
                       </div>
                       <div className="flex justify-end gap-2 mt-2 pt-3 border-t border-zinc-100">
@@ -1149,9 +1154,9 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                      />
                    </div>
 
-                   <div className="grid grid-cols-2 gap-4">
+                   <div className="grid grid-cols-3 gap-3">
                      <div className="space-y-1.5">
-                       <label className="text-xs font-bold text-zinc-500 uppercase">Precio Unidad</label>
+                       <label className="text-xs font-bold text-zinc-500 uppercase">P. Unidad</label>
                        <input
                           type="text"
                           inputMode="decimal"
@@ -1176,12 +1181,24 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                               setPrecioUnidadInput('0');
                             }
                           }}
-                          className="w-full px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl outline-none focus:ring-2 focus:ring-violet-500/20 text-right font-bold"
+                          className="w-full px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl outline-none focus:ring-2 focus:ring-violet-500/20 text-right font-bold text-sm"
+                        />
+                     </div>
+                     <div className="space-y-1.5">
+                       <label className="text-xs font-bold text-zinc-500 uppercase">Dto. %</label>
+                       <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="1"
+                          value={form.items[editingLineIndex].descuento ?? 0}
+                          onChange={e => updateItem(editingLineIndex, 'descuento', parseFloat(e.target.value) || 0)}
+                          className="w-full px-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl outline-none focus:ring-2 focus:ring-violet-500/20 text-right font-bold text-sm"
                         />
                      </div>
                      <div className="space-y-1.5">
                        <label className="text-xs font-bold text-zinc-500 uppercase">Subtotal</label>
-                       <div className="w-full px-3 py-2.5 bg-zinc-100 border border-zinc-200 rounded-xl text-right font-bold text-zinc-700">
+                       <div className="w-full px-2 py-2.5 bg-zinc-100 border border-zinc-200 rounded-xl text-right font-bold text-zinc-700 text-sm truncate">
                          {formatMoneda(form.items[editingLineIndex].subtotal)}
                        </div>
                      </div>

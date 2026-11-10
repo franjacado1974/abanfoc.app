@@ -1767,8 +1767,132 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
   - Los estados "Pendientes" y "En curso" funcionan como filtros estrictamente independientes y desacoplados (sin agruparlos en una sola opción).
 - **Paginación Predeterminada a 10 Líneas**:
   - El selector de límite de partes inicia predeterminado en 10 filas (`useState<number | 'todos'>(10)`).
+- **Recuento Reactivo y Marca Visual por Estado (`countsPorEstado`, `( X )`)**:
+  - En el selector de filtro por estado (`PartesTrabajoOperaciones.tsx`), se evalúa reactivamente el número de partes que corresponden a cada estado (`TODOS`, `Pendiente`, `En curso`, `Parado`, `Finalizado`) considerando la pestaña de operación activa (`tipoFilter`) y las búsquedas o fechas aplicadas.
+  - El botón selector muestra la etiqueta del estado acompañada de una marca destacada con el recuento, ej. `Pendientes ( 3 )`. Cada opción del desplegable y del selector móvil refleja igualmente su número entre paréntesis.
 - **Integración en Panel Técnico (`DashboardTecnico.tsx`)**:
   - La tarjeta de operaciones en el Dashboard del Técnico enlaza directamente a Partes de Trabajo unificadas (`partes-trabajo`) y consolida los contadores globales de tareas activas de reparaciones, instalaciones, pruebas técnicas y urgencias.
+
+---
+
+## 122. Blindaje Inviolable del Campo Descuento ("Dto. %") en Albaranes Multiorigen y Generador de PDF
+- **Campo de Descuento Obligatorio en Partidas de Albarán (`Albaranes.tsx`, `PartesTrabajoOperaciones.tsx`, `Reparaciones.tsx`, `Instalaciones.tsx`, `Urgencias.tsx`, `oficina/pages/Albaranes.tsx`)**:
+  - En todos los formularios y tablas donde se configuren o generen partidas de albarán (escritorio y móvil), DEBE existir el campo de descuento con cabecera `"Dto. %"`, posicionado directamente después de `"P. Unidad"` (o `"Precio ud."`) y antes de `"Subtotal"`.
+  - El campo acepta valores numéricos de porcentaje (0 a 100) y se inicializa predeterminado en `0`.
+- **Cálculo Matemático Inviolable del Subtotal por Partida**:
+  - El cálculo del subtotal en cada línea debe incorporar incondicionalmente el descuento:
+    $$\text{subtotal} = \text{cantidad} \times \text{precioUnidad} \times \left(1 - \frac{\text{descuento}}{100}\right)$$
+- **Columna Reglamentaria en la Tabla del PDF Oficial (`pdfGenerator.ts` y `recursos-compartidos/services/pdfGenerator.ts`)**:
+  - En la función `generarAlbaranPDF`, la tabla de conceptos debe contar obligatoriamente con 6 columnas en su cabecera:
+    `['Cant.', 'Concepto', 'Descripción', 'Precio ud.', 'Dto. %', 'Subtotal']`.
+  - Cada fila debe imprimir el porcentaje de descuento formateado (`${descuento}%` o `0%` si es 0 o no aplica).
+  - Los resúmenes de pie de tabla (`Total:`, `IVA:`, `Total + IVA:`) deben mantener la cuadrícula alineando el texto en la quinta columna y el importe en la sexta columna.
+- **Tipado e Interfaces de Datos (`firebase.tsx` y `recursos-compartidos/firebase/firebase.tsx`)**:
+  - La propiedad `descuento?: number;` forma parte reglamentaria de la estructura de `items` en `Albaran`, `ReparacionItem`, `InstalacionItem`, `UrgenciaItem` y `TareaOperacionUnificada`.
+
+---
+
+## 123. Blindaje Inviolable de Cabecera y Barra de Filtros en Menú Calendario (`Calendario.tsx`)
+- **Alineación Izquierda del Título de Mes y Subtítulo Fijo**:
+  - En `src/Calendario.tsx`, la cabecera del calendario debe alinear a la izquierda el título con el nombre del mes y año en curso.
+  - Directamente debajo del título del mes, el subtítulo debe contener exclusivamente el texto: **`Calendario unificado de todas las tareas.`**
+- **Disposición Uniforme en una Sola Línea**:
+  - Todos los botones de filtrado por tipo de tarea (Revisiones, Reparaciones, Instalaciones, Urgencias, etc.) deben disponerse en una sola línea horizontal continua.
+  - Los botones de navegación y acciones ("Hoy", anterior, siguiente, etc.) deben posicionarse a la derecha con un tamaño uniforme y alineados en la misma fila para mantener el equilibrio visual.
+
+---
+
+## 124. Blindaje Inviolable del Botón Rápido "+ Crear artículo" con Fotografía, Eliminación de Fondo y 25 Familias en Presupuestos (`Presupuestos.tsx`, `constants.ts`, `Articulos.tsx`)
+- **Botón Rojo "+ Crear artículo" a la Derecha de Añadir Artículo y en Filas de Capítulo**:
+  - En la barra de acciones de líneas de presupuesto y en cada fila de capítulo de `src/Presupuestos.tsx`, DEBE ubicarse un botón de color **rojo** (`bg-red-600 hover:bg-red-700 text-white font-bold text-xs`) con el texto exacto **`+ Crear artículo`** posicionado a la derecha de "Añadir artículo".
+  - Al pulsarlo, abre el modal flotante para dar de alta un artículo sin salir de la edición del presupuesto y cuenta con botón explícito para volver al presupuesto sin perder cambios.
+- **Subida de Fotografía y Sincronización en Tiempo Real con Catálogo**:
+  - El modal de creación rápida de artículos incorpora carga de imagen con procesamiento transparente mediante `removeWhiteBackground` y guardado directo en Firebase Storage (`articulos_fotos/...`).
+  - El artículo creado se guarda simultáneamente en la colección `articulos` de Firestore y en `firecheck_db_articulos` de LocalStorage, quedando disponible de inmediato tanto en el presupuesto en curso como en el menú **Catálogo** (`/catalogo`).
+- **Integración de las 25 Familias de Sistemas Existentes (`FAMILIAS_SISTEMAS_EXISTENTES`)**:
+  - Definida en `src/constants.ts` la lista canónica de las 25 familias de sistemas contra incendios, conectada a los desplegables de familia en `Presupuestos.tsx` y `Articulos.tsx`.
+
+---
+
+## 125. Blindaje Inviolable del Subtítulo de Partes de Trabajo (`PartesTrabajoOperaciones.tsx`)
+- **Texto Obligatorio del Subtítulo**:
+  - En `src/PartesTrabajoOperaciones.tsx`, debajo del título principal "Partes de Trabajo", el texto descriptivo debe ser exactamente:
+    **`Gestion y seguimiento de los partes y tareas.`**
+  - Queda prohibido volver a listar la descripción antigua detallando albaranes o firmas en dicho subtítulo.
+
+---
+
+## 126. Blindaje Inviolable de Plantillas de Sistemas y Otras Plantillas en Configuración (`Ajustes.tsx`, `plantillas.ts`, `FormBuilderPlantillas.tsx`)
+- **Dos Menús Independientes en Configuración de Salamandra (`Ajustes.tsx`)**:
+  - En la cuadrícula de configuración de Salamandra deben existir dos tarjetas separadas e independientes:
+    1. **"Plantillas de sistemas"**: Abre el constructor visual de plantillas sobre la colección `'plantillas'` para sistemas de protección contra incendios normativos.
+    2. **"Otras plantillas"**: Abre el constructor visual sobre la colección `'otras_plantillas'` para vehículos, taller, herramientas u otros temas operativos.
+- **Constructor de Formularios Completo y Multi-colección (`FormBuilderPlantillas.tsx`, `plantillas.ts`)**:
+  - `FormBuilderPlantillas` acepta las propiedades `coleccion?: string`, `titulo?: string` e `isOtrasPlantillas?: boolean`, permitiendo crear plantillas, añadir preguntas con cualquier tipo de respuesta (`check`, `texto`, `texto-largo`, `numero`, `fecha`, `imagen`, `desplegable`, `tabla`), ordenar, duplicar, subir imagen y vista previa en tiempo real.
+  - Todas las operaciones CRUD de `src/plantillas.ts` soportan el parámetro `coleccionNom: string = COLECCION_PLANTILLAS`.
+  - Se incorporan `OTRAS_PLANTILLAS_POR_DEFECTO` y `inicializarOtrasPlantillasPorDefecto()` para inicializar plantillas de ejemplo de vehículos (`V01`) y taller (`T01`).
+
+---
+
+## 127. Blindaje Inviolable del Módulo Vehículos (`Vehiculos.tsx`), Tarjetas Limpias Exteriores, Ficha Interior Completa y 4 Tarjetas en el Menú HOY con Alertas de 15 Días (`App.tsx`, `firebase.tsx`)
+- **Tarjetas Exteriores Limpias en el Listado de Vehículos (`Vehiculos.tsx`)**:
+  - En la vista principal del menú `/vehiculos`, los vehículos se muestran en una cuadrícula de tarjetas donde por fuera **solo se ve la matrícula** (en placa real española con Eurobanda azul `#003399`, corona de 12 estrellas amarillas `#FFCC00` de la UE y letra 'E'), **la marca y el modelo**, y la fotografía o icono del vehículo, junto con el enlace *"Entrar al vehículo →"*.
+  - La placa de matrícula se posiciona al lado derecho de la marca y modelo en una sola línea armónica.
+- **Ficha Completa al Entrar en el Vehículo y Cabecera Compacta**:
+  - Al pulsar en cualquier tarjeta, se accede a la vista detallada del vehículo con:
+    1. Botón superior: **`← Volver al listado de vehículos`**.
+    2. Datos completos en cabecera: Conductor/técnico asignado, kilometraje, tipo de vehículo, notas y foto.
+    3. **Marca, Modelo y Matrícula Real**: El nombre del vehículo se acompaña en la misma fila a su derecha de la placa de matrícula española oficial de tamaño grande (`size="lg"`).
+    4. **Botones de Acción en Cabecera**: Los botones (**Editar vehículo** y **Eliminar vehículo**) se disponen alineados a la derecha de la cabecera superior con altura uniforme (`h-9`).
+    5. **Tabla de Preguntas Compacta con Estilo Cebra y Alertas de Caducidad al Lado del Título**:
+       - Al lado del título **`INFORMACIÓN DEL VEHICULO`**, se disponen en cápsulas compactas las alertas y fechas de caducidad del Seguro, ITV y mantenimiento.
+       - Columna `Tipo` eliminada.
+       - Líneas alternadas estilo cebra en color blanco y azul suave (`bg-white` y `bg-blue-50/40`).
+       - Filas compactas de altura reducida (`py-2 px-3`).
+       - Retirado el texto de `* Requerido`.
+       - Textos de la tabla sin negrita (`font-normal` / `font-medium`).
+       - Controles interactivos (OK/Fallo, inputs, selector de opciones, notas individuales, subida y visualizador en pantalla completa de fotografías para tipos `imagen`), más botón **"Guardar Revisión"**.
+- **Tarjeta "4. Notificaciones" en el Menú "HOY" (`src/App.tsx`)**:
+  - El panel principal de "HOY" cuenta exactamente con **4 tarjetas** en cuadrícula adaptada (`grid-cols-1 md:grid-cols-2 xl:grid-cols-4`):
+    1. `1. Facturación` (Naranja: albaranes pendientes de facturar).
+    2. `2. Tareas de Hoy` (Azul: intervenciones y revisiones del día).
+    3. `3. Stock` (Verde: artículos con existencias bajas).
+    4. `4. Notificaciones` (Púrpura / Carmesí: alertas y vencimientos de flota).
+- **Lógica Inviolable de Preaviso de 15 Días**:
+  - Cualquier alerta de vehículo cuya fecha de vencimiento esté a **15 días o menos** de la fecha actual (o ya vencida) debe aparecer automáticamente en la tarjeta `4. Notificaciones` del menú "HOY" con la matrícula, título de la alerta, fecha y días restantes, enlazando directamente al módulo de vehículos.
+
+---
+
+## 128. Blindaje Inviolable del Reporte de Anomalías en PDF Apaisado, Generación de Presupuesto Borrador desde Catálogo y Pantalla Dividida (Split-Screen) de Revisión (`Partes.tsx`, `Presupuestos.tsx`, `pdfReporteAnomaliasGenerator.ts`, `presupuestoBorradorFromAnomalias.ts`, `firebase.tsx`)
+- **Reporte de Anomalías en PDF Apaisado (`generarReporteAnomaliasPDF` en `src/pdfReporteAnomaliasGenerator.ts`)**:
+  - Orientación horizontal apaisada obligatoria (`new jsPDF('l', 'mm', 'a4')`, ancho 297mm, tabla de 269mm útiles).
+  - Tipografía fina sin negrita (`fontStyle: 'normal'`) con tamaño `fontSize: 6.5` en celdas y `cellPadding: { top: 1.2, bottom: 1.2, left: 2.5, right: 2.5 }` para máxima esbeltez visual y filas compactas.
+  - Columnas distribuidas para máxima legibilidad en una sola línea plana: `SISTEMA` (50mm), `EQUIPO` (44mm, código y tipo en una sola línea sin salto `\n`), `UBICACIÓN` (50mm) y `ANOMALÍA / DEFECTO DETECTADO` (`auto`, 125mm de ancho libre en color rojo tenue `[185, 28, 28]` sin negrita).
+  - Cabecera con datos de Empresa Mantenedora, Cliente, Centro, Dirección, Nº Mantenimiento, Fecha y Técnico, adaptada al ancho apaisado.
+  - Mensaje verde de revisión sin anomalías si no se detectan incidencias.
+- **Generación Automática de Presupuesto Borrador (`generarPresupuestoBorradorDesdeAnomalias` en `src/services/presupuestoBorradorFromAnomalias.ts`)**:
+  - Escanea todas las anomalías desglosadas por equipo y busca coincidencias inteligentes semánticas en el catálogo de artículos (`firecheck_db_articulos` / Firestore `articulos`).
+  - Coincidencias soportadas: retimbrados de extintores y BIEs, sustituciones > 20 años por equipo nuevo o tramo de manguera, manómetros, señalización fotoluminiscente, detectores, pulsadores, sirenas, baterías, luminarias de emergencia y recipientes de gas > 10 años.
+  - Si encuentra artículo afín, genera la partida valorada con código, concepto, precio de venta del catálogo y capítulo por sistema. Si no hay coincidencia exacta, genera partida manual con precio 0 y descripción del equipo, ubicación y defecto para ajuste manual.
+  - Crea el presupuesto en estado `'Borrador'` con numeración correlativa `PRE.YYXXX`, cálculos de base imponible, IVA y total, y persiste las anomalías en `anomaliasReporte`.
+- **Opciones en el Modal de Descarga de Partes de Trabajo (`Partes.tsx`)**:
+  - En `showDownloadModal`, se mantienen accesibles e independientes las 6 opciones:
+    1. *Acta de Revisión*
+    2. *Certificado*
+    3. *Albarán de Trabajo*
+    4. *Contrato de Mantenimiento*
+    5. *Reporte de anomalías (PDF)*
+    6. *Generar presupuesto borrador*
+  - Al completar la generación de un presupuesto borrador, redirige automáticamente a `/presupuestos` mediante `navigate('/presupuestos', { state: { editarPresupuestoId, anomalias } })`.
+- **Pantalla Dividida (Split-Screen) en Presupuestos (`src/Presupuestos.tsx`)**:
+  - Al abrir un presupuesto que contenga anomalías vinculadas (`anomaliasSplitList` o `anomaliasReporte`), el modal de edición se expande a pantalla completa (`max-w-[98vw] xl:max-w-[97vw] h-[95vh]`) y se divide en 2 paneles:
+    1. **Panel Izquierdo (Vista previa de anomalías)**: Tarjetas con Sistema, Equipo, Ubicación, texto de anomalía en rojo, buscador en tiempo real, indicador de estado (`✓ En presupuesto` / `Pendiente`) y botón rápido `+ Añadir partida a presupuesto` para incorporar o reincorporar partidas al presupuesto con un clic.
+    2. **Panel Derecho (Editor del presupuesto)**: El formulario íntegro del presupuesto (cliente, centro, partidas, catálogo, descuentos, totales y guardar).
+  - Botón en la cabecera para alternar entre "Ocultar panel anomalías" y "Ver anomalías al lado".
+  - Presupuestos convencionales sin anomalías conservan intacta su visualización estándar (`max-w-6xl xl:max-w-7xl`).
+
+
+
 
 
 

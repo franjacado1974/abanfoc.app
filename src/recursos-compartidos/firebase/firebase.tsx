@@ -68,7 +68,7 @@ export interface Pedido {
   titulo: string;
   fechaCreacion: string;
   fechaPrevista?: string;
-  items: { cantidad: number; concepto: string; descripcion: string; precioUnidad: number; subtotal: number; }[];
+  items: { cantidad: number; concepto: string; descripcion: string; precioUnidad: number; descuento?: number; subtotal: number; }[];
   estado: 'Pendiente' | 'En Proceso' | 'Completado';
   presupuestoId?: string;
   numeroPedido?: string;
@@ -82,7 +82,7 @@ export interface Albaran {
   clienteId: string;
   centroId: string;
   fechaCreacion: string;
-  items: { cantidad: number; concepto: string; descripcion: string; precioUnidad: number; subtotal: number; }[];
+  items: { cantidad: number; concepto: string; descripcion: string; precioUnidad: number; descuento?: number; subtotal: number; }[];
   nombreFirmante: string;
   tecnicoId: string;
   facturado: boolean;
