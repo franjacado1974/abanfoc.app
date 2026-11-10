@@ -1,4 +1,4 @@
-export const APP_VERSION = 'V.10.11.26.B';
+export const APP_VERSION = 'V.10.11.26.C';
 
 export const FAMILIAS_SISTEMAS_EXISTENTES: string[] = [
   'SISTEMA EXTINTORES',
