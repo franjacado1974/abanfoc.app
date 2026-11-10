@@ -186,7 +186,6 @@ export async function generarPresupuestoBorradorDesdeAnomalias(
         descripcion: `Subsanación en ${item.sistemaNombre} - Eq. ${item.codigo} (${item.ubicacion}): ${item.anomalia}`,
         cantidad: 1,
         precioUnidad: pUnit,
-        descuento: 0,
         subtotal: pUnit,
         capitulo: item.sistemaNombre
       });
@@ -199,7 +198,6 @@ export async function generarPresupuestoBorradorDesdeAnomalias(
         descripcion: `Equipo ${item.codigo} (${item.tipo}) en ${item.ubicacion} - Sistema: ${item.sistemaNombre}`,
         cantidad: 1,
         precioUnidad: 0,
-        descuento: 0,
         subtotal: 0,
         capitulo: item.sistemaNombre
       });

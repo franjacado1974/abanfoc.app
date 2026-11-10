@@ -337,7 +337,6 @@ export default function Presupuestos() {
         cantidad: 1,
         precioUnidad: pUnit,
         precioUnidadInput: formatDecimalInput(pUnit),
-        descuento: 0,
         subtotal: pUnit,
         capitulo: anomItem.sistemaNombre,
         familia: artCoincidente.familia || ''
@@ -352,7 +351,6 @@ export default function Presupuestos() {
         cantidad: 1,
         precioUnidad: 0,
         precioUnidadInput: '0',
-        descuento: 0,
         subtotal: 0,
         capitulo: anomItem.sistemaNombre,
         familia: ''
