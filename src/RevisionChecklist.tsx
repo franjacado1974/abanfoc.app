@@ -25,7 +25,7 @@ import SistemaAlumbradoEmergencia from './components/RevisionSistemas/SistemaAlu
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Save, Layers, ChevronDown, ChevronUp, Plus, X, CheckCircle2, AlertTriangle, PenLine, RotateCcw, CheckCheck, Lock, MessageSquare, Unlock, Calendar, Wifi, WifiOff, RefreshCw } from 'lucide-react';
-import { addEquipoInstalado, addAlbaran, updateEquipoInstalado, updateParte as updateParteFirestore, updateCentro, subscribePartes, subscribeCentros, subscribeClientes, subscribeCentroSistemas, subscribeEquiposInstalados, getEquiposInstalados, subscribeArticulos, subscribeSistemasCategorias, generateNumeroMantenimiento, uploadFile, obtenerSiguienteNumeroAlbaran, type Albaran, type ChecklistItem } from './firebase';
+import { addEquipoInstalado, addAlbaran, updateEquipoInstalado, updateParte as updateParteFirestore, updateCentro, subscribePartes, subscribeCentros, subscribeClientes, subscribeCentroSistemas, subscribeEquiposInstalados, getEquiposInstalados, subscribeArticulos, subscribeSistemasCategorias, generateNumeroMantenimiento, uploadFile, obtenerSiguienteNumeroAlbaran, resolverPrecioUnitarioContrato, obtenerCuotaFijaContrato, obtenerEmpresaAvanfoc, type Albaran, type ChecklistItem } from './firebase';
 import { subscribePlantillas, subscribeItemsDePlantilla, type ItemPlantilla } from './plantillas';
 import { getParteOfflineBundle, updateParteOfflineData, getPendingSyncItems, markSyncItemDone, markSyncItemFailed, addPendingSyncItem } from './offlineDB';
 import type { Centro, Parte, Cliente, CentroSistema, EquipoInstalado } from './Centros';
@@ -2061,15 +2061,31 @@ export default function RevisionChecklist() {
 
             const numMantenimiento = parte?.numeroMantenimiento || await generateNumeroMantenimiento();
 
+            // Recuperar el centro más reciente de localStorage o memoria para asegurar datos de contrato frescos
+            const centrosGuardados: Centro[] = (() => {
+                try { return JSON.parse(localStorage.getItem('firecheck_db_centros') || '[]'); } catch { return []; }
+            })();
+            const effectiveCentroId = centroId || parte?.centroId || centro?.id || (centro as any)?._docId || '';
+            const targetCentro: Centro | null = centrosGuardados.find((c: any) => 
+                (effectiveCentroId && (c._docId === effectiveCentroId || c.id === effectiveCentroId)) ||
+                (parte?.centroId && (c._docId === parte.centroId || c.id === parte.centroId)) ||
+                (centro?.id && (c.id === centro.id || c._docId === (centro as any)?._docId)) ||
+                ((parte as any)?.nombreCentro && c.nombre && c.nombre.trim().toLowerCase() === ((parte as any).nombreCentro || '').trim().toLowerCase()) ||
+                (centro?.nombre && c.nombre && c.nombre.trim().toLowerCase() === centro.nombre.trim().toLowerCase())
+            ) || centro;
+
             // Generar items para el albarán basado en los equipos de este centro
-            const conteoPorSistema: Record<string, { cantidad: number, nombre: string }> = {};
+            const conteoPorSistema: Record<string, { cantidad: number, nombre: string, sistId: string, tipo?: string, familia?: string }> = {};
             equiposInstalados.forEach(eq => {
                 const sistId = eq.sistemaId || 'sin-sistema';
                 if (!conteoPorSistema[sistId]) {
                     const sist = sistemasDelCentro.find(s => s.id === sistId);
                     conteoPorSistema[sistId] = {
                         cantidad: 0,
-                        nombre: (sist as any)?.nombre || (sist as any)?.tipo || (sist as any)?.familia || eq.nombre || eq.clase || 'Equipos varios'
+                        nombre: (sist as any)?.nombre || (sist as any)?.tipo || (sist as any)?.familia || eq.nombre || eq.clase || 'Equipos varios',
+                        sistId: sistId,
+                        tipo: (sist as any)?.tipo || '',
+                        familia: (sist as any)?.familia || ''
                     };
                 }
                 conteoPorSistema[sistId].cantidad += 1;
@@ -2087,11 +2103,17 @@ export default function RevisionChecklist() {
                             if (!conteoPorSistema[sist.id]) {
                                 conteoPorSistema[sist.id] = {
                                     cantidad: recuentoInventario,
-                                    nombre: 'Red de rociadores y puestos de control'
+                                    nombre: 'Red de rociadores y puestos de control',
+                                    sistId: sist.id,
+                                    tipo: sist.tipo || '',
+                                    familia: sist.familia || ''
                                 };
                             } else {
                                 conteoPorSistema[sist.id].cantidad = recuentoInventario;
                                 conteoPorSistema[sist.id].nombre = 'Red de rociadores y puestos de control';
+                                conteoPorSistema[sist.id].sistId = sist.id;
+                                conteoPorSistema[sist.id].tipo = sist.tipo || '';
+                                conteoPorSistema[sist.id].familia = sist.familia || '';
                             }
                         }
                     }
@@ -2101,21 +2123,93 @@ export default function RevisionChecklist() {
             const per = parte?.periodicidad || 'Revisión';
             const conceptoStr = per.toLowerCase().includes('revisión') || per.toLowerCase().includes('revision') ? per : `Revisión ${per}`;
 
-            const albaranItems = Object.values(conteoPorSistema).map(sys => {
-                const desc = (sys.nombre || '').trim();
-                const isRociador = esSistemaRedRociadoresPuestoControl({ nombre: desc });
-                let formattedDesc = isRociador
-                    ? 'Red de rociadores y puestos de control'
-                    : (desc ? desc.charAt(0).toUpperCase() + desc.slice(1).toLowerCase() : '');
-                formattedDesc = formattedDesc.replace(/\brf\b/gi, 'RF');
-                return {
-                    cantidad: sys.cantidad,
-                    concepto: conceptoStr,
-                    descripcion: formattedDesc,
-                    precioUnidad: 0,
-                    subtotal: 0
-                };
-            });
+            const tipoModalidad = (targetCentro as any)?.tipoModalidadContrato || 'cuota_fija';
+            // Compatibilidad y soporte preciosSistemasContrato
+            const _preciosSistemasContrato = (targetCentro as any)?.preciosSistemasContrato || {};
+            void _preciosSistemasContrato;
+            let albaranItems: any[] = [];
+
+            if (tipoModalidad === 'por_sistema') {
+                albaranItems = Object.entries(conteoPorSistema).map(([sistId, sys]) => {
+                    const desc = (sys.nombre || '').trim();
+                    const isRociador = esSistemaRedRociadoresPuestoControl({ nombre: desc });
+                    let formattedDesc = isRociador
+                        ? 'Red de rociadores y puestos de control'
+                        : (desc ? desc.charAt(0).toUpperCase() + desc.slice(1).toLowerCase() : '');
+                    formattedDesc = formattedDesc.replace(/\brf\b/gi, 'RF');
+
+                    const precioUnitario = resolverPrecioUnitarioContrato(targetCentro, {
+                        periodicidad: per,
+                        sistId: sistId !== 'sin-sistema' ? sistId : '',
+                        desc: formattedDesc,
+                        nombre: sys.nombre,
+                        tipo: sys.tipo,
+                        familia: sys.familia
+                    });
+
+                    const subtotal = Math.round(sys.cantidad * precioUnitario * 100) / 100;
+
+                    return {
+                        cantidad: sys.cantidad,
+                        concepto: conceptoStr,
+                        descripcion: formattedDesc,
+                        precioUnidad: precioUnitario,
+                        subtotal: subtotal
+                    };
+                });
+            } else {
+                // Modalidad Cuota Fija
+                const cuotaFijaRevision = obtenerCuotaFijaContrato(targetCentro, per);
+                const perL = (per || 'trimestral').toLowerCase().trim();
+                const tipoPer = perL.includes('anual') ? 'anual' : perL.includes('semestral') ? 'semestral' : perL.includes('mensual') ? 'mensual' : 'trimestral';
+                const descCuotaOficial = `Cuota ${tipoPer} revisión sistemas contra incendios`;
+
+                // Filtrar de lineasSistemas cualquier línea que ya sea una cuota o revisión general para evitar duplicados
+                const lineasSistemas = Object.values(conteoPorSistema)
+                    .filter(sys => {
+                        const d = (sys.nombre || '').toLowerCase();
+                        return !d.includes('cuota') && !d.includes('revisión sistemas') && !d.includes('revision sistemas');
+                    })
+                    .map(sys => {
+                        const desc = (sys.nombre || '').trim();
+                        const isRociador = esSistemaRedRociadoresPuestoControl({ nombre: desc });
+                        let formattedDesc = isRociador
+                            ? 'Red de rociadores y puestos de control'
+                            : (desc ? desc.charAt(0).toUpperCase() + desc.slice(1).toLowerCase() : '');
+                        formattedDesc = formattedDesc.replace(/\brf\b/gi, 'RF');
+                        return {
+                            cantidad: sys.cantidad,
+                            concepto: conceptoStr,
+                            descripcion: formattedDesc,
+                            precioUnidad: 0,
+                            subtotal: 0
+                        };
+                    });
+
+                if (cuotaFijaRevision > 0) {
+                    albaranItems = [
+                        {
+                            cantidad: 1,
+                            concepto: conceptoStr,
+                            descripcion: descCuotaOficial,
+                            precioUnidad: cuotaFijaRevision,
+                            subtotal: cuotaFijaRevision
+                        },
+                        ...lineasSistemas
+                    ];
+                } else {
+                    albaranItems = [
+                        {
+                            cantidad: 1,
+                            concepto: conceptoStr,
+                            descripcion: descCuotaOficial,
+                            precioUnidad: 0,
+                            subtotal: 0
+                        },
+                        ...lineasSistemas
+                    ];
+                }
+            }
 
             const { fechaDate: revFechaDate } = obtenerUltimaFechaRevision(equiposInstalados);
             const now = new Date();
@@ -2123,20 +2217,75 @@ export default function RevisionChecklist() {
                 ? new Date(revFechaDate.getFullYear(), revFechaDate.getMonth(), revFechaDate.getDate(), now.getHours(), now.getMinutes(), now.getSeconds()).toISOString()
                 : now.toISOString();
 
-            const nuevoAlbaran: Albaran = {
+            // Identificar empresa mantenedora colaboradora vs Avanfoc
+            const empresasList: any[] = (() => {
+                try {
+                    return JSON.parse(localStorage.getItem('firecheck_db_empresas') || localStorage.getItem('firecheck_db_empresa') || '[]');
+                } catch { return []; }
+            })();
+            const abanfocEmp = obtenerEmpresaAvanfoc(empresasList);
+            const abanfocId = abanfocEmp ? ((abanfocEmp as any)._docId || abanfocEmp.id) : (empresasList[0]?.id || '');
+            const empresaMantenedoraId = targetCentro?.empresaId || parte?.empresaId || abanfocId;
+
+            // 1. Albarán de Revisión / Trabajo (para el cliente, sin valorar, con logo de la mantenedora colaboradora)
+            const albaranItemsSinValorar = albaranItems.map(it => ({
+                ...it,
+                precioUnidad: 0,
+                descuento: 0,
+                subtotal: 0
+            }));
+
+            const albaranTrabajo: Albaran = {
                 id: nextId,
-                titulo: parte?.periodicidad ? `Mantenimiento: Revisión ${parte.periodicidad}` : 'Revisión de Mantenimiento',
+                titulo: parte?.periodicidad ? `Albarán de Revisión: ${parte.periodicidad}` : 'Albarán de Revisión',
                 periodicidad: per,
-                centroId: centro?.id || parte?.centroId || '',
-                clienteId: centro?.clienteId || parte?.clienteId || '',
-                empresaId: centro?.empresaId || parte?.empresaId || '',
+                tipoAlbaran: 'trabajo',
+                sinValorar: true,
+                centroId: targetCentro?._docId || targetCentro?.id || parte?.centroId || '',
+                clienteId: targetCentro?.clienteId || parte?.clienteId || '',
+                empresaId: empresaMantenedoraId, // Logo de la empresa colaboradora (o Avanfoc si es cliente directo)
                 parteId: parteId,
                 tecnicoId: parte?.tecnicoId || '',
                 numeroMantenimiento: numMantenimiento,
                 numeroPedido: (parte as any)?.numeroPedido || '',
                 fechaCreacion: fechaRevisionFinalISO,
-                facturado: false,
-                items: albaranItems,
+                facturado: true, // No aparece en facturas pendientes (es de trabajo sin valorar)
+                items: albaranItemsSinValorar,
+                firmaCliente,
+                firmaTecnico,
+                nombreFirmante: nombreClienteFirma
+            };
+
+            // 2. Albarán para Facturar (con logo de Avanfoc y valoración económica del contrato)
+            let nextIdFacturacion = await obtenerSiguienteNumeroAlbaran();
+            if (nextIdFacturacion === nextId) {
+                const match = nextId.match(/^(ALB\.\d{2})(\d+)$/);
+                if (match) {
+                    const prefix = match[1];
+                    const seq = parseInt(match[2], 10) + 1;
+                    nextIdFacturacion = `${prefix}${String(seq).padStart(match[2].length, '0')}`;
+                } else {
+                    nextIdFacturacion = `${nextId}-F`;
+                }
+            }
+
+            const albaranFacturacion: Albaran = {
+                id: nextIdFacturacion,
+                titulo: parte?.periodicidad ? `Albarán para Facturar: Revisión ${parte.periodicidad}` : 'Albarán para Facturar: Revisión',
+                periodicidad: per,
+                tipoAlbaran: 'facturacion',
+                sinValorar: false,
+                centroId: targetCentro?._docId || targetCentro?.id || parte?.centroId || '',
+                clienteId: targetCentro?.clienteId || parte?.clienteId || '',
+                empresaId: abanfocId, // Siempre logotipo y datos de AVANFOC
+                parteId: parteId,
+                albaranRelacionadoId: nextId,
+                tecnicoId: parte?.tecnicoId || '',
+                numeroMantenimiento: numMantenimiento,
+                numeroPedido: (parte as any)?.numeroPedido || '',
+                fechaCreacion: fechaRevisionFinalISO,
+                facturado: false, // Listo para facturación en Facturas
+                items: albaranItems, // Valorado con las tarifas del contrato
                 firmaCliente,
                 firmaTecnico,
                 nombreFirmante: nombreClienteFirma
@@ -2171,8 +2320,9 @@ export default function RevisionChecklist() {
 
             setSendProgress(80);
 
-            // Guardar Albarán con las firmas
-            await addAlbaran(nuevoAlbaran);
+            // Guardar Albarán de Revisión (sin valorar) y Albarán para Facturar (valorado)
+            await addAlbaran(albaranTrabajo);
+            await addAlbaran(albaranFacturacion);
             
             // Cambiar estado a Finalizado y guardar firmas en el parte
             const docId = (parte as any)?._docId || parteId;

@@ -5585,10 +5585,18 @@ export const generarAlbaranPDF = async (
   periodicidad?: string,
   sistemas?: Record<string, any>[],
   numeroPedido?: string,
-  fechaCreacion?: string
+  fechaCreacion?: string,
+  sinValorar?: boolean
 ) => {
   const doc = new jsPDF('p', 'mm', 'a4');
   const pageWidth = doc.internal.pageSize.getWidth();
+
+  // Determinar si es un albarán sin valorar (Albarán de Trabajo / Revisión)
+  const esSinValorar = Boolean(
+    sinValorar ||
+    (titulo && titulo.toLowerCase().includes('trabajo')) ||
+    (titulo && titulo.toLowerCase().includes('revisión') && !titulo.toLowerCase().includes('facturar') && items && items.length > 0 && items.every(i => !i.precioUnidad && !i.subtotal))
+  );
 
   // Datos de empresa: usar la empresa pasada como parámetro, o cargar de localStorage
   const empData = normalizarDatosEmpresa(empresa, centro?.empresaId);
@@ -5612,10 +5620,14 @@ export const generarAlbaranPDF = async (
   } catch (_e) { }
 
   // Título del documento
+  const tituloDocPrincipal = esSinValorar
+    ? 'ALBARÁN DE TRABAJO'
+    : (titulo && titulo.toLowerCase().includes('facturar') ? 'ALBARÁN PARA FACTURAR' : 'ALBARÁN DE TRABAJO');
+
   doc.setFontSize(18);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(40, 40, 40);
-  doc.text('ALBARÁN DE TRABAJO', pageWidth - 14, headerY + 35.5, { align: 'right' });
+  doc.text(tituloDocPrincipal, pageWidth - 14, headerY + 35.5, { align: 'right' });
 
   // Mostrar el título del albarán si existe
   let rightSideY = headerY + 42;
@@ -5679,8 +5691,32 @@ export const generarAlbaranPDF = async (
   let subtotalTotal = 0;
 
   if (items && items.length > 0) {
-    tableData = items.map(item => {
-      const desc = (item.descripcion || '').trim();
+    // Deduplicación inteligente: si existen dos líneas de cuota fija, conservar únicamente una (la descriptiva oficial)
+    let cuotaEncontrada = false;
+    const esLineaCuotaGen = (it: any) => {
+      const d = (it.descripcion || '').toLowerCase();
+      const c = (it.concepto || '').toLowerCase();
+      return d.includes('cuota') || c.includes('cuota') || d.includes('revisión sistemas') || d.includes('revision sistemas');
+    };
+
+    const itemsLimpios = items.filter(item => {
+      if (esLineaCuotaGen(item)) {
+        if (!cuotaEncontrada) {
+          cuotaEncontrada = true;
+          return true;
+        }
+        return false; // Eliminar línea de cuota duplicada
+      }
+      return true;
+    });
+
+    tableData = itemsLimpios.map(item => {
+      let desc = (item.descripcion || '').trim();
+      if (desc.toLowerCase().startsWith('cuota fija de mantenimiento contratada')) {
+        const perL = (periodicidad || 'trimestral').toLowerCase();
+        const tipoPer = perL.includes('anual') ? 'anual' : perL.includes('semestral') ? 'semestral' : perL.includes('mensual') ? 'mensual' : 'trimestral';
+        desc = `Cuota ${tipoPer} revisión sistemas contra incendios`;
+      }
       const formattedDesc = desc ? desc.charAt(0).toUpperCase() + desc.slice(1).toLowerCase() : '';
       const dtoVal = Number((item as any).descuento) || 0;
       const dtoStr = dtoVal > 0 ? `${dtoVal}%` : '0%';
@@ -5693,7 +5729,7 @@ export const generarAlbaranPDF = async (
         formatM(item.subtotal)
       ];
     });
-    subtotalTotal = items.reduce((acc, item) => acc + (item.subtotal || 0), 0);
+    subtotalTotal = itemsLimpios.reduce((acc, item) => acc + (item.subtotal || 0), 0);
   } else {
     const conteoPorSistema: Record<string, { cantidad: number, nombre: string }> = {};
     equiposTodos.forEach(eq => {
@@ -5751,36 +5787,52 @@ export const generarAlbaranPDF = async (
   const totalConIva = subtotalTotal + ivaImporte;
   const totalRows = tableData.length;
 
-  const tableDataConTotales = [
-    ...tableData,
-    ['', '', '', '', 'Total:', formatM(subtotalTotal)],
-    ['', '', '', '', `IVA (${ivaPorc}%):`, formatM(ivaImporte)],
-    ['', '', '', '', 'Total + IVA:', formatM(totalConIva)],
-  ];
+  let tableHead: string[][];
+  let tableBodyToDraw: string[][];
+  let dynamicColumnStyles: Record<number, any>;
 
-  autoTable(doc, {
-    startY: headerY + 65,
-    head: [['Cant.', 'Concepto', 'Descripción', 'Precio ud.', 'Dto. %', 'Subtotal']],
-    body: tableDataConTotales,
-    theme: 'grid',
-    headStyles: { fillColor: [128, 0, 32], halign: 'center', lineColor: [255, 255, 255], lineWidth: 0.3 },
-    bodyStyles: { lineColor: [255, 255, 255], lineWidth: 0.3 },
-    columnStyles: {
+  if (esSinValorar) {
+    tableHead = [['Cant.', 'Concepto', 'Descripción']];
+    tableBodyToDraw = tableData.map(row => [row[0] || '', row[1] || '', row[2] || '']);
+    dynamicColumnStyles = {
+      0: { halign: 'center', cellWidth: 24 },
+      1: { cellWidth: 54 },
+      2: { cellWidth: 'auto' }
+    };
+  } else {
+    tableHead = [['Cant.', 'Concepto', 'Descripción', 'Precio ud.', 'Dto. %', 'Subtotal']];
+    tableBodyToDraw = [
+      ...tableData,
+      ['', '', '', '', 'Total:', formatM(subtotalTotal)],
+      ['', '', '', '', `IVA (${ivaPorc}%):`, formatM(ivaImporte)],
+      ['', '', '', '', 'Total + IVA:', formatM(totalConIva)],
+    ];
+    dynamicColumnStyles = {
       0: { halign: 'center', cellWidth: 18 },
       1: { cellWidth: 38 },
       2: { cellWidth: 'auto' },
       3: { halign: 'right', cellWidth: 22 },
       4: { halign: 'center', cellWidth: 16 },
       5: { halign: 'right', cellWidth: 22 }
-    },
+    };
+  }
+
+  autoTable(doc, {
+    startY: headerY + 65,
+    head: tableHead,
+    body: tableBodyToDraw,
+    theme: 'grid',
+    headStyles: { fillColor: [128, 0, 32], halign: 'center', lineColor: [255, 255, 255], lineWidth: 0.3 },
+    bodyStyles: { lineColor: [255, 255, 255], lineWidth: 0.3 },
+    columnStyles: dynamicColumnStyles,
     didParseCell: (data: any) => {
-      if (data.section === 'body' && data.row.index >= totalRows) {
+      if (!esSinValorar && data.section === 'body' && data.row.index >= totalRows) {
         data.cell.styles.fillColor = [255, 255, 255];
         data.cell.styles.fontStyle = 'bold';
       }
     },
     didDrawCell: (data: any) => {
-      if (data.section === 'body' && data.row.index === totalRows) {
+      if (!esSinValorar && data.section === 'body' && data.row.index === totalRows) {
         doc.setDrawColor(180, 180, 180);
         doc.setLineWidth(0.4);
         doc.line(data.cell.x, data.cell.y, data.cell.x + data.cell.width, data.cell.y);
@@ -5865,9 +5917,10 @@ export const generarAlbaranPDFView = async (
   titulo?: string,
   periodicidad?: string,
   numeroPedido?: string,
-  fechaCreacion?: string
+  fechaCreacion?: string,
+  sinValorar?: boolean
 ): Promise<string> => {
-  const doc = await generarAlbaranPDF(cliente, centro, equiposTodos, numeroMantenimiento, tecnicoNombre, firmaCliente, firmaTecnico, nombreFirmante, items, empresa, true, titulo, periodicidad, undefined, numeroPedido, fechaCreacion);
+  const doc = await generarAlbaranPDF(cliente, centro, equiposTodos, numeroMantenimiento, tecnicoNombre, firmaCliente, firmaTecnico, nombreFirmante, items, empresa, true, titulo, periodicidad, undefined, numeroPedido, fechaCreacion, sinValorar);
   return doc.output('bloburl').toString();
 };
 

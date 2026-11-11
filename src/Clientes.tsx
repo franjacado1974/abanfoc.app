@@ -1,5 +1,5 @@
 import { collection, doc, deleteDoc, getDocs, setDoc } from "firebase/firestore";
-import { db } from "./firebase";
+import { db, subscribeClientes } from "./firebase";
 import { useState, useEffect, useRef, useMemo } from 'react';
 import ConfirmationModal from './ConfirmationModal';
 import { useNavigate } from 'react-router-dom';
@@ -12,14 +12,14 @@ import DetailModal from './components/DetailModal';
 interface Cliente {
   id: string;
   nombre: string;
-  cif: string;
-  direccion: string;
-  poblacion: string;
-  cp: string;
-  provincia: string;
-  telefono: string;
-  contacto: string;
-  correo: string;
+  cif?: string;
+  direccion?: string;
+  poblacion?: string;
+  cp?: string;
+  provincia?: string;
+  telefono?: string;
+  contacto?: string;
+  correo?: string;
   correoGeneral?: string;
   correoAdministracion?: string;
   correoFacturacion?: string;
@@ -67,7 +67,12 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
   const isTecnicoMode = loggedUser?.rol === 'tecnico';
   const isVisualizador = loggedUser?.rol === 'visualizador' || isTecnicoMode;
 
-  const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [clientes, setClientes] = useState<Cliente[]>(() => {
+    try {
+      const stored = localStorage.getItem('firecheck_db_clientes');
+      return stored ? JSON.parse(stored) : [];
+    } catch { return []; }
+  });
   const [_centros, setCentros] = useState<any[]>([]);
   const [view, setView] = useState<'list' | 'form'>('list');
   const [form, setForm] = useState<Cliente>(emptyCliente);
@@ -97,6 +102,11 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
 
   useEffect(() => {
     fetchClientes();
+    const unsub = subscribeClientes((data) => {
+      if (Array.isArray(data) && data.length > 0) {
+        setClientes(data);
+      }
+    });
     try {
       const storedCentros = localStorage.getItem('firecheck_db_centros');
       if (storedCentros) {
@@ -106,6 +116,7 @@ export default function Clientes({ hideHeader }: { hideHeader?: boolean } = {}) 
     } catch (error) {
       console.error("Error al cargar centros desde localStorage:", error);
     }
+    return () => { if (unsub) unsub(); };
   }, []);
 
   const saveToDB = (data: Cliente[]) => {

@@ -4,7 +4,7 @@ import {
   ArrowLeft, Receipt, Download, Search, CheckCircle2, Clock, AlertCircle,
   FileText, Trash2, Plus, Building2, Save, Edit, Copy, X,
   ArrowUp, ArrowDown, ArrowUpDown, Signature, CreditCard, Check,
-  Wand2, Calendar, MapPin
+  Wand2, Calendar, MapPin, QrCode
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -14,6 +14,7 @@ import {
   subscribeClientes, subscribeCentros, subscribeEmpresas,
   subscribeArticulos,
   updateParte, updateReparacion, updateInstalacion, updateUrgencia,
+  resolverPrecioUnitarioContrato, obtenerCuotaFijaContrato,
   type Factura, type FacturaLinea, type Albaran, type Cliente, type Centro, type Empresa, type Articulo
 } from './firebase';
 import {
@@ -376,19 +377,12 @@ async function generarFacturaOficialPDF(
 
   // TÍTULO CENTRAL: FACTURA
   let y = 37;
+  const esBorrador = factura.estado === 'Borrador' || (factura as any).esBorrador === true || !factura.numeroFactura;
+
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(16);
   doc.setTextColor(20, 20, 25);
-  doc.text('FACTURA', pageWidth / 2, y, { align: 'center' });
-
-  const subtitulo = (factura.titulo || '').trim();
-  if (subtitulo) {
-    y += 5.5;
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8.5);
-    doc.setTextColor(60, 65, 75);
-    doc.text(subtitulo.toUpperCase(), pageWidth / 2, y, { align: 'center' });
-  }
+  doc.text(esBorrador ? 'FACTURA (BORRADOR)' : 'FACTURA', pageWidth / 2, y, { align: 'center' });
 
   y += 7;
 
@@ -396,7 +390,7 @@ async function generarFacturaOficialPDF(
   const colStartY = y;
   const colMidX = 104;
 
-  const numFacturaStr = factura.numeroFactura || factura.id || 'FAC-001';
+  const numFacturaStr = esBorrador ? 'BORRADOR' : (factura.numeroFactura || factura.id || 'FAC-001');
   const fechaEmisionStr = formatFecha(factura.fechaCreacion);
   const fechaVencStr = factura.fechaVencimiento ? formatFecha(factura.fechaVencimiento) : 'A la recepción';
   const formaPagoStr = factura.formaPago || 'Transferencia bancaria';
@@ -424,7 +418,7 @@ async function generarFacturaOficialPDF(
     leftY += 4;
   };
 
-  drawLeftRow('Nº Factura: ', numFacturaStr);
+  drawLeftRow('Nº Factura: ', esBorrador ? 'BORRADOR (Sin numeración)' : numFacturaStr);
   drawLeftRow('Fecha emisión: ', fechaEmisionStr);
   drawLeftRow('Vencimiento: ', fechaVencStr);
   if (factura.albaranId) {
@@ -617,33 +611,53 @@ async function generarFacturaOficialPDF(
     currentTotY = 20;
   }
 
-  // BLOQUE IZQUIERDO DEBAJO DE LA ÚLTIMA LÍNEA: QR TRIBUTARIO (VERI*FACTU - PRUEBA www.abanfoc.es)
+  // BLOQUE IZQUIERDO DEBAJO DE LA ÚLTIMA LÍNEA: QR TRIBUTARIO (VERI*FACTU)
   const qrTopY = currentTotY + 1;
   const qrSizeMm = 21;
   const qrBoxX = margen + 2;
-  const qrCenterX = qrBoxX + qrSizeMm / 2;
 
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(6.8);
-  doc.setTextColor(25, 30, 40);
-  doc.text('QR tributario:', qrCenterX, qrTopY, { align: 'center' });
+  let qrFooterY = qrTopY + qrSizeMm + 3.2;
 
-  const qrImgData = generarQRVerifactuDataUrl('https://www.abanfoc.es');
-  const qrImgY = qrTopY + 1.5;
-  if (qrImgData) {
-    try {
-      doc.setDrawColor(215, 220, 228);
-      doc.setLineWidth(0.2);
-      doc.rect(qrBoxX, qrImgY, qrSizeMm, qrSizeMm);
-      doc.addImage(qrImgData, 'JPEG', qrBoxX + 0.4, qrImgY + 0.4, qrSizeMm - 0.8, qrSizeMm - 0.8);
-    } catch {}
+  if (esBorrador) {
+    // FACTURA BORRADOR: SIN CÓDIGO QR NI VERI*FACTU SEGÚN REQUERIMIENTO
+    doc.setDrawColor(220, 225, 235);
+    doc.setLineWidth(0.25);
+    doc.rect(qrBoxX, qrTopY + 1.5, 45, qrSizeMm);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(6.8);
+    doc.setTextColor(217, 119, 6);
+    doc.text('FACTURA EN BORRADOR', qrBoxX + 22.5, qrTopY + 7.5, { align: 'center' });
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6);
+    doc.setTextColor(115, 115, 125);
+    doc.text('Código QR tributario y Veri*Factu', qrBoxX + 22.5, qrTopY + 12.5, { align: 'center' });
+    doc.text('no emitidos en borrador.', qrBoxX + 22.5, qrTopY + 16.5, { align: 'center' });
+    qrFooterY = qrTopY + qrSizeMm + 3.2;
+  } else {
+    const qrCenterX = qrBoxX + qrSizeMm / 2;
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(6.8);
+    doc.setTextColor(25, 30, 40);
+    doc.text('QR tributario:', qrCenterX, qrTopY, { align: 'center' });
+
+    const qrImgData = generarQRVerifactuDataUrl('https://www.abanfoc.es');
+    const qrImgY = qrTopY + 1.5;
+    if (qrImgData) {
+      try {
+        doc.setDrawColor(215, 220, 228);
+        doc.setLineWidth(0.2);
+        doc.rect(qrBoxX, qrImgY, qrSizeMm, qrSizeMm);
+        doc.addImage(qrImgData, 'JPEG', qrBoxX + 0.4, qrImgY + 0.4, qrSizeMm - 0.8, qrSizeMm - 0.8);
+      } catch {}
+    }
+
+    qrFooterY = qrImgY + qrSizeMm + 3.2;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(6.8);
+    doc.setTextColor(25, 30, 40);
+    doc.text('VERI*FACTU', qrCenterX, qrFooterY, { align: 'center' });
   }
-
-  const qrFooterY = qrImgY + qrSizeMm + 3.2;
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(6.8);
-  doc.setTextColor(25, 30, 40);
-  doc.text('VERI*FACTU', qrCenterX, qrFooterY, { align: 'center' });
 
   if (descPorc > 0) {
     currentTotY += 2;
@@ -806,7 +820,10 @@ async function generarFacturaOficialPDF(
     doc.text(textoRegistro, 5.5, 220, { angle: 90 });
   }
 
-  doc.save(`Factura_${numFacturaStr.replace(/\s+/g, '_')}.pdf`);
+  const pdfFileName = esBorrador
+    ? `Factura_BORRADOR_${(factura.nombreCliente || 'Cliente').replace(/\s+/g, '_')}.pdf`
+    : `Factura_${numFacturaStr.replace(/\s+/g, '_')}.pdf`;
+  doc.save(pdfFileName);
 }
 
 export default function Facturas() {
@@ -926,17 +943,44 @@ export default function Facturas() {
   // Preparar formulario desde un Albarán ("lo que va a misa")
   const iniciarFacturaDesdeAlbaran = (albData: any) => {
     const cli = clientes.find(c => c.id === albData.clienteId || (c as any)._docId === albData.clienteId);
-    const cen = centros.find(c => c._docId === albData.centroId || c.id === albData.centroId);
+    let cen = centros.find(c => c._docId === albData.centroId || c.id === albData.centroId);
+    if (!cen && cli) {
+      cen = centros.find(c => c.clienteId === cli.id || (cli as any)._docId === c.clienteId);
+    }
     const emp = empresas.find(e => e._docId === albData.empresaId || e.id === albData.empresaId) || empresas[0];
 
     const hoy = new Date();
     const venc = new Date(hoy);
     venc.setDate(venc.getDate() + 30);
 
+    const per = albData.periodicidad || albData.titulo || '';
+
     const lineas: FacturaLinea[] = (albData.items && albData.items.length > 0)
       ? albData.items.map((it: any) => {
           const cant = Number(it.cantidad) || 1;
-          const precio = Number(it.precioUnidad) || 0;
+          let precio = Number(it.precioUnidad) || 0;
+          let subtotal = Number(it.subtotal) || (cant * precio);
+
+          // Si el precio viene a 0 o sin valorar, consultar automáticamente el contrato del centro
+          if (precio === 0 && cen) {
+            const precioResuelto = resolverPrecioUnitarioContrato(cen, {
+              periodicidad: per,
+              desc: it.descripcion || it.concepto,
+              nombre: it.descripcion,
+              tipo: it.familia
+            });
+            if (precioResuelto > 0) {
+              precio = precioResuelto;
+              subtotal = Math.round(cant * precio * 100) / 100;
+            } else if ((cen as any)?.tipoModalidadContrato === 'cuota_fija') {
+              const cf = obtenerCuotaFijaContrato(cen, per);
+              if (cf > 0 && (it.descripcion?.toLowerCase().includes('cuota fija') || it.concepto?.toLowerCase().includes('cuota fija'))) {
+                precio = cf;
+                subtotal = Math.round(cant * precio * 100) / 100;
+              }
+            }
+          }
+
           return {
             codigo: it.codigo || '',
             familia: it.familia || it.concepto || 'Trabajo realizado',
@@ -944,20 +988,42 @@ export default function Facturas() {
             descripcion: it.descripcion || it.concepto || '',
             cantidad: cant,
             precioUnidad: precio,
-            subtotal: Number(it.subtotal) || (cant * precio)
+            subtotal: subtotal
           };
         })
       : [{ codigo: '', familia: 'Mantenimiento / Servicio', concepto: 'Mantenimiento / Servicio', descripcion: albData.titulo || '', cantidad: 1, precioUnidad: 0, subtotal: 0 }];
 
+    if (cen && (cen as any)?.tipoModalidadContrato === 'cuota_fija') {
+      const yaTieneCuotaFija = lineas.some(l => l.descripcion?.toLowerCase().includes('cuota fija') || l.concepto?.toLowerCase().includes('cuota fija'));
+      if (!yaTieneCuotaFija) {
+        const cf = obtenerCuotaFijaContrato(cen, per);
+        if (cf > 0) {
+          const yaTieneCuota = lineas.some(l => (l.descripcion || '').toLowerCase().includes('cuota') || (l.descripcion || '').toLowerCase().includes('revisión sistemas') || (l.descripcion || '').toLowerCase().includes('revision sistemas'));
+          if (!yaTieneCuota) {
+            const perL = (per || 'trimestral').toLowerCase().trim();
+            const tipoPer = perL.includes('anual') ? 'anual' : perL.includes('semestral') ? 'semestral' : perL.includes('mensual') ? 'mensual' : 'trimestral';
+            lineas.unshift({
+              codigo: '',
+              familia: 'Mantenimiento / Servicio',
+              concepto: per ? (per.toLowerCase().includes('revisión') || per.toLowerCase().includes('revision') ? per : `Revisión ${per}`) : 'Revisión Mantenimiento',
+              descripcion: `Cuota ${tipoPer} revisión sistemas contra incendios`,
+              cantidad: 1,
+              precioUnidad: cf,
+              subtotal: cf
+            });
+          }
+        }
+      }
+    }
+
     const sub = lineas.reduce((acc, l) => acc + (Number(l.subtotal) || 0), 0);
     const ivaPorc = 21;
     const tot = sub + (sub * ivaPorc / 100);
-    const nextNum = calcularSiguienteNumeroFactura(facturas);
 
     setEditingId(null);
     setForm({
-      id: nextNum,
-      numeroFactura: nextNum,
+      id: '',
+      numeroFactura: '',
       empresaId: albData.empresaId || emp?._docId || emp?.id || '',
       clienteId: cli?.id || albData.clienteId || '',
       centroId: cen?._docId || cen?.id || albData.centroId || '',
@@ -976,7 +1042,7 @@ export default function Facturas() {
       fechaVencimiento: venc.toISOString().slice(0, 10),
       formaPago: cen?.formaPago || 'Transferencia bancaria',
       iban: cen?.iban || 'ES2800810039810001554059',
-      estado: 'Pendiente',
+      estado: 'Borrador',
       items: lineas,
       descuentoPorcentaje: 0,
       descuentoImporte: 0,
@@ -1000,7 +1066,7 @@ export default function Facturas() {
   // Albaranes pendientes de facturar (para la bandeja rápida superior)
   const albaranesPendientesFacturar = useMemo(() => {
     return albaranes
-      .filter(a => !a.facturado && !facturas.some(f => f.albaranId === a.id))
+      .filter(a => !a.facturado && a.tipoAlbaran !== 'trabajo' && !a.sinValorar && !facturas.some(f => f.albaranId === a.id))
       .sort((a, b) => {
         const firmaA = isFirmaValida(a.firmaCliente) ? 1 : 0;
         const firmaB = isFirmaValida(b.firmaCliente) ? 1 : 0;
@@ -1096,11 +1162,10 @@ export default function Facturas() {
     const hoy = new Date();
     const venc = new Date(hoy);
     venc.setDate(venc.getDate() + 30);
-    const nextNum = calcularSiguienteNumeroFactura(facturas);
     setEditingId(null);
     setForm({
-      id: nextNum,
-      numeroFactura: nextNum,
+      id: '',
+      numeroFactura: '',
       empresaId: empresas[0]?._docId || empresas[0]?.id || '',
       clienteId: '',
       centroId: '',
@@ -1119,7 +1184,7 @@ export default function Facturas() {
       fechaVencimiento: venc.toISOString().slice(0, 10),
       formaPago: 'Transferencia bancaria',
       iban: 'ES2800810039810001554059',
-      estado: 'Pendiente',
+      estado: 'Borrador',
       items: [{ codigo: '', familia: '', concepto: '', descripcion: '', cantidad: 1, precioUnidad: 0, subtotal: 0 }],
       descuentoPorcentaje: 0,
       descuentoImporte: 0,
@@ -1207,10 +1272,28 @@ export default function Facturas() {
 
     try {
       const cli = clientes.find(c => c.id === form.clienteId || (c as any)._docId === form.clienteId);
+      const esBorrador = form.estado === 'Borrador' || !form.numeroFactura;
+
+      let idFinal = form.id;
+      let numFinal = form.numeroFactura;
+
+      if (esBorrador) {
+        numFinal = '';
+        if (!idFinal) {
+          idFinal = `BORRADOR-${Date.now()}`;
+        }
+      } else {
+        if (!numFinal) {
+          numFinal = calcularSiguienteNumeroFactura(facturas);
+        }
+        idFinal = numFinal;
+      }
+
       const dataToSave: Factura = {
         ...form,
-        id: form.numeroFactura || form.id || calcularSiguienteNumeroFactura(facturas),
-        numeroFactura: form.numeroFactura || form.id || calcularSiguienteNumeroFactura(facturas),
+        id: idFinal,
+        numeroFactura: numFinal,
+        estado: form.estado || (esBorrador ? 'Borrador' : 'Pendiente'),
         numeroPedido: '',
         notas: limpiarNotasFactura(form.notas, form.albaranId),
         nombreCliente: form.nombreCliente || cli?.nombre || form.clienteNombreLibre || 'Cliente',
@@ -1220,17 +1303,19 @@ export default function Facturas() {
         await updateFactura(editingId, dataToSave);
       } else {
         await addFactura(dataToSave);
-        try {
-          const confFacturas = getConfiguracionContadores().facturas;
-          const numExtraido = extraerNumeroDeCodigo(dataToSave.numeroFactura, confFacturas.prefijo);
-          if (numExtraido !== null) {
-            registrarNumeroGenerado('facturas', numExtraido, dataToSave.numeroFactura);
-          }
-        } catch {}
+        if (!esBorrador && numFinal) {
+          try {
+            const confFacturas = getConfiguracionContadores().facturas;
+            const numExtraido = extraerNumeroDeCodigo(numFinal, confFacturas.prefijo);
+            if (numExtraido !== null) {
+              registrarNumeroGenerado('facturas', numExtraido, numFinal);
+            }
+          } catch {}
+        }
       }
 
-      // Si proviene de un Albarán, marcar el Albarán como Facturado ("va a misa")
-      if (dataToSave.albaranId) {
+      // Si NO es borrador y proviene de un Albarán, marcar el Albarán como Facturado ("va a misa")
+      if (!esBorrador && dataToSave.albaranId) {
         const albOrig = albaranes.find(a => a.id === dataToSave.albaranId || (a as any)._docId === dataToSave.albaranId);
         if (albOrig && !albOrig.facturado) {
           await updateAlbaran({ ...albOrig, facturado: true });
@@ -1257,10 +1342,140 @@ export default function Facturas() {
     }
   };
 
+  // Convertir Borrador a Factura Oficial Definitiva desde el Formulario
+  const handleGenerarVerifactuDesdeForm = async () => {
+    if (!form.clienteId && !form.nombreCliente?.trim() && !form.clienteNombreLibre?.trim()) {
+      alert('Selecciona un cliente o indica su Razón Social antes de generar la factura oficial.');
+      return;
+    }
+
+    const confirmar = confirm(
+      '¿Deseas generar la Factura Definitiva a partir de este borrador?\n\n' +
+      '• Se asignará el siguiente número correlativo oficial.\n' +
+      '• La factura pasará a estado oficial emitida con Veri*Factu.\n' +
+      '• Ya no podrá ser modificada libremente para cumplir con la normativa.'
+    );
+    if (!confirmar) return;
+
+    try {
+      const cli = clientes.find(c => c.id === form.clienteId || (c as any)._docId === form.clienteId);
+      const nextNum = calcularSiguienteNumeroFactura(facturas);
+
+      const dataToSave: Factura = {
+        ...form,
+        id: nextNum,
+        numeroFactura: nextNum,
+        estado: 'Pendiente',
+        numeroPedido: '',
+        notas: limpiarNotasFactura(form.notas, form.albaranId),
+        nombreCliente: form.nombreCliente || cli?.nombre || form.clienteNombreLibre || 'Cliente',
+      };
+
+      if (editingId) {
+        await updateFactura(editingId, dataToSave);
+      } else {
+        await addFactura(dataToSave);
+      }
+
+      try {
+        const confFacturas = getConfiguracionContadores().facturas;
+        const numExtraido = extraerNumeroDeCodigo(nextNum, confFacturas.prefijo);
+        if (numExtraido !== null) {
+          registrarNumeroGenerado('facturas', numExtraido, nextNum);
+        }
+      } catch {}
+
+      if (dataToSave.albaranId) {
+        const albOrig = albaranes.find(a => a.id === dataToSave.albaranId || (a as any)._docId === dataToSave.albaranId);
+        if (albOrig && !albOrig.facturado) {
+          await updateAlbaran({ ...albOrig, facturado: true });
+          if (albOrig.parteId) {
+            try { await updateParte(albOrig.parteId, { estado: 'Cerrado' } as any); } catch {}
+          }
+          if (albOrig.reparacionId) {
+            try { await updateReparacion(albOrig.reparacionId, { facturado: true }); } catch {}
+          }
+          if (albOrig.instalacionId) {
+            try { await updateInstalacion(albOrig.instalacionId, { facturado: true }); } catch {}
+          }
+          if (albOrig.urgenciaId) {
+            try { await updateUrgencia(albOrig.urgenciaId, { facturado: true }); } catch {}
+          }
+        }
+      }
+
+      alert(`¡Factura Oficial ${nextNum} generada con éxito a partir del borrador!`);
+      setView('list');
+      setEditingId(null);
+    } catch (err) {
+      console.error('Error al generar factura Verifactu:', err);
+      alert('Error al generar la factura oficial.');
+    }
+  };
+
+  // Convertir Borrador a Factura Oficial Definitiva desde el modal de acciones o tabla
+  const handleConvertirBorradorAVerifactu = async (fac: Factura) => {
+    const confirmar = confirm(
+      `¿Deseas generar la Factura Definitiva para el borrador de "${fac.nombreCliente || 'Cliente'}"?\n\n` +
+      '• Se le asignará el siguiente número correlativo oficial.\n' +
+      '• Pasará a estado oficial emitida con Veri*Factu.'
+    );
+    if (!confirmar) return;
+
+    try {
+      const nextNum = calcularSiguienteNumeroFactura(facturas);
+      const docId = fac._docId || fac.id;
+
+      const dataToSave: Partial<Factura> = {
+        ...fac,
+        id: nextNum,
+        numeroFactura: nextNum,
+        estado: 'Pendiente',
+        updatedAt: new Date().toISOString()
+      } as any;
+
+      await updateFactura(docId, dataToSave);
+
+      try {
+        const confFacturas = getConfiguracionContadores().facturas;
+        const numExtraido = extraerNumeroDeCodigo(nextNum, confFacturas.prefijo);
+        if (numExtraido !== null) {
+          registrarNumeroGenerado('facturas', numExtraido, nextNum);
+        }
+      } catch {}
+
+      if (fac.albaranId) {
+        const albOrig = albaranes.find(a => a.id === fac.albaranId || (a as any)._docId === fac.albaranId);
+        if (albOrig && !albOrig.facturado) {
+          await updateAlbaran({ ...albOrig, facturado: true });
+          if (albOrig.parteId) {
+            try { await updateParte(albOrig.parteId, { estado: 'Cerrado' } as any); } catch {}
+          }
+          if (albOrig.reparacionId) {
+            try { await updateReparacion(albOrig.reparacionId, { facturado: true }); } catch {}
+          }
+          if (albOrig.instalacionId) {
+            try { await updateInstalacion(albOrig.instalacionId, { facturado: true }); } catch {}
+          }
+          if (albOrig.urgenciaId) {
+            try { await updateUrgencia(albOrig.urgenciaId, { facturado: true }); } catch {}
+          }
+        }
+      }
+
+      alert(`¡Factura Oficial ${nextNum} generada con éxito a partir del borrador!`);
+    } catch (err) {
+      console.error('Error al generar factura definitiva:', err);
+      alert('Error al generar la factura.');
+    }
+  };
+
   const handleEditFactura = (fac: Factura) => {
     setEditingId(fac._docId || fac.id);
     setForm({
       ...fac,
+      numeroFactura: fac.numeroFactura || '',
+      estado: fac.estado || (fac.numeroFactura ? 'Pendiente' : 'Borrador'),
       numeroPedido: '',
       notas: limpiarNotasFactura(fac.notas, fac.albaranId),
       fechaCreacion: (fac.fechaCreacion || '').slice(0, 10),
@@ -1270,16 +1485,15 @@ export default function Facturas() {
   };
 
   const handleDuplicateFactura = (fac: Factura) => {
-    const nextNum = calcularSiguienteNumeroFactura(facturas);
     setEditingId(null);
     setForm({
       ...fac,
       _docId: undefined,
-      id: nextNum,
-      numeroFactura: nextNum,
+      id: '',
+      numeroFactura: '',
       numeroPedido: '',
       notas: limpiarNotasFactura(fac.notas, fac.albaranId),
-      estado: 'Pendiente',
+      estado: 'Borrador',
       fechaCreacion: new Date().toISOString().slice(0, 10)
     });
     setView('form');
@@ -1433,8 +1647,9 @@ export default function Facturas() {
               <button
                 onClick={handleNuevaFactura}
                 className="flex items-center justify-center gap-2 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold shadow-md shadow-red-500/10 hover:shadow-lg active:scale-95 transition-all text-xs cursor-pointer shrink-0"
+                title="Crear nueva factura borrador editable sin correlativo oficial"
               >
-                <Plus className="w-3.5 h-3.5" /> Nueva Factura
+                <Plus className="w-3.5 h-3.5" /> Nueva Factura (Borrador)
               </button>
             </div>
           </div>
@@ -1528,14 +1743,21 @@ export default function Facturas() {
                       return (
                         <tr 
                           key={rowKey} 
-                          className={`transition-all duration-150 group ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100/80'} hover:bg-amber-100/90 hover:shadow-xs`}
+                          onClick={() => setAccionesModalItem(fac)}
+                          className={`transition-all duration-150 group cursor-pointer ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100/80'} hover:bg-amber-100/90 hover:shadow-xs`}
                         >
                           {/* Nº Factura */}
                           <td className="w-px whitespace-nowrap px-4 py-2.5">
                             <div className="flex items-center gap-1.5">
-                              <span className="text-xs font-mono font-medium text-zinc-800 bg-zinc-100 px-2.5 py-0.5 rounded-md border border-zinc-300">
-                                {fac.numeroFactura || fac.id}
-                              </span>
+                              {fac.estado === 'Borrador' || !fac.numeroFactura ? (
+                                <span className="text-xs font-mono font-black text-amber-900 bg-amber-100 px-2.5 py-0.5 rounded-md border border-amber-300 shadow-2xs">
+                                  BORRADOR
+                                </span>
+                              ) : (
+                                <span className="text-xs font-mono font-medium text-zinc-800 bg-zinc-100 px-2.5 py-0.5 rounded-md border border-zinc-300">
+                                  {fac.numeroFactura || fac.id}
+                                </span>
+                              )}
                               {fac.albaranId && (
                                 <span className="text-[10px] font-mono font-medium text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200/80">
                                   Alb: {fac.albaranId}
@@ -1619,14 +1841,24 @@ export default function Facturas() {
 
                           {/* Acciones */}
                           <td className="w-px whitespace-nowrap px-4 py-2.5 text-center">
-                            <button
-                              type="button"
-                              onClick={() => setAccionesModalItem(fac)}
-                              className="inline-flex items-center justify-center p-2 rounded-xl text-amber-600 hover:text-amber-700 bg-amber-50/70 hover:bg-amber-100/80 border border-amber-200/80 transition-all cursor-pointer shadow-2xs group"
-                              title="Abrir acciones de la factura"
-                            >
-                              <Wand2 className="w-4 h-4 group-hover:rotate-12 transition-transform text-amber-600" />
-                            </button>
+                            <div className="flex items-center justify-center gap-1.5">
+                              {(fac.estado === 'Borrador' || !fac.numeroFactura) ? (
+                                <button
+                                  type="button"
+                                  onClick={e => {
+                                    e.stopPropagation();
+                                    handleConvertirBorradorAVerifactu(fac);
+                                  }}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[11px] font-black bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white shadow-xs transition-all cursor-pointer"
+                                  title="Generar Factura Oficial Definitiva (Veri*Factu)"
+                                >
+                                  <QrCode className="w-3.5 h-3.5" />
+                                  <span>VERIFACTU</span>
+                                </button>
+                              ) : (
+                                <span className="text-slate-300 text-xs">—</span>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       );
@@ -1676,9 +1908,15 @@ export default function Facturas() {
                       {formatFecha(accionesModalItem.fechaCreacion)}
                     </span>
                   )}
-                  <span className="font-mono font-medium text-zinc-800 bg-zinc-100 px-2.5 py-1 rounded-lg border border-zinc-300">
-                    {accionesModalItem.numeroFactura || accionesModalItem.id}
-                  </span>
+                  {accionesModalItem.estado === 'Borrador' || !accionesModalItem.numeroFactura ? (
+                    <span className="font-mono font-bold text-amber-900 bg-amber-100 px-2.5 py-1 rounded-lg border border-amber-300">
+                      BORRADOR
+                    </span>
+                  ) : (
+                    <span className="font-mono font-medium text-zinc-800 bg-zinc-100 px-2.5 py-1 rounded-lg border border-zinc-300">
+                      {accionesModalItem.numeroFactura || accionesModalItem.id}
+                    </span>
+                  )}
                   {accionesModalItem.albaranId && (
                     <span className="font-mono font-medium text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
                       Alb: {accionesModalItem.albaranId}
@@ -1696,7 +1934,23 @@ export default function Facturas() {
 
                 {/* Listado de acciones */}
                 <div className="p-6 flex flex-col gap-3">
-                  {/* Acción 1: Descargar Factura Oficial PDF */}
+                  {/* Acción Destacada: GENERAR VERIFACTU para borradores */}
+                  {(accionesModalItem.estado === 'Borrador' || !accionesModalItem.numeroFactura) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const fac = accionesModalItem;
+                        setAccionesModalItem(null);
+                        handleConvertirBorradorAVerifactu(fac);
+                      }}
+                      className="w-full flex items-center justify-center gap-3 p-4 rounded-2xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white shadow-xl shadow-blue-600/30 font-black text-base uppercase tracking-wider transition-all cursor-pointer group mb-1"
+                    >
+                      <QrCode className="w-6 h-6 group-hover:scale-110 transition-transform" />
+                      <span>GENERAR VERIFACTU</span>
+                    </button>
+                  )}
+
+                  {/* Acción 1: Descargar Factura PDF */}
                   <button
                     type="button"
                     onClick={() => {
@@ -1715,14 +1969,22 @@ export default function Facturas() {
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-semibold text-red-950">
-                          Descargar Factura Oficial PDF
+                          {accionesModalItem.estado === 'Borrador' || !accionesModalItem.numeroFactura
+                            ? 'Descargar Factura Borrador PDF'
+                            : 'Descargar Factura Oficial PDF'}
                         </span>
-                        <span className="text-[10px] font-bold uppercase tracking-wider bg-red-200/80 text-red-900 px-1.5 py-0.5 rounded-md">
-                          VERI*FACTU
+                        <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md ${
+                          accionesModalItem.estado === 'Borrador' || !accionesModalItem.numeroFactura
+                            ? 'bg-amber-200/80 text-amber-900'
+                            : 'bg-red-200/80 text-red-900'
+                        }`}>
+                          {accionesModalItem.estado === 'Borrador' || !accionesModalItem.numeroFactura ? 'BORRADOR' : 'VERI*FACTU'}
                         </span>
                       </div>
                       <div className="text-xs text-red-600/80 truncate">
-                        Documento oficial con código QR tributario y datos mercantiles de ABANFOC
+                        {accionesModalItem.estado === 'Borrador' || !accionesModalItem.numeroFactura
+                          ? 'Borrador provisional sin numeración ni QR tributario'
+                          : 'Documento oficial con código QR tributario y datos mercantiles de ABANFOC'}
                       </div>
                     </div>
                   </button>
@@ -1988,89 +2250,148 @@ export default function Facturas() {
   const baseTrasDescuento = Math.max(0, (Number(form.subtotal) || 0) - (Number(form.descuentoImporte) || 0));
   const cuotaIvaForm = baseTrasDescuento * ((Number(form.iva) || 0) / 100);
 
+  const esBorrador = form.estado === 'Borrador' || !form.numeroFactura;
+
   return (
     <div className="min-h-screen bg-[#F8FAFC] p-4 md:p-8">
       <div className="max-w-5xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
           <button
             type="button"
             onClick={() => { setView('list'); setEditingId(null); }}
-            className="flex items-center gap-2 text-sm font-bold text-zinc-600 hover:text-zinc-950 transition-colors cursor-pointer"
+            className="flex items-center gap-2 text-xs font-bold text-zinc-600 hover:text-zinc-950 transition-colors cursor-pointer w-fit"
           >
             <ArrowLeft className="w-4 h-4" /> Volver al listado de Facturas
           </button>
 
-          <button
-            type="button"
-            onClick={() => {
-              const cli = clientes.find(c => c.id === form.clienteId || (c as any)._docId === form.clienteId);
-              const cen = centros.find(c => c._docId === form.centroId || c.id === form.centroId);
-              const emp = empresas.find(e => e._docId === form.empresaId || e.id === form.empresaId);
-              generarFacturaOficialPDF(form, cli, cen, emp);
-            }}
-            className="flex items-center gap-2 px-4 py-2 bg-zinc-900 hover:bg-black text-white rounded-xl text-xs font-bold shadow-sm transition-all cursor-pointer"
-          >
-            <Download className="w-3.5 h-3.5" /> Vista Previa / Descargar PDF
-          </button>
+          <div className="flex items-center gap-2.5">
+            {esBorrador && (
+              <button
+                type="button"
+                onClick={handleGenerarVerifactuDesdeForm}
+                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white px-5 py-2.5 rounded-xl font-black text-xs sm:text-sm shadow-md shadow-blue-600/20 active:scale-95 transition-all cursor-pointer tracking-wider"
+                title="Generar la factura oficial definitiva con numeración correlativa y Veri*Factu"
+              >
+                <QrCode className="w-4 h-4" />
+                <span>GENERAR VERIFACTU</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  const cli = clientes.find(c => c.id === form.clienteId || (c as any)._docId === form.clienteId);
+                  const cen = centros.find(c => c._docId === form.centroId || c.id === form.centroId);
+                  const emp = empresas.find(e => e._docId === form.empresaId || e.id === form.empresaId);
+                  await generarFacturaOficialPDF(form, cli, cen, emp);
+                } catch (err) {
+                  console.error('Error generando PDF:', err);
+                  alert('No se pudo generar el PDF de la factura.');
+                }
+              }}
+              className="flex items-center gap-2 px-4 py-2.5 bg-zinc-900 hover:bg-black text-white rounded-xl text-xs font-bold shadow-sm transition-all cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>{esBorrador ? 'Descargar Borrador en PDF' : 'Descargar Factura Oficial PDF'}</span>
+            </button>
+          </div>
         </div>
 
         <form onSubmit={handleSaveFactura} className="bg-white rounded-3xl shadow-sm border border-zinc-200 overflow-hidden">
-          {/* Cabecera elegante de la Factura */}
-          <div className="p-6 md:p-8 bg-gradient-to-r from-zinc-950 via-zinc-900 to-zinc-800 text-white flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-red-600 text-white flex items-center justify-center font-black text-lg shadow-lg shadow-red-600/30">
-                F
+          {/* Cabecera de la Factura: Gris sobrio para borrador, oscuro para oficial */}
+          <div className={`p-5 md:p-6 border-b transition-colors flex flex-col md:flex-row md:items-center md:justify-between gap-4 ${
+            esBorrador
+              ? 'bg-slate-100 border-slate-200 text-slate-800'
+              : 'bg-gradient-to-r from-zinc-950 via-zinc-900 to-zinc-800 border-zinc-900 text-white'
+          }`}>
+            <div className="flex items-center gap-3.5">
+              <div className={`w-11 h-11 rounded-2xl flex items-center justify-center font-black text-base shrink-0 ${
+                esBorrador
+                  ? 'bg-white text-slate-700 border border-slate-300 shadow-2xs'
+                  : 'bg-red-600 text-white shadow-lg shadow-red-600/30'
+              }`}>
+                {esBorrador ? <FileText className="w-5 h-5 text-slate-600" /> : 'F'}
               </div>
               <div>
-                <div className="flex items-center gap-2.5">
-                  <h2 className="text-xl font-black tracking-tight">
-                    {editingId ? `Editar Factura ${form.numeroFactura}` : 'Nueva Factura Oficial'}
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <h2 className={`text-lg md:text-xl font-black tracking-tight ${esBorrador ? 'text-slate-900' : 'text-white'}`}>
+                    {esBorrador
+                      ? (editingId ? 'Editar Borrador de Factura' : 'Nuevo Borrador de Factura')
+                      : (editingId ? `Editar Factura ${form.numeroFactura}` : 'Nueva Factura Oficial')}
                   </h2>
-                  {form.albaranId && (
-                    <span className="text-[11px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 px-2.5 py-0.5 rounded-full">
-                      Albarán: {form.albaranId}
-                    </span>
+                  {!esBorrador && (
+                    <>
+                      <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                        {form.estado}
+                      </span>
+                      {form.albaranId && (
+                        <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-md border bg-zinc-800 text-zinc-300 border-zinc-700">
+                          Albarán: {form.albaranId}
+                        </span>
+                      )}
+                    </>
                   )}
                 </div>
-                <p className="text-xs text-zinc-300 mt-0.5">
-                  ABANFOC S.L. &bull; Facturación directa desde el albarán firmado por el cliente
+                <p className={`text-xs mt-0.5 ${esBorrador ? 'text-slate-500' : 'text-zinc-300'}`}>
+                  {esBorrador
+                    ? 'Documento provisional para revisión previa • Sin numeración correlativa ni código QR tributario'
+                    : 'ABANFOC S.L. • Facturación directa oficial desde el albarán firmado'}
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
-              <div>
-                <label className="block text-[10px] font-bold text-zinc-400 uppercase">Nº Factura</label>
-                <input
-                  type="text"
-                  value={form.numeroFactura}
-                  onChange={e => setForm({ ...form, numeroFactura: e.target.value, id: e.target.value })}
-                  className="mt-1 px-3.5 py-2 bg-white/10 border border-white/20 rounded-xl text-sm font-mono font-black text-white w-36 outline-none focus:border-red-400"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-zinc-400 uppercase">Estado</label>
-                <select
-                  value={form.estado}
-                  onChange={e => setForm({ ...form, estado: e.target.value as Factura['estado'] })}
-                  className="mt-1 px-3.5 py-2 bg-zinc-800 border border-white/20 rounded-xl text-sm font-bold text-white outline-none focus:border-red-400"
-                >
-                  {ESTADOS_FACTURA.map(e => (
-                    <option key={e.valor} value={e.valor} className="text-zinc-900 bg-white">{e.etiqueta}</option>
-                  ))}
-                </select>
-              </div>
+            <div className="flex items-center gap-3 shrink-0">
+              {esBorrador ? (
+                <>
+                  <div className="bg-white border-2 border-slate-400 w-36 h-14 px-3 py-1.5 rounded-xl shadow-xs text-center flex flex-col justify-center items-center">
+                    <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">Nº Factura</span>
+                    <span className="text-xs font-mono font-extrabold text-slate-700">SIN ASIGNAR</span>
+                  </div>
+                  <div className="bg-white border-2 border-slate-400 w-36 h-14 px-3 py-1.5 rounded-xl shadow-xs text-center flex flex-col justify-center items-center">
+                    <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">Estado</span>
+                    <span className="text-xs font-extrabold text-amber-700 flex items-center justify-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-amber-500" />
+                      Borrador
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <label className="block text-[10px] font-bold text-zinc-400 uppercase">Nº Factura</label>
+                    <input
+                      type="text"
+                      value={form.numeroFactura}
+                      onChange={e => setForm({ ...form, numeroFactura: e.target.value, id: e.target.value })}
+                      className="mt-1 px-3.5 py-2 bg-white/10 border border-white/20 rounded-xl text-sm font-mono font-black text-white w-36 outline-none focus:border-red-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-zinc-400 uppercase">Estado</label>
+                    <select
+                      value={form.estado}
+                      onChange={e => setForm({ ...form, estado: e.target.value as Factura['estado'] })}
+                      className="mt-1 px-3.5 py-2 bg-zinc-800 border border-white/20 rounded-xl text-sm font-bold text-white outline-none focus:border-red-400"
+                    >
+                      {ESTADOS_FACTURA.map(e => (
+                        <option key={e.valor} value={e.valor} className="text-zinc-900 bg-white">{e.etiqueta}</option>
+                      ))}
+                    </select>
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
           <div className="p-6 md:p-8 space-y-8">
-            {/* Banner si proviene de un Albarán */}
-            {form.albaranId && (
+            {/* Banner si proviene de un Albarán (solo en factura oficial emitida) */}
+            {!esBorrador && form.albaranId && (
               <div className="p-4 bg-emerald-50/80 border border-emerald-200 rounded-2xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                 <div className="flex items-center gap-2.5 text-xs font-bold text-emerald-900">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                   <span>
-                    Datos y partidas importados del Albarán <strong>{form.albaranId}</strong>. Al guardar, el albarán quedará marcado como Facturado.
+                    Datos y partidas importados del Albarán <strong>{form.albaranId}</strong>. El albarán queda registrado como Facturado.
                   </span>
                 </div>
               </div>
@@ -2381,16 +2702,31 @@ export default function Facturas() {
             {/* 3. QR TRIBUTARIO (VERI*FACTU), NOTAS Y CUADRO DE TOTALES */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
               <div className="lg:col-span-7 flex flex-col sm:flex-row gap-4 items-start">
-                <div className="flex flex-col items-center justify-center bg-white border border-zinc-200 rounded-2xl p-3.5 shadow-2xs shrink-0 mx-auto sm:mx-0">
-                  <span className="text-[10px] font-black text-zinc-900 tracking-tight mb-1.5">QR tributario:</span>
-                  <img
-                    src={generarQRVerifactuDataUrl('https://www.abanfoc.es')}
-                    alt="QR tributario VERI*FACTU"
-                    className="w-24 h-24 rounded border border-zinc-200"
-                  />
-                  <span className="text-[10px] font-black text-zinc-900 tracking-wider mt-1.5">VERI*FACTU</span>
-                  <span className="text-[9px] text-zinc-400 font-medium mt-0.5">www.abanfoc.es (Prueba)</span>
-                </div>
+                {form.estado === 'Borrador' || !form.numeroFactura ? (
+                  <div className="flex flex-col items-center justify-center bg-amber-50/70 border-2 border-dashed border-amber-300 rounded-2xl p-4 shadow-2xs shrink-0 mx-auto sm:mx-0 w-44 text-center">
+                    <QrCode className="w-10 h-10 text-amber-500/80 mb-2" />
+                    <span className="text-[11px] font-black text-amber-900 tracking-tight leading-tight">
+                      SIN CÓDIGO QR
+                    </span>
+                    <span className="text-[9px] text-amber-700 font-bold mt-1 leading-snug">
+                      Modo Borrador Activo
+                    </span>
+                    <span className="text-[8.5px] text-amber-600/90 font-medium mt-1 leading-snug">
+                      El QR y Veri*Factu se generarán al pulsar el botón azul
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center bg-white border border-zinc-200 rounded-2xl p-3.5 shadow-2xs shrink-0 mx-auto sm:mx-0">
+                    <span className="text-[10px] font-black text-zinc-900 tracking-tight mb-1.5">QR tributario:</span>
+                    <img
+                      src={generarQRVerifactuDataUrl('https://www.abanfoc.es')}
+                      alt="QR tributario VERI*FACTU"
+                      className="w-24 h-24 rounded border border-zinc-200"
+                    />
+                    <span className="text-[10px] font-black text-zinc-900 tracking-wider mt-1.5">VERI*FACTU</span>
+                    <span className="text-[9px] text-zinc-400 font-medium mt-0.5">www.abanfoc.es (Oficial)</span>
+                  </div>
+                )}
 
                 <div className="flex-1 w-full space-y-2">
                   <label className="block text-xs font-bold text-zinc-500 uppercase">Observaciones / Notas en Factura</label>
@@ -2460,7 +2796,7 @@ export default function Facturas() {
             </div>
 
             {/* Botones de Guardado */}
-            <div className="flex flex-col sm:flex-row items-center justify-end gap-3 pt-4 border-t border-zinc-100">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-zinc-100">
               <button
                 type="button"
                 onClick={() => { setView('list'); setEditingId(null); }}
@@ -2468,13 +2804,18 @@ export default function Facturas() {
               >
                 Cancelar
               </button>
-              <button
-                type="submit"
-                className="w-full sm:w-auto flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white px-8 py-3 rounded-xl font-bold text-xs shadow-lg shadow-red-600/20 active:scale-95 transition-all cursor-pointer"
-              >
-                <Save className="w-4 h-4" />
-                {editingId ? 'Guardar Cambios en Factura' : 'Emitir y Guardar Factura'}
-              </button>
+
+              <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
+                <button
+                  type="submit"
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 bg-zinc-900 hover:bg-black text-white px-6 py-3 rounded-xl font-bold text-xs shadow-md transition-all cursor-pointer"
+                >
+                  <Save className="w-4 h-4" />
+                  {form.estado === 'Borrador' || !form.numeroFactura
+                    ? 'Guardar Borrador'
+                    : (editingId ? 'Guardar Cambios en Factura' : 'Emitir y Guardar Factura')}
+                </button>
+              </div>
             </div>
           </div>
         </form>

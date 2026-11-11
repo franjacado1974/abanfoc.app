@@ -70,7 +70,7 @@ const CATEGORIAS_MENU: NavCategory[] = [
     ]
   },
 
-  // 3. Mantenimientos (Planificación, Partes de Revisión, Listman)
+  // 3. Mantenimientos (Planificación, Partes de Revisión, Albaranes de Trabajo, Listman)
   {
     id: 'mantenimientos',
     title: 'Mantenimientos',
@@ -79,11 +79,12 @@ const CATEGORIAS_MENU: NavCategory[] = [
     subItems: [
       { id: 'planificacion', path: '/partes_trabajo', title: 'Planificación', Icon: CalendarDays, allowedRoles: ['super-administrador', 'administrador'] },
       { id: 'partes', path: '/partes', title: 'Partes de Revisión', Icon: FileText, allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador', 'tecnico'] },
+      { id: 'albaranes-revision', path: '/albaranes-revision', title: 'Albarán de Revisión', Icon: FileCheck, allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador', 'tecnico'] },
       { id: 'revisiones', path: '/revisiones', title: 'Listman', Icon: SearchCheck, allowedRoles: ['super-administrador', 'administrador'] }
     ]
   },
 
-  // 4. Operaciones (Crear nuevo parte y Partes de Trabajo)
+  // 4. Operaciones (Crear nuevo parte, Partes de Trabajo, Albaranes de Trabajo)
   {
     id: 'operaciones',
     title: 'Operaciones',
@@ -91,7 +92,8 @@ const CATEGORIAS_MENU: NavCategory[] = [
     allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador', 'tecnico'],
     subItems: [
       { id: 'crear-parte', path: '/crear-parte', title: 'Crear nuevo parte', Icon: FilePlus2, allowedRoles: ['super-administrador', 'administrador', 'editor', 'tecnico'] },
-      { id: 'partes-operaciones', path: '/partes-trabajo', title: 'Partes de Trabajo', Icon: FileText, allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador', 'tecnico'] }
+      { id: 'partes-operaciones', path: '/partes-trabajo', title: 'Partes de Trabajo', Icon: FileText, allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador', 'tecnico'] },
+      { id: 'albaranes-trabajo', path: '/albaranes-trabajo', title: 'Albarán de Trabajo', Icon: FileDigit, allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador', 'tecnico'] }
     ]
   },
 
@@ -105,7 +107,7 @@ const CATEGORIAS_MENU: NavCategory[] = [
       { id: 'certificados', path: '/certificados', title: 'Certificados', Icon: FileCheck, allowedRoles: ['super-administrador', 'administrador'] },
       { id: 'presupuestos', path: '/presupuestos', title: 'Presupuestos', Icon: Calculator, allowedRoles: ['super-administrador', 'administrador'] },
       { id: 'pedidos', path: '/pedidos', title: 'Pedidos', Icon: FileText, allowedRoles: ['super-administrador', 'administrador'] },
-      { id: 'albaranes', path: '/albaranes', title: 'Albaranes', Icon: FileDigit, allowedRoles: ['super-administrador', 'administrador', 'visualizador'] },
+      { id: 'albaranes', path: '/albaranes', title: 'Albarán para Facturar', Icon: FileDigit, allowedRoles: ['super-administrador', 'administrador', 'visualizador'] },
       { id: 'facturas', path: '/facturas', title: 'Facturas', Icon: Receipt, allowedRoles: ['super-administrador', 'administrador'] },
       { id: 'notas', path: '/notas', title: 'Notas', Icon: StickyNote, allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador', 'tecnico'] }
     ]

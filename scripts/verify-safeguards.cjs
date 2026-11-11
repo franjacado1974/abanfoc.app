@@ -1982,6 +1982,53 @@ if (fs.existsSync(pdfGenPath)) {
     }
   }
 
+  // 130. Blindaje Inviolable del Contrato de Mantenimiento Dual (Cuota Fija y Por Sistemas)
+  const centrosPath130 = path.join(__dirname, '..', 'src', 'Centros.tsx');
+  const checklistPath130 = path.join(__dirname, '..', 'src', 'RevisionChecklist.tsx');
+  const pdfContratoPath130 = path.join(__dirname, '..', 'src', 'pdfContratoGenerator.ts');
+
+  if (fs.existsSync(centrosPath130)) {
+    const cContent130 = fs.readFileSync(centrosPath130, 'utf8');
+    if (!cContent130.includes('tipoModalidadContrato') || !cContent130.includes('por_sistema') || !cContent130.includes('preciosSistemasContrato')) {
+      errors.push('CRÍTICO: Centros.tsx carece de soporte para modalidad por_sistema o preciosSistemasContrato (AGENTS.md REGLA 130).');
+    }
+  }
+  if (fs.existsSync(checklistPath130)) {
+    const chContent130 = fs.readFileSync(checklistPath130, 'utf8');
+    if (!chContent130.includes('tipoModalidadContrato') || !chContent130.includes('preciosSistemasContrato')) {
+      errors.push('CRÍTICO: RevisionChecklist.tsx no aplica la valoración automática según tipoModalidadContrato (AGENTS.md REGLA 130).');
+    }
+  }
+  if (fs.existsSync(pdfContratoPath130)) {
+    const pdfContent130 = fs.readFileSync(pdfContratoPath130, 'utf8');
+    if (!pdfContent130.includes('tipoModalidadContrato') || !pdfContent130.includes('por_sistema')) {
+      errors.push('CRÍTICO: pdfContratoGenerator.ts no adapta la tabla según modalidad por_sistema (AGENTS.md REGLA 130).');
+    }
+  }
+
+  const firebasePath130 = path.join(__dirname, '..', 'src', 'firebase.tsx');
+  const albaranesPath130 = path.join(__dirname, '..', 'src', 'Albaranes.tsx');
+  const facturasPath130 = path.join(__dirname, '..', 'src', 'Facturas.tsx');
+
+  if (fs.existsSync(firebasePath130)) {
+    const fbContent130 = fs.readFileSync(firebasePath130, 'utf8');
+    if (!fbContent130.includes('resolverPrecioUnitarioContrato') || !fbContent130.includes('obtenerCuotaFijaContrato')) {
+      errors.push('CRÍTICO: firebase.tsx carece del motor de resolución semántica de precios de contrato (AGENTS.md REGLA 130).');
+    }
+  }
+  if (fs.existsSync(albaranesPath130)) {
+    const albContent130 = fs.readFileSync(albaranesPath130, 'utf8');
+    if (!albContent130.includes('revalorarAlbaranSiProcede') || !albContent130.includes('resolverPrecioUnitarioContrato')) {
+      errors.push('CRÍTICO: Albaranes.tsx carece de revaloración automática de albaranes desde contrato (AGENTS.md REGLA 130).');
+    }
+  }
+  if (fs.existsSync(facturasPath130)) {
+    const facContent130 = fs.readFileSync(facturasPath130, 'utf8');
+    if (!facContent130.includes('resolverPrecioUnitarioContrato')) {
+      errors.push('CRÍTICO: Facturas.tsx carece de valoración automática desde contrato en iniciarFacturaDesdeAlbaran (AGENTS.md REGLA 130).');
+    }
+  }
+
 // Resultado de la verificación
 if (errors.length > 0) {
   console.error('\n❌ ERROR CRÍTICO DE BLINDAJE INTEGRAL (AGENTS.md):');

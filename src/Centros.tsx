@@ -5,7 +5,7 @@ import { ArrowLeft, Save, Plus, Search, Edit, Trash2, MapPin, Layers, X, Copy, A
 import { HandOptionsIcon } from './components/HandOptionsIcon';
 import * as XLSX from 'xlsx';
 import { CATEGORIAS_POR_DEFECTO, getIconForSistema } from './Sistemas';
-import { addCentro, updateCentro, deleteCentro, subscribeCentros, subscribeFamilias, subscribeArticulos, subscribeTecnicos, subscribeEmpresas, addCentroSistema, deleteCentroSistema, subscribeCentroSistemas, addEquipoInstalado, updateEquipoInstalado, deleteEquipoInstalado, subscribeEquiposInstalados, sistemaToSlug, saveContrato, syncContratosExistentes, updateParte as updateParteFirestore, subscribeSistemasCategorias } from './firebase';
+import { addCentro, updateCentro, deleteCentro, subscribeCentros, subscribeClientes, subscribeFamilias, subscribeArticulos, subscribeTecnicos, subscribeEmpresas, addCentroSistema, deleteCentroSistema, subscribeCentroSistemas, addEquipoInstalado, updateEquipoInstalado, deleteEquipoInstalado, subscribeEquiposInstalados, sistemaToSlug, saveContrato, syncContratosExistentes, updateParte as updateParteFirestore, subscribeSistemasCategorias } from './firebase';
 import type { Articulo, Tecnico } from './firebase';
 import ConfirmationModal from './ConfirmationModal';
 import DetailModal from './components/DetailModal';
@@ -78,6 +78,11 @@ export interface Centro {
   precioAnualContrato?: string;
   precioTrimestralContrato?: string;
   precioMensualContrato?: string;
+  tipoModalidadContrato?: 'cuota_fija' | 'por_sistema';
+  preciosSistemasContrato?: Record<string, string>;
+  preciosSistemasAnualContrato?: Record<string, string>;
+  preciosSistemasTrimestralContrato?: Record<string, string>;
+  formaPagoContrato?: string;
   comentariosTecnico?: string;
   comentariosPrivados?: string;
   formaPago?: string;
@@ -134,6 +139,16 @@ export const getNombreEquipoDisplay = (eq: any) => {
   if (isValid(eq.modelo)) return eq.modelo;
   if (isValid(eq.pesoCapacidad)) return eq.pesoCapacidad;
   return 'Equipo sin tipo';
+};
+
+export const renderIconoParaContrato = (nombre: string) => {
+  const IconoCat = getIconForSistema(nombre);
+  if (!IconoCat) return <Layers className="w-4 h-4 text-zinc-500" />;
+  if (typeof IconoCat === 'string') {
+    return <img src={IconoCat} alt="Icon" className="w-4 h-4 object-contain" />;
+  }
+  const IconComponent = IconoCat as React.ElementType;
+  return <IconComponent className="w-4 h-4 text-zinc-600" />;
 };
 
 export interface CentroSistema {
@@ -205,7 +220,7 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
   const [centros, setCentros] = useState<Centro[]>(() => { try { const saved = localStorage.getItem('firecheck_db_centros'); return saved ? JSON.parse(saved) : []; } catch { return []; } });
   const [limiteCentros, setLimiteCentros] = useState<number | 'todos'>(10);
   const [accionesModalItem, setAccionesModalItem] = useState<Centro | null>(null);
-  const [clientes] = useState<Cliente[]>(() => { try { const saved = localStorage.getItem('firecheck_db_clientes'); return saved ? JSON.parse(saved) : []; } catch { return []; } });
+  const [clientes, setClientes] = useState<Cliente[]>(() => { try { const saved = localStorage.getItem('firecheck_db_clientes'); return saved ? JSON.parse(saved) : []; } catch { return []; } });
   const [centroSistemas, setCentroSistemas] = useState<CentroSistema[]>(() => { try { const saved = localStorage.getItem('firecheck_db_centro_sistemas'); return saved ? JSON.parse(saved) : []; } catch { return []; } });
   const [categoriasSistema, setCategoriasSistema] = useState<{id: string, nombre: string, imagenUrl?: string}[]>(() => { const saved = localStorage.getItem('firecheck_db_sistemas_categorias'); return saved ? JSON.parse(saved) : CATEGORIAS_POR_DEFECTO; });
   const [view, setView] = useState<'list' | 'form' | 'sistemas' | 'periodicidad' | 'asignar-tecnico'>('list');
@@ -227,7 +242,11 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
     precioAnual: '',
     precioTrimestral: '',
     precioMensual: '',
-    formaPago: 'Transferencia bancaria'
+    formaPago: 'Transferencia bancaria',
+    tipoModalidad: 'cuota_fija' as 'cuota_fija' | 'por_sistema',
+    preciosSistemas: {} as Record<string, string>,
+    preciosSistemasAnual: {} as Record<string, string>,
+    preciosSistemasTrimestral: {} as Record<string, string>
   });
   const [isTecnicoModalOpen, setIsTecnicoModalOpen] = useState(false);
   const [centroForTecnico, setCentroForTecnico] = useState<Centro | null>(null);
@@ -398,6 +417,7 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
 
   useEffect(() => {
     let unsub: (() => void) | null = null;
+    let unsubCli: (() => void) | null = null;
     try {
       unsub = subscribeCentros((items: any[]) => {
         const uniqueMap = new Map<string, any>();
@@ -411,8 +431,16 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
         setCentros(mapped);
         localStorage.setItem('firecheck_db_centros', JSON.stringify(mapped));
       });
-    } catch (e) { console.error('subscribeCentros failed', e); }
-    return () => { if (unsub) unsub(); };
+      unsubCli = subscribeClientes((items: any[]) => {
+        if (Array.isArray(items) && items.length > 0) {
+          setClientes(items);
+        }
+      });
+    } catch (e) { console.error('subscribeCentros/subscribeClientes failed', e); }
+    return () => { 
+      if (unsub) unsub(); 
+      if (unsubCli) unsubCli();
+    };
   }, []);
 
   const syncRef = useRef(false);
@@ -695,20 +723,53 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
     const pMensual = parseFloat(formContrato.precioMensual) || 0;
 
     let total = 0;
-    if (isAnual && isTrimestral && isMensual) {
-      total = pAnual + (pTrimestral * 3) + (pMensual * 8);
-    } else if (isAnual && isTrimestral) {
-      total = pAnual + (pTrimestral * 3);
-    } else if (isAnual && isMensual) {
-      total = pAnual + (pMensual * 11);
-    } else if (isTrimestral && isMensual) {
-      total = (pTrimestral * 4) + (pMensual * 8);
-    } else if (isAnual) {
-      total = pAnual;
-    } else if (isTrimestral) {
-      total = pTrimestral * 4;
-    } else if (isMensual) {
-      total = pMensual * 12;
+    if (formContrato.tipoModalidad === 'cuota_fija') {
+      if (isAnual && isTrimestral && isMensual) {
+        total = pAnual + (pTrimestral * 3) + (pMensual * 8);
+      } else if (isAnual && isTrimestral) {
+        total = pAnual + (pTrimestral * 3);
+      } else if (isAnual && isMensual) {
+        total = pAnual + (pMensual * 11);
+      } else if (isTrimestral && isMensual) {
+        total = (pTrimestral * 4) + (pMensual * 8);
+      } else if (isAnual) {
+        total = pAnual;
+      } else if (isTrimestral) {
+        total = pTrimestral * 4;
+      } else if (isMensual) {
+        total = pMensual * 12;
+      }
+    } else {
+      // Modalidad por sistemas / equipos
+      let subtotalRevisionAnual = 0;
+      let subtotalRevisionTrimestral = 0;
+      const cId = centroForContrato._docId || centroForContrato.id;
+      const sistCentro = centroSistemas.filter(s => s.centroId === cId || s.centroId === centroForContrato.id);
+      sistCentro.forEach(s => {
+        const cant = equiposInstalados.filter(eq => (eq.centroId === cId || eq.centroId === centroForContrato.id) && eq.sistemaId === s.id).length;
+        const pAnual = parseFloat(formContrato.preciosSistemasAnual[s.id] || formContrato.preciosSistemasAnual[s.tipo] || formContrato.preciosSistemasAnual[s.familia] || formContrato.preciosSistemas[s.id] || '0') || 0;
+        const pTrim = parseFloat(formContrato.preciosSistemasTrimestral[s.id] || formContrato.preciosSistemasTrimestral[s.tipo] || formContrato.preciosSistemasTrimestral[s.familia] || '') || (pAnual > 0 ? pAnual : 0);
+        subtotalRevisionAnual += cant * pAnual;
+        subtotalRevisionTrimestral += cant * pTrim;
+      });
+
+      if (isAnual && isTrimestral && isMensual) {
+        total = subtotalRevisionAnual + (subtotalRevisionTrimestral * 3) + (subtotalRevisionTrimestral * 8);
+      } else if (isAnual && isTrimestral) {
+        total = subtotalRevisionAnual + (subtotalRevisionTrimestral * 3);
+      } else if (isAnual && isMensual) {
+        total = subtotalRevisionAnual + (subtotalRevisionTrimestral * 11);
+      } else if (isTrimestral && isMensual) {
+        total = (subtotalRevisionTrimestral * 4) + (subtotalRevisionTrimestral * 8);
+      } else if (isAnual) {
+        total = subtotalRevisionAnual;
+      } else if (isTrimestral) {
+        total = subtotalRevisionTrimestral * 4;
+      } else if (isMensual) {
+        total = subtotalRevisionTrimestral * 12;
+      } else {
+        total = subtotalRevisionAnual;
+      }
     }
 
     const updatedCentro = {
@@ -723,7 +784,11 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
       precioAnualContrato: formContrato.precioAnual.trim(),
       precioTrimestralContrato: formContrato.precioTrimestral.trim(),
       precioMensualContrato: formContrato.precioMensual.trim(),
-      formaPagoContrato: formContrato.formaPago
+      formaPagoContrato: formContrato.formaPago,
+      tipoModalidadContrato: formContrato.tipoModalidad,
+      preciosSistemasContrato: formContrato.preciosSistemasAnual,
+      preciosSistemasAnualContrato: formContrato.preciosSistemasAnual,
+      preciosSistemasTrimestralContrato: formContrato.preciosSistemasTrimestral
     };
     const docId = (centroForContrato as any)._docId || centroForContrato.id;
     const { _docId, ...centroData } = updatedCentro as any;
@@ -741,14 +806,18 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
         precioAnualContrato: formContrato.precioAnual.trim(),
         precioTrimestralContrato: formContrato.precioTrimestral.trim(),
         precioMensualContrato: formContrato.precioMensual.trim(),
-        formaPagoContrato: formContrato.formaPago
+        formaPagoContrato: formContrato.formaPago,
+        tipoModalidadContrato: formContrato.tipoModalidad,
+        preciosSistemasContrato: formContrato.preciosSistemasAnual,
+        preciosSistemasAnualContrato: formContrato.preciosSistemasAnual,
+        preciosSistemasTrimestralContrato: formContrato.preciosSistemasTrimestral
       });
     } catch (err) {
       console.error('Error guardando contrato en Firestore:', err);
       alert('Error al guardar el contrato en Firestore');
       return;
     }
-    const updatedCentros = centros.map(c => c.id === centroForContrato.id ? { ...updatedCentro, _docId: (c as any)._docId || _docId } : c);
+    const updatedCentros = centros.map(c => ((c.id && c.id === centroForContrato.id) || (c as any)._docId === docId || c.id === docId) ? { ...updatedCentro, _docId: (c as any)._docId || _docId } : c);
     saveToDB(updatedCentros);
     setIsContratoModalOpen(false);
     setCentroForContrato(null);
@@ -1076,13 +1145,19 @@ const renderModals = () => {
         )}
 
         {isContratoModalOpen && centroForContrato && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[100]">
-            <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl flex flex-col animate-in fade-in zoom-in-95 duration-200 overflow-hidden">
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-[100]">
+            <div className="bg-white rounded-3xl w-full max-w-6xl shadow-2xl flex flex-col animate-in fade-in zoom-in-95 duration-200 overflow-hidden max-h-[92vh]">
               <div className="px-6 py-4 border-b border-zinc-100 flex items-center justify-between bg-zinc-50/50">
-                <div><h2 className="text-lg font-bold text-zinc-900">Contrato de Mantenimiento</h2><p className="text-xs text-zinc-500">{centroForContrato.nombre}</p></div>
-                <button onClick={() => setIsContratoModalOpen(false)} className="p-2 text-zinc-400 hover:text-black hover:bg-white rounded-xl transition-colors"><X className="w-5 h-5" /></button>
+                <div>
+                  <h2 className="text-lg font-bold text-zinc-900">Contrato de Mantenimiento</h2>
+                  <p className="text-xs text-zinc-500">{centroForContrato.nombre}</p>
+                </div>
+                <button onClick={() => setIsContratoModalOpen(false)} className="p-2 text-zinc-400 hover:text-black hover:bg-white rounded-xl transition-colors">
+                  <X className="w-5 h-5" />
+                </button>
               </div>
-              <form onSubmit={handleSaveContrato} className="p-6 space-y-4 overflow-y-auto max-h-[70vh]">
+
+              <form onSubmit={handleSaveContrato} className="p-6 space-y-5 overflow-y-auto max-h-[78vh]">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div className="space-y-1">
                     <label className="text-xs font-bold text-zinc-700">Nº de Contrato</label>
@@ -1117,53 +1192,413 @@ const renderModals = () => {
                   </div>
                 </div>
 
-                {/* Selector de Periodicidad */}
+                {/* Selector de Modalidad del Contrato */}
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-zinc-700">Periodicidad del Contrato e Importe por revisión</label>
-                  <div className="space-y-3 p-3.5 border border-zinc-200 rounded-xl bg-zinc-50/30">
-                    {[
-                      { type: 'Anual', stateKey: 'precioAnual', label: 'Anual (Revisión Anual)' },
-                      { type: 'Trimestral', stateKey: 'precioTrimestral', label: 'Trimestral (Revisión Trimestral)' },
-                      { type: 'Mensual', stateKey: 'precioMensual', label: 'Mensual (Revisión Mensual)' }
-                    ].map(({ type, stateKey, label }) => {
-                      const isChecked = formContrato.periodicidad.includes(type);
-                      return (
-                        <div key={type} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-100 last:border-b-0 pb-2.5 last:pb-0">
-                          <label className={`flex items-center gap-2 group ${isTecnicoMode ? 'cursor-not-allowed opacity-75' : 'cursor-pointer'}`}>
-                            <input
-                              disabled={isTecnicoMode}
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={e => {
-                                const newTypes = e.target.checked
-                                  ? [...formContrato.periodicidad, type]
-                                  : formContrato.periodicidad.filter(t => t !== type);
-                                setFormContrato({ ...formContrato, periodicidad: newTypes });
-                              }}
-                              className={`w-4 h-4 text-black rounded border-zinc-300 focus:ring-black ${isTecnicoMode ? 'cursor-not-allowed' : 'cursor-pointer'}`}
-                            />
-                            <span className={`text-sm font-medium text-zinc-700 ${!isTecnicoMode && 'group-hover:text-black'} transition-colors`}>{label}</span>
-                          </label>
-                          
-                          {isChecked && (
-                            <div className="flex items-center gap-2 shrink-0 pl-6 sm:pl-0">
-                              <span className="text-xs font-medium text-zinc-500">Importe (€):</span>
-                              <input
-                                disabled={isTecnicoMode}
-                                type="number"
-                                value={formContrato[stateKey as 'precioAnual' | 'precioTrimestral' | 'precioMensual']}
-                                onChange={e => setFormContrato({ ...formContrato, [stateKey]: e.target.value })}
-                                placeholder="Ej: 150"
-                                className="w-24 px-2.5 py-1 border border-zinc-200 rounded-lg text-xs outline-none focus:border-zinc-400 bg-white text-black text-right font-semibold"
-                              />
-                              <span className="text-[10px] text-zinc-400 font-bold uppercase shrink-0">+ IVA</span>
-                            </div>
+                  <label className="text-xs font-bold text-zinc-700 uppercase tracking-wider">Modalidad de Facturación y Precios del Contrato</label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      disabled={isTecnicoMode}
+                      onClick={() => setFormContrato({ ...formContrato, tipoModalidad: 'cuota_fija' })}
+                      className={`p-3.5 rounded-2xl border-2 text-left transition-all flex items-start gap-3.5 cursor-pointer ${
+                        formContrato.tipoModalidad === 'cuota_fija'
+                          ? 'border-black bg-zinc-900 text-white shadow-lg shadow-black/10'
+                          : 'border-zinc-200 bg-zinc-50/50 hover:bg-zinc-100 text-zinc-700'
+                      }`}
+                    >
+                      <div className={`p-2.5 rounded-xl shrink-0 ${formContrato.tipoModalidad === 'cuota_fija' ? 'bg-white/10 text-white' : 'bg-white border border-zinc-200 text-zinc-700'}`}>
+                        <CreditCard className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="font-bold text-sm flex items-center gap-2">
+                          1. Contrato por Cuota Fija
+                          {formContrato.tipoModalidad === 'cuota_fija' && (
+                            <span className="text-[10px] bg-white/20 text-white px-2 py-0.5 rounded-full font-bold">Activo</span>
                           )}
                         </div>
-                      );
-                    })}
+                        <p className={`text-xs mt-1 ${formContrato.tipoModalidad === 'cuota_fija' ? 'text-zinc-300' : 'text-zinc-500'}`}>
+                          Tarifa acordada fija por revisión (anual, trimestral o mensual), independientemente del número de equipos instalados.
+                        </p>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={isTecnicoMode}
+                      onClick={() => setFormContrato({ ...formContrato, tipoModalidad: 'por_sistema' })}
+                      className={`p-3.5 rounded-2xl border-2 text-left transition-all flex items-start gap-3.5 cursor-pointer ${
+                        formContrato.tipoModalidad === 'por_sistema'
+                          ? 'border-blue-600 bg-blue-600 text-white shadow-lg shadow-blue-600/20'
+                          : 'border-zinc-200 bg-zinc-50/50 hover:bg-zinc-100 text-zinc-700'
+                      }`}
+                    >
+                      <div className={`p-2.5 rounded-xl shrink-0 ${formContrato.tipoModalidad === 'por_sistema' ? 'bg-white/10 text-white' : 'bg-white border border-zinc-200 text-blue-600'}`}>
+                        <Layers className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="font-bold text-sm flex items-center gap-2">
+                          2. Contrato Precio por Sistemas
+                          {formContrato.tipoModalidad === 'por_sistema' && (
+                            <span className="text-[10px] bg-white/20 text-white px-2 py-0.5 rounded-full font-bold">Activo</span>
+                          )}
+                        </div>
+                        <p className={`text-xs mt-1 ${formContrato.tipoModalidad === 'por_sistema' ? 'text-blue-100' : 'text-zinc-500'}`}>
+                          Precios unitarios acordados por periodo (Anual y Trimestral). El albarán se valora automáticamente según el periodo revisado.
+                        </p>
+                      </div>
+                    </button>
                   </div>
                 </div>
+
+                {/* MODALIDAD 1: CUOTA FIJA */}
+                {formContrato.tipoModalidad === 'cuota_fija' && (
+                  <div className="space-y-2 p-4 border border-zinc-200 rounded-2xl bg-zinc-50/50">
+                    <label className="text-xs font-bold text-zinc-800">Periodicidad del Contrato e Importe por revisión</label>
+                    <p className="text-xs text-zinc-500 mb-3">Marca las revisiones incluidas y especifica el importe fijado para cada visita:</p>
+                    <div className="space-y-3">
+                      {[
+                        { type: 'Anual', stateKey: 'precioAnual', label: 'Anual (Revisión Anual)' },
+                        { type: 'Trimestral', stateKey: 'precioTrimestral', label: 'Trimestral (Revisión Trimestral)' },
+                        { type: 'Mensual', stateKey: 'precioMensual', label: 'Mensual (Revisión Mensual)' }
+                      ].map(({ type, stateKey, label }) => {
+                        const isChecked = formContrato.periodicidad.includes(type);
+                        return (
+                          <div key={type} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-white border border-zinc-200 rounded-xl">
+                            <label className={`flex items-center gap-2 group ${isTecnicoMode ? 'cursor-not-allowed opacity-75' : 'cursor-pointer'}`}>
+                              <input
+                                disabled={isTecnicoMode}
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={e => {
+                                  const newTypes = e.target.checked
+                                    ? [...formContrato.periodicidad, type]
+                                    : formContrato.periodicidad.filter(t => t !== type);
+                                  setFormContrato({ ...formContrato, periodicidad: newTypes });
+                                }}
+                                className={`w-4 h-4 text-black rounded border-zinc-300 focus:ring-black ${isTecnicoMode ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                              />
+                              <span className={`text-sm font-semibold text-zinc-800 ${!isTecnicoMode && 'group-hover:text-black'} transition-colors`}>{label}</span>
+                            </label>
+                            
+                            {isChecked && (
+                              <div className="flex items-center gap-2 shrink-0 pl-6 sm:pl-0">
+                                <span className="text-xs font-medium text-zinc-500">Importe (€):</span>
+                                <input
+                                  disabled={isTecnicoMode}
+                                  type="number"
+                                  value={formContrato[stateKey as 'precioAnual' | 'precioTrimestral' | 'precioMensual']}
+                                  onChange={e => setFormContrato({ ...formContrato, [stateKey]: e.target.value })}
+                                  placeholder="Ej: 150"
+                                  className="w-28 px-3 py-1.5 border border-zinc-200 rounded-lg text-sm outline-none focus:border-black bg-white text-black text-right font-bold"
+                                />
+                                <span className="text-[11px] text-zinc-500 font-bold uppercase shrink-0">+ IVA</span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* MODALIDAD 2: PRECIO POR SISTEMAS */}
+                {formContrato.tipoModalidad === 'por_sistema' && (
+                  <div className="space-y-4 p-4 border border-blue-200 rounded-2xl bg-blue-50/30">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-blue-100 pb-3">
+                      <div>
+                        <h3 className="text-xs font-bold text-blue-900 uppercase tracking-wider">Tarifas por Sistema / Equipo del Centro (Anual y Trimestral)</h3>
+                        <p className="text-xs text-blue-700 mt-0.5">Define los precios unitarios (€/ud) para revisiones Anuales y Trimestrales. El albarán aplicará automáticamente el precio correspondiente al periodo revisado.</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-zinc-700">Periodicidad:</span>
+                        {['Anual', 'Trimestral', 'Mensual'].map(type => {
+                          const isChecked = formContrato.periodicidad.includes(type);
+                          return (
+                            <label key={type} className="inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-700 cursor-pointer">
+                              <input
+                                disabled={isTecnicoMode}
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={e => {
+                                  const newTypes = e.target.checked
+                                    ? [...formContrato.periodicidad, type]
+                                    : formContrato.periodicidad.filter(t => t !== type);
+                                  setFormContrato({ ...formContrato, periodicidad: newTypes });
+                                }}
+                                className="w-3.5 h-3.5 text-blue-600 rounded border-zinc-300 focus:ring-blue-500"
+                              />
+                              {type}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Tabla de sistemas del centro */}
+                    {(() => {
+                      const cId = centroForContrato._docId || centroForContrato.id;
+                      const sistCentro = centroSistemas.filter(s => s.centroId === cId || s.centroId === centroForContrato.id);
+                      
+                      let subtotalAnualTotal = 0;
+                      let subtotalTrimestralTotal = 0;
+                      let totalEquiposCount = 0;
+
+                      return (
+                        <div className="space-y-3">
+                          {sistCentro.length === 0 ? (
+                            <div className="p-4 bg-white rounded-xl border border-zinc-200 text-center text-xs text-zinc-500">
+                              Este centro no tiene sistemas vinculados todavía. Puedes añadir sistemas al centro o configurar los precios en las categorías globales abajo.
+                            </div>
+                          ) : (
+                            <div className="bg-white rounded-xl border border-zinc-200 overflow-hidden divide-y divide-zinc-100">
+                              <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-zinc-50 text-[11px] font-bold text-zinc-600 uppercase">
+                                <div className="col-span-4">Sistema / Elemento PCI</div>
+                                <div className="col-span-1 text-center">Equipos</div>
+                                <div className="col-span-2 text-right">P. Unit. Anual (€)</div>
+                                <div className="col-span-1 text-right">Sub. Anual</div>
+                                <div className="col-span-2 text-right">P. Unit. Trim. (€)</div>
+                                <div className="col-span-2 text-right">Sub. Trim.</div>
+                              </div>
+                              {sistCentro.map(s => {
+                                const cant = equiposInstalados.filter(eq => (eq.centroId === cId || eq.centroId === centroForContrato.id) && eq.sistemaId === s.id).length;
+                                totalEquiposCount += cant;
+                                
+                                const priceAnualStr = formContrato.preciosSistemasAnual[s.id] !== undefined
+                                  ? formContrato.preciosSistemasAnual[s.id]
+                                  : (formContrato.preciosSistemasAnual[s.tipo] || formContrato.preciosSistemasAnual[s.familia] || formContrato.preciosSistemas[s.id] || '');
+                                
+                                const priceTrimStr = formContrato.preciosSistemasTrimestral[s.id] !== undefined
+                                  ? formContrato.preciosSistemasTrimestral[s.id]
+                                  : (formContrato.preciosSistemasTrimestral[s.tipo] || formContrato.preciosSistemasTrimestral[s.familia] || '');
+
+                                const pAnual = parseFloat(priceAnualStr) || 0;
+                                const pTrim = parseFloat(priceTrimStr) || (pAnual > 0 ? pAnual : 0);
+
+                                const lineSubtotalAnual = Math.round(cant * pAnual * 100) / 100;
+                                const lineSubtotalTrim = Math.round(cant * pTrim * 100) / 100;
+
+                                subtotalAnualTotal += lineSubtotalAnual;
+                                subtotalTrimestralTotal += lineSubtotalTrim;
+
+                                const desc = s.descripcion || s.tipo || s.familia || 'Sistema';
+
+                                return (
+                                  <div key={s.id} className="grid grid-cols-12 gap-2 px-3 py-2.5 items-center hover:bg-zinc-50/70 transition-colors">
+                                    <div className="col-span-4 flex items-center gap-2">
+                                      <div className="w-5 h-5 flex items-center justify-center shrink-0">
+                                        {renderIconoParaContrato(s.tipo || s.familia || s.descripcion || '')}
+                                      </div>
+                                      <div className="truncate">
+                                        <p className="text-xs font-bold text-zinc-900 truncate">{desc}</p>
+                                        <p className="text-[10px] text-zinc-400 truncate">{s.tipo || s.familia}</p>
+                                      </div>
+                                    </div>
+                                    <div className="col-span-1 text-center">
+                                      <span className="inline-block px-2 py-0.5 rounded-full text-xs font-bold bg-zinc-100 text-zinc-700">
+                                        {cant}
+                                      </span>
+                                    </div>
+                                    
+                                    {/* Precio Anual */}
+                                    <div className="col-span-2 text-right">
+                                      <input
+                                        disabled={isTecnicoMode}
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        value={priceAnualStr}
+                                        onChange={e => {
+                                          const val = e.target.value;
+                                          setFormContrato(prev => ({
+                                            ...prev,
+                                            preciosSistemasAnual: {
+                                              ...prev.preciosSistemasAnual,
+                                              [s.id]: val,
+                                              ...(s.tipo ? { [s.tipo]: val } : {}),
+                                              ...(s.familia ? { [s.familia]: val } : {})
+                                            },
+                                            preciosSistemas: {
+                                              ...prev.preciosSistemas,
+                                              [s.id]: val,
+                                              ...(s.tipo ? { [s.tipo]: val } : {}),
+                                              ...(s.familia ? { [s.familia]: val } : {})
+                                            }
+                                          }));
+                                        }}
+                                        placeholder="0.00"
+                                        className="w-full max-w-[85px] px-2 py-1 border border-zinc-200 rounded-lg text-xs outline-none focus:border-blue-600 bg-white text-black text-right font-bold ml-auto"
+                                      />
+                                    </div>
+                                    <div className="col-span-1 text-right font-bold text-xs text-zinc-900">
+                                      {lineSubtotalAnual.toFixed(2)} €
+                                    </div>
+
+                                    {/* Precio Trimestral */}
+                                    <div className="col-span-2 text-right">
+                                      <input
+                                        disabled={isTecnicoMode}
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        value={priceTrimStr}
+                                        onChange={e => {
+                                          const val = e.target.value;
+                                          setFormContrato(prev => ({
+                                            ...prev,
+                                            preciosSistemasTrimestral: {
+                                              ...prev.preciosSistemasTrimestral,
+                                              [s.id]: val,
+                                              ...(s.tipo ? { [s.tipo]: val } : {}),
+                                              ...(s.familia ? { [s.familia]: val } : {})
+                                            }
+                                          }));
+                                        }}
+                                        placeholder={priceAnualStr || '0.00'}
+                                        className="w-full max-w-[85px] px-2 py-1 border border-zinc-200 rounded-lg text-xs outline-none focus:border-blue-600 bg-white text-black text-right font-bold ml-auto"
+                                      />
+                                    </div>
+                                    <div className="col-span-2 text-right font-bold text-xs text-blue-700">
+                                      {lineSubtotalTrim.toFixed(2)} €
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {/* Otros sistemas del catálogo para precio por defecto */}
+                          {categoriasSistema.filter(cat => !sistCentro.some(sc => sc.tipo === cat.nombre || sc.familia === cat.nombre)).length > 0 && (
+                            <details className="p-3 bg-white rounded-xl border border-zinc-200 group">
+                              <summary className="text-xs font-bold text-zinc-600 cursor-pointer hover:text-black flex items-center justify-between">
+                                <span>+ Otros sistemas del catálogo para tarificación previa ({categoriasSistema.filter(cat => !sistCentro.some(sc => sc.tipo === cat.nombre || sc.familia === cat.nombre)).length})</span>
+                                <span className="text-[11px] text-blue-600 font-semibold group-open:rotate-180 transition-transform">▼</span>
+                              </summary>
+                              <div className="mt-3 space-y-2 pt-2 border-t border-zinc-100">
+                                {categoriasSistema
+                                  .filter(cat => !sistCentro.some(sc => sc.tipo === cat.nombre || sc.familia === cat.nombre))
+                                  .map(cat => {
+                                    const currentPriceAnualStr = formContrato.preciosSistemasAnual[cat.nombre] || formContrato.preciosSistemasAnual[cat.id] || formContrato.preciosSistemas[cat.nombre] || '';
+                                    const currentPriceTrimStr = formContrato.preciosSistemasTrimestral[cat.nombre] || formContrato.preciosSistemasTrimestral[cat.id] || '';
+                                    return (
+                                      <div key={cat.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 py-1.5 border-b border-zinc-50 last:border-b-0">
+                                        <div className="flex items-center gap-2 text-xs font-medium text-zinc-700">
+                                          <div className="w-4 h-4 flex items-center justify-center shrink-0">
+                                            {renderIconoParaContrato(cat.nombre)}
+                                          </div>
+                                          <span>{cat.nombre}</span>
+                                        </div>
+                                        <div className="flex items-center gap-4 shrink-0">
+                                          <div className="flex items-center gap-1.5">
+                                            <span className="text-[10px] text-zinc-500 font-semibold">Anual:</span>
+                                            <input
+                                              disabled={isTecnicoMode}
+                                              type="number"
+                                              step="0.01"
+                                              min="0"
+                                              value={currentPriceAnualStr}
+                                              onChange={e => {
+                                                const val = e.target.value;
+                                                setFormContrato(prev => ({
+                                                  ...prev,
+                                                  preciosSistemasAnual: {
+                                                    ...prev.preciosSistemasAnual,
+                                                    [cat.nombre]: val,
+                                                    [cat.id]: val
+                                                  },
+                                                  preciosSistemas: {
+                                                    ...prev.preciosSistemas,
+                                                    [cat.nombre]: val,
+                                                    [cat.id]: val
+                                                  }
+                                                }));
+                                              }}
+                                              placeholder="0.00"
+                                              className="w-20 px-2 py-1 border border-zinc-200 rounded-lg text-xs outline-none focus:border-blue-600 bg-white text-black text-right font-bold"
+                                            />
+                                            <span className="text-[10px] text-zinc-400 font-bold">€/ud</span>
+                                          </div>
+
+                                          <div className="flex items-center gap-1.5">
+                                            <span className="text-[10px] text-zinc-500 font-semibold">Trimestral:</span>
+                                            <input
+                                              disabled={isTecnicoMode}
+                                              type="number"
+                                              step="0.01"
+                                              min="0"
+                                              value={currentPriceTrimStr}
+                                              onChange={e => {
+                                                const val = e.target.value;
+                                                setFormContrato(prev => ({
+                                                  ...prev,
+                                                  preciosSistemasTrimestral: {
+                                                    ...prev.preciosSistemasTrimestral,
+                                                    [cat.nombre]: val,
+                                                    [cat.id]: val
+                                                  }
+                                                }));
+                                              }}
+                                              placeholder={currentPriceAnualStr || '0.00'}
+                                              className="w-20 px-2 py-1 border border-zinc-200 rounded-lg text-xs outline-none focus:border-blue-600 bg-white text-black text-right font-bold"
+                                            />
+                                            <span className="text-[10px] text-zinc-400 font-bold">€/ud</span>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                              </div>
+                            </details>
+                          )}
+
+                          {/* Resumen de valoración por sistemas */}
+                          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 pt-2">
+                            <div className="p-3 bg-white rounded-xl border border-blue-200 flex flex-col">
+                              <span className="text-[10px] font-bold text-zinc-500 uppercase">Equipos Instalados</span>
+                              <span className="text-base font-extrabold text-zinc-900 mt-0.5">{totalEquiposCount} uds.</span>
+                            </div>
+                            <div className="p-3 bg-white rounded-xl border border-blue-200 flex flex-col">
+                              <span className="text-[10px] font-bold text-zinc-500 uppercase">Subtotal Rev. Anual</span>
+                              <span className="text-base font-extrabold text-zinc-900 mt-0.5">{subtotalAnualTotal.toFixed(2)} € <span className="text-[10px] text-zinc-400 font-normal">+ IVA</span></span>
+                            </div>
+                            <div className="p-3 bg-white rounded-xl border border-blue-200 flex flex-col">
+                              <span className="text-[10px] font-bold text-zinc-500 uppercase">Subtotal Rev. Trimestral</span>
+                              <span className="text-base font-extrabold text-blue-600 mt-0.5">{subtotalTrimestralTotal.toFixed(2)} € <span className="text-[10px] text-zinc-400 font-normal">+ IVA</span></span>
+                            </div>
+                            <div className="p-3 bg-blue-600 text-white rounded-xl flex flex-col">
+                              <span className="text-[10px] font-bold text-blue-200 uppercase">Total Anual Estimado</span>
+                              {(() => {
+                                const isMensual = formContrato.periodicidad.includes('Mensual');
+                                const isTrimestral = formContrato.periodicidad.includes('Trimestral');
+                                const isAnual = formContrato.periodicidad.includes('Anual');
+                                let totAnual = 0;
+                                if (isAnual && isTrimestral && isMensual) {
+                                  totAnual = subtotalAnualTotal + (subtotalTrimestralTotal * 3) + (subtotalTrimestralTotal * 8);
+                                } else if (isAnual && isTrimestral) {
+                                  totAnual = subtotalAnualTotal + (subtotalTrimestralTotal * 3);
+                                } else if (isAnual && isMensual) {
+                                  totAnual = subtotalAnualTotal + (subtotalTrimestralTotal * 11);
+                                } else if (isTrimestral && isMensual) {
+                                  totAnual = (subtotalTrimestralTotal * 4) + (subtotalTrimestralTotal * 8);
+                                } else if (isAnual) {
+                                  totAnual = subtotalAnualTotal;
+                                } else if (isTrimestral) {
+                                  totAnual = subtotalTrimestralTotal * 4;
+                                } else if (isMensual) {
+                                  totAnual = subtotalTrimestralTotal * 12;
+                                } else {
+                                  totAnual = subtotalAnualTotal;
+                                }
+                                return (
+                                  <span className="text-base font-extrabold text-white mt-0.5">{totAnual.toFixed(2)} € <span className="text-[10px] text-blue-200 font-normal">+ IVA</span></span>
+                                );
+                              })()}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
 
                 {/* Forma de Pago */}
                 <div className="space-y-2">
@@ -1206,35 +1641,71 @@ const renderModals = () => {
                             (eq.centroId === centroForContrato.id || eq.centroId === centroForContrato._docId) && 
                             eq.sistemaId === s.id
                           ).length;
+                          const pAnual = parseFloat(formContrato.preciosSistemasAnual[s.id] || formContrato.preciosSistemasAnual[s.tipo] || formContrato.preciosSistemasAnual[s.familia] || formContrato.preciosSistemas[s.id] || '0') || 0;
+                          const pTrim = parseFloat(formContrato.preciosSistemasTrimestral[s.id] || formContrato.preciosSistemasTrimestral[s.tipo] || formContrato.preciosSistemasTrimestral[s.familia] || '') || (pAnual > 0 ? pAnual : 0);
                           return {
                             ...s,
-                            cantidadEquipos: count
+                            cantidadEquipos: count,
+                            precioUnitario: pAnual,
+                            precioUnitarioAnual: pAnual,
+                            precioUnitarioTrimestral: pTrim,
+                            subtotalAnual: Math.round(count * pAnual * 100) / 100,
+                            subtotalTrimestral: Math.round(count * pTrim * 100) / 100,
+                            subtotal: Math.round(count * pAnual * 100) / 100
                           };
                         });
                       
-                      const pAnual = parseFloat(formContrato.precioAnual) || 0;
-                      const pTrimestral = parseFloat(formContrato.precioTrimestral) || 0;
-                      const pMensual = parseFloat(formContrato.precioMensual) || 0;
-
                       let total = 0;
                       const isMensual = formContrato.periodicidad.includes('Mensual');
                       const isTrimestral = formContrato.periodicidad.includes('Trimestral');
                       const isAnual = formContrato.periodicidad.includes('Anual');
 
-                      if (isAnual && isTrimestral && isMensual) {
-                        total = pAnual + (pTrimestral * 3) + (pMensual * 8);
-                      } else if (isAnual && isTrimestral) {
-                        total = pAnual + (pTrimestral * 3);
-                      } else if (isAnual && isMensual) {
-                        total = pAnual + (pMensual * 11);
-                      } else if (isTrimestral && isMensual) {
-                        total = (pTrimestral * 4) + (pMensual * 8);
-                      } else if (isAnual) {
-                        total = pAnual;
-                      } else if (isTrimestral) {
-                        total = pTrimestral * 4;
-                      } else if (isMensual) {
-                        total = pMensual * 12;
+                      if (formContrato.tipoModalidad === 'cuota_fija') {
+                        const pAnual = parseFloat(formContrato.precioAnual) || 0;
+                        const pTrimestral = parseFloat(formContrato.precioTrimestral) || 0;
+                        const pMensual = parseFloat(formContrato.precioMensual) || 0;
+
+                        if (isAnual && isTrimestral && isMensual) {
+                          total = pAnual + (pTrimestral * 3) + (pMensual * 8);
+                        } else if (isAnual && isTrimestral) {
+                          total = pAnual + (pTrimestral * 3);
+                        } else if (isAnual && isMensual) {
+                          total = pAnual + (pMensual * 11);
+                        } else if (isTrimestral && isMensual) {
+                          total = (pTrimestral * 4) + (pMensual * 8);
+                        } else if (isAnual) {
+                          total = pAnual;
+                        } else if (isTrimestral) {
+                          total = pTrimestral * 4;
+                        } else if (isMensual) {
+                          total = pMensual * 12;
+                        }
+                      } else {
+                        // Modalidad por sistemas / equipos
+                        let subtotalAnualTotal = 0;
+                        let subtotalTrimestralTotal = 0;
+                        systems.forEach(s => {
+                          subtotalAnualTotal += (s.subtotalAnual || 0);
+                          subtotalTrimestralTotal += (s.subtotalTrimestral || 0);
+                        });
+
+                        if (isAnual && isTrimestral && isMensual) {
+                          total = subtotalAnualTotal + (subtotalTrimestralTotal * 3) + (subtotalTrimestralTotal * 8);
+                        } else if (isAnual && isTrimestral) {
+                          total = subtotalAnualTotal + (subtotalTrimestralTotal * 3);
+                        } else if (isAnual && isMensual) {
+                          total = subtotalAnualTotal + (subtotalTrimestralTotal * 11);
+                        } else if (isTrimestral && isMensual) {
+                          total = (subtotalTrimestralTotal * 4) + (subtotalTrimestralTotal * 8);
+                        } else if (isAnual) {
+                          total = subtotalAnualTotal;
+                        } else if (isTrimestral) {
+                          total = subtotalTrimestralTotal * 4;
+                        } else if (isMensual) {
+                          total = subtotalTrimestralTotal * 12;
+                        } else {
+                          total = subtotalAnualTotal;
+                        }
                       }
 
                       const tempCentro = {
@@ -1249,7 +1720,11 @@ const renderModals = () => {
                         precioAnualContrato: formContrato.precioAnual.trim(),
                         precioTrimestralContrato: formContrato.precioTrimestral.trim(),
                         precioMensualContrato: formContrato.precioMensual.trim(),
-                        formaPagoContrato: formContrato.formaPago
+                        formaPagoContrato: formContrato.formaPago,
+                        tipoModalidadContrato: formContrato.tipoModalidad,
+                        preciosSistemasContrato: formContrato.preciosSistemasAnual,
+                        preciosSistemasAnualContrato: formContrato.preciosSistemasAnual,
+                        preciosSistemasTrimestralContrato: formContrato.preciosSistemasTrimestral
                       };
 
                       const empresaCentro = tempCentro.empresaId ? empresas.find(e => e._docId === tempCentro.empresaId || (e as any).id === tempCentro.empresaId || ((e as any).nombre && typeof (e as any).nombre === 'string' && (e as any).nombre.trim().toLowerCase() === tempCentro.empresaId?.trim().toLowerCase())) : undefined;
@@ -2269,7 +2744,11 @@ const renderModals = () => {
                               precioAnual: form.precioAnualContrato || '',
                               precioTrimestral: form.precioTrimestralContrato || '',
                               precioMensual: form.precioMensualContrato || '',
-                              formaPago: (form as any).formaPagoContrato || 'Transferencia bancaria'
+                              formaPago: (form as any).formaPagoContrato || 'Transferencia bancaria',
+                              tipoModalidad: (form as any).tipoModalidadContrato || 'cuota_fija',
+                              preciosSistemas: (form as any).preciosSistemasAnualContrato || (form as any).preciosSistemasContrato || {},
+                              preciosSistemasAnual: (form as any).preciosSistemasAnualContrato || (form as any).preciosSistemasContrato || {},
+                              preciosSistemasTrimestral: (form as any).preciosSistemasTrimestralContrato || {}
                             });
                             setIsContratoModalOpen(true);
                           }}

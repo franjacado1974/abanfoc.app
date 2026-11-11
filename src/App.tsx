@@ -891,7 +891,7 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
   // ─── 1. TARJETA FACTURACIÓN (NARANJA): ALBARANES PENDIENTES DE FACTURAR ───
   const albaranesPendientesFacturar = useMemo(() => {
     return albaranesList
-      .filter(a => !a.facturado && !facturasList.some(f => f.albaranId === a.id))
+      .filter(a => !a.facturado && a.tipoAlbaran !== 'trabajo' && !facturasList.some(f => f.albaranId === a.id))
       .sort((a, b) => {
         const firmaA = (isFirmaValida(a.firmaCliente) || isFirmaValida(a.firmaTecnico)) ? 1 : 0;
         const firmaB = (isFirmaValida(b.firmaCliente) || isFirmaValida(b.firmaTecnico)) ? 1 : 0;
@@ -1956,7 +1956,17 @@ export default function App() {
         } />
         <Route path="/albaranes" element={
           <ProtectedRoute allowedRoles={['super-administrador', 'administrador', 'visualizador']} user={loggedUser}>
-            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Albaranes /></PageLayout>
+            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Albaranes key="facturacion" tipoAlbaranFiltro="facturacion" /></PageLayout>
+          </ProtectedRoute>
+        } />
+        <Route path="/albaranes-revision" element={
+          <ProtectedRoute allowedRoles={['super-administrador', 'administrador', 'editor', 'visualizador', 'tecnico']} user={loggedUser}>
+            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Albaranes key="revision" tipoAlbaranFiltro="revision" /></PageLayout>
+          </ProtectedRoute>
+        } />
+        <Route path="/albaranes-trabajo" element={
+          <ProtectedRoute allowedRoles={['super-administrador', 'administrador', 'editor', 'visualizador', 'tecnico']} user={loggedUser}>
+            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Albaranes key="trabajo" tipoAlbaranFiltro="trabajo" /></PageLayout>
           </ProtectedRoute>
         } />
         <Route path="/facturas" element={

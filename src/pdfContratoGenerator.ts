@@ -174,6 +174,7 @@ export const generarContratoPDF = async (
   doc.setFontSize(7.0);
 
   const totalImporte = parseFloat(contrato.importeAnual) || 0;
+  const esPorSistema = (centro as any)?.tipoModalidadContrato === 'por_sistema';
 
   const periodicidad = centro.periodicidad || [];
   const isMensual = periodicidad.includes('Mensual');
@@ -232,7 +233,9 @@ export const generarContratoPDF = async (
   }
 
   // Inciso a)
-  const clientAIntro = 'a) Se compromete al pago de las siguientes cuotas acordadas:';
+  const clientAIntro = esPorSistema
+    ? 'a) Se compromete al pago de las siguientes tarifas acordadas por sistema y equipo:'
+    : 'a) Se compromete al pago de las siguientes cuotas acordadas:';
   const introSplit = doc.splitTextToSize(clientAIntro, pageWidth - margen * 2);
   introSplit.forEach((line: string) => {
     if (y > pageHeight - 20) {
@@ -245,59 +248,103 @@ export const generarContratoPDF = async (
 
   y += 2;
 
-  // Dibujar tabla dinámica (4 columnas)
-  const colWidths = [80, 25, 38, 43];
+  // Dibujar tabla dinámica (4 columnas para cuota fija, 5 columnas para precio por sistema con Anual y Trimestral)
+  const colWidths = esPorSistema
+    ? [66, 18, 32, 34, 36]
+    : [80, 25, 38, 43];
+
   const colX = [
     margen,
     margen + colWidths[0],
     margen + colWidths[0] + colWidths[1],
-    margen + colWidths[0] + colWidths[1] + colWidths[2]
+    margen + colWidths[0] + colWidths[1] + colWidths[2],
+    ...(esPorSistema ? [margen + colWidths[0] + colWidths[1] + colWidths[2] + colWidths[3]] : [])
   ];
   const rowHeight = 5.5;
 
   // Preparar las filas que realmente tienen contenido
-  const tableRows: { concepto: string; cantidad: string; unitario: string; subtotal: string }[] = [];
+  const tableRows: { concepto: string; cantidad: string; unitarioAnual?: string; unitarioTrim?: string; unitario?: string; subtotal: string }[] = [];
+  let totalSuma = 0;
 
-  // Fila Anual
-  const cantAnual = isAnual || (!isTrimestral && !isMensual) ? '1' : '0';
-  if (cantAnual !== '0' || valorAnualSubtotal > 0) {
-    tableRows.push({
-      concepto: 'Revisión Anual de Sistemas PCI',
-      cantidad: cantAnual,
-      unitario: `${valorAnualUnitario.toFixed(2)} € : + i.v.a.`,
-      subtotal: `${valorAnualSubtotal.toFixed(2)} € : + i.v.a.`
-    });
-  }
+  if (esPorSistema) {
+    // Modalidad Precio por Sistemas / Equipos (con precio Anual y Trimestral)
+    if (_sistemas && _sistemas.length > 0) {
+      _sistemas.forEach((s: any) => {
+        const nombre = s.descripcion || s.tipo || s.familia || s.nombre || 'Sistema PCI';
+        const cant = Number(s.cantidadEquipos) || 0;
+        const pAnual = Number(s.precioUnitarioAnual !== undefined ? s.precioUnitarioAnual : s.precioUnitario) || 0;
+        const pTrim = Number(s.precioUnitarioTrimestral !== undefined ? s.precioUnitarioTrimestral : s.precioUnitario) || (pAnual > 0 ? pAnual : 0);
+        const sub = Math.round(cant * pAnual * 100) / 100;
+        totalSuma += sub;
+        tableRows.push({
+          concepto: nombre,
+          cantidad: String(cant),
+          unitarioAnual: `${pAnual.toFixed(2)} €/ud`,
+          unitarioTrim: `${pTrim.toFixed(2)} €/ud`,
+          subtotal: `${sub.toFixed(2)} € : + i.v.a.`
+        });
+      });
+    }
 
-  // Fila Trimestral
-  const cantTrimestral = isTrimestral ? (isAnual ? '3' : '4') : '0';
-  if (cantTrimestral !== '0' || valorTrimestralSubtotal > 0) {
-    tableRows.push({
-      concepto: 'Revisión Trimestral de Sistemas PCI',
-      cantidad: cantTrimestral,
-      unitario: `${valorTrimestralUnitario.toFixed(2)} € : + i.v.a.`,
-      subtotal: `${valorTrimestralSubtotal.toFixed(2)} € : + i.v.a.`
-    });
-  }
+    if (tableRows.length === 0) {
+      tableRows.push({
+        concepto: 'Sistemas PCI del Centro',
+        cantidad: '1',
+        unitarioAnual: `${totalImporte.toFixed(2)} €/ud`,
+        unitarioTrim: `${totalImporte.toFixed(2)} €/ud`,
+        subtotal: `${totalImporte.toFixed(2)} € : + i.v.a.`
+      });
+      totalSuma = totalImporte;
+    }
+  } else {
+    // Modalidad Cuota Fija
+    const cantAnual = isAnual || (!isTrimestral && !isMensual) ? '1' : '0';
+    if (cantAnual !== '0' || valorAnualSubtotal > 0) {
+      tableRows.push({
+        concepto: 'Revisión Anual de Sistemas PCI',
+        cantidad: cantAnual,
+        unitario: `${valorAnualUnitario.toFixed(2)} € : + i.v.a.`,
+        subtotal: `${valorAnualSubtotal.toFixed(2)} € : + i.v.a.`
+      });
+    }
 
-  // Fila Mensual
-  const cantMensual = isMensual ? (isAnual ? '11' : (isTrimestral ? '8' : '12')) : '0';
-  if (cantMensual !== '0' || valorMensualSubtotal > 0) {
-    tableRows.push({
-      concepto: 'Revisión Mensual de Sistemas PCI',
-      cantidad: cantMensual,
-      unitario: `${valorMensualUnitario.toFixed(2)} € : + i.v.a.`,
-      subtotal: `${valorMensualSubtotal.toFixed(2)} € : + i.v.a.`
-    });
-  }
+    // Fila Trimestral
+    const cantTrimestral = isTrimestral ? (isAnual ? '3' : '4') : '0';
+    if (cantTrimestral !== '0' || valorTrimestralSubtotal > 0) {
+      tableRows.push({
+        concepto: 'Revisión Trimestral de Sistemas PCI',
+        cantidad: cantTrimestral,
+        unitario: `${valorTrimestralUnitario.toFixed(2)} € : + i.v.a.`,
+        subtotal: `${valorTrimestralSubtotal.toFixed(2)} € : + i.v.a.`
+      });
+    }
 
-  if (tableRows.length === 0) {
-    tableRows.push({
-      concepto: 'Revisión Anual de Sistemas PCI',
-      cantidad: '1',
-      unitario: `${totalImporte.toFixed(2)} € : + i.v.a.`,
-      subtotal: `${totalImporte.toFixed(2)} € : + i.v.a.`
-    });
+    // Fila Mensual
+    const cantMensual = isMensual ? (isAnual ? '11' : (isTrimestral ? '8' : '12')) : '0';
+    if (cantMensual !== '0' || valorMensualSubtotal > 0) {
+      tableRows.push({
+        concepto: 'Revisión Mensual de Sistemas PCI',
+        cantidad: cantMensual,
+        unitario: `${valorMensualUnitario.toFixed(2)} € : + i.v.a.`,
+        subtotal: `${valorMensualSubtotal.toFixed(2)} € : + i.v.a.`
+      });
+    }
+
+    if (tableRows.length === 0) {
+      tableRows.push({
+        concepto: 'Revisión Anual de Sistemas PCI',
+        cantidad: '1',
+        unitario: `${totalImporte.toFixed(2)} € : + i.v.a.`,
+        subtotal: `${totalImporte.toFixed(2)} € : + i.v.a.`
+      });
+    }
+
+    totalSuma = (valorAnualSubtotal > 0 ? valorAnualSubtotal : 0) + 
+                (valorTrimestralSubtotal > 0 ? valorTrimestralSubtotal : 0) + 
+                (valorMensualSubtotal > 0 ? valorMensualSubtotal : 0);
+    if (totalSuma === 0) {
+      totalSuma = totalImporte;
+    }
   }
 
   const numRows = tableRows.length + 1; // +1 de cabecera
@@ -322,54 +369,63 @@ export const generarContratoPDF = async (
 
   // Líneas verticales
   doc.line(margen, y, margen, y + tableHeight); // Izquierda
-  doc.line(colX[1], y, colX[1], y + tableHeight);
-  doc.line(colX[2], y, colX[2], y + tableHeight);
-  doc.line(colX[3], y, colX[3], y + tableHeight);
+  colX.slice(1).forEach(cx => {
+    doc.line(cx, y, cx, y + tableHeight);
+  });
   doc.line(pageWidth - margen, y, pageWidth - margen, y + tableHeight); // Derecha
 
   // Escribir cabecera
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(6.5);
   doc.setTextColor(60, 60, 60);
-  doc.text('Concepto', colX[0] + 3, y + 3.8);
-  doc.text('Cantidad', colX[1] + 3, y + 3.8);
-  doc.text('Precio Unitario', colX[2] + 3, y + 3.8);
-  doc.text('Subtotal', colX[3] + 3, y + 3.8);
+  if (esPorSistema) {
+    doc.text('Sistema / Elemento PCI', colX[0] + 3, y + 3.8);
+    doc.text('Equipos', colX[1] + 2, y + 3.8);
+    doc.text('P. Unit. Anual', colX[2] + 2, y + 3.8);
+    doc.text('P. Unit. Trim.', colX[3] + 2, y + 3.8);
+    doc.text('Subtotal Anual', colX[4] + 2, y + 3.8);
+  } else {
+    doc.text('Concepto', colX[0] + 3, y + 3.8);
+    doc.text('Cantidad', colX[1] + 3, y + 3.8);
+    doc.text('Precio Unitario', colX[2] + 3, y + 3.8);
+    doc.text('Subtotal', colX[3] + 3, y + 3.8);
+  }
 
   // Escribir filas de datos
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(80, 80, 80);
   tableRows.forEach((row, index) => {
     const rowY = y + rowHeight * (index + 1);
-    doc.text(row.concepto, colX[0] + 3, rowY + 3.8);
-    doc.text(row.cantidad, colX[1] + 3, rowY + 3.8);
-    doc.text(row.unitario, colX[2] + 3, rowY + 3.8);
-    doc.text(row.subtotal, colX[3] + 3, rowY + 3.8);
+    if (esPorSistema) {
+      doc.text(row.concepto, colX[0] + 3, rowY + 3.8);
+      doc.text(row.cantidad, colX[1] + 2, rowY + 3.8);
+      doc.text(row.unitarioAnual || '', colX[2] + 2, rowY + 3.8);
+      doc.text(row.unitarioTrim || '', colX[3] + 2, rowY + 3.8);
+      doc.text(row.subtotal, colX[4] + 2, rowY + 3.8);
+    } else {
+      doc.text(row.concepto, colX[0] + 3, rowY + 3.8);
+      doc.text(row.cantidad, colX[1] + 3, rowY + 3.8);
+      doc.text(row.unitario || '', colX[2] + 3, rowY + 3.8);
+      doc.text(row.subtotal, colX[3] + 3, rowY + 3.8);
+    }
   });
 
-  // Calcular suma de subtotales
-  let totalSuma = (valorAnualSubtotal > 0 ? valorAnualSubtotal : 0) + 
-                  (valorTrimestralSubtotal > 0 ? valorTrimestralSubtotal : 0) + 
-                  (valorMensualSubtotal > 0 ? valorMensualSubtotal : 0);
-  if (totalSuma === 0) {
-    totalSuma = totalImporte;
-  }
-
   // Dibujar la celda de Total debajo de la columna Subtotal
+  const totalColIndex = esPorSistema ? 4 : 3;
   const totalCellY = y + tableHeight;
   doc.setFillColor(248, 250, 252);
-  doc.rect(colX[3], totalCellY, pageWidth - margen - colX[3], rowHeight, 'F');
+  doc.rect(colX[totalColIndex], totalCellY, pageWidth - margen - colX[totalColIndex], rowHeight, 'F');
   
   doc.setDrawColor(210, 214, 219);
   doc.setLineWidth(0.2);
-  doc.line(colX[3], totalCellY, colX[3], totalCellY + rowHeight);
+  doc.line(colX[totalColIndex], totalCellY, colX[totalColIndex], totalCellY + rowHeight);
   doc.line(pageWidth - margen, totalCellY, pageWidth - margen, totalCellY + rowHeight);
-  doc.line(colX[3], totalCellY + rowHeight, pageWidth - margen, totalCellY + rowHeight);
+  doc.line(colX[totalColIndex], totalCellY + rowHeight, pageWidth - margen, totalCellY + rowHeight);
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(6.5);
   doc.setTextColor(40, 40, 40);
-  doc.text(`Total: ${totalSuma.toFixed(2)} € : + i.v.a.`, colX[3] + 3, totalCellY + 3.8);
+  doc.text(esPorSistema ? `Total Anual: ${totalSuma.toFixed(2)} € : + i.v.a.` : `Total: ${totalSuma.toFixed(2)} € : + i.v.a.`, colX[totalColIndex] + 2, totalCellY + 3.8);
 
   y += tableHeight + rowHeight + 3;
 

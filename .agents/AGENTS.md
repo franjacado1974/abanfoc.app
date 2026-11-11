@@ -1916,6 +1916,47 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
   - Al generar un código, el motor inspecciona los documentos existentes que coincidan con el prefijo activo para asegurar que el siguiente número sea estrictamente `Math.max(config.siguienteNumero, maxExistente + 1)`.
   - Caja de vista previa en tiempo real en cada tarjeta que muestra instantáneamente cómo se generará el próximo documento (ej: `27.0001`).
 
+---
+
+## 130. Blindaje Inviolable del Contrato de Mantenimiento Dual: Cuota Fija y Precio por Sistemas / Equipos con Tarifas Anuales y Trimestrales (`Centros.tsx`, `RevisionChecklist.tsx`, `pdfContratoGenerator.ts`, `firebase.tsx`)
+- **Modal Ampliado a Gran Anchura y Selector Segmentado (`Centros.tsx`)**:
+  - En la ventana modal de configuración del contrato de mantenimiento de centros (`isContratoModalOpen`), el contenedor se abre con anchura amplia `max-w-6xl w-full` para comodidad visual de todas las columnas.
+  - Incorpora selector visual de dos modalidades:
+    1. **"1. Contrato por Cuota Fija" (`tipoModalidad === 'cuota_fija'`)**: Importe acordado fijo por revisión (Anual, Trimestral o Mensual), independientemente del recuento de equipos.
+    2. **"2. Contrato Precio por Sistemas" (`tipoModalidad === 'por_sistema'`)**: Tarificación unitaria acordada (€/ud) con columnas diferenciadas para revisiones Anuales y Trimestrales.
+- **Columnas de Precios Anuales y Trimestrales por Sistema (`Centros.tsx`)**:
+  - Al seleccionar modalidad por sistemas, se despliega la tabla con 6 columnas estructuradas:
+    `Sistema / Elemento PCI` | `Equipos` | `P. Unit. Anual (€)` | `Sub. Anual` | `P. Unit. Trim. (€)` | `Sub. Trim.`
+  - Permite configurar de forma independiente el precio unitario pactado para visitas Anuales (`preciosSistemasAnualContrato`) y para visitas Trimestrales (`preciosSistemasTrimestralContrato`).
+  - Muestra acordeón extensible con el resto de sistemas del catálogo (`categoriasSistema`) para pre-configurar precios unitarios tanto anuales como trimestrales.
+  - Tarjetas resumen al pie: `Equipos Instalados`, `Subtotal Rev. Anual`, `Subtotal Rev. Trimestral` y `Total Anual Estimado` (combinando revisiones anuales y trimestrales según la periodicidad contratada).
+- **Valoración Automática del Albarán y Factura según el Periodo Revisado (`RevisionChecklist.tsx`, `Albaranes.tsx`, `Facturas.tsx`, `firebase.tsx`)**:
+  - **Motor Semántico Universal de Precios (`resolverPrecioUnitarioContrato` y `obtenerCuotaFijaContrato`)**:
+    - Al finalizar y firmar una revisión de mantenimiento, al emitir albarán o al facturar desde albarán:
+    - Recupera datos frescos del centro desde `firecheck_db_centros` garantizando que no se utilicen referencias obsoletas.
+    - Si el centro tiene modalidad `'por_sistema'`: el motor detecta automáticamente la periodicidad de la revisión (`parte.periodicidad` o `albData.periodicidad`).
+      - Si la revisión es **Trimestral**: busca prioritariamente el precio en `centro.preciosSistemasTrimestralContrato` (con fallback a `preciosSistemasAnualContrato`).
+      - Si la revisión es **Anual**: busca prioritariamente el precio en `centro.preciosSistemasAnualContrato` (con fallback a `preciosSistemasContrato`).
+      - **Emparejamiento Semántico Inteligente**: Realiza búsqueda multinivel por:
+        1. ID directo de sistema (`sistId`, `s.id`).
+        2. Clave exacta por cadena (`desc`, `nombre`, `tipo`, `familia`).
+        3. Cadena normalizada sin acentos ni mayúsculas.
+        4. Subcadena bidireccional.
+        5. Categorías semánticas PCI (`CATEGORIAS_SEMANTICAS_PCI`: extintores, bies, puertas/rf, monoxido/co, deteccion, rociadores/sprinklers, bombas, emergencia, hidrantes, campana, gas, columna seca).
+      - Asigna el `precioUnidad` correspondiente y calcula el `subtotal = Math.round(cantidad * precioUnidad * 100) / 100`.
+    - Si el centro tiene modalidad `'cuota_fija'`: se aplica el importe fijo acordado para la periodicidad de la revisión actual (`precioAnualContrato`, `precioTrimestralContrato` o `precioMensualContrato`) en el albarán generado.
+  - **Autovaloración y Revaloración Reactiva en Albaranes y Facturas**:
+    - En `Albaranes.tsx`: Cualquier albarán de revisión con líneas a 0 € cuyos centros tengan contrato pactado se revalora de forma automática y reactiva en carga, edición o apertura de modal de acciones (`revalorarAlbaranSiProcede`), sincronizándose en Firestore y `firecheck_db_albaranes`.
+    - En `Facturas.tsx`: Al generar una factura desde un albarán (`iniciarFacturaDesdeAlbaran`), si alguna línea de albarán contiene precio 0, se consulta automáticamente el contrato del centro para valorar las líneas con sus precios pactados, subtotal e IVA correctamente calculados.
+- **Adaptación Fiel del Certificado de Contrato en PDF (`pdfContratoGenerator.ts`)**:
+  - En el inciso a) de obligaciones del cliente:
+    - Si `tipoModalidadContrato === 'por_sistema'`: imprime la tabla de 5 columnas:
+      `Sistema / Elemento PCI` | `Equipos` | `P. Unit. Anual` | `P. Unit. Trim.` | `Subtotal Anual`, culminando en la celda `Total Anual: X.XX € : + i.v.a.`.
+    - Si es cuota fija: conserva la tabla reglamentaria de 4 columnas de cuotas periódicas (`Revisión Anual`, `Trimestral`, `Mensual`).
+- **Persistencia Dual Inmediata**:
+  - Toda la configuración del contrato (`tipoModalidadContrato`, `preciosSistemasAnualContrato`, `preciosSistemasTrimestralContrato`, importes y periodicidades) se sincroniza en Firestore (`updateCentro`, `saveContrato`) y `localStorage` (`firecheck_db_centros`).
+
+
 
 
 

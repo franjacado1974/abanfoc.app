@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, FileDigit, Download, Search, CheckCircle2, Circle, Clock, Trash2, Plus, Building2, MapPin, Save, Trash, Edit, Copy, Maximize2, X, Signature, ArrowUp, ArrowDown, ArrowUpDown, GripVertical, ChevronUp, ChevronDown, Wand2, Calendar } from 'lucide-react';
-import { addAlbaran, updateAlbaran, deleteAlbaran, subscribeAlbaranes, subscribeEmpresas, subscribeTecnicos, subscribeCentros, subscribeClientes, subscribeTrabajos, db, type Albaran, type Cliente, type Centro, type Equipo, type Tecnico, type Empresa, type TrabajoConfig, updateParte, updateReparacion, updateInstalacion, updateUrgencia, obtenerSiguienteNumeroAlbaran, extraerSufijoSecuencia, obtenerEmpresaPorDefecto } from './firebase';
+import { addAlbaran, updateAlbaran, deleteAlbaran, subscribeAlbaranes, subscribeEmpresas, subscribeTecnicos, subscribeCentros, subscribeClientes, subscribeTrabajos, db, resolverPrecioUnitarioContrato, obtenerCuotaFijaContrato, obtenerEmpresaAvanfoc, type Albaran, type Cliente, type Centro, type Equipo, type Tecnico, type Empresa, type TrabajoConfig, updateParte, updateReparacion, updateInstalacion, updateUrgencia, obtenerSiguienteNumeroAlbaran, extraerSufijoSecuencia, obtenerEmpresaPorDefecto } from './firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { generarAlbaranPDF } from './pdfGenerator';
 import ConfirmationModal from './ConfirmationModal';
@@ -47,11 +47,69 @@ const getFormattedDate = (isoString: string | undefined): string => {
 
 interface AlbaranesProps {
   isTecnicoMode?: boolean;
+  tipoAlbaranFiltro?: 'revision' | 'trabajo' | 'facturacion';
 }
 
-export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
+export default function Albaranes({ isTecnicoMode = false, tipoAlbaranFiltro }: AlbaranesProps) {
   const navigate = useNavigate();
   const location = useLocation();
+
+  const modoActivo: 'revision' | 'trabajo' | 'facturacion' = useMemo(() => {
+    if (tipoAlbaranFiltro) return tipoAlbaranFiltro;
+    if (location.pathname.includes('revision')) return 'revision';
+    if (location.pathname.includes('trabajo')) return 'trabajo';
+    return 'facturacion';
+  }, [tipoAlbaranFiltro, location.pathname]);
+
+  const esDeRevision = (alb: Albaran): boolean => {
+    const tit = (alb.titulo || '').toLowerCase();
+    const per = (alb.periodicidad || '').toLowerCase();
+
+    // Si explícitamente tiene origen en reparación o instalación, no es de revisión
+    if (alb.reparacionId || alb.instalacionId) return false;
+    if (tit.includes('reparaci') || tit.includes('instalaci') || tit.includes('averí') || tit.includes('averi')) {
+      return false;
+    }
+
+    // Si el título o periodicidad indican revisión o mantenimiento, es SIEMPRE de revisión
+    if (
+      tit.includes('revisión') ||
+      tit.includes('revision') ||
+      tit.includes('mantenimiento') ||
+      per.includes('anual') ||
+      per.includes('trimestral') ||
+      per.includes('semestral') ||
+      per.includes('mensual') ||
+      alb.parteId
+    ) {
+      return true;
+    }
+
+    // Por defecto si tiene numeroMantenimiento o parteId
+    if (alb.numeroMantenimiento || alb.parteId) return true;
+
+    return false;
+  };
+
+  const esDeOperaciones = (alb: Albaran): boolean => {
+    // Si es de revisión, nunca es de operaciones
+    if (esDeRevision(alb)) return false;
+
+    const tit = (alb.titulo || '').toLowerCase();
+    return Boolean(
+      alb.reparacionId ||
+      alb.instalacionId ||
+      alb.urgenciaId ||
+      tit.includes('reparaci') ||
+      tit.includes('instalaci') ||
+      tit.includes('averí') ||
+      tit.includes('averi') ||
+      tit.includes('urgenci') ||
+      tit.includes('obra') ||
+      (alb.numeroPedido && alb.numeroPedido.trim() !== '')
+    );
+  };
+
   // Obtener rol del usuario logueado
   const loggedUser = useMemo(() => {
     try {
@@ -106,6 +164,7 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
 
   const canvasClienteRef = useRef<HTMLCanvasElement>(null);
   const canvasTecnicoRef = useRef<HTMLCanvasElement>(null);
+  const hasAutoValuedAlbaranesRef = useRef(false);
 
   // Sorting state
   const [sortField, setSortField] = useState<'albaran' | 'fecha' | 'pedido' | 'centro' | 'titulo' | 'estado'>('fecha');
@@ -136,8 +195,16 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
   const [accionesModalItem, setAccionesModalItem] = useState<Albaran | null>(null);
 
   const pendingCount = useMemo(() => 
-    albaranes.filter(alb => !alb.facturado).length,
-  [albaranes]);
+    albaranes.filter(alb => {
+      if (modoActivo === 'revision') {
+        return esDeRevision(alb) && alb.tipoAlbaran !== 'facturacion' && !alb.facturado;
+      }
+      if (modoActivo === 'trabajo') {
+        return esDeOperaciones(alb) && alb.tipoAlbaran !== 'facturacion' && !alb.facturado;
+      }
+      return alb.tipoAlbaran !== 'trabajo' && !alb.sinValorar && !alb.facturado;
+    }).length,
+  [albaranes, modoActivo]);
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -184,6 +251,22 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
       unsubTrabajos();
     };
   }, []);
+
+  // Autovaloración de albaranes de revisión pendientes si tienen líneas con precio 0 y el centro tiene contrato
+  useEffect(() => {
+    if (centros.length > 0 && albaranes.length > 0 && !hasAutoValuedAlbaranesRef.current) {
+      hasAutoValuedAlbaranesRef.current = true;
+      albaranes.forEach(alb => {
+        if (!alb.facturado && alb.items && alb.items.some(i => Number(i.precioUnidad) === 0)) {
+          const { albaran: albVal, modificado } = revalorarAlbaranSiProcede(alb, centros);
+          if (modificado) {
+            const docId = (albVal as any)._docId || albVal.id;
+            updateAlbaran(docId, albVal).catch(() => {});
+          }
+        }
+      });
+    }
+  }, [centros, albaranes]);
 
   // Precargar Albarán si venimos navegados desde Reparaciones o Instalaciones con un pedido/presupuesto
   useEffect(() => {
@@ -306,21 +389,30 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
 
   const handleDescargarAlbaranPDF = async (alb: Albaran) => {
     const eqsDelCentro = equipos.filter(e => e.centroId === alb.centroId);
-    const empId = alb.empresaId || centros.find(c => c._docId === alb.centroId || c.id === alb.centroId)?.empresaId;
-    let empresa = empresas.find(e => e._docId === empId || e.id === empId || (e.nombre && typeof e.nombre === 'string' && e.nombre.trim().toLowerCase() === empId?.trim().toLowerCase()));
-    if (!empresa && empId) {
-      try {
-        const docSnap = await getDoc(doc(db, 'empresa', empId));
-        if (docSnap.exists()) empresa = { _docId: docSnap.id, ...(docSnap.data() as any) };
-      } catch(e){}
+    
+    // Si es para facturar, el logotipo y datos emisores son SIEMPRE de Avanfoc
+    let empresa: Empresa | undefined;
+    if (modoActivo === 'facturacion' || alb.tipoAlbaran === 'facturacion') {
+      empresa = obtenerEmpresaAvanfoc(empresas) || empresas.find(e => /(?:abanfoc|avanfoc)/i.test(e.nombre || '')) || empresas[0];
+    } else {
+      const empId = alb.empresaId || centros.find(c => c._docId === alb.centroId || c.id === alb.centroId)?.empresaId;
+      empresa = empresas.find(e => e._docId === empId || e.id === empId || (e.nombre && typeof e.nombre === 'string' && e.nombre.trim().toLowerCase() === empId?.trim().toLowerCase()));
+      if (!empresa && empId) {
+        try {
+          const docSnap = await getDoc(doc(db, 'empresa', empId));
+          if (docSnap.exists()) empresa = { _docId: docSnap.id, ...(docSnap.data() as any) };
+        } catch(e){}
+      }
     }
+
     const tecnico = tecnicos.find(t => t.id === alb.tecnicoId);
     const tecnicoNombre = tecnico ? `${tecnico.nombre} ${tecnico.apellidos}` : '';
     const cliente = clientes.find(c => c.id === alb.clienteId);
     const centro = centros.find(c => c._docId === alb.centroId || c.id === alb.centroId);
     const clienteParaPDF = cliente || (alb.clienteNombreLibre ? { nombre: alb.clienteNombreLibre } : null);
     const centroParaPDF = centro || (alb.centroNombreLibre ? { nombre: alb.centroNombreLibre } : null);
-    await generarAlbaranPDF(clienteParaPDF as any, centroParaPDF as any, eqsDelCentro as any[], alb.numeroMantenimiento || alb.id, tecnicoNombre, alb.firmaCliente, alb.firmaTecnico, alb.nombreFirmante, alb.items, empresa as any, false, alb.titulo, alb.periodicidad, undefined, alb.numeroPedido, alb.fechaCreacion);
+    const esSinVal = modoActivo !== 'facturacion' && (alb.tipoAlbaran === 'trabajo' || alb.sinValorar || modoActivo === 'revision' || modoActivo === 'trabajo');
+    await generarAlbaranPDF(clienteParaPDF as any, centroParaPDF as any, eqsDelCentro as any[], alb.numeroMantenimiento || alb.id, tecnicoNombre, alb.firmaCliente, alb.firmaTecnico, alb.nombreFirmante, alb.items, empresa as any, false, alb.titulo, alb.periodicidad, undefined, alb.numeroPedido, alb.fechaCreacion, esSinVal);
   };
 
   const handleOpenCrearFactura = (alb: Albaran) => {
@@ -342,9 +434,149 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
     });
   };
 
+  const revalorarAlbaranSiProcede = (alb: Albaran, listaCentros: Centro[] = centros): { albaran: Albaran; modificado: boolean } => {
+    if (!alb || !alb.items) return { albaran: alb, modificado: false };
+    if (alb.tipoAlbaran === 'trabajo' || alb.sinValorar) return { albaran: alb, modificado: false };
+
+    let cen = listaCentros.find(c => c._docId === alb.centroId || c.id === alb.centroId);
+    if (!cen && alb.clienteId) {
+      cen = listaCentros.find(c => c.clienteId === alb.clienteId || (c as any)._docId === alb.clienteId);
+    }
+    if (!cen) return { albaran: alb, modificado: false };
+
+    const esCuotaFija = (cen as any)?.tipoModalidadContrato === 'cuota_fija' || !(cen as any)?.tipoModalidadContrato;
+    const per = alb.periodicidad || alb.titulo || '';
+
+    if (esCuotaFija) {
+      const cf = obtenerCuotaFijaContrato(cen, per);
+      if (cf > 0) {
+        const perL = (per || 'trimestral').toLowerCase().trim();
+        const tipoPer = perL.includes('anual') ? 'anual' : perL.includes('semestral') ? 'semestral' : perL.includes('mensual') ? 'mensual' : 'trimestral';
+        const descCuotaOficial = `Cuota ${tipoPer} revisión sistemas contra incendios`;
+
+        const esLineaDeCuota = (it: any) => {
+          const d = (it.descripcion || '').toLowerCase();
+          const c = (it.concepto || '').toLowerCase();
+          return d.includes('cuota') || c.includes('cuota') || d.includes('revisión sistemas') || d.includes('revision sistemas');
+        };
+
+        const indexCuota = alb.items.findIndex(esLineaDeCuota);
+        let newItems: any[] = [];
+        let cambio = false;
+
+        if (indexCuota >= 0) {
+          // Ya existe una o más líneas de cuota: unificar en UNA SOLA línea limpia
+          let cuotaProcesada = false;
+          for (let idx = 0; idx < alb.items.length; idx++) {
+            const it = alb.items[idx];
+            if (esLineaDeCuota(it)) {
+              if (!cuotaProcesada) {
+                cuotaProcesada = true;
+                const descActual = (it.descripcion || '').trim();
+                const descLimpia = descActual.toLowerCase().includes('sistemas contra incendios') ? descActual : descCuotaOficial;
+                if (Number(it.precioUnidad) !== cf || Number(it.subtotal) !== cf || it.descripcion !== descLimpia) {
+                  cambio = true;
+                }
+                newItems.push({
+                  ...it,
+                  cantidad: 1,
+                  descripcion: descLimpia,
+                  precioUnidad: cf,
+                  subtotal: cf
+                });
+              } else {
+                // Duplicado encontrado: omitir para que solo quede una línea
+                cambio = true;
+              }
+            } else {
+              if (Number(it.precioUnidad) !== 0 || Number(it.subtotal) !== 0) {
+                cambio = true;
+              }
+              newItems.push({ ...it, precioUnidad: 0, subtotal: 0 });
+            }
+          }
+        } else {
+          // No existe la línea de cuota fija: añadirla al principio y fijar los equipos a precio 0
+          cambio = true;
+          const conceptoStr = per.toLowerCase().includes('revisión') || per.toLowerCase().includes('revision') ? per : `Revisión ${per}`;
+          const cuotaItem = {
+            cantidad: 1,
+            concepto: conceptoStr,
+            descripcion: descCuotaOficial,
+            precioUnidad: cf,
+            subtotal: cf
+          };
+          const equipItems = alb.items.map(it => ({
+            ...it,
+            precioUnidad: 0,
+            subtotal: 0
+          }));
+          newItems = [cuotaItem, ...equipItems];
+        }
+
+        if (cambio) {
+          return {
+            albaran: {
+              ...alb,
+              centroId: cen._docId || cen.id || alb.centroId,
+              items: newItems
+            },
+            modificado: true
+          };
+        }
+      }
+      return { albaran: alb, modificado: false };
+    } else {
+      // Modalidad por sistemas / equipos
+      const tieneItemsSinPrecio = alb.items.some(it => Number(it.precioUnidad) === 0);
+      if (!tieneItemsSinPrecio) return { albaran: alb, modificado: false };
+
+      let huboCambio = false;
+      const newItems = alb.items.map(it => {
+        const cant = Number(it.cantidad) || 1;
+        let precio = Number(it.precioUnidad) || 0;
+        if (precio === 0) {
+          const pRes = resolverPrecioUnitarioContrato(cen, {
+            periodicidad: per,
+            desc: it.descripcion || it.concepto,
+            nombre: it.descripcion,
+            tipo: (it as any).familia || (it as any).tipo
+          });
+          if (pRes > 0) {
+            precio = pRes;
+            huboCambio = true;
+          }
+        }
+        const dto = Number(it.descuento) || 0;
+        const subtotalCalc = Math.round(cant * precio * (1 - dto / 100) * 100) / 100;
+        return {
+          ...it,
+          precioUnidad: precio,
+          subtotal: (precio > 0 && (!it.subtotal || Number(it.subtotal) === 0)) ? subtotalCalc : (Number(it.subtotal) || subtotalCalc)
+        };
+      });
+
+      if (!huboCambio) return { albaran: alb, modificado: false };
+
+      return {
+        albaran: {
+          ...alb,
+          centroId: cen._docId || cen.id || alb.centroId,
+          items: newItems
+        },
+        modificado: true
+      };
+    }
+  };
+
   const handleEditAlbaran = (alb: any) => {
-    setForm({ ...alb as Albaran });
-    setEditingId(alb.id);
+    const { albaran: albValorado, modificado } = revalorarAlbaranSiProcede(alb, centros);
+    if (modificado) {
+      const docId = (albValorado as any)._docId || albValorado.id;
+      updateAlbaran(docId, albValorado).catch(() => {});
+    }
+    setForm({ ...albValorado as Albaran });
+    setEditingId(albValorado.id);
     setView('form');
   };
 
@@ -381,6 +613,18 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
 
   const filtered = useMemo(() => {
     return albaranes.filter(alb => {
+      // Filtrar según el modo activo:
+      if (modoActivo === 'revision') {
+        if (!esDeRevision(alb)) return false;
+        if (alb.tipoAlbaran === 'facturacion') return false;
+      } else if (modoActivo === 'trabajo') {
+        if (!esDeOperaciones(alb)) return false;
+        if (alb.tipoAlbaran === 'facturacion') return false;
+      } else {
+        // modoActivo === 'facturacion': Agrupa TODOS los albaranes para facturación (valorados)
+        if (alb.tipoAlbaran === 'trabajo' || alb.sinValorar) return false;
+      }
+
       if (isTecnicoMode && alb.facturado) return false;
       
       const cliente = clientes.find(c => c.id === alb.clienteId);
@@ -393,7 +637,7 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
         (cliente && cliente.nombre.toLowerCase().includes(term)) ||
         (alb.clienteNombreLibre && alb.clienteNombreLibre.toLowerCase().includes(term));
         
-      const matchesFilter = !showOnlyPending || !alb.facturado;
+      const matchesFilter = (modoActivo === 'revision' || modoActivo === 'trabajo') ? true : (!showOnlyPending || !alb.facturado);
       
       return matchesSearch && matchesFilter;
     }).sort((a, b) => {
@@ -697,8 +941,20 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
       <div className={`min-h-screen bg-[#F8FAFC] px-8 py-6 ${isTecnicoMode ? 'max-w-4xl mx-auto' : ''}`}>
         {/* Header */}
         <div className="mb-6 text-center sm:text-left flex flex-col items-center sm:items-start">
-          <h1 className="text-2xl font-black text-zinc-950 tracking-tight">Registro de Albaranes</h1>
-          <p className="text-xs font-semibold text-zinc-500 mt-1">Historial de albaranes de entrega generados y pendientes de facturar.</p>
+          <h1 className="text-2xl font-black text-zinc-950 tracking-tight">
+            {modoActivo === 'revision'
+              ? 'Albarán de Revisión'
+              : modoActivo === 'trabajo'
+              ? 'Albarán de Trabajo'
+              : 'Albarán para Facturar'}
+          </h1>
+          <p className="text-xs font-semibold text-zinc-500 mt-1">
+            {modoActivo === 'revision'
+              ? 'Historial de albaranes de revisión y mantenimientos periódicos (sin valoración económica).'
+              : modoActivo === 'trabajo'
+              ? 'Albaranes de pedidos de venta, reparaciones e instalaciones (operaciones de campo sin valorar).'
+              : 'Todos los albaranes valorados listos para emitir facturas bajo el logotipo de Avanfoc.'}
+          </p>
         </div>
 
         {/* BARRA DE ACCIONES Y FILTROS */}
@@ -719,7 +975,7 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                 <span className={`text-[10px] font-black font-sans px-2 py-0.5 rounded-md transition-colors ${
                   !showOnlyPending ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-zinc-200 text-zinc-500'
                 }`}>
-                  {albaranes.length}
+                  {filtered.length}
                 </span>
               </button>
               <button
@@ -791,21 +1047,39 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
                         <span className="text-[10px] font-mono font-bold text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded">{alb.id}</span>
-                        <button 
-                          onClick={() => !isVisualizador && toggleFacturado(alb.id)}
-                          disabled={isVisualizador}
-                          className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md border flex items-center gap-0.5 ${
-                            alb.facturado ? 'bg-blue-600 border-blue-700 text-white' : 'bg-zinc-100 border-zinc-200 text-zinc-500'
-                          } ${isVisualizador ? 'cursor-not-allowed opacity-70' : ''}`}
-                        >
-                          {alb.facturado ? <CheckCircle2 className="w-2.5 h-2.5" /> : <Circle className="w-2.5 h-2.5" />}
-                          {alb.facturado ? 'Facturado' : 'Pendiente'}
-                        </button>
+                        {modoActivo !== 'facturacion' ? (
+                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md border flex items-center gap-0.5 ${
+                            isFirmaValida(alb.firmaCliente)
+                              ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                              : 'bg-zinc-100 border-zinc-200 text-zinc-500'
+                          }`}>
+                            <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
+                            {isFirmaValida(alb.firmaCliente) ? 'Firmado' : 'Revisado'}
+                          </span>
+                        ) : (
+                          <button 
+                            onClick={() => !isVisualizador && toggleFacturado(alb.id)}
+                            disabled={isVisualizador}
+                            className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md border flex items-center gap-0.5 ${
+                              alb.facturado ? 'bg-blue-600 border-blue-700 text-white' : 'bg-zinc-100 border-zinc-200 text-zinc-500'
+                            } ${isVisualizador ? 'cursor-not-allowed opacity-70' : ''}`}
+                          >
+                            {alb.facturado ? <CheckCircle2 className="w-2.5 h-2.5" /> : <Circle className="w-2.5 h-2.5" />}
+                            {alb.facturado ? 'Facturado' : 'Pendiente'}
+                          </button>
+                        )}
                       </div>
                       <div className="flex items-center gap-1">
                         <button
                           type="button"
-                          onClick={() => setAccionesModalItem(alb)}
+                          onClick={() => {
+                            const { albaran: albVal, modificado } = revalorarAlbaranSiProcede(alb, centros);
+                            if (modificado) {
+                              const docId = (albVal as any)._docId || albVal.id;
+                              updateAlbaran(docId, albVal).catch(() => {});
+                            }
+                            setAccionesModalItem(albVal);
+                          }}
                           className="inline-flex items-center justify-center p-2 rounded-xl text-amber-600 hover:text-amber-700 bg-amber-50/70 hover:bg-amber-100/80 border border-amber-200/80 transition-all cursor-pointer shadow-2xs group"
                           title="Abrir acciones del albarán"
                         >
@@ -971,22 +1245,42 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                           </span>
                         </td>
                         <td className="w-px whitespace-nowrap px-4 py-2.5 text-center">
-                          <button 
-                            onClick={() => !isVisualizador && toggleFacturado(alb.id)} 
-                            disabled={isVisualizador}
-                            className={`text-[10px] font-semibold px-2.5 py-0.5 rounded-full border inline-flex items-center gap-1 cursor-pointer ${
-                              alb.facturado ? 'bg-blue-600 border-blue-700 text-white' : 'bg-zinc-100 border-zinc-200 text-zinc-500'
-                            } ${isVisualizador ? 'cursor-not-allowed opacity-70' : ''}`}
-                            title={alb.facturado ? 'Facturado - Clic para cambiar' : 'Pendiente - Clic para marcar facturado'}
-                          >
-                            {alb.facturado ? <CheckCircle2 className="w-3 h-3" /> : <Circle className="w-3 h-3" />}
-                            {alb.facturado ? 'Facturado' : 'Pendiente'}
-                          </button>
+                          {modoActivo !== 'facturacion' ? (
+                            <span 
+                              className={`text-[10px] font-semibold px-2.5 py-0.5 rounded-full border inline-flex items-center gap-1 ${
+                                isFirmaValida(alb.firmaCliente) 
+                                  ? 'bg-emerald-50 border-emerald-200 text-emerald-700' 
+                                  : 'bg-zinc-100 border-zinc-200 text-zinc-500'
+                              }`}
+                            >
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                              {isFirmaValida(alb.firmaCliente) ? 'Firmado' : 'Revisado'}
+                            </span>
+                          ) : (
+                            <button 
+                              onClick={() => !isVisualizador && toggleFacturado(alb.id)} 
+                              disabled={isVisualizador}
+                              className={`text-[10px] font-semibold px-2.5 py-0.5 rounded-full border inline-flex items-center gap-1 cursor-pointer ${
+                                alb.facturado ? 'bg-blue-600 border-blue-700 text-white' : 'bg-zinc-100 border-zinc-200 text-zinc-500'
+                              } ${isVisualizador ? 'cursor-not-allowed opacity-70' : ''}`}
+                              title={alb.facturado ? 'Facturado - Clic para cambiar' : 'Pendiente - Clic para marcar facturado'}
+                            >
+                              {alb.facturado ? <CheckCircle2 className="w-3 h-3" /> : <Circle className="w-3 h-3" />}
+                              {alb.facturado ? 'Facturado' : 'Pendiente'}
+                            </button>
+                          )}
                         </td>
                         <td className="w-px whitespace-nowrap px-4 py-2.5 text-center">
                           <button
                             type="button"
-                            onClick={() => setAccionesModalItem(alb)}
+                            onClick={() => {
+                              const { albaran: albVal, modificado } = revalorarAlbaranSiProcede(alb, centros);
+                              if (modificado) {
+                                const docId = (albVal as any)._docId || albVal.id;
+                                updateAlbaran(docId, albVal).catch(() => {});
+                              }
+                              setAccionesModalItem(albVal);
+                            }}
                             className="inline-flex items-center justify-center p-2 rounded-xl text-amber-600 hover:text-amber-700 bg-amber-50/70 hover:bg-amber-100/80 border border-amber-200/80 transition-all cursor-pointer shadow-2xs group"
                             title="Abrir acciones del albarán"
                           >
@@ -1057,7 +1351,7 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                   <Signature className="w-3.5 h-3.5" />
                   {isFirmaValida(accionesModalItem.firmaCliente) ? 'Firmado' : 'Sin firma'}
                 </span>
-                {(() => {
+                {modoActivo === 'facturacion' && (() => {
                   const total = (accionesModalItem.items || []).reduce((s, i) => s + (Number(i.subtotal) || ((Number(i.cantidad) || 0) * (Number(i.precioUnidad) || 0))), 0);
                   return (
                     <span className="font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200/80 ml-auto">
@@ -1093,7 +1387,7 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                 </button>
 
                 {/* Acción 2: Facturación / Conexión directa */}
-                {!isVisualizador && !isTecnicoMode && (
+                {!isVisualizador && !isTecnicoMode && modoActivo === 'facturacion' && (
                   <button
                     type="button"
                     onClick={() => {
@@ -1380,7 +1674,7 @@ export default function Albaranes({ isTecnicoMode = false }: AlbaranesProps) {
                     {form.clienteId ? (
                       // Cliente de BD: mostrar select filtrado por clienteId
                       <select 
-                        value={form.centroId}
+                        value={selectedCentro ? (selectedCentro._docId || selectedCentro.id) : (form.centroId || '')}
                         onChange={e => setForm({...form, centroId: e.target.value})}
                         className="w-full px-5 py-3.5 bg-zinc-50 border border-zinc-200 rounded-3xl outline-none"
                       >

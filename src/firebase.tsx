@@ -100,6 +100,9 @@ export interface Albaran {
   periodicidad?: string;
   clienteNombreLibre?: string;
   centroNombreLibre?: string;
+  tipoAlbaran?: 'trabajo' | 'facturacion';
+  albaranRelacionadoId?: string;
+  sinValorar?: boolean;
   _docId?: string;
 }
 
@@ -150,6 +153,11 @@ export interface Centro {
   precioAnualContrato?: string;
   precioTrimestralContrato?: string;
   precioMensualContrato?: string;
+  tipoModalidadContrato?: 'cuota_fija' | 'por_sistema';
+  preciosSistemasContrato?: Record<string, string>;
+  preciosSistemasAnualContrato?: Record<string, string>;
+  preciosSistemasTrimestralContrato?: Record<string, string>;
+  formaPagoContrato?: string;
   comentariosTecnico?: string;
   comentariosPrivados?: string;
   formaPago?: string;
@@ -534,6 +542,45 @@ export const obtenerEmpresaPorDefecto = (listaEmpresas?: Empresa[]): string => {
     return (abanfoc as any)._docId || abanfoc.id || '';
   }
   return (arr[0] as any)._docId || arr[0].id || '';
+};
+
+/**
+ * Obtiene el objeto de Empresa correspondiente a Avanfoc / Abanfoc.
+ */
+export const obtenerEmpresaAvanfoc = (listaEmpresas?: Empresa[]): Empresa | undefined => {
+  let arr = listaEmpresas;
+  if (!arr || arr.length === 0) {
+    try {
+      const local = JSON.parse(localStorage.getItem('firecheck_db_empresas') || localStorage.getItem('firecheck_db_empresa') || '[]');
+      if (Array.isArray(local) && local.length > 0) {
+        arr = local;
+      }
+    } catch {
+      // ignore
+    }
+  }
+  if (!arr || arr.length === 0) return undefined;
+  return arr.find(e => e && e.nombre && typeof e.nombre === 'string' && /(?:abanfoc|avanfoc)/i.test(e.nombre)) || arr[0];
+};
+
+/**
+ * Comprueba si una empresa dada (por objeto o id) es Avanfoc / Abanfoc.
+ */
+export const esEmpresaAvanfoc = (empresa?: Empresa | Record<string, any> | string, listaEmpresas?: Empresa[]): boolean => {
+  if (!empresa) return false;
+  if (typeof empresa === 'string') {
+    if (/(?:abanfoc|avanfoc)/i.test(empresa)) return true;
+    let arr = listaEmpresas;
+    if (!arr || arr.length === 0) {
+      try {
+        const local = JSON.parse(localStorage.getItem('firecheck_db_empresas') || localStorage.getItem('firecheck_db_empresa') || '[]');
+        if (Array.isArray(local) && local.length > 0) arr = local;
+      } catch { }
+    }
+    const found = arr?.find(e => e.id === empresa || (e as any)._docId === empresa);
+    return found ? /(?:abanfoc|avanfoc)/i.test(found.nombre || '') : false;
+  }
+  return /(?:abanfoc|avanfoc)/i.test(empresa.nombre || '');
 };
 
 export const subscribeTrabajos = (onUpdate: (data: TrabajoConfig[]) => void) => {
@@ -1768,12 +1815,14 @@ export async function addAlbaran(albaran: Albaran) {
   }
 }
 
-export async function updateAlbaran(albaran: Albaran) {
+export async function updateAlbaran(idOrAlbaran: string | Albaran, data?: Partial<Albaran>) {
   try {
-    if (!albaran.id) {
+    const albaranObj = typeof idOrAlbaran === 'string' ? (data || {}) : idOrAlbaran;
+    const albaranId = typeof idOrAlbaran === 'string' ? idOrAlbaran : idOrAlbaran.id;
+    if (!albaranId) {
       throw new Error("Albaran ID is required for update.");
     }
-    const docRef = doc(db, 'albaranes', albaran.id);
+    const docRef = doc(db, 'albaranes', albaranId);
 
     // Verificar si ya estaba firmado en la base de datos
     let alreadySigned = false;
@@ -1790,24 +1839,25 @@ export async function updateAlbaran(albaran: Albaran) {
     }
 
     const albaranToUpdate = {
-      ...albaran,
+      ...albaranObj,
+      id: albaranId,
       updatedAt: new Date().toISOString()
     };
     await setDoc(docRef, albaranToUpdate, { merge: true });
-    console.info('updateAlbaran: updated', albaran.id);
+    console.info('updateAlbaran: updated', albaranId);
 
     // Solo enviar correo si antes NO estaba firmado y ahora SÍ está firmado
-    if (!alreadySigned && isFirmaValida(albaranToUpdate.firmaCliente)) {
+    if (!alreadySigned && isFirmaValida((albaranToUpdate as any).firmaCliente)) {
       try {
-        await enviarCorreoAlbaran(albaranToUpdate);
+        await enviarCorreoAlbaran(albaranToUpdate as Albaran);
       } catch (emailErr) {
         console.error('Error in enviarCorreoAlbaran inside updateAlbaran:', emailErr);
       }
     } else {
-      console.info(`enviarCorreoAlbaran omitido en actualización del albarán ${albaran.id}: ya firmado (${alreadySigned}) o sin firma válida.`);
+      console.info(`enviarCorreoAlbaran omitido en actualización del albarán ${albaranId}: ya firmado (${alreadySigned}) o sin firma válida.`);
     }
 
-    return { _docId: albaran.id, ...albaranToUpdate };
+    return { _docId: albaranId, ...albaranToUpdate };
   } catch (e) {
     console.error('updateAlbaran error:', e);
     throw e;
@@ -4111,10 +4161,12 @@ export function subscribeFacturas(callback: (items: Factura[]) => void) {
     const unsub = onSnapshot(col, (snap) => {
       const items = snap.docs.map(d => {
         const data = d.data() as any;
+        const esBorrador = data?.estado === 'Borrador' || data?.esBorrador === true;
+        const numFacturaVal = esBorrador ? (data?.numeroFactura || '') : (data?.numeroFactura || data?.id || d.id);
         return {
           _docId: d.id,
           id: data?.id || d.id,
-          numeroFactura: data?.numeroFactura || data?.id || d.id,
+          numeroFactura: numFacturaVal,
           empresaId: data?.empresaId || '',
           clienteId: data?.clienteId || '',
           centroId: data?.centroId || '',
@@ -4331,6 +4383,166 @@ export async function deleteVehiculo(docId: string): Promise<void> {
     console.error('deleteVehiculo error:', e);
     throw e;
   }
+}
+
+/**
+ * Normaliza una cadena para comparaciones semánticas en contratos de mantenimiento
+ */
+export function normalizarTextoContrato(str: string): string {
+  return (str || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Categorías semánticas de PCI para emparejar descripciones de equipos y nombres de sistemas
+ */
+export const CATEGORIAS_SEMANTICAS_PCI: { clave: string; keywords: string[] }[] = [
+  { clave: 'puertas', keywords: ['puerta', 'puertas', 'cortafuego', 'cortafuegos', 'rf'] },
+  { clave: 'extintores', keywords: ['extintor', 'extintores'] },
+  { clave: 'bies', keywords: ['bie', 'bies', 'boca', 'bocas', 'manguera'] },
+  { clave: 'monoxido', keywords: ['monoxido', 'co', 'aparcamiento', 'garaje'] },
+  { clave: 'deteccion', keywords: ['deteccion', 'humo', 'incendio', 'optico', 'termico', 'pulsador', 'sirena', 'central'] },
+  { clave: 'rociadores', keywords: ['rociador', 'rociadores', 'sprinkler', 'sprinklers', 'puesto de control', 'puestos de control'] },
+  { clave: 'bombas', keywords: ['bomba', 'bombas', 'grupo de presion', 'aljibe', 'deposito'] },
+  { clave: 'emergencia', keywords: ['emergencia', 'emergencias', 'alumbrado', 'luminaria', 'senalizacion', 'senal'] },
+  { clave: 'hidrantes', keywords: ['hidrante', 'hidrantes', 'caseta', 'casetas'] },
+  { clave: 'campana', keywords: ['campana', 'campanas', 'cocina', 'cocinas'] },
+  { clave: 'gas', keywords: ['gas', 'inundacion', 'extincion automatica'] },
+  { clave: 'columna_seca', keywords: ['columna seca', 'columnas secas', 'siamesa'] }
+];
+
+export function obtenerClaveSemantica(texto: string): string | null {
+  const norm = normalizarTextoContrato(texto);
+  for (const cat of CATEGORIAS_SEMANTICAS_PCI) {
+    if (cat.keywords.some(kw => {
+      if (kw.length <= 2) {
+        return new RegExp(`\\b${kw}\\b`, 'i').test(norm);
+      }
+      return norm.includes(kw);
+    })) {
+      return cat.clave;
+    }
+  }
+  return null;
+}
+
+export function resolverPrecioUnitarioContrato(centro: any, params: { periodicidad?: string; sistId?: string; desc?: string; nombre?: string; tipo?: string; familia?: string }): number {
+  if (!centro) return 0;
+  const periodicidad = params.periodicidad || '';
+  const esTrimestral = periodicidad.toLowerCase().includes('trimestral');
+
+  const dictTrimestral = centro.preciosSistemasTrimestralContrato || {};
+  const dictAnual = centro.preciosSistemasAnualContrato || centro.preciosSistemasContrato || {};
+  const dictLegacy = centro.preciosSistemasContrato || {};
+
+  const dicts = esTrimestral 
+    ? [dictTrimestral, dictAnual, dictLegacy]
+    : [dictAnual, dictLegacy, dictTrimestral];
+
+  const sistId = params.sistId || '';
+  const desc = params.desc || params.nombre || '';
+  const tipo = params.tipo || '';
+  const familia = params.familia || '';
+
+  const normDesc = normalizarTextoContrato(desc);
+  const normTipo = normalizarTextoContrato(tipo);
+  const normFamilia = normalizarTextoContrato(familia);
+
+  const targetSemantic = obtenerClaveSemantica(desc) || obtenerClaveSemantica(tipo) || obtenerClaveSemantica(familia);
+
+  for (const dict of dicts) {
+    if (!dict || typeof dict !== 'object') continue;
+
+    // 1. Coincidencia directa por ID de sistema
+    if (sistId && dict[sistId] !== undefined && dict[sistId] !== '') {
+      const p = parseFloat(dict[sistId]);
+      if (!isNaN(p) && p > 0) return p;
+    }
+
+    // 2. Clave directa por string
+    for (const keyCandidate of [desc, tipo, familia]) {
+      if (keyCandidate && dict[keyCandidate] !== undefined && dict[keyCandidate] !== '') {
+        const p = parseFloat(dict[keyCandidate]);
+        if (!isNaN(p) && p > 0) return p;
+      }
+    }
+
+    // 3. Coincidencia normalizada exacta
+    const keys = Object.keys(dict);
+    for (const k of keys) {
+      const normK = normalizarTextoContrato(k);
+      if (normK && (normK === normDesc || normK === normTipo || normK === normFamilia)) {
+        const p = parseFloat(dict[k]);
+        if (!isNaN(p) && p > 0) return p;
+      }
+    }
+
+    // 4. Coincidencia por subcadena
+    for (const k of keys) {
+      const normK = normalizarTextoContrato(k);
+      if (normK.length >= 3) {
+        if ((normDesc && normK.includes(normDesc)) || (normDesc && normDesc.includes(normK)) ||
+            (normTipo && normK.includes(normTipo)) || (normTipo && normTipo.includes(normK))) {
+          const p = parseFloat(dict[k]);
+          if (!isNaN(p) && p > 0) return p;
+        }
+      }
+    }
+
+    // 5. Coincidencia semántica de categoría PCI
+    if (targetSemantic) {
+      for (const k of keys) {
+        const semK = obtenerClaveSemantica(k);
+        if (semK === targetSemantic) {
+          const p = parseFloat(dict[k]);
+          if (!isNaN(p) && p > 0) return p;
+        }
+      }
+    }
+  }
+
+  return 0;
+}
+
+export function parseImporteSeguro(val: any): number {
+  if (val === undefined || val === null) return 0;
+  if (typeof val === 'number') return isNaN(val) ? 0 : val;
+  const str = String(val).trim().replace(',', '.');
+  const num = parseFloat(str);
+  return isNaN(num) ? 0 : num;
+}
+
+export function obtenerCuotaFijaContrato(centro: any, periodicidad?: string): number {
+  if (!centro) return 0;
+  const perLower = (periodicidad || '').toLowerCase();
+
+  const pTrim = parseImporteSeguro(centro.precioTrimestralContrato || centro.precioTrimestral);
+  const pAnual = parseImporteSeguro(centro.precioAnualContrato || centro.precioAnual || centro.importeAnualContrato);
+  const pMensual = parseImporteSeguro(centro.precioMensualContrato || centro.precioMensual);
+
+  if (perLower.includes('trimestral')) {
+    if (pTrim > 0) return pTrim;
+    if (pAnual > 0) return pAnual;
+    if (pMensual > 0) return pMensual * 3;
+    return parseImporteSeguro(centro.importeAnualContrato);
+  }
+
+  if (perLower.includes('mensual')) {
+    if (pMensual > 0) return pMensual;
+    if (pAnual > 0) return Math.round((pAnual / 12) * 100) / 100;
+    if (pTrim > 0) return Math.round((pTrim / 3) * 100) / 100;
+    return parseImporteSeguro(centro.importeAnualContrato);
+  }
+
+  if (pAnual > 0) return pAnual;
+  if (pTrim > 0) return pTrim;
+  if (pMensual > 0) return pMensual;
+  return parseImporteSeguro(centro.importeAnualContrato);
 }
 
 export {app, storage, db, analytics};
