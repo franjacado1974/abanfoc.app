@@ -1891,6 +1891,32 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
   - Botón en la cabecera para alternar entre "Ocultar panel anomalías" y "Ver anomalías al lado".
   - Presupuestos convencionales sin anomalías conservan intacta su visualización estándar (`max-w-6xl xl:max-w-7xl`).
 
+---
+
+## 129. Blindaje Inviolable del Módulo Reinicio de Contadores (`Ajustes.tsx`, `ReinicioContadores.tsx`, `contadoresService.ts`, `Facturas.tsx`, `Certificados.tsx`, `firebase.tsx`)
+- **Tarjeta Dedicada en Configuración de Salamandra (`src/Ajustes.tsx`)**:
+  - En el menú principal de Ajustes (`view === 'menu'`), tarjeta obligatoria **"Reinicio de contadores"** con icono `RotateCcw`, fondo y borde violeta estilizado (`border-violet-200 bg-white hover:border-violet-250 hover:bg-violet-50/30`), navegando a `view === 'contadores'`.
+  - Vista completa y responsive integrada: [`src/ReinicioContadores.tsx`](file:///C:/Users/canci/Documents/antigravity/noble-noether/src/ReinicioContadores.tsx) con selector de documentos, botones rápidos y preajustes de ejercicio anual.
+- **Documentos Gestionados y Secuencia Configurable**:
+  - Control de numeración individual para los 6 documentos clave:
+    1. **Facturas**: prefijo configurable (ej. `27.` o `FAC 27.`), cifras (ej. 4 dígitos `0001` o 3 dígitos `001`), contador inicial y fecha de reinicio (ej: `31/12/2026`).
+    2. **Albaranes**: prefijo (ej. `ALB.27`), cifras (3 dígitos `001`) y contador inicial.
+    3. **Pedidos**: prefijo (ej. `PDV.27`), cifras (3 dígitos `001`) y contador inicial.
+    4. **Certificados**: prefijo (ej. `CERT-2027-`), cifras (4 dígitos `0001`) y contador inicial.
+    5. **Presupuestos**: prefijo (ej. `PRE.27`), cifras (3 dígitos `001`) y contador inicial.
+    6. **Partes de Mantenimiento**: prefijo (ej. `MANT-2027-`), cifras (4 dígitos `0001`) y contador inicial.
+- **Lógica de Activación y Fechas de Corte (`estaReinicioActivo` en `src/services/contadoresService.ts`)**:
+  - Si el reinicio está activado (`activo: true`) y la fecha actual o la del documento es $\ge$ `fechaReinicio` (o si se aplica desde hoy), los nuevos documentos generados adoptan de inmediato la nueva estructura.
+  - Si la fecha es futura, permanece en estado `Programado` y entra en vigor automáticamente al llegar la fecha indicada.
+  - Si está desactivado, el sistema mantiene intacto el formato correlativo estándar.
+- **Asistente Rápido de Cambio de Ejercicio**:
+  - Panel superior con preajuste en un solo clic para el año objetivo (ej. 2027) con opciones rápidas de fecha de corte ("Corte 31 Dic", "Corte 1 Ene", "Aplicar desde Hoy").
+- **Prevención de Duplicados y Persistencia Dual (`contadoresService.ts`)**:
+  - Sincronización en tiempo real mediante Firestore (`contadores/configuracion_reinicios`) y LocalStorage (`firecheck_contadores_config`).
+  - Al generar un código, el motor inspecciona los documentos existentes que coincidan con el prefijo activo para asegurar que el siguiente número sea estrictamente `Math.max(config.siguienteNumero, maxExistente + 1)`.
+  - Caja de vista previa en tiempo real en cada tarjeta que muestra instantáneamente cómo se generará el próximo documento (ej: `27.0001`).
+
+
 
 
 

@@ -16,6 +16,12 @@ import {
   updateParte, updateReparacion, updateInstalacion, updateUrgencia,
   type Factura, type FacturaLinea, type Albaran, type Cliente, type Centro, type Empresa, type Articulo
 } from './firebase';
+import {
+  obtenerSiguienteNumeroFacturaConfigurado,
+  registrarNumeroGenerado,
+  extraerNumeroDeCodigo,
+  getConfiguracionContadores
+} from './services/contadoresService';
 
 const formatMoneda = (valor: number | string | undefined) => {
   const num = typeof valor === 'string' ? parseFloat(valor.replace(',', '.')) : Number(valor || 0);
@@ -838,7 +844,14 @@ export default function Facturas() {
   const [showModalAlbaranesPendientes, setShowModalAlbaranesPendientes] = useState(false);
   const [accionesModalItem, setAccionesModalItem] = useState<Factura | null>(null);
 
-  const calcularSiguienteNumeroFactura = (lista: Factura[]) => {
+  const calcularSiguienteNumeroFactura = (lista: Factura[], fechaDoc?: string) => {
+    // 1. Prioridad: comprobar si el reinicio de contadores está activo
+    const nextConfig = obtenerSiguienteNumeroFacturaConfigurado(lista, fechaDoc);
+    if (nextConfig) {
+      return nextConfig;
+    }
+
+    // 2. Comportamiento por defecto / estándar
     const yy = new Date().getFullYear().toString().slice(-2);
     let maxNum = 0;
     lista.forEach(f => {
@@ -1207,6 +1220,13 @@ export default function Facturas() {
         await updateFactura(editingId, dataToSave);
       } else {
         await addFactura(dataToSave);
+        try {
+          const confFacturas = getConfiguracionContadores().facturas;
+          const numExtraido = extraerNumeroDeCodigo(dataToSave.numeroFactura, confFacturas.prefijo);
+          if (numExtraido !== null) {
+            registrarNumeroGenerado('facturas', numExtraido, dataToSave.numeroFactura);
+          }
+        } catch {}
       }
 
       // Si proviene de un Albarán, marcar el Albarán como Facturado ("va a misa")

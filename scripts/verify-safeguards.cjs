@@ -1957,6 +1957,31 @@ if (fs.existsSync(pdfGenPath)) {
     }
   }
 
+  // 129. Blindaje Inviolable del Módulo Reinicio de Contadores (Ajustes > Reinicio de Contadores)
+  const contadoresServPath = path.join(__dirname, '..', 'src', 'services', 'contadoresService.ts');
+  const reinicioContPath = path.join(__dirname, '..', 'src', 'ReinicioContadores.tsx');
+  const ajustesPath129 = path.join(__dirname, '..', 'src', 'Ajustes.tsx');
+
+  if (!fs.existsSync(contadoresServPath)) {
+    errors.push('CRÍTICO: No existe src/services/contadoresService.ts (AGENTS.md REGLA 129).');
+  } else {
+    const cServContent = fs.readFileSync(contadoresServPath, 'utf8');
+    if (!cServContent.includes('formatearCodigoDocumento') || !cServContent.includes('guardarConfiguracionContadores')) {
+      errors.push('CRÍTICO: contadoresService.ts carece de formatearCodigoDocumento o guardarConfiguracionContadores (AGENTS.md REGLA 129).');
+    }
+  }
+
+  if (!fs.existsSync(reinicioContPath)) {
+    errors.push('CRÍTICO: No existe src/ReinicioContadores.tsx (AGENTS.md REGLA 129).');
+  }
+
+  if (fs.existsSync(ajustesPath129)) {
+    const ajContent129 = fs.readFileSync(ajustesPath129, 'utf8');
+    if (!ajContent129.includes("view === 'contadores'") || !ajContent129.includes('Reinicio de contadores')) {
+      errors.push("CRÍTICO: Ajustes.tsx carece de la tarjeta o vista de 'contadores' (AGENTS.md REGLA 129).");
+    }
+  }
+
 // Resultado de la verificación
 if (errors.length > 0) {
   console.error('\n❌ ERROR CRÍTICO DE BLINDAJE INTEGRAL (AGENTS.md):');

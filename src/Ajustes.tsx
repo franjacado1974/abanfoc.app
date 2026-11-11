@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Building2, Users, ShieldCheck, FireExtinguisher, Plus, Trash2, ArrowLeft, Image as ImageIcon, X, Loader, Edit, Percent, ClipboardList, ChevronDown, ChevronUp, Sparkles, Upload, RotateCw, FileCheck
+  Building2, Users, ShieldCheck, FireExtinguisher, Plus, Trash2, ArrowLeft, Image as ImageIcon, X, Loader, Edit, Percent, ClipboardList, ChevronDown, ChevronUp, Sparkles, Upload, RotateCw, RotateCcw, FileCheck
 } from 'lucide-react';
 import { addUserToFirestore, subscribeSistemasCategorias, addSistemaCategoria, deleteSistemaCategoria, updateSistemaCategoria, uploadFile, subscribeImpuestos, saveImpuestoConfig, subscribeTecnicos, saveTecnico, deleteTecnico, subscribeLoaderConfig, saveLoaderConfig } from './firebase';
 import FormBuilderPlantillas from './FormBuilderPlantillas';
+import ReinicioContadores from './ReinicioContadores';
 import ConfirmationModal from './ConfirmationModal';
 
 const generateId = () => {
@@ -37,7 +38,7 @@ interface SistemaItem {
 
 export default function Ajustes() {
   const navigate = useNavigate();
-  const [view, setView] = useState<'menu' | 'tecnicos' | 'usuarios' | 'sistemas' | 'impuestos' | 'plantillas' | 'otras_plantillas' | 'loader_image'>('menu');
+  const [view, setView] = useState<'menu' | 'tecnicos' | 'usuarios' | 'sistemas' | 'impuestos' | 'plantillas' | 'otras_plantillas' | 'loader_image' | 'contadores'>('menu');
 
   const [tecnicos, setTecnicos] = useState<{ id: string; nombre: string; apellidos: string; habilitacion?: string; _docId?: string }[]>(() => {
     try {
@@ -526,11 +527,11 @@ export default function Ajustes() {
           </button>
         )}
         <h1 className="text-2xl font-black text-zinc-950 tracking-tight">
-          {view === 'menu' ? 'Configuración de Salamandra' : view === 'tecnicos' ? 'Gestión de Técnicos' : view === 'usuarios' ? 'Gestión de Usuarios' : view === 'sistemas' ? 'Gestión de Sistemas' : view === 'plantillas' ? 'Plantillas de sistemas' : view === 'otras_plantillas' ? 'Otras plantillas' : view === 'loader_image' ? 'Cambio de imagen inicio' : 'Tipos de Impuestos'}
+          {view === 'menu' ? 'Configuración de Salamandra' : view === 'tecnicos' ? 'Gestión de Técnicos' : view === 'usuarios' ? 'Gestión de Usuarios' : view === 'sistemas' ? 'Gestión de Sistemas' : view === 'plantillas' ? 'Plantillas de sistemas' : view === 'otras_plantillas' ? 'Otras plantillas' : view === 'loader_image' ? 'Cambio de imagen inicio' : view === 'contadores' ? 'Reinicio de Contadores' : 'Tipos de Impuestos'}
         </h1>
         <p className="text-xs font-semibold text-zinc-500 mt-1">
           {view === 'menu' 
-            ? 'Administración de técnicos, usuarios, sistemas, plantillas de sistemas, otras plantillas, imagen de inicio e impuestos de Salamandra.' 
+            ? 'Administración de técnicos, usuarios, sistemas, plantillas de sistemas, otras plantillas, imagen de inicio, contadores e impuestos de Salamandra.' 
             : view === 'tecnicos' 
             ? 'Listado, edición y alta de operarios técnicos asignables.' 
             : view === 'usuarios' 
@@ -543,11 +544,13 @@ export default function Ajustes() {
             ? 'Gestión de plantillas para vehículos, taller y otras áreas operativas.' 
             : view === 'loader_image'
             ? 'Personaliza la imagen o logo que gira durante la pantalla de carga inicial.'
+            : view === 'contadores'
+            ? 'Configura fechas de corte, prefijos y numeración anual para facturas, albaranes, pedidos, certificados y otros documentos.'
             : 'Gestión de los tipos de IVA e impuestos vigentes.'}
         </p>
       </div>
 
-      <div className={view === 'plantillas' || view === 'otras_plantillas' ? 'w-full' : view === 'menu' ? 'max-w-5xl' : 'max-w-2xl'}>
+      <div className={view === 'plantillas' || view === 'otras_plantillas' || view === 'contadores' ? 'w-full' : view === 'menu' ? 'max-w-5xl' : 'max-w-2xl'}>
         {view === 'menu' && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             <button
@@ -651,6 +654,19 @@ export default function Ajustes() {
               <div>
                 <p className="font-extrabold text-zinc-900 text-base">Cambio de imagen inicio</p>
                 <p className="text-xs text-zinc-500 mt-1.5 max-w-[200px] leading-relaxed">Cargar imagen giratoria para la pantalla de inicio.</p>
+              </div>
+            </button>
+
+            <button
+              onClick={() => setView('contadores')}
+              className="w-full flex flex-col items-center justify-center text-center p-6 min-h-[220px] rounded-3xl border border-zinc-200 bg-white hover:border-violet-250 hover:bg-violet-50/30 transition-all group cursor-pointer shadow-sm hover:shadow-md active:scale-95"
+            >
+              <div className="w-16 h-16 bg-violet-100 text-violet-600 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform shadow-sm">
+                <RotateCcw className="w-7 h-7" />
+              </div>
+              <div>
+                <p className="font-extrabold text-zinc-900 text-base">Reinicio de contadores</p>
+                <p className="text-xs text-zinc-500 mt-1.5 max-w-[200px] leading-relaxed">Reiniciar numeración de facturas, albaranes, pedidos y certificados.</p>
               </div>
             </button>
           </div>
@@ -1117,6 +1133,10 @@ export default function Ajustes() {
               </div>
             </div>
           </section>
+        )}
+
+        {view === 'contadores' && (
+          <ReinicioContadores onBack={() => setView('menu')} />
         )}
 
       </div>

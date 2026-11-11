@@ -1507,6 +1507,17 @@ export function extraerSufijoSecuencia(codigo?: string): string {
  * 3. Asigna de forma atómica y reserva el nuevo número en Firestore y en caché local para evitar colisiones.
  */
 export async function obtenerSiguienteNumeroPedido(prefijo: 'PDV' | 'PDR' | 'PDI' | 'PDA' = 'PDV'): Promise<string> {
+  // Comprobar si existe reinicio de contadores activo
+  try {
+    const { obtenerSiguienteNumeroPedidoConfigurado } = await import('./services/contadoresService');
+    const numConfig = await obtenerSiguienteNumeroPedidoConfigurado(prefijo);
+    if (numConfig) {
+      return numConfig;
+    }
+  } catch (errConfig) {
+    console.warn('[obtenerSiguienteNumeroPedido] Error comprobando contadores configurados:', errConfig);
+  }
+
   const currentYear = new Date().getFullYear();
   const yy = currentYear.toString().slice(-2);
   let maxCorrelativo = 0;
@@ -1594,6 +1605,17 @@ export async function obtenerSiguienteNumeroPedido(prefijo: 'PDV' | 'PDR' | 'PDI
  * Formato: ALB.YYXXX (ej. ALB.26001, ALB.26002...)
  */
 export async function obtenerSiguienteNumeroAlbaran(): Promise<string> {
+  // Comprobar si existe reinicio de contadores activo
+  try {
+    const { obtenerSiguienteNumeroAlbaranConfigurado } = await import('./services/contadoresService');
+    const numConfig = await obtenerSiguienteNumeroAlbaranConfigurado();
+    if (numConfig) {
+      return numConfig;
+    }
+  } catch (errConfig) {
+    console.warn('[obtenerSiguienteNumeroAlbaran] Error comprobando contadores configurados:', errConfig);
+  }
+
   const currentYear = new Date().getFullYear();
   const yy = currentYear.toString().slice(-2);
   let maxCorrelativo = 0;
@@ -2051,6 +2073,17 @@ export interface ParteFirestore {
 }
 
 export async function generateNumeroMantenimiento(): Promise<string> {
+  // Comprobar si existe reinicio de contadores activo
+  try {
+    const { obtenerSiguienteNumeroParteConfigurado } = await import('./services/contadoresService');
+    const numConfig = await obtenerSiguienteNumeroParteConfigurado();
+    if (numConfig) {
+      return numConfig;
+    }
+  } catch (errConfig) {
+    console.warn('[generateNumeroMantenimiento] Error comprobando contadores configurados:', errConfig);
+  }
+
   const year = new Date().getFullYear();
   let maxCorr = 0;
   try {
@@ -2202,6 +2235,17 @@ export function subscribePartes(callback: (partes: ParteFirestore[]) => void) {
 
 /** Genera un número de presupuesto correlativo con formato PRE.YYXXX (ej: PRE.26001) */
 async function getNextPresupuestoNumero(): Promise<string> {
+  // Comprobar si existe reinicio de contadores activo
+  try {
+    const { obtenerSiguienteNumeroPresupuestoConfigurado } = await import('./services/contadoresService');
+    const numConfig = await obtenerSiguienteNumeroPresupuestoConfigurado();
+    if (numConfig) {
+      return numConfig;
+    }
+  } catch (errConfig) {
+    console.warn('[getNextPresupuestoNumero] Error comprobando contadores configurados:', errConfig);
+  }
+
   const currentYear = new Date().getFullYear();
   const yy = currentYear.toString().slice(-2);
   let maxCorrelativo = 0;

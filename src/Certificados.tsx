@@ -8,6 +8,12 @@ import { HandOptionsIcon } from './components/HandOptionsIcon';
 import ConfirmationModal from './ConfirmationModal';
 import { generarCertificadoPDF, generarCertificadoPDFView } from './pdfGenerator';
 import { subscribeCertificados, deleteCertificado, addCertificado } from './firebase';
+import {
+  obtenerSiguienteNumeroCertificadoConfigurado,
+  registrarNumeroGenerado,
+  extraerNumeroDeCodigo,
+  getConfiguracionContadores
+} from './services/contadoresService';
 import DetailModal from './components/DetailModal';
 import SearchableSelect from './components/SearchableSelect';
 
@@ -277,8 +283,9 @@ export default function Certificados() {
     const catId = tipoId || 'revision';
     const cat = CATEGORIAS_CERTIFICADO.find(c => c.id === catId) || CATEGORIAS_CERTIFICADO[0];
     const year = new Date().getFullYear();
+    const numConfig = obtenerSiguienteNumeroCertificadoConfigurado(certificados);
     const randomCorr = Math.floor(1000 + Math.random() * 9000);
-    const numSugerido = `CERT-${year}-${randomCorr}`;
+    const numSugerido = numConfig || `CERT-${year}-${randomCorr}`;
 
     setFormManualCert({
       clienteId: '',
@@ -372,6 +379,15 @@ export default function Certificados() {
 
     try {
       await addCertificado(certToSave);
+      if (!editingCert) {
+        try {
+          const confCert = getConfiguracionContadores().certificados;
+          const numExtraido = extraerNumeroDeCodigo(certToSave.numeroMantenimiento, confCert.prefijo);
+          if (numExtraido !== null) {
+            registrarNumeroGenerado('certificados', numExtraido, certToSave.numeroMantenimiento);
+          }
+        } catch {}
+      }
       setIsCreateModalOpen(false);
       setEditingCert(null);
       setFirmaTecnicoData('');
