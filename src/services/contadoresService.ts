@@ -1,5 +1,5 @@
 import { db } from '../firebase';
-import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
+import { doc, setDoc, onSnapshot } from 'firebase/firestore';
 
 export type TipoDocumentoContador =
   | 'facturas'
