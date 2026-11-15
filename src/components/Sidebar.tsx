@@ -6,7 +6,7 @@ import {
   Settings, Power, ChevronLeft, ChevronRight, LayoutDashboard,
   Menu, X, Mail, Clock, Trash2,
   ChevronDown, Building2, FolderKanban, ClipboardCheck, Files, GraduationCap,
-  FilePlus2, BarChart3, StickyNote, Hammer, Truck
+  FilePlus2, BarChart3, StickyNote, Hammer, Truck, ShoppingCart, TrendingUp
 } from 'lucide-react';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -64,6 +64,7 @@ const CATEGORIAS_MENU: NavCategory[] = [
     subItems: [
       { id: 'clientes', path: '/clientes', title: 'Clientes', Icon: Users, allowedRoles: ['super-administrador', 'administrador', 'editor'] },
       { id: 'centros', path: '/centros', title: 'Centros', Icon: Building2, allowedRoles: ['super-administrador', 'administrador'] },
+      { id: 'proveedores', path: '/proveedores', title: 'Proveedores', Icon: Building2, allowedRoles: ['super-administrador', 'administrador', 'editor'] },
       { id: 'catalogo', path: '/catalogo', title: 'Catálogo', Icon: Package, allowedRoles: ['super-administrador', 'administrador', 'editor', 'tecnico'] },
       { id: 'taller', path: '/taller', title: 'Taller', Icon: Hammer, allowedRoles: ['super-administrador', 'administrador', 'editor', 'tecnico'] },
       { id: 'vehiculos', path: '/vehiculos', title: 'Vehículos', Icon: Truck, allowedRoles: ['super-administrador', 'administrador', 'editor', 'tecnico'] }
@@ -109,6 +110,7 @@ const CATEGORIAS_MENU: NavCategory[] = [
       { id: 'pedidos', path: '/pedidos', title: 'Pedidos', Icon: FileText, allowedRoles: ['super-administrador', 'administrador'] },
       { id: 'albaranes', path: '/albaranes', title: 'Albarán para Facturar', Icon: FileDigit, allowedRoles: ['super-administrador', 'administrador', 'visualizador'] },
       { id: 'facturas', path: '/facturas', title: 'Facturas', Icon: Receipt, allowedRoles: ['super-administrador', 'administrador'] },
+      { id: 'compras', path: '/compras', title: 'Compras y Gastos', Icon: ShoppingCart, allowedRoles: ['super-administrador', 'administrador'] },
       { id: 'notas', path: '/notas', title: 'Notas', Icon: StickyNote, allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador', 'tecnico'] }
     ]
   },
@@ -122,13 +124,16 @@ const CATEGORIAS_MENU: NavCategory[] = [
     allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador', 'tecnico']
   },
 
-  // 8. Análisis (Gráficos y estadísticas operativas)
+  // 8. Análisis (Operativo y Financiero)
   {
     id: 'analisis',
     title: 'Análisis',
     Icon: BarChart3,
-    path: '/analisis',
-    allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador']
+    allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador'],
+    subItems: [
+      { id: 'analisis-operativo', path: '/analisis', title: 'Análisis Operativo', Icon: BarChart3, allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador'] },
+      { id: 'analisis-financiero', path: '/analisis-financiero', title: 'Análisis Financiero', Icon: TrendingUp, allowedRoles: ['super-administrador', 'administrador'] }
+    ]
   },
 
   // 6. Papelera (Preservada permanentemente al fondo según Regla 29)

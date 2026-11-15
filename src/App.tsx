@@ -18,6 +18,8 @@ import Articulos from './Articulos';
 import Servicios from './Servicios';
 import Albaranes from './Albaranes';
 import Facturas from './Facturas';
+import Compras from './Compras';
+import Proveedores from './Proveedores';
 import Certificados from './Certificados';
 import ConfiguracionEmpresa from './ConfiguracionEmpresa';
 import Pedidos from './Pedidos';
@@ -38,6 +40,7 @@ import PruebasTecnicas from './PruebasTecnicas';
 import Papelera from './Papelera';
 import Metodos from './Metodos';
 import Analisis from './Analisis';
+import AnalisisFinanciero from './AnalisisFinanciero';
 import Calendario from './Calendario';
 import Taller from './Taller';
 import Vehiculos from './Vehiculos';
@@ -2000,6 +2003,16 @@ export default function App() {
             <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Facturas /></PageLayout>
           </ProtectedRoute>
         } />
+        <Route path="/compras" element={
+          <ProtectedRoute allowedRoles={['super-administrador', 'administrador']} user={loggedUser}>
+            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Compras /></PageLayout>
+          </ProtectedRoute>
+        } />
+        <Route path="/proveedores" element={
+          <ProtectedRoute allowedRoles={['super-administrador', 'administrador', 'editor']} user={loggedUser}>
+            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Proveedores /></PageLayout>
+          </ProtectedRoute>
+        } />
         <Route path="/partes" element={
           <ProtectedRoute allowedRoles={['super-administrador', 'administrador', 'editor', 'visualizador', 'tecnico']} user={loggedUser}>
             <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Partes /></PageLayout>
@@ -2113,6 +2126,11 @@ export default function App() {
         <Route path="/analisis" element={
           <ProtectedRoute allowedRoles={['super-administrador', 'administrador', 'editor', 'visualizador']} user={loggedUser}>
             <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Analisis /></PageLayout>
+          </ProtectedRoute>
+        } />
+        <Route path="/analisis-financiero" element={
+          <ProtectedRoute allowedRoles={['super-administrador', 'administrador']} user={loggedUser}>
+            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><AnalisisFinanciero /></PageLayout>
           </ProtectedRoute>
         } />
         <Route path="/notas" element={

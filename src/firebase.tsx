@@ -4546,6 +4546,236 @@ export function obtenerCuotaFijaContrato(centro: any, periodicidad?: string): nu
   return parseImporteSeguro(centro.importeAnualContrato);
 }
 
+// ==========================================
+// PROVEEDORES Y COMPRAS (GASTOS)
+// ==========================================
+
+export interface Proveedor {
+  _docId?: string;
+  id?: string;
+  referencia: string;
+  proveedor: string;
+  nombreComercial: string;
+  tipoComercio: string;
+  nif: string;
+  telefono: string;
+  email: string;
+  contacto: string;
+  notas?: string;
+  fechaCreacion?: string;
+  updatedAt?: string;
+}
+
+export interface CompraGasto {
+  _docId?: string;
+  id?: string;
+  fecha: string;
+  numeroFactura: string;
+  proveedorId?: string;
+  proveedorReferencia?: string;
+  proveedorNombre: string;
+  categoria: string;
+  concepto: string;
+  baseImponible: number;
+  iva: number;
+  total: number;
+  formaPago: string;
+  estado: 'Pagado' | 'Pendiente';
+  notas?: string;
+  fechaCreacion?: string;
+  updatedAt?: string;
+}
+
+export function subscribeProveedores(callback: (items: Proveedor[]) => void) {
+  try {
+    const col = collection(db, 'proveedores');
+    const unsub = onSnapshot(col, (snap) => {
+      const items = snap.docs.map(d => {
+        const data = d.data() as any;
+        return {
+          _docId: d.id,
+          id: data?.id || d.id,
+          referencia: data?.referencia || '',
+          proveedor: data?.proveedor || '',
+          nombreComercial: data?.nombreComercial || '',
+          tipoComercio: data?.tipoComercio || '',
+          nif: data?.nif || '',
+          telefono: data?.telefono || '',
+          email: data?.email || '',
+          contacto: data?.contacto || '',
+          notas: data?.notas || '',
+          fechaCreacion: data?.fechaCreacion || '',
+          updatedAt: data?.updatedAt || '',
+        } as Proveedor;
+      });
+      items.sort((a, b) => (a.referencia || '').localeCompare(b.referencia || ''));
+      try {
+        localStorage.setItem('firecheck_db_proveedores', JSON.stringify(items));
+      } catch {}
+      callback(items);
+    }, (err) => {
+      console.error('subscribeProveedores error:', err);
+      try {
+        const cached = localStorage.getItem('firecheck_db_proveedores');
+        if (cached) callback(JSON.parse(cached));
+      } catch {}
+    });
+    return unsub;
+  } catch (e) {
+    console.error('subscribeProveedores error:', e);
+    return () => {};
+  }
+}
+
+export async function addProveedor(data: Proveedor) {
+  try {
+    const col = collection(db, 'proveedores');
+    const dataToSave = cleanUndefinedForFirestore({
+      ...data,
+      fechaCreacion: data.fechaCreacion || new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+    const docRef = await addDoc(col, dataToSave);
+    return { ...dataToSave, _docId: docRef.id, id: data.id || docRef.id };
+  } catch (e) {
+    console.error('addProveedor error:', e);
+    throw e;
+  }
+}
+
+export async function updateProveedor(docId: string, data: Partial<Proveedor>) {
+  try {
+    const docRef = doc(db, 'proveedores', docId);
+    const dataToSave = cleanUndefinedForFirestore({
+      ...data,
+      updatedAt: new Date().toISOString()
+    });
+    await updateDoc(docRef, dataToSave as any);
+  } catch (e) {
+    console.error('updateProveedor error:', e);
+    throw e;
+  }
+}
+
+export async function deleteProveedor(docId: string) {
+  try {
+    const docRef = doc(db, 'proveedores', docId);
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      const data = snap.data() as any;
+      await moverAPapelera({
+        coleccion: 'proveedores',
+        originalDocId: docId,
+        tipo: 'Proveedor',
+        titulo: `${data.referencia || docId} - ${data.proveedor || data.nombreComercial || 'Proveedor'}`,
+        clienteNombre: data.nombreComercial || data.proveedor || 'Proveedor',
+        datos: data
+      });
+    }
+    await deleteDoc(docRef);
+  } catch (e) {
+    console.error('deleteProveedor error:', e);
+    throw e;
+  }
+}
+
+export function subscribeCompras(callback: (items: CompraGasto[]) => void) {
+  try {
+    const col = collection(db, 'compras');
+    const unsub = onSnapshot(col, (snap) => {
+      const items = snap.docs.map(d => {
+        const data = d.data() as any;
+        return {
+          _docId: d.id,
+          id: data?.id || d.id,
+          fecha: data?.fecha || '',
+          numeroFactura: data?.numeroFactura || '',
+          proveedorId: data?.proveedorId || '',
+          proveedorReferencia: data?.proveedorReferencia || '',
+          proveedorNombre: data?.proveedorNombre || '',
+          categoria: data?.categoria || 'Materiales',
+          concepto: data?.concepto || '',
+          baseImponible: Number(data?.baseImponible || 0),
+          iva: data?.iva !== undefined ? Number(data.iva) : 21,
+          total: Number(data?.total || 0),
+          formaPago: data?.formaPago || 'Tarjeta empresa',
+          estado: data?.estado === 'Pendiente' ? 'Pendiente' : 'Pagado',
+          notas: data?.notas || '',
+          fechaCreacion: data?.fechaCreacion || '',
+          updatedAt: data?.updatedAt || '',
+        } as CompraGasto;
+      });
+      items.sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+      try {
+        localStorage.setItem('firecheck_db_compras', JSON.stringify(items));
+      } catch {}
+      callback(items);
+    }, (err) => {
+      console.error('subscribeCompras error:', err);
+      try {
+        const cached = localStorage.getItem('firecheck_db_compras');
+        if (cached) callback(JSON.parse(cached));
+      } catch {}
+    });
+    return unsub;
+  } catch (e) {
+    console.error('subscribeCompras error:', e);
+    return () => {};
+  }
+}
+
+export async function addCompra(data: CompraGasto) {
+  try {
+    const col = collection(db, 'compras');
+    const dataToSave = cleanUndefinedForFirestore({
+      ...data,
+      fechaCreacion: data.fechaCreacion || new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+    const docRef = await addDoc(col, dataToSave);
+    return { ...dataToSave, _docId: docRef.id, id: data.id || docRef.id };
+  } catch (e) {
+    console.error('addCompra error:', e);
+    throw e;
+  }
+}
+
+export async function updateCompra(docId: string, data: Partial<CompraGasto>) {
+  try {
+    const docRef = doc(db, 'compras', docId);
+    const dataToSave = cleanUndefinedForFirestore({
+      ...data,
+      updatedAt: new Date().toISOString()
+    });
+    await updateDoc(docRef, dataToSave as any);
+  } catch (e) {
+    console.error('updateCompra error:', e);
+    throw e;
+  }
+}
+
+export async function deleteCompra(docId: string) {
+  try {
+    const docRef = doc(db, 'compras', docId);
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      const data = snap.data() as any;
+      await moverAPapelera({
+        coleccion: 'compras',
+        originalDocId: docId,
+        tipo: 'Compra / Gasto',
+        titulo: `${data.numeroFactura || data.fecha || docId} - ${data.concepto || 'Gasto'}`,
+        clienteNombre: data.proveedorNombre || 'Proveedor',
+        datos: data
+      });
+    }
+    await deleteDoc(docRef);
+  } catch (e) {
+    console.error('deleteCompra error:', e);
+    throw e;
+  }
+}
+
 export {app, storage, db, analytics};
 
 

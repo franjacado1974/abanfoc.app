@@ -2233,6 +2233,61 @@ if (fs.existsSync(pdfGenPath)) {
     }
   }
 
+  // REGLA 135: Módulos Proveedores (Gestión), Compras y Gastos (Documentos) y Análisis Financiero (Análisis)
+  const fbPath135 = path.join(__dirname, '..', 'src', 'firebase.tsx');
+  if (fs.existsSync(fbPath135)) {
+    const fbContent135 = fs.readFileSync(fbPath135, 'utf8');
+    if (
+      !fbContent135.includes('subscribeProveedores') ||
+      !fbContent135.includes('subscribeCompras')
+    ) {
+      errors.push('CRÍTICO: firebase.tsx debe mantener las suscripciones y CRUD de proveedores y compras (REGLA 135).');
+    }
+  }
+
+  const provPath135 = path.join(__dirname, '..', 'src', 'Proveedores.tsx');
+  const compPath135 = path.join(__dirname, '..', 'src', 'Compras.tsx');
+  const afPath135 = path.join(__dirname, '..', 'src', 'AnalisisFinanciero.tsx');
+  if (!fs.existsSync(provPath135) || !fs.existsSync(compPath135) || !fs.existsSync(afPath135)) {
+    errors.push('CRÍTICO: Faltan src/Proveedores.tsx, src/Compras.tsx o src/AnalisisFinanciero.tsx (REGLA 135).');
+  } else {
+    const provContent135 = fs.readFileSync(provPath135, 'utf8');
+    const compContent135 = fs.readFileSync(compPath135, 'utf8');
+    const afContent135 = fs.readFileSync(afPath135, 'utf8');
+    if (
+      !provContent135.includes('PROV.') ||
+      !provContent135.includes('toUpperCase()') ||
+      !provContent135.includes('accionesModalItem')
+    ) {
+      errors.push('CRÍTICO: Proveedores.tsx debe mantener referencia PROV.XXXXX, nombre en mayúsculas y modal al tocar línea (REGLA 135).');
+    }
+    if (
+      !compContent135.includes('Compras y Gastos') ||
+      !compContent135.includes('resolveProveedor') ||
+      !compContent135.includes('accionesModalItem')
+    ) {
+      errors.push('CRÍTICO: Compras.tsx debe mantener Compras y Gastos, datos de proveedor en fila y modal al tocar línea (REGLA 135).');
+    }
+    if (
+      !afContent135.includes('subscribeFacturas') ||
+      !afContent135.includes('subscribeCompras')
+    ) {
+      errors.push('CRÍTICO: AnalisisFinanciero.tsx debe mantener la comparativa en tiempo real de Facturas y Compras (REGLA 135).');
+    }
+  }
+
+  const sbPath135 = path.join(__dirname, '..', 'src', 'components', 'Sidebar.tsx');
+  if (fs.existsSync(sbPath135)) {
+    const sbContent135 = fs.readFileSync(sbPath135, 'utf8');
+    if (
+      !sbContent135.includes("path: '/proveedores'") ||
+      !sbContent135.includes("title: 'Compras y Gastos'") ||
+      !sbContent135.includes("path: '/analisis-financiero'")
+    ) {
+      errors.push('CRÍTICO: Sidebar.tsx debe mantener los menús Proveedores (Gestión), Compras y Gastos (Documentos) y Análisis Financiero (REGLA 135).');
+    }
+  }
+
 // Resultado de la verificación
 if (errors.length > 0) {
   console.error('\n❌ ERROR CRÍTICO DE BLINDAJE INTEGRAL (AGENTS.md):');
