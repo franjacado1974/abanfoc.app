@@ -59,6 +59,18 @@ export default defineConfig({
     })
   ],
   server: {
-    host: true
+    host: true,
+    proxy: {
+      '/api/salamandra-auth': {
+        target: 'http://127.0.0.1:5001/app-abanfoc-v1/europe-west1/salamandraAuth',
+        changeOrigin: true,
+        rewrite: () => '',
+      },
+      '/api/onedrive-upload': {
+        target: 'http://127.0.0.1:5001/app-abanfoc-v1/europe-west1/onedriveProxy',
+        changeOrigin: true,
+        rewrite: () => '',
+      }
+    }
   }
 })

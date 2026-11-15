@@ -227,6 +227,8 @@ export default function PartesTrabajoOperaciones({
   const [estadoFilter, setEstadoFilter] = useState<string>('Pendiente');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
+  const [showTipoDropdown, setShowTipoDropdown] = useState(false);
+  const tipoDropdownRef = useRef<HTMLDivElement>(null);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [sortField, setSortField] = useState<'fecha' | 'cliente' | 'centro' | 'poblacion' | 'tipo' | 'tecnico'>('fecha');
@@ -304,6 +306,9 @@ export default function PartesTrabajoOperaciones({
     const handleClickOutside = (e: MouseEvent) => {
       if (filterRef.current && !filterRef.current.contains(e.target as Node)) {
         setIsFilterOpen(false);
+      }
+      if (tipoDropdownRef.current && !tipoDropdownRef.current.contains(e.target as Node)) {
+        setShowTipoDropdown(false);
       }
     };
 
@@ -2868,99 +2873,163 @@ export default function PartesTrabajoOperaciones({
             </div>
           </div>
 
-          {/* Filtros rápidos de Tipo de Operación */}
-          <div className="px-4 pb-2.5 flex items-center gap-1.5 overflow-x-auto scrollbar-none">
-            {[
-              { id: 'TODOS', label: 'Todos', count: countsPorTipo.TODOS },
-              { id: 'reparacion', label: 'Reparaciones', count: countsPorTipo.reparacion },
-              { id: 'instalacion', label: 'Instalaciones', count: countsPorTipo.instalacion },
-              { id: 'prueba-tecnica', label: 'Pruebas Téc.', count: countsPorTipo['prueba-tecnica'] },
-              { id: 'urgencia', label: 'Avisos', count: countsPorTipo.urgencia },
-            ].map(tab => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setTipoFilter(tab.id as any)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
-                  tipoFilter === tab.id
-                    ? 'bg-red-600 text-white shadow-xs'
-                    : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
-                }`}
-              >
-                <span>{tab.label}</span>
-                <span className={`text-[10px] px-1.5 py-0.2 rounded-md ${
-                  tipoFilter === tab.id ? 'bg-white/20 text-white' : 'bg-white text-zinc-600'
-                }`}>
-                  {tab.count}
-                </span>
-              </button>
-            ))}
-          </div>
+          {/* Filtros de Tipo de Operación: Desplegable en móvil, pestañas en tablet/PC */}
+          {(() => {
+            const tipoTabs = [
+              { id: 'TODOS' as const, label: 'Todos los tipos', shortLabel: 'Todos', count: countsPorTipo.TODOS, dotClass: 'bg-red-600' },
+              { id: 'reparacion' as const, label: 'Reparaciones', shortLabel: 'Reparaciones', count: countsPorTipo.reparacion, dotClass: 'bg-blue-600' },
+              { id: 'instalacion' as const, label: 'Instalaciones', shortLabel: 'Instalaciones', count: countsPorTipo.instalacion, dotClass: 'bg-emerald-600' },
+              { id: 'prueba-tecnica' as const, label: 'Pruebas Técnicas', shortLabel: 'Pruebas Téc.', count: countsPorTipo['prueba-tecnica'], dotClass: 'bg-purple-600' },
+              { id: 'urgencia' as const, label: 'Avisos', shortLabel: 'Avisos', count: countsPorTipo.urgencia, dotClass: 'bg-amber-500' },
+            ];
+            const selectedTab = tipoTabs.find(t => t.id === tipoFilter) || tipoTabs[0];
 
-          {/* Fecha · Estado · Búsqueda — una sola línea */}
-          <div className="px-4 pb-3 flex items-center gap-2">
+            return (
+              <>
+                {/* Desplegable en móvil (< md) */}
+                <div className="px-3 sm:px-4 pb-2 md:hidden relative" ref={tipoDropdownRef}>
+                  <button
+                    type="button"
+                    onClick={() => setShowTipoDropdown(prev => !prev)}
+                    className="w-full h-9 px-3 bg-white border border-zinc-300 rounded-xl text-xs font-bold text-zinc-900 flex items-center justify-between gap-2 shadow-2xs cursor-pointer"
+                  >
+                    <span className="flex items-center gap-2 min-w-0">
+                      <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${selectedTab.dotClass}`} />
+                      <span className="truncate">{selectedTab.label}</span>
+                      <span className="px-1.5 py-0.5 rounded-md text-[10px] font-black bg-zinc-100 text-zinc-700 border border-zinc-200/80 shrink-0">
+                        {selectedTab.count}
+                      </span>
+                    </span>
+                    <ChevronDown className={`w-4 h-4 text-zinc-400 shrink-0 transition-transform duration-150 ${showTipoDropdown ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  {showTipoDropdown && (
+                    <div className="absolute left-3 right-3 top-full mt-1 bg-white border border-zinc-200 rounded-xl shadow-xl z-50 py-1.5 overflow-hidden">
+                      {tipoTabs.map(tab => {
+                        const isActive = tipoFilter === tab.id;
+                        return (
+                          <button
+                            key={tab.id}
+                            type="button"
+                            onClick={() => {
+                              setTipoFilter(tab.id);
+                              setShowTipoDropdown(false);
+                            }}
+                            className={`w-full px-3.5 py-2.5 text-left text-xs font-bold flex items-center justify-between gap-2 transition-colors cursor-pointer ${
+                              isActive ? 'bg-red-50 text-red-700' : 'text-zinc-700 hover:bg-zinc-50'
+                            }`}
+                          >
+                            <span className="flex items-center gap-2.5 min-w-0">
+                              <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${tab.dotClass}`} />
+                              <span className="truncate">{tab.label}</span>
+                            </span>
+                            <span className="flex items-center gap-2 shrink-0">
+                              <span className={`text-[11px] px-1.5 py-0.5 rounded-md font-extrabold ${
+                                isActive ? 'bg-red-100 text-red-800' : 'bg-zinc-100 text-zinc-700'
+                              }`}>
+                                {tab.count}
+                              </span>
+                              {isActive && <Check className="w-3.5 h-3.5 text-red-600" />}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Pestañas en tablet/PC (>= md) */}
+                <div className="hidden md:flex px-4 pb-2.5 items-center gap-1.5 overflow-x-auto scrollbar-none">
+                  {tipoTabs.map(tab => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setTipoFilter(tab.id)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
+                        tipoFilter === tab.id
+                          ? 'bg-red-600 text-white shadow-xs'
+                          : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+                      }`}
+                    >
+                      <span>{tab.shortLabel}</span>
+                      <span className={`text-[10px] px-1.5 py-0.2 rounded-md ${
+                        tipoFilter === tab.id ? 'bg-white/20 text-white' : 'bg-white text-zinc-600'
+                      }`}>
+                        {tab.count}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            );
+          })()}
+
+          {/* Fecha arriba y debajo Búsqueda + Estado (mismo ancho total en móvil) */}
+          <div className="px-3 sm:px-4 pb-3 flex flex-col md:flex-row md:items-center gap-2">
             {/* Rango de fechas */}
-            <div className="flex items-center gap-1 bg-white px-2.5 py-1.5 rounded-xl border border-zinc-300 shadow-xs shrink-0">
+            <div className="flex items-center justify-between md:justify-start gap-1.5 bg-white px-2.5 py-1.5 rounded-xl border border-zinc-300 shadow-xs w-full md:w-auto shrink-0 min-w-0">
               <Calendar className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
               <input
                 type="date"
                 value={startDate}
                 onChange={e => setStartDate(e.target.value)}
-                className="text-[11px] outline-none text-zinc-700 bg-transparent w-[88px]"
+                className="text-[11px] sm:text-xs outline-none text-zinc-700 bg-transparent flex-1 min-w-0 md:w-[95px] md:flex-none"
               />
-              <span className="text-zinc-400 text-[11px]">–</span>
+              <span className="text-zinc-400 text-[11px] shrink-0">–</span>
               <input
                 type="date"
                 value={endDate}
                 onChange={e => setEndDate(e.target.value)}
-                className="text-[11px] outline-none text-zinc-700 bg-transparent w-[88px]"
+                className="text-[11px] sm:text-xs outline-none text-zinc-700 bg-transparent flex-1 min-w-0 md:w-[95px] md:flex-none"
               />
               {(startDate || endDate) && (
                 <button
                   type="button"
                   onClick={() => { setStartDate(''); setEndDate(''); }}
-                  className="p-0.5 text-zinc-400 hover:text-red-500 rounded-md"
+                  className="p-0.5 text-zinc-400 hover:text-red-500 rounded-md shrink-0"
                 >
                   <X className="w-3 h-3" />
                 </button>
               )}
             </div>
 
-            {/* Estado */}
-            <div className="relative shrink-0">
-              <Filter className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400 pointer-events-none" />
-              <select
-                value={estadoFilter}
-                onChange={e => setEstadoFilter(e.target.value)}
-                className="pl-8 pr-3 py-1.5 bg-white border border-zinc-300 rounded-xl text-[11px] outline-none text-zinc-900 font-semibold cursor-pointer"
-              >
-                <option value="TODOS">Todos ( {countsPorEstado.TODOS} )</option>
-                <option value="Pendiente">Pendientes ( {countsPorEstado.Pendiente} )</option>
-                <option value="En curso">En curso ( {countsPorEstado['En curso']} )</option>
-                <option value="Parado">Parados ( {countsPorEstado.Parado} )</option>
-                <option value="Finalizado">Finalizados ( {countsPorEstado.Finalizado} )</option>
-              </select>
-            </div>
+            <div className="grid grid-cols-2 md:flex md:flex-1 md:items-center gap-2 w-full min-w-0">
+              {/* Búsqueda */}
+              <div className="relative w-full md:flex-1 min-w-0">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400" />
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                  placeholder="Buscar…"
+                  className="w-full pl-8 pr-7 py-1.5 bg-white border border-zinc-300 rounded-xl text-[11px] sm:text-xs outline-none text-zinc-950"
+                />
+                {searchTerm && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchTerm('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-700"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
 
-            {/* Búsqueda */}
-            <div className="relative flex-1 min-w-0">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400" />
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-                placeholder="Buscar…"
-                className="w-full pl-8 pr-7 py-1.5 bg-white border border-zinc-300 rounded-xl text-[11px] outline-none text-zinc-950"
-              />
-              {searchTerm && (
-                <button
-                  type="button"
-                  onClick={() => setSearchTerm('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-700"
+              {/* Estado */}
+              <div className="relative w-full md:w-auto shrink-0 min-w-0">
+                <Filter className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400 pointer-events-none" />
+                <select
+                  value={estadoFilter}
+                  onChange={e => setEstadoFilter(e.target.value)}
+                  className="w-full md:w-auto pl-8 pr-3 py-1.5 bg-white border border-zinc-300 rounded-xl text-[11px] sm:text-xs outline-none text-zinc-900 font-semibold cursor-pointer truncate"
                 >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
+                  <option value="TODOS">Todos ( {countsPorEstado.TODOS} )</option>
+                  <option value="Pendiente">Pendientes ( {countsPorEstado.Pendiente} )</option>
+                  <option value="En curso">En curso ( {countsPorEstado['En curso']} )</option>
+                  <option value="Parado">Parados ( {countsPorEstado.Parado} )</option>
+                  <option value="Finalizado">Finalizados ( {countsPorEstado.Finalizado} )</option>
+                </select>
+              </div>
             </div>
           </div>
 
@@ -3080,12 +3149,12 @@ export default function PartesTrabajoOperaciones({
   const selectedOption = opcionesEstado.find(o => o.value === estadoFilter) || opcionesEstado[0];
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] px-8 py-6">
+    <div className="min-h-screen bg-[#F8FAFC] px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
       {/* Cabecera idéntica a Partes de Revisión */}
-      <div className="mb-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 w-full text-center sm:text-left">
-          <div>
-            <h1 className="text-2xl font-black text-zinc-950 tracking-tight flex items-center justify-center sm:justify-start gap-2">
+      <div className="mb-5 sm:mb-6">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 w-full text-center lg:text-left">
+          <div className="px-12 lg:px-0">
+            <h1 className="text-xl sm:text-2xl font-black text-zinc-950 tracking-tight flex items-center justify-center lg:justify-start gap-2">
               Partes de Trabajo
             </h1>
             <p className="text-xs font-semibold text-zinc-500 mt-1">
@@ -3093,30 +3162,30 @@ export default function PartesTrabajoOperaciones({
             </p>
           </div>
 
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+          <div className="flex flex-col xl:flex-row xl:items-center gap-2.5 w-full xl:w-auto min-w-0">
             {/* Filtro de fechas */}
-            <div className="flex items-center gap-2 bg-white px-3 rounded-xl border border-zinc-200/80 shadow-sm shrink-0 h-[52px]">
-              <CalendarDays className="w-4 h-4 text-zinc-400" />
+            <div className="flex items-center justify-between xl:justify-start gap-1.5 bg-white px-2.5 rounded-xl border border-zinc-200/80 shadow-sm w-full xl:w-auto shrink-0 h-11 xl:h-[52px] min-w-0">
+              <CalendarDays className="w-4 h-4 text-zinc-400 shrink-0" />
               <input
                 type="date"
                 value={startDate}
                 onChange={e => setStartDate(e.target.value)}
-                className="text-sm outline-none text-zinc-600 bg-transparent border-0"
+                className="text-xs sm:text-sm outline-none text-zinc-600 bg-transparent border-0 flex-1 min-w-0 xl:w-[118px] xl:flex-none"
                 title="Fecha inicial"
               />
-              <span className="text-zinc-400 text-sm">a</span>
+              <span className="text-zinc-400 text-sm shrink-0">a</span>
               <input
                 type="date"
                 value={endDate}
                 onChange={e => setEndDate(e.target.value)}
-                className="text-sm outline-none text-zinc-600 bg-transparent border-0"
+                className="text-xs sm:text-sm outline-none text-zinc-600 bg-transparent border-0 flex-1 min-w-0 xl:w-[118px] xl:flex-none"
                 title="Fecha final"
               />
               {(startDate || endDate) && (
                 <button
                   type="button"
                   onClick={() => { setStartDate(''); setEndDate(''); }}
-                  className="ml-1 p-1 text-zinc-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors"
+                  className="ml-1 p-1 text-zinc-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors shrink-0"
                   title="Limpiar fechas"
                 >
                   <X className="w-3.5 h-3.5" />
@@ -3124,73 +3193,75 @@ export default function PartesTrabajoOperaciones({
               )}
             </div>
 
-            {/* Buscador */}
-            <div className="relative w-full sm:w-64 shrink-0 h-[52px]">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 z-10" />
-              <input
-                type="text"
-                placeholder="Buscar partes de trabajo..."
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-                className="w-full h-full pl-10 pr-4 bg-white border border-zinc-200/80 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-red-500/10 focus:border-red-500 transition-all text-zinc-950 shadow-sm"
-              />
-            </div>
+            <div className="grid grid-cols-2 xl:flex xl:items-center gap-2 w-full xl:w-auto min-w-0">
+              {/* Buscador */}
+              <div className="relative w-full xl:w-64 min-w-0 h-11 xl:h-[52px]">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 z-10" />
+                <input
+                  type="text"
+                  placeholder="Buscar partes..."
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                  className="w-full h-full pl-9 pr-3 bg-white border border-zinc-200/80 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-red-500/10 focus:border-red-500 transition-all text-zinc-950 shadow-sm"
+                />
+              </div>
 
-            {/* Filtro por Estado con Indicador de Color y Contador */}
-            <div className="relative shrink-0 h-[52px]" ref={filterRef}>
-              <button
-                type="button"
-                onClick={() => setIsFilterOpen(!isFilterOpen)}
-                className="h-full px-4 bg-white border border-zinc-200/80 rounded-xl text-sm flex items-center justify-between gap-3 text-zinc-900 shadow-sm font-medium hover:border-zinc-300 transition-all min-w-[235px] cursor-pointer"
-                title="Filtrar partes de trabajo por estado"
-              >
-                <div className="flex items-center gap-2 min-w-0">
-                  <Filter className="w-4 h-4 text-zinc-400 shrink-0" />
-                  {selectedOption.colorClass && (
-                    <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${selectedOption.colorClass}`} />
-                  )}
-                  <span className="truncate font-semibold text-zinc-900">{selectedOption.label}</span>
-                  <span className="px-2 py-0.5 rounded-md text-xs font-black bg-zinc-100 text-zinc-800 border border-zinc-200/90 shrink-0 shadow-2xs">
-                    ( {selectedOption.count} )
-                  </span>
-                </div>
-                <ChevronDown className={`w-4 h-4 text-zinc-400 shrink-0 transition-transform duration-200 ${isFilterOpen ? 'rotate-180' : ''}`} />
-              </button>
+              {/* Filtro por Estado con Indicador de Color y Contador */}
+              <div className="relative w-full xl:w-auto shrink-0 min-w-0 h-11 xl:h-[52px]" ref={filterRef}>
+                <button
+                  type="button"
+                  onClick={() => setIsFilterOpen(!isFilterOpen)}
+                  className="w-full xl:w-auto h-full px-2.5 sm:px-4 bg-white border border-zinc-200/80 rounded-xl text-xs sm:text-sm flex items-center justify-between gap-2 text-zinc-900 shadow-sm font-medium hover:border-zinc-300 transition-all min-w-0 xl:min-w-[235px] cursor-pointer"
+                  title="Filtrar partes de trabajo por estado"
+                >
+                  <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+                    <Filter className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-zinc-400 shrink-0" />
+                    {selectedOption.colorClass && (
+                      <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${selectedOption.colorClass}`} />
+                    )}
+                    <span className="truncate font-semibold text-zinc-900">{selectedOption.label}</span>
+                    <span className="hidden sm:inline-flex px-2 py-0.5 rounded-md text-xs font-black bg-zinc-100 text-zinc-800 border border-zinc-200/90 shrink-0 shadow-2xs">
+                      ( {selectedOption.count} )
+                    </span>
+                  </div>
+                  <ChevronDown className={`w-4 h-4 text-zinc-400 shrink-0 transition-transform duration-200 ${isFilterOpen ? 'rotate-180' : ''}`} />
+                </button>
 
-              {isFilterOpen && (
-                <div className="absolute right-0 top-full mt-1 bg-white border border-zinc-200 rounded-xl shadow-xl z-50 py-1.5 overflow-hidden min-w-[235px]">
-                  {opcionesEstado.map((op) => (
-                    <button
-                      key={op.value}
-                      type="button"
-                      onClick={() => {
-                        setEstadoFilter(op.value);
-                        setIsFilterOpen(false);
-                      }}
-                      className={`w-full px-3.5 py-2.5 text-left text-xs font-semibold flex items-center gap-2.5 transition-colors cursor-pointer ${
-                        estadoFilter === op.value
-                          ? 'bg-red-50 text-red-700 font-bold'
-                          : 'text-zinc-700 hover:bg-zinc-50'
-                      }`}
-                    >
-                      {op.colorClass ? (
-                        <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${op.colorClass}`} />
-                      ) : (
-                        <span className="w-2.5 h-2.5 rounded-full border border-zinc-300 shrink-0" />
-                      )}
-                      <span className="flex-1">{op.label}</span>
-                      <span className={`text-[11px] px-1.5 py-0.5 rounded-md font-extrabold shrink-0 ${
-                        estadoFilter === op.value
-                          ? 'bg-red-100 text-red-800'
-                          : 'bg-zinc-100 text-zinc-700'
-                      }`}>
-                        ( {op.count} )
-                      </span>
-                      {estadoFilter === op.value && <Check className="w-3.5 h-3.5 text-red-600 shrink-0" />}
-                    </button>
-                  ))}
-                </div>
-              )}
+                {isFilterOpen && (
+                  <div className="absolute right-0 top-full mt-1 bg-white border border-zinc-200 rounded-xl shadow-xl z-50 py-1.5 overflow-hidden min-w-[220px] sm:min-w-[235px]">
+                    {opcionesEstado.map((op) => (
+                      <button
+                        key={op.value}
+                        type="button"
+                        onClick={() => {
+                          setEstadoFilter(op.value);
+                          setIsFilterOpen(false);
+                        }}
+                        className={`w-full px-3.5 py-2.5 text-left text-xs font-semibold flex items-center gap-2.5 transition-colors cursor-pointer ${
+                          estadoFilter === op.value
+                            ? 'bg-red-50 text-red-700 font-bold'
+                            : 'text-zinc-700 hover:bg-zinc-50'
+                        }`}
+                      >
+                        {op.colorClass ? (
+                          <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${op.colorClass}`} />
+                        ) : (
+                          <span className="w-2.5 h-2.5 rounded-full border border-zinc-300 shrink-0" />
+                        )}
+                        <span className="flex-1">{op.label}</span>
+                        <span className={`text-[11px] px-1.5 py-0.5 rounded-md font-extrabold shrink-0 ${
+                          estadoFilter === op.value
+                            ? 'bg-red-100 text-red-800'
+                            : 'bg-zinc-100 text-zinc-700'
+                        }`}>
+                          ( {op.count} )
+                        </span>
+                        {estadoFilter === op.value && <Check className="w-3.5 h-3.5 text-red-600 shrink-0" />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

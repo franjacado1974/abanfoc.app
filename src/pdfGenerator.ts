@@ -1796,7 +1796,19 @@ export const generarActaExtintoresPDF = async (
                  !lLow.includes('bie caducado') &&
                  !lLow.includes('bie necesita realizar prueba');
         });
+      } else if (lines.some(line => line.toLowerCase().includes('extintor caducado'))) {
+        // Si el extintor tiene +20 años (caducado), se retira y no debe mostrarse aviso de retimbrado
+        lines = lines.filter(line => !line.toLowerCase().includes('extintor necesita retimbr'));
       }
+
+      // Deduplicar líneas equivalentes (ej. eq.anomalias vs campo dinámico con/sin punto final)
+      const seenNorm = new Set<string>();
+      lines = lines.filter(line => {
+        const norm = line.replace(/^[-\s–—•*]+/g, '').replace(/[.\s]+$/g, '').toLowerCase();
+        if (!norm || seenNorm.has(norm)) return false;
+        seenNorm.add(norm);
+        return true;
+      });
       return lines;
     };
 
@@ -1922,6 +1934,36 @@ export const generarActaExtintoresPDF = async (
               rawUbicTexto = rawUbic;
             }
 
+            const itemTipoEquipo = checkItemsDeSistema?.find(item => {
+              const lbl = (item.label || '').toLowerCase();
+              const k = (item.key || '').toLowerCase();
+              return k === 'tipo' || k === 'clase' || lbl === 'tipo' || lbl.includes('tipo ') || lbl.includes('agente') || lbl.includes('clase');
+            });
+            const isValidTipo = (v: any) => {
+              if (typeof v !== 'string' && typeof v !== 'number') return false;
+              const s = String(v).trim();
+              if (!s || s === '-' || s.toUpperCase() === 'N/A' || s.toUpperCase() === 'S/N') return false;
+              const sl = s.toLowerCase();
+              return sl !== 'true' && sl !== 'false' && sl !== 'sí' && sl !== 'si' && sl !== 'no' && sl !== 'ok' && sl !== 'correcto' && sl !== 'incorrecto';
+            };
+            const tipoCandidates = [
+              eq.tipo,
+              itemTipoEquipo ? eq[itemTipoEquipo.key] : undefined,
+              eq.clase,
+              eq.nombre,
+              eq.pesoCapacidad,
+            ];
+            let rawTipoTexto = '';
+            for (const cand of tipoCandidates) {
+              if (isValidTipo(cand)) {
+                rawTipoTexto = String(cand).replace(/[\r\n]+/g, ' ').trim();
+                break;
+              }
+            }
+            if (rawTipoTexto && tipoBombaRef && rawTipoTexto.toUpperCase() === tipoBombaRef) {
+              rawTipoTexto = '';
+            }
+
             let infoTexto = '';
             if (rawUbicTexto) {
               let clean = rawUbicTexto.replace(/^\s*\(\s*/, '').replace(/\s*\)\s*$/, '').trim();
@@ -1931,7 +1973,8 @@ export const generarActaExtintoresPDF = async (
               }
             }
 
-            const boldPart = `EQUIPO Nº ${String(eq.codigo || eq.numero || 'S/N').toUpperCase()}${eq.placa ? ` (${String(eq.placa).toUpperCase()})` : ''}${infoTexto ? ' - ' : ''}`;
+            const tipoPart = rawTipoTexto ? ` - ${rawTipoTexto}` : '';
+            const boldPart = `EQUIPO Nº ${String(eq.codigo || eq.numero || 'S/N').toUpperCase()}${eq.placa ? ` (${String(eq.placa).toUpperCase()})` : ''}${tipoPart}${infoTexto ? ' - ' : ''}`;
 
             const checkPageBreakHeader = () => {
               if (finalY > 188) {
@@ -1953,23 +1996,20 @@ export const generarActaExtintoresPDF = async (
 
             if (!infoTexto) {
               checkPageBreakHeader();
-              doc.setFont("helvetica", "bold");
+              doc.setFont("helvetica", "normal");
               doc.setTextColor(0, 0, 0);
               doc.text(boldPart, 14, finalY);
-              doc.setFont("helvetica", "normal");
               finalY += 5.5;
             } else {
-              doc.setFont("helvetica", "bold");
-              const boldW = doc.getTextWidth(boldPart);
               doc.setFont("helvetica", "normal");
+              const boldW = doc.getTextWidth(boldPart);
               const normalW = doc.getTextWidth(infoTexto);
 
               if (boldW + normalW <= maxTextWidth) {
                 checkPageBreakHeader();
-                doc.setFont("helvetica", "bold");
+                doc.setFont("helvetica", "normal");
                 doc.setTextColor(0, 0, 0);
                 doc.text(boldPart, 14, finalY);
-                doc.setFont("helvetica", "normal");
                 doc.text(infoTexto, 14 + boldW, finalY);
                 finalY += 5.5;
               } else {
@@ -1987,11 +2027,10 @@ export const generarActaExtintoresPDF = async (
                 }
 
                 checkPageBreakHeader();
-                doc.setFont("helvetica", "bold");
+                doc.setFont("helvetica", "normal");
                 doc.setTextColor(0, 0, 0);
                 doc.text(boldPart, 14, finalY);
                 if (line1) {
-                  doc.setFont("helvetica", "normal");
                   doc.text(line1, 14 + boldW, finalY);
                 }
                 finalY += 5.5;
@@ -5788,7 +5827,7 @@ export const generarAlbaranPDF = async (
   const totalRows = tableData.length;
 
   let tableHead: string[][];
-  let tableBodyToDraw: string[][];
+  let tableBodyToDraw: any[][];
   let dynamicColumnStyles: Record<number, any>;
 
   if (esSinValorar) {
@@ -5803,9 +5842,9 @@ export const generarAlbaranPDF = async (
     tableHead = [['Cant.', 'Concepto', 'Descripción', 'Precio ud.', 'Dto. %', 'Subtotal']];
     tableBodyToDraw = [
       ...tableData,
-      ['', '', '', '', 'Total:', formatM(subtotalTotal)],
-      ['', '', '', '', `IVA (${ivaPorc}%):`, formatM(ivaImporte)],
-      ['', '', '', '', 'Total + IVA:', formatM(totalConIva)],
+      ['', '', '', { content: 'Total:', colSpan: 2, styles: { halign: 'right' } }, formatM(subtotalTotal)],
+      ['', '', '', { content: `IVA (${ivaPorc}%):`, colSpan: 2, styles: { halign: 'right' } }, formatM(ivaImporte)],
+      ['', '', '', { content: 'Total + IVA:', colSpan: 2, styles: { halign: 'right' } }, formatM(totalConIva)],
     ];
     dynamicColumnStyles = {
       0: { halign: 'center', cellWidth: 18 },
@@ -6599,9 +6638,18 @@ export const generarPresupuestoPDF = async (
     tituloDocumento?: string;
     sinValorar?: boolean;
     autoPrint?: boolean;
+    returnBlob?: boolean;
   },
-  _empresa?: Record<string, any>
+  _empresa?: Record<string, any>,
+  onProgress?: (percent: number, stage?: string) => void
 ) => {
+  const reportProgress = async (percent: number, stage?: string) => {
+    if (onProgress) {
+      onProgress(percent, stage);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+  };
+  await reportProgress(8, 'Cargando cabecera y logotipo...');
   const doc = new jsPDF('p', 'mm', 'a4');
   const pageWidth = doc.internal.pageSize.getWidth(); // 210 mm
   const pageHeight = doc.internal.pageSize.getHeight(); // 297 mm
@@ -6856,10 +6904,14 @@ export const generarPresupuestoPDF = async (
   // Encabezados: Código | Artículo | Precio | Unidades | Subtotal
   // Subrayados por la línea gris horizontal
   // ─────────────────────────────────────────────────────────────────────────
+  await reportProgress(25, 'Cargando datos y partidas...');
   const lineasConFoto = (presupuesto.lineas || []).filter(l => l.fotoUrl);
   const imagenesCargadas: Record<number, string> = {};
   if (lineasConFoto.length > 0) {
-    for (const l of lineasConFoto) {
+    for (let fIdx = 0; fIdx < lineasConFoto.length; fIdx++) {
+      const l = lineasConFoto[fIdx];
+      const pct = 25 + Math.round(((fIdx + 1) / lineasConFoto.length) * 50);
+      await reportProgress(pct, `Procesando imágenes (${fIdx + 1}/${lineasConFoto.length})...`);
       if (l.fotoUrl) {
         try {
           const base64 = await fetchImageToBase64(l.fotoUrl);
@@ -6873,30 +6925,42 @@ export const generarPresupuestoPDF = async (
         } catch (e) {}
       }
     }
+  } else {
+    await reportProgress(70, 'Preparando partidas y capítulos...');
   }
 
   const tieneAlgunaFoto = Object.keys(imagenesCargadas).length > 0;
   const colFotoWidth = tieneAlgunaFoto ? 7 : 0;
 
+  const isCapitulo = (lin?: any) => {
+    if (!lin) return false;
+    if (lin.tipo === 'capitulo') return true;
+    if (typeof lin.concepto === 'string' && /^\s*CAP[IÍ]TULO\b/i.test(lin.concepto)) return true;
+    return false;
+  };
+
   const tableBody = (presupuesto.lineas || []).map((l, lIdx) => {
-    if (l.tipo === 'capitulo') {
+    if (isCapitulo(l)) {
       let subtotalCap = 0;
       for (let k = lIdx + 1; k < (presupuesto.lineas || []).length; k++) {
-        if (presupuesto.lineas[k].tipo === 'capitulo') break;
+        if (isCapitulo(presupuesto.lineas[k])) break;
         subtotalCap += (Number(presupuesto.lineas[k].cantidad) || 0) * (Number(presupuesto.lineas[k].precioUnidad) || 0);
       }
+      const capTitulo = (l.concepto || 'CAPÍTULO').toUpperCase();
+      const capDesc = (l.descripcion || '').trim();
+      const capTexto = capDesc ? `${capTitulo}\n${capDesc}` : capTitulo;
       if (esSinValorar) {
         return [
           '', // Columna para imagen
-          '', // Código
-          (l.concepto || 'CAPÍTULO').toUpperCase(), // Título del capítulo
+          'CAPÍTULO:', // Código
+          capTexto, // Título y descripción opcional del capítulo
           ''  // Unidades
         ];
       }
       return [
         '', // Columna para imagen
-        '', // Código
-        (l.concepto || 'CAPÍTULO').toUpperCase(), // Título del capítulo
+        'CAPÍTULO:', // Código
+        capTexto, // Título y descripción opcional del capítulo
         '', // Precio
         '', // Unidades
         formatM(subtotalCap) // Subtotal del capítulo
@@ -6952,17 +7016,18 @@ export const generarPresupuestoPDF = async (
         0: { cellWidth: colFotoWidth, halign: 'center', cellPadding: { left: 1, right: 1 } },
         1: { cellWidth: 20, halign: 'left', fontStyle: 'bold', fontSize: 6.5, textColor: [110, 115, 125], cellPadding: { left: 1, right: 1 } },
         2: { cellWidth: 'auto', halign: 'left', cellPadding: { top: 2.2, bottom: 2.2, left: 1.5, right: 1 } },
-        3: { cellWidth: 18, halign: 'center', cellPadding: { left: 1, right: 1 } }
+        3: { cellWidth: 15, halign: 'center', cellPadding: { left: 1, right: 1 } }
       }
     : {
         0: { cellWidth: colFotoWidth, halign: 'center', cellPadding: { left: 1, right: 1 } },
         1: { cellWidth: 16, halign: 'left', fontStyle: 'bold', fontSize: 6.5, textColor: [110, 115, 125], cellPadding: { left: 1, right: 1 } },
         2: { cellWidth: 'auto', halign: 'left', cellPadding: { top: 2.2, bottom: 2.2, left: 1.5, right: 1 } },
-        3: { cellWidth: 18, halign: 'right', cellPadding: { left: 1, right: 2 } },
-        4: { cellWidth: 13, halign: 'center', cellPadding: { left: 1, right: 1 } },
-        5: { cellWidth: 20, halign: 'right', cellPadding: { left: 1, right: 2 } }
+        3: { cellWidth: 15, halign: 'right', cellPadding: { left: 1, right: 1.5 } },
+        4: { cellWidth: 11, halign: 'center', cellPadding: { left: 1, right: 1 } },
+        5: { cellWidth: 19, halign: 'right', cellPadding: { left: 1, right: 2 } }
       };
 
+  await reportProgress(82, 'Maquetando tabla y totales...');
   autoTable(doc, {
     startY: colStartY + 30,
     head: tableHead as any,
@@ -6994,35 +7059,37 @@ export const generarPresupuestoPDF = async (
     columnStyles: tableColumnStyles as any,
     didParseCell: (data: any) => {
       const linea = (presupuesto.lineas || [])[data.row.index];
-      if (linea?.tipo === 'capitulo') {
-        data.cell.styles.fillColor = [245, 246, 249];
+      if (data.section === 'body' && isCapitulo(linea)) {
+        data.cell.styles.fillColor = [246, 249, 255]; // Fondo azul muy suave
         data.cell.styles.fontStyle = 'bold';
-        data.cell.styles.textColor = [15, 23, 42];
+        data.cell.styles.textColor = [59, 98, 173]; // Azul suave en negrita
+        if (data.column.index === 1) {
+          data.cell.styles.fontSize = 6.8;
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.textColor = [59, 98, 173];
+        }
         if (data.column.index === 2) {
-          data.cell.styles.fontSize = 8;
-          data.cell.styles.textColor = [15, 23, 42];
+          // Usar 7.2pt normal en didParseCell para que autoTable calcule la altura y saltos sin ensanchar de más
+          data.cell.styles.fontSize = 7.2;
+          data.cell.styles.fontStyle = 'normal';
+          data.cell.styles.textColor = [59, 98, 173];
         }
         if (!esSinValorar && data.column.index === 5) {
-          data.cell.styles.textColor = [234, 88, 12]; // Naranja / acento
+          data.cell.styles.textColor = [59, 98, 173];
         }
         return;
       }
       if (data.section === 'body' && data.column.index === 2) {
-        const fam = (linea?.familia || '').trim();
-        let numFamLines = 0;
-        if (fam) {
-          const usableW = (data.cell.width && data.cell.width > 5) ? (data.cell.width - 2.5) : 80;
-          doc.setFont('helvetica', 'bold');
-          doc.setFontSize(7.5);
-          const fLines = doc.splitTextToSize(fam.toUpperCase(), usableW);
-          numFamLines = fLines.length;
-        }
-        data.cell._customFamLines = numFamLines;
+        data.cell.styles.fontSize = 7.5;
       }
     },
     willDrawCell: (data: any) => {
       const linea = (presupuesto.lineas || [])[data.row.index];
-      if (linea?.tipo === 'capitulo') {
+      if (data.section === 'body' && isCapitulo(linea)) {
+        if (data.column.index === 2 && (linea.descripcion || '').trim()) {
+          data.cell._savedCapText = data.cell.text;
+          data.cell.text = [];
+        }
         return;
       }
       // Guardar líneas calculadas por autoTable y limpiar para dibujar con tipografía mixta (negrita/normal)
@@ -7060,12 +7127,68 @@ export const generarPresupuestoPDF = async (
         }
       }
 
+      // Renderizar Celda de Capítulo con descripción: Título en azul negrita (mayúsculas) + Descripción debajo en azul normal (mayúsculas y minúsculas)
+      if (data.section === 'body' && data.column.index === 2 && data.cell._savedCapText) {
+        const cell = data.cell;
+        const lineaCap = (presupuesto.lineas || [])[data.row.index];
+        const leftPad = typeof cell.padding === 'function' ? cell.padding('left') : 1.5;
+        const rightPad = typeof cell.padding === 'function' ? cell.padding('right') : 1;
+        const usableW = Math.max(40, cell.width - leftPad - rightPad);
+
+        const capTitle = (lineaCap?.concepto || 'CAPÍTULO').toUpperCase();
+        const capDesc = (lineaCap?.descripcion || '').trim();
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8);
+        const titleLines: string[] = doc.splitTextToSize(capTitle, usableW);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7.2);
+        const descLines: string[] = capDesc ? doc.splitTextToSize(capDesc, usableW) : [];
+
+        const lines: string[] = [...titleLines, ...descLines];
+        const numTitleLines: number = titleLines.length;
+        const leftX = cell.x + leftPad;
+        const topPadding = typeof cell.padding === 'function' ? cell.padding('top') : 2.2;
+        const lineH = 3.3;
+        const totalTextH = lines.length * lineH;
+        let startY = cell.y + (cell.height - totalTextH) / 2 + 2.5;
+        if (startY < cell.y + topPadding + 2.2) {
+          startY = cell.y + topPadding + 2.2;
+        }
+
+        lines.forEach((lineText: string, idx: number) => {
+          if (idx < numTitleLines) {
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(8);
+            doc.setTextColor(59, 98, 173); // Azul suave en negrita para el título
+          } else {
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(7.2);
+            doc.setTextColor(75, 112, 180); // Azul suave normal para la descripción
+          }
+          doc.text(lineText, leftX, startY + (idx * lineH));
+        });
+      }
+
       // Renderizar Celda de Artículo: Familia en Negrita y Descripción debajo en normal (mismo tamaño 7.5pt)
       if (data.section === 'body' && data.column.index === 2 && data.cell._savedText) {
         const cell = data.cell;
-        const lines: string[] = Array.isArray(cell._savedText) ? cell._savedText : [String(cell._savedText)];
-        const numFamLines: number = cell._customFamLines || 0;
-        const leftX = cell.x + (typeof cell.padding === 'function' ? cell.padding('left') : 1.5);
+        const lineaArt = (presupuesto.lineas || [])[data.row.index];
+        const leftPad = typeof cell.padding === 'function' ? cell.padding('left') : 1.5;
+        const rightPad = typeof cell.padding === 'function' ? cell.padding('right') : 1;
+        const usableW = Math.max(40, cell.width - leftPad - rightPad);
+
+        const fam = (lineaArt?.familia || '').trim();
+        const desc = (lineaArt?.descripcion || lineaArt?.concepto || '').trim();
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7.5);
+        const famLines: string[] = fam ? doc.splitTextToSize(fam.toUpperCase(), usableW) : [];
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7.5);
+        const descLines: string[] = desc ? doc.splitTextToSize(desc, usableW) : [];
+
+        const lines: string[] = [...famLines, ...descLines];
+        const numFamLines: number = famLines.length;
+        const leftX = cell.x + leftPad;
         const topPadding = typeof cell.padding === 'function' ? cell.padding('top') : 2.2;
         const lineH = 3.2;
         const totalTextH = lines.length * lineH;
@@ -7104,8 +7227,7 @@ export const generarPresupuestoPDF = async (
 
     // ── SALTO DE PÁGINA PREVENTIVO ──────────────────────────────────────────────
     // Calcular altura total del bloque de totales para saber si cabe antes del pie
-    // Descuento: ~12mm | Subtotal: 5.5mm | IVA: 5.5mm | sep: 3.8mm | TOTAL: 5.5mm = ~32mm sin desc, ~44mm con desc
-    const alturaBloqueTotal = (tieneDescuento ? 13 : 0) + 32;
+    const alturaBloqueTotal = (tieneDescuento ? 14 : 0) + 38;
     const firmaBoxHEstimado = 35;
     const footerSafeZone = 30 + firmaBoxHEstimado + 6; // margen seguro sobre el pie de página
     const limiteDisponible = pageHeight - footerSafeZone;
@@ -7116,38 +7238,46 @@ export const generarPresupuestoPDF = async (
     }
     // ────────────────────────────────────────────────────────────────────────────
 
-    // LÍNEA DE DESCUENTO AL FINAL DE TODOS LOS ARTÍCULOS ANTES DEL PRECIO, IVA, ETC.
-    if (tieneDescuento) {
-      const descPorcStr = descPorc.toFixed(2).replace('.', ',');
-      const labelDesc = `Descuento sobre el subtotal: ${descPorcStr} %`;
-
-      // TEXTO DEL DESCUENTO
-      currentTotY += 3;
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(8);
-      doc.setTextColor(220, 38, 38);
-      doc.text(labelDesc, margen + 2, currentTotY);
-      doc.text(`-${formatM(descImp)}`, totalX, currentTotY, { align: 'right' });
-
-      // LÍNEA HORIZONTAL (inferior del descuento - ancho completo de margen a margen)
-      currentTotY += 3.2;
-      doc.setDrawColor(200, 205, 215);
-      doc.setLineWidth(0.35);
-      doc.line(margen, currentTotY, totalX, currentTotY);
-
-      currentTotY += 6;
-    } else {
-      currentTotY += 4;
-    }
-
-    // A CONTINUACIÓN: PRECIOS (SUBTOTAL, IVA Y TOTAL)
+    // 1. TOTAL PRESUPUESTO (suma de los importes de los artículos, antes de descuento e impuestos)
+    currentTotY += 3;
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
     doc.setTextColor(80, 80, 80);
-    doc.text('Subtotal:', totalX - 50, currentTotY, { align: 'right' });
+    doc.text('Total presupuesto:', totalX - 50, currentTotY, { align: 'right' });
     doc.text(formatM(presupuesto.subtotal), totalX, currentTotY, { align: 'right' });
 
+    // 2. LÍNEA DE DESCUENTO (si aplica)
+    if (tieneDescuento) {
+      const descPorcStr = descPorc.toFixed(2).replace('.', ',');
+      const labelDesc = `Descuento (${descPorcStr}%):`;
+
+      currentTotY += 5.5;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+      doc.setTextColor(220, 38, 38);
+      doc.text(labelDesc, totalX - 50, currentTotY, { align: 'right' });
+      doc.text(`-${formatM(descImp)}`, totalX, currentTotY, { align: 'right' });
+
+      // LÍNEA HORIZONTAL (inferior del descuento)
+      currentTotY += 3.2;
+      doc.setDrawColor(200, 205, 215);
+      doc.setLineWidth(0.35);
+      doc.line(totalX - 75, currentTotY, totalX, currentTotY);
+    }
+
+    // 3. SUBTOTAL SIN IMPUESTOS (base imponible tras descuento)
     currentTotY += 5.5;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(60, 65, 75);
+    doc.text('Subtotal sin impuestos:', totalX - 50, currentTotY, { align: 'right' });
+    doc.text(formatM(baseTrasDescuento), totalX, currentTotY, { align: 'right' });
+
+    // 4. IVA
+    currentTotY += 5.5;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(80, 80, 80);
     if (ivaExento) {
       doc.text('IVA:', totalX - 50, currentTotY, { align: 'right' });
       doc.text('Exento (0%)', totalX, currentTotY, { align: 'right' });
@@ -7156,16 +7286,17 @@ export const generarPresupuestoPDF = async (
       doc.text(formatM(baseTrasDescuento * presupuesto.iva / 100), totalX, currentTotY, { align: 'right' });
     }
 
+    // 5. LÍNEA SEPARADORA Y TOTAL CON IMPUESTOS
     currentTotY += 3.8;
     doc.setDrawColor(40, 40, 40);
     doc.setLineWidth(0.4);
-    doc.line(totalX - 55, currentTotY, totalX, currentTotY);
+    doc.line(totalX - 65, currentTotY, totalX, currentTotY);
 
     currentTotY += 5.5;
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(10.5);
     doc.setTextColor(24, 24, 27);
-    doc.text('TOTAL:', totalX - 50, currentTotY, { align: 'right' });
+    doc.text('TOTAL con impuestos:', totalX - 50, currentTotY, { align: 'right' });
     doc.text(formatM(presupuesto.total), totalX, currentTotY, { align: 'right' });
 
     // Texto de exención de IVA si aplica
@@ -7293,6 +7424,12 @@ export const generarPresupuestoPDF = async (
     doc.text(textoRegistro, 5.5, 220, { angle: 90 });
   }
 
+  await reportProgress(95, 'Finalizando documento PDF...');
+  if (presupuesto.returnBlob) {
+    const pdfBlob = doc.output('blob');
+    await reportProgress(100, '¡PDF generado!');
+    return pdfBlob;
+  }
   const filePrefix = esPdv 
     ? (esSinValorar ? 'Pedido_Sin_Valorar' : 'Pedido') 
     : (esSinValorar ? 'Presupuesto_Sin_Valorar' : 'Presupuesto');
@@ -7304,11 +7441,14 @@ export const generarPresupuestoPDF = async (
       if (!win) {
         doc.save(`${filePrefix}_${presupuesto.numeroPresupuesto || 'N-A'}.pdf`);
       }
+      await reportProgress(100, '¡PDF generado y descargado!');
       return;
     } catch {
       doc.save(`${filePrefix}_${presupuesto.numeroPresupuesto || 'N-A'}.pdf`);
+      await reportProgress(100, '¡PDF generado y descargado!');
       return;
     }
   }
   doc.save(`${filePrefix}_${presupuesto.numeroPresupuesto || 'N-A'}.pdf`);
+  await reportProgress(100, '¡PDF generado y descargado!');
 };

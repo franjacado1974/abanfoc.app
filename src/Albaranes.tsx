@@ -268,9 +268,22 @@ export default function Albaranes({ isTecnicoMode = false, tipoAlbaranFiltro }: 
     }
   }, [centros, albaranes]);
 
-  // Precargar Albarán si venimos navegados desde Reparaciones o Instalaciones con un pedido/presupuesto
+  // Precargar Albarán si venimos navegados desde Reparaciones, Instalaciones o Calendario
   useEffect(() => {
-    const prefill = (location.state as any)?.prefillAlbaran;
+    const state = location.state as any;
+    const editAlbaranId = state?.editAlbaranId;
+    if (editAlbaranId && albaranes.length > 0) {
+      const existing = albaranes.find(
+        (alb) => alb.id === editAlbaranId || (alb as any)._docId === editAlbaranId
+      );
+      if (existing) {
+        handleEditAlbaran(existing);
+        window.history.replaceState({}, document.title);
+        return;
+      }
+    }
+
+    const prefill = state?.prefillAlbaran;
     if (prefill) {
       (async () => {
         let generatedId = prefill.id;
@@ -302,6 +315,7 @@ export default function Albaranes({ isTecnicoMode = false, tipoAlbaranFiltro }: 
           reparacionId: prefill.reparacionId || '',
           instalacionId: prefill.instalacionId || '',
           urgenciaId: prefill.urgenciaId || '',
+          parteId: prefill.parteId || '',
         });
         setEditingId(null);
         setView('form');
@@ -310,7 +324,7 @@ export default function Albaranes({ isTecnicoMode = false, tipoAlbaranFiltro }: 
         window.history.replaceState({}, document.title);
       })();
     }
-  }, [location.state]);
+  }, [location.state, albaranes]);
 
   const toggleFacturado = async (id: Albaran['id']) => {
     const albaranToUpdate = albaranes.find(alb => alb.id === id);
@@ -938,7 +952,7 @@ export default function Albaranes({ isTecnicoMode = false, tipoAlbaranFiltro }: 
 
   if (view === 'list') {
     return (
-      <div className={`min-h-screen bg-[#F8FAFC] px-8 py-6 ${isTecnicoMode ? 'max-w-4xl mx-auto' : ''}`}>
+      <div className={`min-h-screen bg-[#F8FAFC] px-3 sm:px-6 lg:px-8 py-4 sm:py-6 ${isTecnicoMode ? 'max-w-4xl mx-auto' : ''}`}>
         {/* Header */}
         <div className="mb-6 text-center sm:text-left flex flex-col items-center sm:items-start">
           <h1 className="text-2xl font-black text-zinc-950 tracking-tight">

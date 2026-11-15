@@ -7,7 +7,6 @@ import { collection, getDocs, doc, getDoc, query, where } from 'firebase/firesto
 import { generarActaExtintoresPDF, generarAlbaranPDF, generarCertificadoPDF } from './pdfGenerator';
 import { generarContratoPDF } from './pdfContratoGenerator';
 import { generarReporteAnomaliasPDF } from './pdfReporteAnomaliasGenerator';
-import { generarPresupuestoBorradorDesdeAnomalias } from './services/presupuestoBorradorFromAnomalias';
 import { calcularAlertasExtintores, calcularAlertasBies, esEquipoExtintor, esEquipoBie, esSistemaExtintores, esSistemaBies, type ExtintorAlertas, type BieAlertas } from './recursos-compartidos/services/sistemasUtils';
 import { evaluarObservacionesPorFecha, evaluarAnomaliasPorFecha } from './RevisionChecklist';
 
@@ -1047,27 +1046,32 @@ export default function Partes() {
         );
       }
 
-      // 6. Generar Presupuesto Borrador desde Anomalías
-      let resultadoPresupuesto: { success: boolean; message: string; anomaliasCount: number; presupuesto?: any; anomalias?: any[] } | null = null;
+      // 6. Abrir formulario de Presupuesto solo con datos del mantenimiento y cliente (sin anomalías precargadas)
+      let datosPresupuestoDesdeParte: {
+        clienteId: string;
+        nombreCliente: string;
+        centroId: string;
+        nombreCentro: string;
+        numeroMantenimiento: string;
+        titulo: string;
+      } | null = null;
       if (downloadOptions.generarPresupuesto) {
         setDownloadProgress(98);
-        setDownloadStepText('Analizando anomalías y catálogo de artículos...');
+        setDownloadStepText('Preparando presupuesto con datos del mantenimiento y cliente...');
         await new Promise(r => setTimeout(r, 60));
-        resultadoPresupuesto = await generarPresupuestoBorradorDesdeAnomalias(
-          cliente,
-          centro,
-          sistemasDelCentro,
-          equiposTodos,
-          numeroMantenimiento,
-          tecnicoNombre
-        );
+        datosPresupuestoDesdeParte = {
+          clienteId: cliente?.id || (cliente as any)?._docId || '',
+          nombreCliente: cliente?.nombre || '',
+          centroId: centro?.id || (centro as any)?._docId || '',
+          nombreCentro: centro?.nombre || '',
+          numeroMantenimiento: numeroMantenimiento || '',
+          titulo: `Presupuesto mantenimiento ${numeroMantenimiento || ''} - ${centro?.nombre || cliente?.nombre || ''}`.trim()
+        };
       }
 
       setDownloadProgress(100);
-      const textoFinal = resultadoPresupuesto
-        ? (resultadoPresupuesto.success
-            ? `¡Listo! ${resultadoPresupuesto.message} Redirigiendo a pantalla dividida...`
-            : `Proceso finalizado. ${resultadoPresupuesto.message}`)
+      const textoFinal = datosPresupuestoDesdeParte
+        ? '¡Listo! Abriendo presupuesto con los datos del mantenimiento y cliente...'
         : '¡Documentos generados y descargados con éxito!';
       setDownloadStepText(textoFinal);
       setDownloadCompleted(true);
@@ -1077,15 +1081,14 @@ export default function Partes() {
         setDownloadCompleted(false);
         setDownloadProgress(0);
         setDownloadStepText('');
-        if (resultadoPresupuesto?.success && resultadoPresupuesto.presupuesto) {
+        if (datosPresupuestoDesdeParte) {
           navigate('/presupuestos', {
             state: {
-              editarPresupuestoId: resultadoPresupuesto.presupuesto.id,
-              anomalias: resultadoPresupuesto.anomalias || []
+              nuevoPresupuestoDesdeParte: datosPresupuestoDesdeParte
             }
           });
         }
-      }, resultadoPresupuesto?.success ? 1600 : 1400);
+      }, datosPresupuestoDesdeParte ? 900 : 1400);
 
     } catch (error) {
       console.error('Error generando PDFs:', error);
@@ -1189,39 +1192,39 @@ export default function Partes() {
     : partesPlanificados.slice(0, Number(limitePartes));
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] px-8 py-6">
+    <div className="min-h-screen bg-[#F8FAFC] px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
         {/* Header */}
-        <div className="mb-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 w-full text-center sm:text-left">
-            <div>
-              <h1 className="text-2xl font-black text-zinc-950 tracking-tight flex items-center justify-center sm:justify-start gap-2">
+        <div className="mb-5 sm:mb-6">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 w-full text-center lg:text-left">
+            <div className="px-12 lg:px-0">
+              <h1 className="text-xl sm:text-2xl font-black text-zinc-950 tracking-tight flex items-center justify-center lg:justify-start gap-2">
                 Partes de Revisión
               </h1>
               <p className="text-xs font-semibold text-zinc-500 mt-1">Gestión, seguimiento y precierre de partes de revisión en los clientes.</p>
             </div>
             
-            <div className="flex flex-row items-center gap-2 w-full sm:w-auto min-w-0">
-                 <div className="flex items-center gap-1.5 bg-white px-2 rounded-xl border border-zinc-200/80 shadow-sm shrink-0 h-10">
-                <CalendarDays className="w-4 h-4 text-zinc-400" />
+            <div className="flex flex-col xl:flex-row xl:items-center gap-2.5 w-full xl:w-auto min-w-0">
+              <div className="flex items-center justify-between xl:justify-start gap-1.5 bg-white px-2.5 rounded-xl border border-zinc-200/80 shadow-sm w-full xl:w-auto shrink-0 h-10 min-w-0">
+                <CalendarDays className="w-4 h-4 text-zinc-400 shrink-0" />
                 <input 
                   type="date" 
                   value={startDate} 
                   onChange={e => setStartDate(e.target.value)} 
-                  className="text-xs outline-none text-zinc-600 bg-transparent border-0 w-[110px]"
+                  className="text-xs outline-none text-zinc-600 bg-transparent border-0 flex-1 min-w-0 xl:w-[110px] xl:flex-none"
                   title="Fecha inicial"
                 />
-                <span className="text-zinc-400 text-sm">a</span>
+                <span className="text-zinc-400 text-sm shrink-0">a</span>
                 <input 
                   type="date" 
                   value={endDate} 
                   onChange={e => setEndDate(e.target.value)} 
-                  className="text-xs outline-none text-zinc-650 bg-transparent border-0 w-[110px]"
+                  className="text-xs outline-none text-zinc-650 bg-transparent border-0 flex-1 min-w-0 xl:w-[110px] xl:flex-none"
                   title="Fecha final"
                 />
                 {(startDate || endDate) && (
                   <button 
                     onClick={() => { setStartDate(''); setEndDate(''); }}
-                    className="ml-1 p-1 text-zinc-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors"
+                    className="ml-1 p-1 text-zinc-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors shrink-0"
                     title="Limpiar fechas"
                   >
                     <X className="w-3.5 h-3.5" />
@@ -1229,79 +1232,81 @@ export default function Partes() {
                 )}
               </div>
 
-              {/* Buscador */}
-              <div className="relative flex-1 min-w-[120px] sm:w-64 sm:flex-none h-10">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 z-10" />
-                <input
-                  type="text"
-                  placeholder="Buscar partes..."
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  className="w-full h-full pl-10 pr-4 bg-white border border-zinc-200/80 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-red-500/10 focus:border-red-500 transition-all text-zinc-955 shadow-sm"
-                />
+              <div className="grid grid-cols-2 xl:flex xl:items-center gap-2 w-full xl:w-auto min-w-0">
+                {/* Buscador */}
+                <div className="relative w-full xl:w-64 min-w-0 h-10">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 z-10" />
+                  <input
+                    type="text"
+                    placeholder="Buscar partes..."
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    className="w-full h-full pl-9 pr-3 bg-white border border-zinc-200/80 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-red-500/10 focus:border-red-500 transition-all text-zinc-955 shadow-sm"
+                  />
+                </div>
+
+                {/* Filtro por Estado con Indicador de Color (A la derecha) */}
+                {(() => {
+                  const opcionesEstado = [
+                    { value: 'TODOS', label: 'Todos los estados', colorClass: '' },
+                    { value: 'Abierto', label: 'Planificado', colorClass: 'bg-zinc-400 shadow-[0_0_8px_rgba(161,161,170,0.8)]' },
+                    { value: 'En revisión', label: 'En curso', colorClass: 'bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.8)]' },
+                    { value: 'Finalizado', label: 'Finalizado (Firmado)', colorClass: 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.8)]' },
+                    { value: 'Retimbrando', label: 'Retimbrando', colorClass: 'bg-red-600 shadow-[0_0_12px_rgba(220,38,38,0.9)] animate-pulse' },
+                    { value: 'Pre-Cerrado', label: 'Pre-cerrado', colorClass: 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.8)]' },
+                    { value: 'Cerrado', label: 'Cerrado', colorClass: 'bg-black shadow-[0_0_8px_rgba(0,0,0,0.6)]' },
+                  ];
+                  const selectedOption = opcionesEstado.find(o => o.value === estadoFilter) || opcionesEstado[0];
+
+                  return (
+                    <div className="relative w-full xl:w-auto shrink-0 min-w-0 h-10" ref={filterRef}>
+                      <button
+                        type="button"
+                        onClick={() => setIsFilterOpen(!isFilterOpen)}
+                        className="w-full xl:w-auto h-full px-2.5 sm:px-3.5 bg-white border border-zinc-200/80 rounded-xl text-xs flex items-center justify-between gap-2 text-zinc-900 shadow-sm font-medium hover:border-zinc-300 transition-all min-w-0 xl:min-w-[220px]"
+                        title="Filtrar partes por estado"
+                      >
+                        <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0">
+                          <Filter className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-zinc-400 shrink-0" />
+                          {selectedOption.colorClass && (
+                            <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${selectedOption.colorClass}`} />
+                          )}
+                          <span className="truncate">{selectedOption.label}</span>
+                        </div>
+                        <ChevronDown className={`w-4 h-4 text-zinc-400 shrink-0 transition-transform duration-200 ${isFilterOpen ? 'rotate-180' : ''}`} />
+                      </button>
+
+                      {isFilterOpen && (
+                        <div className="absolute right-0 top-full mt-1 bg-white border border-zinc-200 rounded-xl shadow-xl z-50 py-1.5 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150 min-w-[215px] sm:min-w-[230px]">
+                          {opcionesEstado.map((op) => (
+                            <button
+                              key={op.value}
+                              type="button"
+                              onClick={() => {
+                                setEstadoFilter(op.value);
+                                setIsFilterOpen(false);
+                              }}
+                              className={`w-full px-3.5 py-2.5 text-left text-xs font-semibold flex items-center gap-3 transition-colors ${
+                                estadoFilter === op.value
+                                  ? 'bg-red-50 text-red-700 font-bold'
+                                  : 'text-zinc-700 hover:bg-zinc-50'
+                              }`}
+                            >
+                              {op.colorClass ? (
+                                <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${op.colorClass}`} />
+                              ) : (
+                                <span className="w-2.5 h-2.5 rounded-full border border-zinc-300 shrink-0" />
+                              )}
+                              <span className="flex-1">{op.label}</span>
+                              {estadoFilter === op.value && <Check className="w-3.5 h-3.5 text-red-600 shrink-0" />}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
-
-              {/* Filtro por Estado con Indicador de Color (A la derecha) */}
-              {(() => {
-                const opcionesEstado = [
-                  { value: 'TODOS', label: 'Todos los estados', colorClass: '' },
-                  { value: 'Abierto', label: 'Planificado', colorClass: 'bg-zinc-400 shadow-[0_0_8px_rgba(161,161,170,0.8)]' },
-                  { value: 'En revisión', label: 'En curso', colorClass: 'bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.8)]' },
-                  { value: 'Finalizado', label: 'Finalizado (Firmado)', colorClass: 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.8)]' },
-                  { value: 'Retimbrando', label: 'Retimbrando', colorClass: 'bg-red-600 shadow-[0_0_12px_rgba(220,38,38,0.9)] animate-pulse' },
-                  { value: 'Pre-Cerrado', label: 'Pre-cerrado', colorClass: 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.8)]' },
-                  { value: 'Cerrado', label: 'Cerrado', colorClass: 'bg-black shadow-[0_0_8px_rgba(0,0,0,0.6)]' },
-                ];
-                const selectedOption = opcionesEstado.find(o => o.value === estadoFilter) || opcionesEstado[0];
-
-                return (
-                  <div className="relative shrink-0 h-10" ref={filterRef}>
-                    <button
-                      type="button"
-                      onClick={() => setIsFilterOpen(!isFilterOpen)}
-                      className="h-full px-3.5 bg-white border border-zinc-200/80 rounded-xl text-xs flex items-center justify-between gap-2.5 text-zinc-900 shadow-sm font-medium hover:border-zinc-300 transition-all min-w-[210px] sm:min-w-[230px]"
-                      title="Filtrar partes por estado"
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <Filter className="w-4 h-4 text-zinc-400 shrink-0" />
-                        {selectedOption.colorClass && (
-                          <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${selectedOption.colorClass}`} />
-                        )}
-                        <span className="whitespace-nowrap">{selectedOption.label}</span>
-                      </div>
-                      <ChevronDown className={`w-4 h-4 text-zinc-400 shrink-0 transition-transform duration-200 ${isFilterOpen ? 'rotate-180' : ''}`} />
-                    </button>
-
-                    {isFilterOpen && (
-                      <div className="absolute right-0 top-full mt-1 bg-white border border-zinc-200 rounded-xl shadow-xl z-50 py-1.5 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150 min-w-[230px]">
-                        {opcionesEstado.map((op) => (
-                          <button
-                            key={op.value}
-                            type="button"
-                            onClick={() => {
-                              setEstadoFilter(op.value);
-                              setIsFilterOpen(false);
-                            }}
-                            className={`w-full px-3.5 py-2.5 text-left text-xs font-semibold flex items-center gap-3 transition-colors ${
-                              estadoFilter === op.value
-                                ? 'bg-red-50 text-red-700 font-bold'
-                                : 'text-zinc-700 hover:bg-zinc-50'
-                            }`}
-                          >
-                            {op.colorClass ? (
-                              <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${op.colorClass}`} />
-                            ) : (
-                              <span className="w-2.5 h-2.5 rounded-full border border-zinc-300 shrink-0" />
-                            )}
-                            <span className="flex-1">{op.label}</span>
-                            {estadoFilter === op.value && <Check className="w-3.5 h-3.5 text-red-600 shrink-0" />}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
             </div>
           </div>
         </div>
@@ -2136,8 +2141,8 @@ export default function Partes() {
                     onChange={(e) => setDownloadOptions(prev => ({ ...prev, generarPresupuesto: e.target.checked }))}
                   />
                   <div className="flex-1">
-                    <span className="font-semibold text-amber-950">Generar presupuesto borrador</span>
-                    <p className="text-[11px] text-amber-700/90">Crea un presupuesto vinculando anomalías con artículos del catálogo.</p>
+                    <span className="font-semibold text-amber-950">Generar presupuesto</span>
+                    <p className="text-[11px] text-amber-700/90">Abre el formulario de presupuesto con los datos del mantenimiento y cliente.</p>
                   </div>
                 </label>
               </div>
@@ -2163,52 +2168,48 @@ export default function Partes() {
         </div>
       )}
 
-      {/* Modal de Progreso de Generación y Descarga de PDFs */}
+      {/* Indicador de Progreso de Generación y Descarga de PDFs (esquina inferior derecha) */}
       {isGeneratingPDFs && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-md p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden p-6 sm:p-7 text-center relative border border-zinc-100 animate-in zoom-in-95 duration-200">
-            {/* Icono central de estado */}
-            <div className="mx-auto mb-4 w-16 h-16 rounded-2xl flex items-center justify-center transition-all duration-300 relative shadow-inner">
-              {downloadCompleted ? (
-                <div className="w-16 h-16 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center animate-bounce">
-                  <CheckCircle2 className="w-10 h-10 text-emerald-600" />
-                </div>
-              ) : (
-                <div className="w-16 h-16 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center relative">
-                  <FileText className="w-8 h-8 text-red-600 animate-pulse" />
-                  <Loader2 className="w-12 h-12 text-red-600/30 absolute inset-0 m-auto animate-spin" />
-                </div>
-              )}
+        <div className="fixed bottom-6 right-6 z-[200] w-80 sm:w-96 bg-white rounded-2xl shadow-2xl border border-teal-200 p-4 animate-in fade-in slide-in-from-bottom-4 duration-200">
+          <div className="flex items-center justify-between gap-3 mb-2.5">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                downloadCompleted
+                  ? 'bg-emerald-100 text-emerald-600'
+                  : 'bg-teal-100 text-teal-700'
+              }`}>
+                {downloadCompleted ? (
+                  <CheckCircle2 className="w-5 h-5" />
+                ) : (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                )}
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-extrabold text-zinc-900 truncate">
+                  {downloadCompleted ? 'Descarga completada' : 'Generando documentos PDF'}
+                </p>
+                <p className="text-[11px] font-mono font-semibold text-zinc-500 truncate">
+                  {downloadCompleted ? 'Completado' : 'Procesando...'}
+                </p>
+              </div>
             </div>
-
-            <h3 className="text-lg font-black text-zinc-900 mb-1">
-              {downloadCompleted ? '¡Descarga Lista!' : 'Generando Documentos'}
-            </h3>
-            
-            <p className="text-xs font-semibold text-zinc-500 mb-5 min-h-[32px] flex items-center justify-center px-2">
-              {downloadStepText}
-            </p>
-
-            {/* Barra de progreso */}
-            <div className="w-full bg-zinc-100 rounded-full h-3 mb-3 overflow-hidden p-0.5 border border-zinc-200/60 shadow-inner">
-              <div
-                className={`h-full rounded-full transition-all duration-300 ease-out ${
-                  downloadCompleted
-                    ? 'bg-emerald-500'
-                    : 'bg-gradient-to-r from-red-500 via-rose-500 to-amber-500'
-                }`}
-                style={{ width: `${downloadProgress}%` }}
-              />
-            </div>
-
-            {/* Porcentaje y estado inferior */}
-            <div className="flex items-center justify-between text-[11px] font-bold text-zinc-400 px-1">
-              <span>{downloadCompleted ? 'Completado' : 'Procesando...'}</span>
-              <span className={downloadCompleted ? 'text-emerald-600 font-extrabold' : 'text-red-600 font-extrabold'}>
-                {downloadProgress}%
-              </span>
-            </div>
+            <span className={`text-base font-black tabular-nums shrink-0 ${
+              downloadCompleted ? 'text-emerald-600' : 'text-teal-700'
+            }`}>
+              {downloadProgress}%
+            </span>
           </div>
+          <div className="w-full h-2.5 bg-zinc-100 rounded-full overflow-hidden border border-zinc-200/70">
+            <div
+              className={`h-full rounded-full transition-all duration-200 ease-out ${
+                downloadCompleted ? 'bg-emerald-500' : 'bg-teal-600'
+              }`}
+              style={{ width: `${downloadProgress}%` }}
+            />
+          </div>
+          <p className="text-[11px] font-medium text-zinc-600 mt-2 truncate">
+            {downloadStepText}
+          </p>
         </div>
       )}
 

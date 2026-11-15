@@ -795,22 +795,22 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
           </button>
         </div>
 
-        {/* Fecha · Estado · Búsqueda — una sola línea */}
-        <div className="px-4 pb-3 flex items-center gap-2">
-          <div className="flex items-center gap-1 bg-white px-2.5 py-1.5 rounded-xl border border-red-500/80 shadow-xs shrink-0">
+        {/* Fecha arriba y debajo Búsqueda + Estado (mismo ancho total en móvil) */}
+        <div className="px-3 sm:px-4 pb-3 flex flex-col md:flex-row md:items-center gap-2">
+          <div className="flex items-center justify-between md:justify-start gap-1.5 bg-white px-2.5 py-1.5 rounded-xl border border-red-500/80 shadow-xs w-full md:w-auto shrink-0 min-w-0">
             <Calendar className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
             <input 
               type="date" 
               value={startDate} 
               onChange={e => setStartDate(e.target.value)} 
-              className="text-[11px] outline-none text-zinc-700 bg-transparent w-[88px]"
+              className="text-[11px] sm:text-xs outline-none text-zinc-700 bg-transparent flex-1 min-w-0 md:w-[95px] md:flex-none"
             />
-            <span className="text-zinc-400 text-[11px]">–</span>
+            <span className="text-zinc-400 text-[11px] shrink-0">–</span>
             <input 
               type="date" 
               value={endDate} 
               onChange={e => setEndDate(e.target.value)} 
-              className="text-[11px] outline-none text-zinc-700 bg-transparent w-[88px]"
+              className="text-[11px] sm:text-xs outline-none text-zinc-700 bg-transparent flex-1 min-w-0 md:w-[95px] md:flex-none"
             />
             {(startDate || endDate) && (
               <button 
@@ -821,38 +821,40 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
               </button>
             )}
           </div>
-          <div className="relative shrink-0">
-            <Filter className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400 pointer-events-none z-10" />
-            <select
-              value={estadoFilter}
-              onChange={e => setEstadoFilter(e.target.value)}
-              className="pl-8 pr-3 py-1.5 bg-white border border-red-500/80 rounded-xl text-[11px] outline-none text-zinc-900 font-semibold cursor-pointer"
-            >
-              <option value="TODOS">Todos</option>
-              <option value="Abierto">Planificado</option>
-              <option value="En revisión">En curso</option>
-              <option value="Finalizado">Finalizado</option>
-              <option value="Pre-Cerrado">Pre-cerrado</option>
-              <option value="Cerrado">Cerrado</option>
-            </select>
-          </div>
-          <div className="relative flex-1 min-w-0">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              placeholder="Buscar…"
-              className="w-full pl-8 pr-7 py-1.5 bg-white border border-red-500/80 rounded-xl text-[11px] outline-none text-zinc-950"
-            />
-            {searchTerm && (
-              <button
-                onClick={() => setSearchTerm('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-700"
+          <div className="grid grid-cols-2 md:flex md:flex-1 md:items-center gap-2 w-full min-w-0">
+            <div className="relative w-full md:flex-1 min-w-0">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                placeholder="Buscar…"
+                className="w-full pl-8 pr-7 py-1.5 bg-white border border-red-500/80 rounded-xl text-[11px] sm:text-xs outline-none text-zinc-950"
+              />
+              {searchTerm && (
+                <button
+                  onClick={() => setSearchTerm('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-700"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+            <div className="relative w-full md:w-auto shrink-0 min-w-0">
+              <Filter className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400 pointer-events-none z-10" />
+              <select
+                value={estadoFilter}
+                onChange={e => setEstadoFilter(e.target.value)}
+                className="w-full md:w-auto pl-8 pr-3 py-1.5 bg-white border border-red-500/80 rounded-xl text-[11px] sm:text-xs outline-none text-zinc-900 font-semibold cursor-pointer truncate"
               >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
+                <option value="TODOS">Todos</option>
+                <option value="Abierto">Planificado</option>
+                <option value="En revisión">En curso</option>
+                <option value="Finalizado">Finalizado</option>
+                <option value="Pre-Cerrado">Pre-cerrado</option>
+                <option value="Cerrado">Cerrado</option>
+              </select>
+            </div>
           </div>
         </div>
       </header>

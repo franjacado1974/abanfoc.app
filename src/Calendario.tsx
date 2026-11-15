@@ -1,8 +1,10 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Phone,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Clock,
   ClipboardCheck,
   Wrench,
@@ -17,7 +19,10 @@ import {
   AlertTriangle,
   ExternalLink,
   CheckCircle2,
-  RotateCcw
+  RotateCcw,
+  ReceiptText,
+  Filter,
+  Check
 } from 'lucide-react';
 import {
   subscribePartes,
@@ -31,6 +36,7 @@ import {
   subscribeCentros,
   subscribeClientes,
   subscribeAlbaranes,
+  obtenerEmpresaPorDefecto,
   type ParteFirestore,
   type ReparacionItem,
   type InstalacionItem,
@@ -141,6 +147,7 @@ export interface EventoCalendario {
 }
 
 export default function Calendario() {
+  const navigate = useNavigate();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [partes, setPartes] = useState<ParteFirestore[]>([]);
   const [reparaciones, setReparaciones] = useState<ReparacionItem[]>([]);
@@ -160,6 +167,8 @@ export default function Calendario() {
   const [editFechaFin, setEditFechaFin] = useState<string>('');
   const [mostrarAmpliarRango, setMostrarAmpliarRango] = useState<boolean>(false);
   const [guardandoCambios, setGuardandoCambios] = useState(false);
+  const [selectedDayModal, setSelectedDayModal] = useState<{ iso: string; date: Date } | null>(null);
+  const [showConfirmAlbaranModal, setShowConfirmAlbaranModal] = useState(false);
 
   useEffect(() => {
     if (selectedEvento) {
@@ -171,6 +180,7 @@ export default function Calendario() {
       setEditFechaInicio(startIso);
       setEditFechaFin(endIso);
       setMostrarAmpliarRango(Boolean(selectedEvento.fechaFin && selectedEvento.fechaFin > startIso));
+      setShowConfirmAlbaranModal(false);
     } else {
       setEditEstado('Pendiente');
       setEditNota('');
@@ -178,6 +188,7 @@ export default function Calendario() {
       setEditFechaInicio('');
       setEditFechaFin('');
       setMostrarAmpliarRango(false);
+      setShowConfirmAlbaranModal(false);
     }
   }, [selectedEvento]);
 
@@ -188,6 +199,18 @@ export default function Calendario() {
     instalaciones: true,
     urgencias: true
   });
+  const [showTiposDropdown, setShowTiposDropdown] = useState(false);
+  const tiposDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (tiposDropdownRef.current && !tiposDropdownRef.current.contains(e.target as Node)) {
+        setShowTiposDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const toggleFiltro = (filtroKey: keyof typeof filtrosVisibles) => {
     setFiltrosVisibles((prev) => ({ ...prev, [filtroKey]: !prev[filtroKey] }));
@@ -933,7 +956,7 @@ export default function Calendario() {
   };
 
   // Guardar Estado, Nota, Rango de Fecha Programada y Fecha Confirmada editados desde el modal del Calendario
-  const handleGuardarCambiosEvento = async (ev: EventoCalendario) => {
+  const handleGuardarCambiosEvento = async (ev: EventoCalendario, overrideEstado?: string) => {
     const { rawDocId, modulo, id: evId } = ev;
     if (!rawDocId || modulo === 'Festivo') return;
 
@@ -948,7 +971,7 @@ export default function Calendario() {
     };
 
     const notaTrimmed = editNota.trim();
-    const nuevoEstado = editEstado || ev.estado || 'Pendiente';
+    const nuevoEstado = overrideEstado || editEstado || ev.estado || 'Pendiente';
     const confirmadaVal = !!editFechaConfirmada;
     const startIso = editFechaInicio || ev.fechaInicio || ev.fecha;
     const endIso = editFechaFin && editFechaFin > startIso ? editFechaFin : '';
@@ -1026,33 +1049,207 @@ export default function Calendario() {
     }
   };
 
+  // Guardar como Finalizado y navegar a Albaranes para firmar y terminar el albarán de la tarea
+  const handleIrAAlbaranDesdeCalendario = async (ev: EventoCalendario) => {
+    setShowConfirmAlbaranModal(false);
+    await handleGuardarCambiosEvento(ev, 'Finalizado');
+    setSelectedDayModal(null);
+
+    const { rawDocId, modulo, id: evId } = ev;
+    const cleanId = (evId || '').replace(/^(parte|rep|inst|urg)-/, '');
+    const matchById = (val?: string) => Boolean(val && (val === rawDocId || (cleanId && val === cleanId)));
+
+    const targetRoute = modulo === 'Mantenimientos' ? '/albaranes-revision' : '/albaranes-trabajo';
+
+    const existingAlbaran = albaranes.find((alb) => {
+      if (modulo === 'Mantenimientos') return matchById(alb.parteId);
+      if (modulo === 'Reparaciones') return matchById(alb.reparacionId);
+      if (modulo === 'Instalaciones') return matchById(alb.instalacionId);
+      if (modulo === 'Urgencias') return matchById(alb.urgenciaId);
+      return false;
+    });
+
+    if (existingAlbaran) {
+      navigate(targetRoute, {
+        state: {
+          editAlbaranId: existingAlbaran.id || (existingAlbaran as any)._docId
+        }
+      });
+      return;
+    }
+
+    const sourceList: any[] =
+      modulo === 'Mantenimientos'
+        ? partes
+        : modulo === 'Reparaciones'
+        ? reparaciones
+        : modulo === 'Instalaciones'
+        ? instalaciones
+        : modulo === 'Urgencias'
+        ? urgencias
+        : [];
+
+    const rawItem = sourceList.find(
+      (it) =>
+        it._docId === rawDocId ||
+        it.id === rawDocId ||
+        (cleanId && (it.id === cleanId || it._docId === cleanId))
+    );
+
+    const centroObj = centros.find(
+      (c) =>
+        (rawItem?.centroId && c.id === rawItem.centroId) ||
+        (ev.lugar && c.nombre?.trim().toLowerCase() === ev.lugar.trim().toLowerCase())
+    );
+    const clienteObj = clientes.find(
+      (cl) =>
+        ((rawItem?.clienteId || centroObj?.clienteId) && cl.id === (rawItem?.clienteId || centroObj?.clienteId)) ||
+        (ev.cliente && cl.nombre?.trim().toLowerCase() === ev.cliente.trim().toLowerCase())
+    );
+    const tecnicoObj = tecnicos.find(
+      (t) =>
+        (rawItem?.tecnicoId && t.id === rawItem.tecnicoId) ||
+        (ev.tecnico && t.nombre?.trim().toLowerCase() === ev.tecnico.trim().toLowerCase())
+    );
+
+    const empresaId = rawItem?.empresaId || centroObj?.empresaId || obtenerEmpresaPorDefecto() || '';
+    const concepto = ev.tituloCompleto || ev.lugar || '';
+    const descripcion = (editNota || ev.detalles || rawItem?.observaciones || rawItem?.nota || '').trim();
+
+    navigate(targetRoute, {
+      state: {
+        prefillAlbaran: {
+          empresaId,
+          clienteId: clienteObj?.id || rawItem?.clienteId || '',
+          clienteNombreLibre: !clienteObj?.id ? ev.cliente || '' : '',
+          centroId: centroObj?.id || rawItem?.centroId || '',
+          centroNombreLibre: !centroObj?.id ? ev.lugar || '' : '',
+          tecnicoId: tecnicoObj?.id || rawItem?.tecnicoId || (tecnicos[0]?.id || ''),
+          numeroPedido: rawItem?.numeroPedido || rawItem?.pedidoId || '',
+          titulo: concepto,
+          reparacionId: modulo === 'Reparaciones' ? rawDocId : '',
+          instalacionId: modulo === 'Instalaciones' ? rawDocId : '',
+          urgenciaId: modulo === 'Urgencias' ? rawDocId : '',
+          parteId: modulo === 'Mantenimientos' ? rawDocId : '',
+          fechaCreacion: ev.fecha ? `${ev.fecha}T10:00:00.000Z` : new Date().toISOString(),
+          items: [
+            {
+              cantidad: 1,
+              concepto,
+              descripcion,
+              precioUnidad: 0,
+              subtotal: 0
+            }
+          ]
+        }
+      }
+    });
+  };
+
   return (
-    <div className="h-screen max-h-screen bg-[#F8FAFC] flex flex-col p-3 sm:p-4 lg:p-5 select-none overflow-hidden">
+    <div className="h-screen max-h-screen bg-[#F8FAFC] flex flex-col p-2 sm:p-4 lg:p-5 select-none overflow-hidden">
       {/* Barra de cabecera del Calendario */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 px-4 py-3 sm:px-5 sm:py-3.5 shadow-sm mb-3 shrink-0">
-        <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between gap-4">
+      <div className="bg-white rounded-2xl border border-slate-200/80 px-3 py-2.5 sm:px-5 sm:py-3.5 shadow-sm mb-2.5 sm:mb-3 shrink-0">
+        <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between gap-2.5 sm:gap-4">
           <div className="w-full xl:w-auto text-left">
             <div>
-              <div className="flex items-center justify-start gap-2">
-                <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight capitalize">
-                  {MESES[month]} {year}
-                </h1>
-                {isCurrentMonth && (
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-red-600 text-white tracking-wider shadow-sm">
-                    Mes en curso
-                  </span>
-                )}
+              <div className="flex items-center justify-between sm:justify-start gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <h1 className="text-lg sm:text-2xl font-black text-slate-900 tracking-tight capitalize truncate">
+                    {MESES[month]} {year}
+                  </h1>
+                  {isCurrentMonth && (
+                    <span className="px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-extrabold uppercase bg-red-600 text-white tracking-wider shadow-sm shrink-0">
+                      Mes en curso
+                    </span>
+                  )}
+                </div>
               </div>
-              <p className="text-xs text-slate-500 font-medium mt-0.5">
+              <p className="text-[11px] sm:text-xs text-slate-500 font-medium mt-0.5">
                 Calendario unificado de todas las tareas.
               </p>
             </div>
           </div>
 
-          {/* Botones de filtrado y acciones unificados en la misma línea */}
-          <div className="flex flex-wrap items-center justify-between xl:justify-end gap-2.5 w-full xl:w-auto">
-            {/* Leyenda y Conteo de Etiquetas con Filtros Interactivos (todos en línea) */}
-            <div className="flex items-center gap-2 overflow-x-auto scrollbar-none">
+          {/* Botones de filtrado y acciones */}
+          <div className="flex flex-col md:flex-row md:flex-wrap items-stretch md:items-center justify-between xl:justify-end gap-2 w-full xl:w-auto min-w-0">
+            {/* Desplegable de Tipos de Tareas en Móvil (< md) */}
+            {(() => {
+              const tiposOpciones = [
+                { key: 'revisiones' as const, short: 'Rev.', label: 'Revisiones', count: statsMes.mantCount, dotClass: 'bg-amber-500', badgeClass: 'bg-amber-50 text-amber-900 border-amber-300' },
+                { key: 'reparaciones' as const, short: 'Rep.', label: 'Reparaciones', count: statsMes.repCount, dotClass: 'bg-sky-500', badgeClass: 'bg-sky-50 text-sky-900 border-sky-300' },
+                { key: 'instalaciones' as const, short: 'Inst.', label: 'Instalaciones', count: statsMes.instCount, dotClass: 'bg-red-500', badgeClass: 'bg-red-50 text-red-900 border-red-300' },
+                { key: 'urgencias' as const, short: 'Urg.', label: 'Urgencias', count: statsMes.urgCount, dotClass: 'bg-black', badgeClass: 'bg-zinc-900 text-white border-zinc-950' },
+              ];
+              const activosCount = tiposOpciones.filter((t) => filtrosVisibles[t.key]).length;
+              const resumenTexto =
+                activosCount === 4
+                  ? 'Tipos de tareas (Todas)'
+                  : activosCount === 0
+                  ? 'Tipos de tareas (Ninguna)'
+                  : `Tipos: ${tiposOpciones.filter((t) => filtrosVisibles[t.key]).map((t) => t.short).join(' ')} (${activosCount}/4)`;
+
+              return (
+                <div className="relative md:hidden w-full" ref={tiposDropdownRef}>
+                  <button
+                    type="button"
+                    onClick={() => setShowTiposDropdown((prev) => !prev)}
+                    className="w-full h-9 px-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 text-xs font-bold flex items-center justify-between gap-2 shadow-2xs cursor-pointer"
+                  >
+                    <span className="flex items-center gap-2 min-w-0">
+                      <Filter className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <span className="truncate">{resumenTexto}</span>
+                    </span>
+                    <ChevronDown className={`w-4 h-4 text-slate-400 shrink-0 transition-transform duration-150 ${showTiposDropdown ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  {showTiposDropdown && (
+                    <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1.5 overflow-hidden">
+                      {tiposOpciones.map((op) => {
+                        const active = filtrosVisibles[op.key];
+                        return (
+                          <button
+                            key={op.key}
+                            type="button"
+                            onClick={() => toggleFiltro(op.key)}
+                            className={`w-full px-3.5 py-2.5 text-left text-xs font-bold flex items-center justify-between gap-2 transition-colors cursor-pointer ${
+                              active ? 'bg-slate-50/80 text-slate-900' : 'text-slate-400 hover:bg-slate-50'
+                            }`}
+                          >
+                            <span className="flex items-center gap-2.5 min-w-0">
+                              <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${active ? op.dotClass : 'bg-slate-300'}`} />
+                              <span className={active ? '' : 'line-through'}>{op.label} ({op.count})</span>
+                            </span>
+                            <span className={`w-4 h-4 rounded-md border flex items-center justify-center shrink-0 ${
+                              active ? 'bg-slate-900 border-slate-900 text-white' : 'border-slate-300 bg-white'
+                            }`}>
+                              {active && <Check className="w-3 h-3" />}
+                            </span>
+                          </button>
+                        );
+                      })}
+                      {activosCount < 4 && (
+                        <div className="border-t border-slate-100 mt-1 pt-1 px-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setFiltrosVisibles({ revisiones: true, reparaciones: true, instalaciones: true, urgencias: true });
+                              setShowTiposDropdown(false);
+                            }}
+                            className="w-full py-1.5 text-[11px] font-bold text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                          >
+                            Mostrar todas
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Leyenda y Conteo de Etiquetas con Filtros Interactivos en Tablet/Escritorio (>= md) */}
+            <div className="hidden md:flex items-center gap-2 overflow-x-auto scrollbar-none">
               <button
                 type="button"
                 onClick={() => toggleFiltro('revisiones')}
@@ -1110,52 +1307,55 @@ export default function Calendario() {
               </button>
             </div>
 
-            <div className="hidden sm:block h-5 w-px bg-slate-200 shrink-0 mx-0.5" />
+            <div className="hidden md:block h-5 w-px bg-slate-200 shrink-0 mx-0.5" />
 
-            {/* Demás botones a la derecha del mismo tamaño uniforme */}
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={handleToday}
-                className="h-9 inline-flex items-center justify-center gap-1.5 px-3.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95 whitespace-nowrap"
-              >
-                <Clock className="w-3.5 h-3.5 text-slate-500" />
-                <span>Hoy</span>
-              </button>
+            {/* Botones de Hoy, Finde y selector de mes compacto */}
+            <div className="flex items-center justify-between md:justify-end gap-1.5 sm:gap-2 w-full md:w-auto shrink-0 min-w-0">
+              <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+                <button
+                  type="button"
+                  onClick={handleToday}
+                  className="h-8 sm:h-9 inline-flex items-center justify-center gap-1 sm:gap-1.5 px-2.5 sm:px-3.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-[11px] sm:text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95 whitespace-nowrap"
+                >
+                  <Clock className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-slate-500" />
+                  <span>Hoy</span>
+                </button>
 
-              <button
-                type="button"
-                onClick={() => setMostrarFinSemana((prev) => !prev)}
-                className={`h-9 inline-flex items-center justify-center gap-1.5 px-3.5 rounded-xl border text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95 whitespace-nowrap ${
-                  mostrarFinSemana
-                    ? 'border-amber-400 bg-amber-50 text-amber-950 hover:bg-amber-100 shadow-xs'
-                    : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
-                }`}
-                title={mostrarFinSemana ? 'Ocultar sábado y domingo' : 'Mostrar sábado y domingo'}
-              >
-                <CalendarDays className={`w-3.5 h-3.5 ${mostrarFinSemana ? 'text-amber-700' : 'text-slate-500'}`} />
-                <span>{mostrarFinSemana ? 'Ocultar Finde' : 'Mostrar Finde'}</span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => setMostrarFinSemana((prev) => !prev)}
+                  className={`h-8 sm:h-9 inline-flex items-center justify-center gap-1 sm:gap-1.5 px-2.5 sm:px-3.5 rounded-xl border text-[11px] sm:text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95 whitespace-nowrap ${
+                    mostrarFinSemana
+                      ? 'border-amber-400 bg-amber-50 text-amber-950 hover:bg-amber-100 shadow-xs'
+                      : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                  }`}
+                  title={mostrarFinSemana ? 'Ocultar sábado y domingo' : 'Mostrar sábado y domingo'}
+                >
+                  <CalendarDays className={`w-3 h-3 sm:w-3.5 sm:h-3.5 ${mostrarFinSemana ? 'text-amber-700' : 'text-slate-500'}`} />
+                  <span className="sm:hidden">{mostrarFinSemana ? 'Sin Finde' : 'Finde'}</span>
+                  <span className="hidden sm:inline">{mostrarFinSemana ? 'Ocultar Finde' : 'Mostrar Finde'}</span>
+                </button>
+              </div>
 
-              <div className="h-9 inline-flex items-center bg-slate-100 px-1 rounded-xl border border-slate-200/80 shadow-2xs">
+              <div className="h-8 sm:h-9 inline-flex items-center bg-slate-100 px-0.5 sm:px-1 rounded-xl border border-slate-200/80 shadow-2xs shrink-0">
                 <button
                   type="button"
                   onClick={handlePrevMonth}
-                  className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-white text-slate-600 hover:text-slate-900 transition-all cursor-pointer"
+                  className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded-lg hover:bg-white text-slate-600 hover:text-slate-900 transition-all cursor-pointer"
                   title="Mes anterior"
                 >
-                  <ChevronLeft className="w-4 h-4" />
+                  <ChevronLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </button>
-                <span className="px-2.5 text-xs font-black text-slate-700 min-w-[70px] text-center capitalize select-none">
+                <span className="px-1.5 sm:px-2.5 text-[11px] sm:text-xs font-black text-slate-700 min-w-[40px] sm:min-w-[70px] text-center capitalize select-none">
                   {MESES[month].slice(0, 3)}
                 </span>
                 <button
                   type="button"
                   onClick={handleNextMonth}
-                  className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-white text-slate-600 hover:text-slate-900 transition-all cursor-pointer"
+                  className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded-lg hover:bg-white text-slate-600 hover:text-slate-900 transition-all cursor-pointer"
                   title="Mes siguiente"
                 >
-                  <ChevronRight className="w-4 h-4" />
+                  <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </button>
               </div>
             </div>
@@ -1210,19 +1410,28 @@ export default function Calendario() {
                     : 'bg-slate-50/40 text-slate-300'
                 }`}
               >
-                {/* Cabecera del día */}
-                <div className="flex items-center justify-between mb-1 shrink-0">
-                  <span
-                    className={`w-5 h-5 sm:w-6 sm:h-6 rounded-lg flex items-center justify-center text-[11px] sm:text-xs font-black ${
+                {/* Cabecera del día (clic en el número o cabecera abre todas las tareas del día) */}
+                <div
+                  onClick={() => setSelectedDayModal({ iso: d.iso, date: d.date })}
+                  className="flex items-center justify-between mb-1 shrink-0 cursor-pointer group"
+                  title="Haz clic para ver todas las tareas de este día"
+                >
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedDayModal({ iso: d.iso, date: d.date });
+                    }}
+                    className={`w-5 h-5 sm:w-6 sm:h-6 rounded-lg flex items-center justify-center text-[11px] sm:text-xs font-black transition-transform group-hover:scale-110 active:scale-95 cursor-pointer ${
                       isToday
                         ? 'bg-red-600 text-white shadow-xs shadow-red-500/30'
                         : d.currentMonth
-                        ? 'border border-red-500 text-slate-900 bg-transparent'
-                        : 'text-slate-400'
+                        ? 'border border-red-500 text-slate-900 bg-transparent hover:bg-red-50'
+                        : 'text-slate-400 hover:bg-slate-100'
                     }`}
                   >
                     {d.dayNumber}
-                  </span>
+                  </button>
                   {eventosDia.length > 0 && (
                     <span
                       title={`${eventosDia.length} ${eventosDia.length === 1 ? 'tarea' : 'tareas'}`}
@@ -1271,9 +1480,143 @@ export default function Calendario() {
         </div>
       </div>
 
+      {/* Modal ampliado con todas las tareas del día seleccionado (ideal para móvil y días con muchas tareas) */}
+      {selectedDayModal && (() => {
+        const todosDelDia = eventosPorFecha[selectedDayModal.iso] || [];
+        const eventosDelDia = todosDelDia.filter((ev) => {
+          if (ev.sigla === 'Rev.' && !filtrosVisibles.revisiones) return false;
+          if (ev.sigla === 'Rep.' && !filtrosVisibles.reparaciones) return false;
+          if (ev.sigla === 'Inst.' && !filtrosVisibles.instalaciones) return false;
+          if (ev.sigla === 'Urg.' && !filtrosVisibles.urgencias) return false;
+          return true;
+        });
+        const fechaFormateada = selectedDayModal.date.toLocaleDateString('es-ES', {
+          weekday: 'long',
+          day: 'numeric',
+          month: 'long',
+          year: 'numeric',
+        });
+
+        return (
+          <div
+            onClick={() => setSelectedDayModal(null)}
+            className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/50 backdrop-blur-xs pt-16 pb-4 px-3 sm:p-4 animate-in fade-in duration-150"
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-3xl shadow-2xl border border-slate-200/90 w-full max-w-lg overflow-hidden flex flex-col max-h-[75dvh] sm:max-h-[82vh]"
+            >
+              {/* Cabecera */}
+              <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/80 shrink-0">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center justify-center w-8 h-8 rounded-xl bg-red-600 text-white font-black text-sm shadow-xs shrink-0">
+                      {selectedDayModal.date.getDate()}
+                    </span>
+                    <div className="min-w-0">
+                      <h3 className="text-sm sm:text-base font-black text-slate-900 capitalize truncate">
+                        {fechaFormateada}
+                      </h3>
+                      <p className="text-xs font-semibold text-slate-500">
+                        {eventosDelDia.length} {eventosDelDia.length === 1 ? 'tarea programada' : 'tareas programadas'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedDayModal(null)}
+                  className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-xl transition-all cursor-pointer shrink-0"
+                  title="Cerrar"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Lista de tareas del día */}
+              <div className="p-4 flex-1 min-h-0 overflow-y-auto space-y-2.5">
+                {eventosDelDia.length === 0 ? (
+                  <div className="text-center py-10 px-4">
+                    <CalendarDays className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                    <p className="text-sm font-bold text-slate-500">No hay tareas para este día</p>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Las tareas asignadas o filtradas aparecerán aquí.
+                    </p>
+                  </div>
+                ) : (
+                  eventosDelDia.map((ev) => {
+                    const isFestivo = ev.modulo === 'Festivo';
+                    return (
+                      <button
+                        key={ev.id}
+                        type="button"
+                        onClick={() => setSelectedEvento(ev)}
+                        className={`w-full text-left p-3.5 rounded-2xl border transition-all shadow-2xs hover:shadow-md active:scale-[0.99] cursor-pointer flex flex-col gap-1.5 ${ev.colorTag}`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="px-2 py-0.5 rounded-md bg-white/80 font-black text-[11px] uppercase tracking-tight shrink-0 border border-current/20">
+                              {ev.sigla}
+                            </span>
+                            <span className="font-black text-sm truncate">
+                              {ev.fechaConfirmada ? '* ' : ''}{ev.clienteResumido}
+                            </span>
+                          </div>
+                          {ev.estado && !isFestivo && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/80 border border-current/20 shrink-0">
+                              {ev.estado}
+                            </span>
+                          )}
+                        </div>
+                        {ev.tituloCompleto && ev.tituloCompleto !== ev.clienteResumido && (
+                          <p className="text-xs font-semibold opacity-90 leading-snug">
+                            {ev.tituloCompleto}
+                          </p>
+                        )}
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] opacity-80 font-medium">
+                          {(ev.lugar || ev.poblacion) && (
+                            <span className="inline-flex items-center gap-1">
+                              <MapPin className="w-3 h-3 shrink-0" />
+                              {[ev.lugar, ev.poblacion].filter(Boolean).join(' · ')}
+                            </span>
+                          )}
+                          {ev.tecnico && (
+                            <span className="inline-flex items-center gap-1">
+                              <User className="w-3 h-3 shrink-0" />
+                              {ev.tecnico}
+                            </span>
+                          )}
+                          {ev.completado && (
+                            <span className="inline-flex items-center gap-1 font-bold text-emerald-700">
+                              <CheckCircle2 className="w-3 h-3 shrink-0" />
+                              Completada
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Pie */}
+              <div className="px-5 py-3 border-t border-slate-100 bg-slate-50/60 flex justify-end shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setSelectedDayModal(null)}
+                  className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs transition-all cursor-pointer"
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Modal flotante de Solo Lectura con todos los detalles del trabajo */}
       {selectedEvento && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl shadow-2xl border border-slate-200/90 w-full max-w-lg overflow-hidden flex flex-col">
             {/* Cabecera del modal */}
             <div className="p-5 border-b border-slate-100 flex items-start justify-between bg-slate-50/60">
@@ -1452,9 +1795,9 @@ export default function Calendario() {
                       </div>
                     </div>
 
-                    <div className="pt-1.5 border-t border-slate-200/60 flex items-center justify-between">
+                    <div className="pt-2 border-t border-slate-200/60 flex flex-col items-start gap-2">
                       {selectedEvento.poblacion && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-sky-50 text-sky-800 border border-sky-200 rounded-md text-[10px] font-bold">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-sky-50 text-sky-800 border border-sky-200 rounded-md text-[10px] font-bold break-words max-w-full">
                           📍 {selectedEvento.poblacion}
                         </span>
                       )}
@@ -1462,7 +1805,7 @@ export default function Calendario() {
                         href={mapsUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 ml-auto px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 border border-slate-200 hover:border-slate-300 rounded-xl text-[11px] font-bold shadow-xs hover:shadow-sm transition-all cursor-pointer group"
+                        className="inline-flex items-center justify-center gap-1.5 w-full sm:w-auto px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 border border-slate-200 hover:border-slate-300 rounded-xl text-[11px] font-bold shadow-xs hover:shadow-sm transition-all cursor-pointer group"
                         title="Abrir ubicación en Google Maps"
                       >
                         {/* Icono oficial Google Maps Pin Multicolor */}
@@ -1589,7 +1932,12 @@ export default function Calendario() {
                           <button
                             key={est}
                             type="button"
-                            onClick={() => setEditEstado(est)}
+                            onClick={() => {
+                              setEditEstado(est);
+                              if (est === 'Finalizado' && selectedEvento.modulo !== 'Festivo') {
+                                setShowConfirmAlbaranModal(true);
+                              }
+                            }}
                             className={`px-2.5 py-1.5 rounded-lg text-[11px] font-extrabold border transition-all cursor-pointer text-center ${
                               isSelected ? activeColors : inactiveColors
                             }`}
@@ -1665,6 +2013,48 @@ export default function Calendario() {
                   {guardandoCambios ? 'Guardando...' : 'Guardar cambios'}
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de confirmación para hacer el albarán al pulsar Finalizado */}
+      {showConfirmAlbaranModal && selectedEvento && (
+        <div
+          className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-150"
+          onClick={() => setShowConfirmAlbaranModal(false)}
+        >
+          <div
+            className="bg-white rounded-3xl w-full max-w-sm shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-6 text-center space-y-3">
+              <div className="w-12 h-12 mx-auto rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                <ReceiptText className="w-6 h-6" />
+              </div>
+              <h3 className="text-base font-black text-slate-900 leading-snug">
+                ¿Quieres hacer el albarán de esta tarea?
+              </h3>
+              <p className="text-xs font-medium text-slate-500 line-clamp-2">
+                {selectedEvento.tituloCompleto || selectedEvento.lugar}
+              </p>
+            </div>
+            <div className="px-6 pb-6 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setShowConfirmAlbaranModal(false)}
+                className="flex-1 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm transition-colors cursor-pointer"
+              >
+                No
+              </button>
+              <button
+                type="button"
+                disabled={guardandoCambios}
+                onClick={() => handleIrAAlbaranDesdeCalendario(selectedEvento)}
+                className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm transition-colors shadow-sm cursor-pointer disabled:opacity-60"
+              >
+                Sí
+              </button>
             </div>
           </div>
         </div>

@@ -530,7 +530,7 @@ export function evaluarAnomaliasPorFecha(eq: any, sistema?: any, items?: Checkli
 
     if (isExtintor) {
         if (caducado20 && !lineas.some((l: string) => l.includes("caducado + de 20 años"))) lineas.push("- Extintor caducado + de 20 años, se debe sustituir por equipo nuevo.");
-        if (retimbre5 && !lineas.some((l: string) => l.includes("retimbrado obligatorio")))  lineas.push("- Extintor necesita retimbrado obligatorio de los 5 años.");
+        if (!caducado20 && retimbre5 && !lineas.some((l: string) => l.includes("retimbrado obligatorio")))  lineas.push("- Extintor necesita retimbrado obligatorio de los 5 años.");
     } else if (isBie) {
         if (caducado20 && !lineas.some((l: string) => l.includes("caducado + de 20 años"))) lineas.push("- BIE caducado + de 20 años, se debe sustituir tramo de manguera según normativa.");
         if (retimbre5 && !lineas.some((l: string) => l.includes("prueba hidráulica")))  lineas.push("- BIE necesita realizar prueba hidráulica obligatoria cada 5 años.");
@@ -2840,16 +2840,16 @@ export default function RevisionChecklist() {
     return (
         <div className="min-h-screen bg-slate-50">
             {/* Top Navigation Bar */}
-            <div className="sticky top-0 z-20 bg-white/90 backdrop-blur-md border-b border-slate-200 px-4 sm:px-6 py-2.5 shadow-sm">
-                <div className="max-w-5xl mx-auto flex items-center justify-between gap-2">
+            <div className="sticky top-0 z-20 bg-white/90 backdrop-blur-md border-b border-slate-200 px-3 sm:px-6 py-2.5 shadow-sm">
+                <div className="max-w-5xl mx-auto flex flex-wrap items-center justify-between gap-2">
                     <button
                         onClick={() => navigate(-1)}
-                        className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors px-2.5 py-1.5 rounded-xl hover:bg-slate-100"
+                        className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors px-2 sm:px-2.5 py-1.5 rounded-xl hover:bg-slate-100 shrink-0"
                     >
                         <ArrowLeft className="w-4 h-4" /> Volver
                     </button>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2 min-w-0">
                         {/* Insignia Estado de Red */}
                         {isOnlineState ? (
                             <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full">
@@ -2897,7 +2897,7 @@ export default function RevisionChecklist() {
                 </div>
             </div>
 
-            <div className="max-w-5xl mx-auto px-6 py-8">
+            <div className="max-w-5xl mx-auto px-3 sm:px-6 py-4 sm:py-8">
                 {parte?.estado === 'Cerrado' && (
                     <div className="mb-6 p-4 bg-orange-50 border border-orange-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-orange-850 shadow-sm animate-in fade-in slide-in-from-top-3 duration-300">
                         <div className="flex items-center gap-3">
@@ -2935,42 +2935,42 @@ export default function RevisionChecklist() {
                     </div>
                 )}
                 {/* Header Card */}
-                <div className="mb-8 bg-white rounded-2xl border border-slate-200 overflow-hidden">
-                    <div className="px-6 py-6 border-b border-slate-100 relative">
-                        <h1 className="text-2xl font-bold text-slate-800 tracking-tight">
-                            Revisión del parte: <span className="text-slate-500 font-mono text-lg">{parte.numeroMantenimiento || parte.id}</span>
+                <div className="mb-6 sm:mb-8 bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                    <div className="px-4 sm:px-6 py-4 sm:py-6 border-b border-slate-100 relative">
+                        <h1 className="text-lg sm:text-2xl font-bold text-slate-800 tracking-tight break-words">
+                            Revisión del parte: <span className="text-slate-500 font-mono text-sm sm:text-lg break-all">{parte.numeroMantenimiento || parte.id}</span>
                         </h1>
                         
-                        <div className="mt-4 space-y-1">
-                            <div className="text-lg font-bold text-slate-800">
+                        <div className="mt-3 sm:mt-4 space-y-1">
+                            <div className="text-base sm:text-lg font-bold text-slate-800 break-words">
                                 {clientInfo?.nombre || 'Cliente'}
                             </div>
-                            <div className="text-base font-semibold text-slate-600 flex items-center gap-2 flex-wrap">
-                                <span>{centro.nombre}</span>
+                            <div className="text-sm sm:text-base font-semibold text-slate-600 flex items-center gap-2 flex-wrap">
+                                <span className="break-words">{centro.nombre}</span>
                                 {(centro.id || centro.customIdPart) && (
                                     <span className="text-xs font-mono font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
                                         {centro.id || centro.customIdPart}
                                     </span>
                                 )}
                             </div>
-                            <div className="text-sm text-slate-500">
+                            <div className="text-xs sm:text-sm text-slate-500 break-words">
                                 {centro.direccion}, {centro.poblacion}
                             </div>
-                            <div className="text-sm text-slate-500">
+                            <div className="text-xs sm:text-sm text-slate-500">
                                 Tipo de revisión: <span className="font-semibold text-slate-700">{parte.periodicidad || 'No definida'}</span>
                             </div>
                         </div>
                     </div>
                     
-                    <div className="px-6 py-4 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                        <div className="flex items-center gap-3">
+                    <div className="px-4 sm:px-6 py-3.5 sm:py-4 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+                        <div className="flex items-center gap-3 w-full sm:w-auto min-w-0">
                             {parte.tecnicoId ? (
-                                <div className="flex items-center gap-3">
-                                    <label className="text-sm font-medium text-slate-600">Técnico asignado:</label>
+                                <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3 w-full sm:w-auto min-w-0">
+                                    <label className="text-xs sm:text-sm font-medium text-slate-600 shrink-0">Técnico asignado:</label>
                                     <select
                                         value={parte.tecnicoId || ''}
                                         onChange={(e) => handleParteChange({ tecnicoId: e.target.value })}
-                                        className="bg-white border border-slate-200 rounded-lg text-sm px-3 py-1.5 focus:outline-none focus:border-sky-500 font-semibold text-sky-700"
+                                        className="w-full sm:w-auto min-w-0 bg-white border border-slate-200 rounded-lg text-sm px-3 py-1.5 focus:outline-none focus:border-sky-500 font-semibold text-sky-700"
                                     >
                                         <option value="">-- Seleccionar Técnico --</option>
                                         {tecnicos.map(t => (
@@ -2979,7 +2979,7 @@ export default function RevisionChecklist() {
                                     </select>
                                 </div>
                             ) : (
-                                <div className="relative">
+                                <div className="relative w-full sm:w-auto">
                                     <select
                                         value=""
                                         onChange={(e) => handleParteChange({ tecnicoId: e.target.value })}
@@ -2990,26 +2990,26 @@ export default function RevisionChecklist() {
                                             <option key={t.id} value={t.id}>{t.nombre} {t.apellidos}</option>
                                         ))}
                                     </select>
-                                    <button className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold transition-colors flex items-center gap-2 shadow-sm pointer-events-none">
+                                    <button className="w-full sm:w-auto justify-center px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold transition-colors flex items-center gap-2 shadow-sm pointer-events-none">
                                         Asignar Técnico
                                     </button>
                                 </div>
                             )}
                         </div>
                         
-                        <div className="flex items-center gap-3">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 sm:gap-3 w-full sm:w-auto min-w-0">
                             {parte.estado !== 'En revisión' && parte.estado !== 'Cerrado' && parte.estado !== 'Pre-Cerrado' && (
                                 <button
                                     onClick={() => handleParteChange({ estado: 'En revisión' })}
-                                    className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-semibold transition-colors flex items-center gap-2"
+                                    className="w-full sm:w-auto justify-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-semibold transition-colors flex items-center gap-2"
                                 >
                                     <CheckCircle2 className="w-4 h-4" /> Empezar revisión
                                 </button>
                             )}
                             {isSuperAdmin ? (
-                                <div className="flex items-center gap-1.5 text-sm bg-white px-3 py-1 rounded-lg border border-slate-300 shadow-sm focus-within:ring-2 focus-within:ring-indigo-500/30 min-w-[220px]">
+                                <div className="flex items-center gap-1.5 text-sm bg-white px-3 py-1.5 sm:py-1 rounded-lg border border-slate-300 shadow-sm focus-within:ring-2 focus-within:ring-indigo-500/30 w-full sm:w-auto min-w-0 sm:min-w-[220px]">
                                     <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${parte.estado === 'En revisión' ? 'bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.8)]' : parte.estado === 'Pre-Cerrado' ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.8)]' : parte.estado === 'Finalizado' ? 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.8)]' : parte.estado === 'Cerrado' ? 'bg-black shadow-[0_0_8px_rgba(0,0,0,0.6)]' : 'bg-zinc-400'}`}></div>
-                                    <span className="text-slate-500 font-medium">Estado:</span>
+                                    <span className="text-slate-500 font-medium shrink-0">Estado:</span>
                                     <select
                                         value={parte.estado || 'Abierto'}
                                         onChange={async (e) => {
@@ -3018,7 +3018,7 @@ export default function RevisionChecklist() {
                                             await handleParteChange({ estado: nuevoEstado as any });
                                             showToast(`Estado cambiado a: ${nuevoEstado}`);
                                         }}
-                                        className="bg-transparent font-bold text-slate-800 text-sm focus:outline-none cursor-pointer pr-1"
+                                        className="flex-1 min-w-0 bg-transparent font-bold text-slate-800 text-sm focus:outline-none cursor-pointer pr-1"
                                         title="Cambiar estado del parte (Exclusivo SuperAdmin)"
                                     >
                                         <option value="Abierto">Planificado (Abierto)</option>
@@ -3029,7 +3029,7 @@ export default function RevisionChecklist() {
                                     </select>
                                 </div>
                             ) : (
-                                <span className="flex items-center gap-1.5 text-sm text-slate-500 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm">
+                                <span className="flex items-center justify-center sm:justify-start gap-1.5 text-sm text-slate-500 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm w-full sm:w-auto">
                                     <div className={`w-2 h-2 rounded-full ${parte.estado === 'En revisión' ? 'bg-green-500' : (parte.estado === 'Cerrado' || parte.estado === 'Pre-Cerrado') ? 'bg-amber-500' : 'bg-slate-300'}`}></div>
                                     Estado: <span className="font-semibold text-slate-700">{parte.estado}</span>
                                 </span>

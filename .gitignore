@@ -24,3 +24,5 @@ dist-ssr
 *.sln
 *.sw?
 abanfoc.app2/
+functions/lib/
+functions/service-account*.json

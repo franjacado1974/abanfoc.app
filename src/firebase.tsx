@@ -269,6 +269,7 @@ export interface Presupuesto {
   pedidoId?: string;
   tipoTrabajo?: 'Reparación' | 'Instalación' | 'Prueba técnica' | string;
   anomaliasReporte?: any[];
+  documentosAdjuntos?: any[];
 }
 
 const app = initializeApp(firebaseConfig);

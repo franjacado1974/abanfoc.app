@@ -723,7 +723,7 @@ function TecnicoApp({ loggedUser, onLogout }: DashboardTecnicoProps) {
         </div>
         {/* Renderizamos Albaranes (que ya controla su propio layout/scroll) */}
         <div className="pb-20">
-          <Albaranes isTecnicoMode={true} />
+          <Albaranes isTecnicoMode={true} tipoAlbaranFiltro="facturacion" />
         </div>
       </div>
     );
@@ -917,6 +917,9 @@ export default function DashboardTecnico({ loggedUser, onLogout }: DashboardTecn
         <Route path="/pruebas-tecnicas" element={<PruebasTecnicas />} />
         <Route path="/urgencias" element={<Urgencias />} />
         <Route path="/partes-trabajo" element={<PartesTrabajoOperaciones isTecnicoMode={true} loggedUser={loggedUser} />} />
+        <Route path="/albaranes" element={<Albaranes isTecnicoMode={true} tipoAlbaranFiltro="facturacion" />} />
+        <Route path="/albaranes-revision" element={<Albaranes isTecnicoMode={true} tipoAlbaranFiltro="revision" />} />
+        <Route path="/albaranes-trabajo" element={<Albaranes isTecnicoMode={true} tipoAlbaranFiltro="trabajo" />} />
         <Route path="/notas" element={<Notas user={loggedUser} />} />
         <Route path="/revision-checklist" element={<RevisionChecklist />} />
       </Routes>

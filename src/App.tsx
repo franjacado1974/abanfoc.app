@@ -33,6 +33,7 @@ import Urgencias from './Urgencias';
 import Ajustes from './Ajustes';
 import Buzon from './Buzon';
 import RegistroHorario from './RegistroHorario';
+import { syncFirebaseAuthSession, clearFirebaseAuthSession } from './services/salamandraAuthService';
 import PruebasTecnicas from './PruebasTecnicas';
 import Papelera from './Papelera';
 import Metodos from './Metodos';
@@ -166,6 +167,7 @@ function Login({ usuarios: initialUsuarios, onLogin }: { usuarios: Usuario[], on
       if (remoteUser) {
         sessionStorage.setItem('firecheck_logged_user', JSON.stringify(remoteUser));
         localStorage.setItem('firecheck_logged_user', JSON.stringify(remoteUser));
+        void syncFirebaseAuthSession(username, password);
         onLogin(remoteUser);
         return;
       }
@@ -1644,9 +1646,9 @@ export function PlaceholderPage(props: { title: string; [key: string]: any }) {
 
 function PageLayout({ user, onLogout, appLogo, children }: { user: Usuario | null; onLogout: () => void; appLogo: string; children: React.ReactNode }) {
   return (
-    <div className="flex h-screen bg-[#F8FAFC]">
+    <div className="flex h-screen bg-[#F8FAFC] overflow-x-hidden">
       <Sidebar user={user} onLogout={onLogout} appLogo={appLogo} />
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 min-w-0 overflow-y-auto">
         {children}
       </div>
     </div>
@@ -1871,6 +1873,7 @@ export default function App() {
   const handleLogout = () => {
     sessionStorage.removeItem('firecheck_logged_user');
     localStorage.removeItem('firecheck_logged_user');
+    void clearFirebaseAuthSession();
     setLoggedUser(null);
     const stored = localStorage.getItem('firecheck_db_usuarios');
     if (stored) setAvailableUsers(JSON.parse(stored));
@@ -1878,8 +1881,31 @@ export default function App() {
 
 
 
-  // Detección de ruta pública: Portal del cliente para presupuestos
+  // Detección de ruta pública: Callback OAuth2 de OneDrive (popup)
   const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
+  if (pathname === '/onedrive-callback') {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    const error = params.get('error');
+    const errorDescription = params.get('error_description');
+    if (window.opener) {
+      window.opener.postMessage(
+        { type: 'ONEDRIVE_OAUTH_CALLBACK', code, error, errorDescription },
+        window.location.origin
+      );
+      window.close();
+    }
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6 text-center">
+        <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm max-w-sm">
+          <p className="text-sm font-bold text-slate-900">Conectando con Microsoft OneDrive...</p>
+          <p className="text-xs text-slate-500 mt-1">Puedes cerrar esta ventana si no se cierra automáticamente.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Detección de ruta pública: Portal del cliente para presupuestos
   if (pathname.startsWith('/portal-presupuesto/') || pathname.startsWith('/p/')) {
     const token = pathname.replace(/^\/(portal-presupuesto|p)\//, '').split('/')[0];
     return <PortalPresupuesto token={token} />;

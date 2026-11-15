@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Search, X, Download, Edit, Send, Trash2, Save, Package, PackagePlus, Wrench, Type, Calculator, CheckCircle, Clock, Ban, ChevronDown, ChevronUp, GripVertical, FileText, Plus, HardHat, Gauge, Check, Mail, Eye, Copy, ExternalLink, Activity, ShieldCheck, ArrowUp, ArrowDown, ArrowUpDown, Layers, ArrowLeft, Image as ImageIcon, Camera, AlertTriangle } from 'lucide-react';
+import { Search, X, Download, Edit, Send, Trash2, Save, Package, PackagePlus, Wrench, Type, Calculator, CheckCircle, Clock, Ban, ChevronDown, ChevronUp, GripVertical, FileText, Plus, HardHat, Gauge, Check, Mail, Eye, Copy, ExternalLink, Activity, ShieldCheck, ArrowUp, ArrowDown, ArrowUpDown, Layers, ArrowLeft, Image as ImageIcon, Camera, AlertTriangle, Loader2, Paperclip } from 'lucide-react';
+import PresupuestoAdjuntosOneDriveModal from './components/PresupuestoAdjuntosOneDriveModal';
 import { 
   subscribePresupuestos, addPresupuesto, updatePresupuesto, deletePresupuesto, 
   subscribeClientes, subscribeArticulos, subscribeCentros, subscribeImpuestos, subscribeEmpresas,
@@ -96,6 +97,8 @@ export default function Presupuestos() {
   const [showDetail, setShowDetail] = useState<Presupuesto | null>(null);
   const [showCatalogo, setShowCatalogo] = useState<'articulo' | 'servicio' | null>(null);
   const [presupuestoParaAcciones, setPresupuestoParaAcciones] = useState<Presupuesto | null>(null);
+  const [presupuestoParaAdjuntos, setPresupuestoParaAdjuntos] = useState<Presupuesto | null>(null);
+  const [pdfDownloadProgress, setPdfDownloadProgress] = useState<{ active: boolean; percent: number; stage: string; codigo: string } | null>(null);
   const [catalogoSearch, setCatalogoSearch] = useState('');
   const [limitePresupuestos, setLimitePresupuestos] = useState<number | 'todos'>(10);
 
@@ -285,16 +288,48 @@ export default function Presupuestos() {
     return () => { try { unsub1(); } catch {} try { unsub2(); } catch {} try { unsub3(); } catch {} try { unsub4(); } catch {} try { unsub5(); } catch {} try { unsub6(); } catch {} try { unsub7(); } catch {} };
   }, []);
 
-  // Detección de redirección con anomalías y edición directa
+  // Detección de redirección desde parte de trabajo o edición directa
   useEffect(() => {
+    if (location.state?.nuevoPresupuestoDesdeParte && !locationProcessedRef.current) {
+      const datos = location.state.nuevoPresupuestoDesdeParte;
+      locationProcessedRef.current = true;
+      setEditingPresupuesto(null);
+      setAnomaliasSplitList([]);
+      setMostrarPanelAnomalias(false);
+
+      const matchedCliente = clientes.find(c =>
+        c.id === datos.clienteId ||
+        (c as any)._docId === datos.clienteId ||
+        (datos.nombreCliente && c.nombre?.trim().toLowerCase() === datos.nombreCliente.trim().toLowerCase())
+      );
+      const matchedCentro = centros.find(c =>
+        c.id === datos.centroId ||
+        (c as any)._docId === datos.centroId
+      );
+
+      setFormTitulo(datos.titulo || '');
+      setFormClienteId(matchedCliente?.id || datos.clienteId || '');
+      setFormCentroId(matchedCentro?.id || datos.centroId || '');
+      setFormFechaValidez(new Date().toISOString().slice(0, 10));
+      setFormNotas(datos.numeroMantenimiento ? `Mantenimiento Nº: ${datos.numeroMantenimiento}${datos.nombreCentro ? ` - ${datos.nombreCentro}` : ''}` : '');
+      setFormIva(getDefaultIva());
+      setFormIvaExento(false);
+      setFormDescuento(0);
+      setFormLineas([]);
+      setTargetCapituloId(null);
+      setSelectedCapituloManual('');
+      setFormNewLinea({ familia: '', concepto: '', descripcion: '', cantidad: 1, precioUnidad: 0 });
+      setShowForm(true);
+      return;
+    }
+
     if (location.state?.editarPresupuestoId && !locationProcessedRef.current) {
       const targetId = location.state.editarPresupuestoId;
-      const anoms = location.state.anomalias || [];
       const found = presupuestos.find(p => p.id === targetId || p._docId === targetId);
       if (found) {
         locationProcessedRef.current = true;
-        setAnomaliasSplitList(anoms.length > 0 ? anoms : (found.anomaliasReporte || []));
-        setMostrarPanelAnomalias(true);
+        setAnomaliasSplitList([]);
+        setMostrarPanelAnomalias(false);
         handleEditar(found);
       } else {
         try {
@@ -302,14 +337,14 @@ export default function Presupuestos() {
           const f = list.find((p: any) => p.id === targetId || p._docId === targetId);
           if (f) {
             locationProcessedRef.current = true;
-            setAnomaliasSplitList(anoms.length > 0 ? anoms : (f.anomaliasReporte || []));
-            setMostrarPanelAnomalias(true);
+            setAnomaliasSplitList([]);
+            setMostrarPanelAnomalias(false);
             handleEditar(f);
           }
         } catch { /* ignore */ }
       }
     }
-  }, [location.state, presupuestos]);
+  }, [location.state, presupuestos, clientes, centros]);
 
   const anomaliasFiltradas = useMemo(() => {
     if (!anomaliasSplitList || anomaliasSplitList.length === 0) return [];
@@ -446,10 +481,8 @@ export default function Presupuestos() {
   // Abrir formulario para editar
   const handleEditar = (p: Presupuesto) => {
     setEditingPresupuesto(p);
-    if (p.anomaliasReporte && Array.isArray(p.anomaliasReporte) && p.anomaliasReporte.length > 0) {
-      setAnomaliasSplitList(p.anomaliasReporte);
-      setMostrarPanelAnomalias(true);
-    }
+    setAnomaliasSplitList([]);
+    setMostrarPanelAnomalias(false);
     setFormTitulo(p.titulo);
     setFormClienteId(p.clienteId);
     setFormCentroId(p.centroId || '');
@@ -745,6 +778,21 @@ export default function Presupuestos() {
     setFormLineas(prev => prev.filter(l => l.id !== id));
   };
 
+  // Duplicar línea del formulario justo debajo de la original
+  const handleDuplicarLinea = (index: number) => {
+    setFormLineas(prev => {
+      const original = prev[index];
+      if (!original) return prev;
+      const copia: EditablePresupuestoLinea = {
+        ...original,
+        id: `L-${generateId()}`,
+      };
+      const next = [...prev];
+      next.splice(index + 1, 0, copia);
+      return next;
+    });
+  };
+
   // Reordenar líneas (arrastrar y soltar)
   const handleDragStart = (index: number) => {
     setDraggedLineIndex(index);
@@ -814,6 +862,7 @@ export default function Presupuestos() {
           id: l.id || `CAP-${generateId()}`,
           tipo: 'capitulo',
           concepto: l.concepto || 'CAPÍTULO',
+          ...(l.descripcion ? { descripcion: l.descripcion } : {}),
           cantidad: 1,
           precioUnidad: 0,
           subtotal: subtotalCap,
@@ -1230,38 +1279,62 @@ export default function Presupuestos() {
   };
 
   // Descargar PDF
-  const handleDescargar = (p: Presupuesto) => {
-    let empresaSeleccionada: any = undefined;
-    const empId = (p as any).empresaId || centros.find(c => (c as any)._docId === (p as any).centroId || c.id === (p as any).centroId)?.empresaId;
-    if (empId) {
-      empresaSeleccionada = empresas.find(e => (e as any)._docId === empId || (e as any).id === empId || ((e as any).nombre && typeof (e as any).nombre === 'string' && (e as any).nombre.trim().toLowerCase() === empId.trim().toLowerCase()));
+  const handleDescargar = async (p: Presupuesto) => {
+    if (pdfDownloadProgress?.active) return;
+    const codigo = formatCodigoPresupuesto(p.numeroPresupuesto, p.id);
+    setPdfDownloadProgress({ active: true, percent: 5, stage: 'Iniciando generación de PDF...', codigo });
+
+    try {
+      let empresaSeleccionada: any = undefined;
+      const empId = (p as any).empresaId || centros.find(c => (c as any)._docId === (p as any).centroId || c.id === (p as any).centroId)?.empresaId;
+      if (empId) {
+        empresaSeleccionada = empresas.find(e => (e as any)._docId === empId || (e as any).id === empId || ((e as any).nombre && typeof (e as any).nombre === 'string' && (e as any).nombre.trim().toLowerCase() === empId.trim().toLowerCase()));
+      }
+      const clienteObj = clientes.find(c => (c as any)._docId === p.clienteId || c.id === p.clienteId || (c.nombre && c.nombre === p.nombreCliente));
+      await generarPresupuestoPDF({
+        titulo: p.titulo,
+        numeroPresupuesto: p.numeroPresupuesto,
+        nombreCliente: p.nombreCliente || clienteObj?.nombre || 'Cliente',
+        cliente: clienteObj,
+        fechaCreacion: p.fechaCreacion,
+        fechaValidez: p.fechaValidez,
+        estado: p.estado,
+        lineas: p.lineas.map(l => ({
+          tipo: l.tipo,
+          capitulo: l.capitulo,
+          capituloId: l.capituloId,
+          familia: l.familia,
+          concepto: l.concepto,
+          descripcion: l.descripcion,
+          codigo: l.codigo,
+          fotoUrl: l.fotoUrl,
+          cantidad: l.cantidad,
+          precioUnidad: l.precioUnidad,
+          subtotal: l.subtotal,
+        })),
+        subtotal: p.subtotal,
+        descuentoPorcentaje: p.descuentoPorcentaje,
+        descuentoImporte: p.descuentoImporte,
+        iva: p.iva,
+        total: p.total,
+        notas: p.notas,
+      }, empresaSeleccionada, (percent, stage) => {
+        setPdfDownloadProgress({
+          active: true,
+          percent,
+          stage: stage || 'Generando documento...',
+          codigo,
+        });
+      });
+
+      setPdfDownloadProgress({ active: true, percent: 100, stage: '¡PDF generado y descargado!', codigo });
+      setTimeout(() => {
+        setPdfDownloadProgress(null);
+      }, 900);
+    } catch (err) {
+      console.error('Error al generar PDF:', err);
+      setPdfDownloadProgress(null);
     }
-    const clienteObj = clientes.find(c => (c as any)._docId === p.clienteId || c.id === p.clienteId || (c.nombre && c.nombre === p.nombreCliente));
-    generarPresupuestoPDF({
-      titulo: p.titulo,
-      numeroPresupuesto: p.numeroPresupuesto,
-      nombreCliente: p.nombreCliente || clienteObj?.nombre || 'Cliente',
-      cliente: clienteObj,
-      fechaCreacion: p.fechaCreacion,
-      fechaValidez: p.fechaValidez,
-      estado: p.estado,
-      lineas: p.lineas.map(l => ({
-        familia: l.familia,
-        concepto: l.concepto,
-        descripcion: l.descripcion,
-        codigo: l.codigo,
-        fotoUrl: l.fotoUrl,
-        cantidad: l.cantidad,
-        precioUnidad: l.precioUnidad,
-        subtotal: l.subtotal,
-      })),
-      subtotal: p.subtotal,
-      descuentoPorcentaje: p.descuentoPorcentaje,
-      descuentoImporte: p.descuentoImporte,
-      iva: p.iva,
-      total: p.total,
-      notas: p.notas,
-    }, empresaSeleccionada);
   };
 
   // Obtener info del estado
@@ -1456,7 +1529,6 @@ export default function Presupuestos() {
                     </div>
                   </th>
                   <th className="px-4 py-3 text-right">Importe</th>
-                  <th className="px-4 py-3 text-center">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
@@ -1467,7 +1539,9 @@ export default function Presupuestos() {
                   return (
                     <tr 
                       key={p.id} 
-                      className={`transition-all duration-150 group ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100/80'} hover:bg-amber-100/90 hover:shadow-xs`}
+                      onClick={() => setPresupuestoParaAcciones(p)}
+                      title="Clic para ver opciones y acciones"
+                      className={`transition-all duration-150 group cursor-pointer ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100/80'} hover:bg-amber-100/90 hover:shadow-xs`}
                     >
                       <td className="px-4 py-2.5">
                         <p className="text-xs font-mono font-bold text-zinc-800">{formatCodigoPresupuesto(p.numeroPresupuesto, p.id)}</p>
@@ -1504,6 +1578,19 @@ export default function Presupuestos() {
                               <Eye className="w-2.5 h-2.5" /> {p.seguimiento.visitasCount} {p.seguimiento.visitasCount === 1 ? 'visita' : 'visitas'}
                             </span>
                           ) : null}
+                          {Array.isArray(p.documentosAdjuntos) && p.documentosAdjuntos.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setPresupuestoParaAdjuntos(p);
+                              }}
+                              className="text-[9px] font-bold text-sky-700 bg-sky-50 hover:bg-sky-100 px-1.5 py-0.5 rounded-md border border-sky-200 inline-flex items-center gap-1 cursor-pointer"
+                              title="Ver documentos adjuntos en OneDrive"
+                            >
+                              <Paperclip className="w-2.5 h-2.5" /> {p.documentosAdjuntos.length} {p.documentosAdjuntos.length === 1 ? 'adjunto' : 'adjuntos'}
+                            </button>
+                          )}
                         </div>
                       </td>
                       <td className="px-4 py-2.5 text-right">
@@ -1513,16 +1600,6 @@ export default function Presupuestos() {
                             Dto. {Number(p.descuentoPorcentaje)}%
                           </span>
                         ) : null}
-                      </td>
-                      <td className="px-4 py-2.5 text-center">
-                        <button
-                          onClick={() => setPresupuestoParaAcciones(p)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 hover:text-zinc-900 rounded-xl text-xs font-bold transition-all border border-zinc-200/80 shadow-xs hover:shadow cursor-pointer"
-                          title="Ver opciones y acciones disponibles"
-                        >
-                          <span>Selecciona</span>
-                          <ChevronDown className="w-3.5 h-3.5 text-zinc-500" />
-                        </button>
                       </td>
                     </tr>
                   );
@@ -2084,54 +2161,66 @@ export default function Presupuestos() {
                                     </div>
                                   </td>
                                   <td colSpan={4} className="px-3 py-2">
-                                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                                      <div className="flex items-center gap-1.5 shrink-0">
-                                        <span className="inline-flex items-center gap-1 bg-amber-200 text-amber-950 text-[10px] font-black uppercase px-2 py-1 rounded shadow-xs border border-amber-300">
-                                          <Layers className="w-3 h-3 text-amber-800" /> Capítulo
-                                        </span>
+                                    <div className="flex flex-col gap-1.5">
+                                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                                        <div className="flex items-center gap-1.5 shrink-0">
+                                          <span className="inline-flex items-center gap-1 bg-amber-200 text-amber-950 text-[10px] font-black uppercase px-2 py-1 rounded shadow-xs border border-amber-300">
+                                            <Layers className="w-3 h-3 text-amber-800" /> Capítulo
+                                          </span>
+                                        </div>
+                                        <input
+                                          type="text"
+                                          value={l.concepto}
+                                          onChange={(e) => {
+                                            const val = e.target.value;
+                                            setFormLineas(prev => prev.map(li => li.id === l.id ? { ...li, concepto: val } : li));
+                                          }}
+                                          placeholder="Título del capítulo (ej. 1. EXTINCIÓN DE INCENDIOS)..."
+                                          className="flex-1 px-3 py-1 font-bold uppercase tracking-tight bg-white border border-amber-300 rounded-lg text-xs text-amber-950 placeholder:font-normal placeholder:normal-case placeholder:text-amber-700/50 focus:ring-1 focus:ring-amber-500 focus:border-amber-500 outline-none"
+                                        />
+                                        <div className="flex items-center gap-1 shrink-0">
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setTargetCapituloId(l.id);
+                                              setShowCatalogo('articulo');
+                                            }}
+                                            className="flex items-center gap-1 px-2 py-1 text-[11px] font-bold text-amber-900 bg-amber-200/70 hover:bg-amber-200 border border-amber-300 rounded-lg transition-colors cursor-pointer"
+                                            title="Añadir artículo a este capítulo"
+                                          >
+                                            <Package className="w-3 h-3 text-amber-700" /> + Art.
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setTargetCapituloId(l.id);
+                                              setShowCatalogo('servicio');
+                                            }}
+                                            className="flex items-center gap-1 px-2 py-1 text-[11px] font-bold text-amber-900 bg-amber-200/70 hover:bg-amber-200 border border-amber-300 rounded-lg transition-colors cursor-pointer"
+                                            title="Añadir servicio a este capítulo"
+                                          >
+                                            <Wrench className="w-3 h-3 text-amber-700" /> + Serv.
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleOpenCrearArticulo(l.id)}
+                                            className="flex items-center gap-1 px-2 py-1 text-[11px] font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors cursor-pointer shadow-xs active:scale-95"
+                                            title="Crear nuevo artículo y añadir a este capítulo"
+                                          >
+                                            <Plus className="w-3 h-3" /> + Crear
+                                          </button>
+                                        </div>
                                       </div>
-                                      <input
-                                        type="text"
-                                        value={l.concepto}
+                                      <textarea
+                                        rows={2}
+                                        value={l.descripcion || ''}
                                         onChange={(e) => {
                                           const val = e.target.value;
-                                          setFormLineas(prev => prev.map(li => li.id === l.id ? { ...li, concepto: val } : li));
+                                          setFormLineas(prev => prev.map(li => li.id === l.id ? { ...li, descripcion: val } : li));
                                         }}
-                                        placeholder="Título del capítulo (ej. 1. EXTINCIÓN DE INCENDIOS)..."
-                                        className="flex-1 px-3 py-1 font-bold uppercase tracking-tight bg-white border border-amber-300 rounded-lg text-xs text-amber-950 placeholder:font-normal placeholder:normal-case placeholder:text-amber-700/50 focus:ring-1 focus:ring-amber-500 focus:border-amber-500 outline-none"
+                                        placeholder="Descripción o explicación del capítulo (admite mayúsculas y minúsculas)..."
+                                        className="w-full px-3 py-1.5 bg-white/95 border border-amber-200 rounded-lg text-xs text-zinc-700 placeholder:text-amber-700/50 focus:ring-1 focus:ring-amber-500 focus:border-amber-500 outline-none resize-y leading-snug"
                                       />
-                                      <div className="flex items-center gap-1 shrink-0">
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            setTargetCapituloId(l.id);
-                                            setShowCatalogo('articulo');
-                                          }}
-                                          className="flex items-center gap-1 px-2 py-1 text-[11px] font-bold text-amber-900 bg-amber-200/70 hover:bg-amber-200 border border-amber-300 rounded-lg transition-colors cursor-pointer"
-                                          title="Añadir artículo a este capítulo"
-                                        >
-                                          <Package className="w-3 h-3 text-amber-700" /> + Art.
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            setTargetCapituloId(l.id);
-                                            setShowCatalogo('servicio');
-                                          }}
-                                          className="flex items-center gap-1 px-2 py-1 text-[11px] font-bold text-amber-900 bg-amber-200/70 hover:bg-amber-200 border border-amber-300 rounded-lg transition-colors cursor-pointer"
-                                          title="Añadir servicio a este capítulo"
-                                        >
-                                          <Wrench className="w-3 h-3 text-amber-700" /> + Serv.
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => handleOpenCrearArticulo(l.id)}
-                                          className="flex items-center gap-1 px-2 py-1 text-[11px] font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors cursor-pointer shadow-xs active:scale-95"
-                                          title="Crear nuevo artículo y añadir a este capítulo"
-                                        >
-                                          <Plus className="w-3 h-3" /> + Crear
-                                        </button>
-                                      </div>
                                     </div>
                                   </td>
                                   <td className="px-3 py-2 text-right">
@@ -2285,10 +2374,25 @@ export default function Presupuestos() {
                                   />
                                 </td>
                                 <td className="px-3 py-2 text-right font-bold text-zinc-800">{formatMoneda(l.cantidad * l.precioUnidad)}</td>
-                                <td className="px-3 py-2 text-center">
-                                  <button onClick={() => handleRemoveLinea(l.id)} className="p-1 text-zinc-300 hover:text-red-500 rounded transition-colors cursor-pointer">
-                                    <X className="w-3.5 h-3.5" />
-                                  </button>
+                                <td className="px-2 py-2 text-center">
+                                  <div className="flex items-center justify-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDuplicarLinea(i)}
+                                      className="p-1 text-zinc-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors cursor-pointer"
+                                      title="Duplicar línea"
+                                    >
+                                      <Copy className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveLinea(l.id)}
+                                      className="p-1 text-zinc-300 hover:text-red-500 hover:bg-red-50 rounded transition-colors cursor-pointer"
+                                      title="Eliminar línea"
+                                    >
+                                      <X className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
                                 </td>
                               </tr>
                             );
@@ -2474,20 +2578,21 @@ export default function Presupuestos() {
               </div>
 
               {/* Totales */}
-              <div className="border-t border-zinc-100 pt-4 flex flex-col items-end gap-1">
-                <div className="text-sm text-zinc-500">Subtotal: <span className="font-bold text-zinc-800">{formatMoneda(formSubtotal)}</span></div>
+              <div className="border-t border-zinc-100 pt-4 flex flex-col items-end gap-1.5">
+                <div className="text-sm text-zinc-500">Total presupuesto: <span className="font-bold text-zinc-800">{formatMoneda(formSubtotal)}</span></div>
                 {formDescuento > 0 && (
-                  <div className="w-full max-w-sm border-y-2 border-zinc-200 py-2 my-1 flex items-center justify-between text-xs font-bold text-red-600">
-                    <span>Descuento sobre el subtotal: {formDescuento.toFixed(2).replace('.', ',')} %</span>
+                  <div className="w-full max-w-sm border-y border-zinc-200 py-1.5 my-0.5 flex items-center justify-between text-xs font-bold text-red-600">
+                    <span>Descuento ({formDescuento.toFixed(2).replace('.', ',')}%):</span>
                     <span>-{formatMoneda(formDescuentoImporte)}</span>
                   </div>
                 )}
+                <div className="text-sm text-zinc-600 font-semibold">Subtotal sin impuestos: <span className="font-bold text-zinc-900">{formatMoneda(formBaseImponible)}</span></div>
                 {formIvaExento ? (
                   <div className="text-sm text-zinc-500">IVA: <span className="font-bold text-zinc-800">Exento (0%)</span></div>
                 ) : (
                   <div className="text-sm text-zinc-500">IVA ({formIva}%): <span className="font-bold text-zinc-800">{formatMoneda(formBaseImponible * formIva / 100)}</span></div>
                 )}
-                <div className="text-lg font-black text-orange-600">TOTAL: {formatMoneda(formTotal)}</div>
+                <div className="text-lg font-black text-orange-600 border-t border-zinc-300 pt-1 mt-0.5">TOTAL con impuestos: {formatMoneda(formTotal)}</div>
                 {formIvaExento && (
                   <div className="text-[10px] text-zinc-400 italic text-right max-w-xs mt-1">
                     Factura exenta de IVA por inversión del sujeto pasivo de acuerdo con el artículo 84 letra f-Uno. 2º - Ley 37/1992 - art. 5 Ley 7/2012
@@ -3619,20 +3724,59 @@ export default function Presupuestos() {
               {/* 5. Descargar PDF Oficial */}
               <button
                 type="button"
+                disabled={!!pdfDownloadProgress?.active}
                 onClick={() => {
                   handleDescargar(presupuestoParaAcciones);
                 }}
-                className="w-full text-left p-3.5 rounded-2xl border border-zinc-200/80 hover:border-teal-400 bg-white hover:bg-teal-50/40 transition-all flex items-start gap-3.5 group cursor-pointer shadow-xs hover:shadow"
+                className="w-full text-left p-3.5 rounded-2xl border border-zinc-200/80 hover:border-teal-400 bg-white hover:bg-teal-50/40 transition-all flex items-start gap-3.5 group cursor-pointer shadow-xs hover:shadow disabled:opacity-60 disabled:cursor-wait"
               >
                 <div className="w-10 h-10 rounded-xl bg-teal-100 text-teal-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-                  <Download className="w-5 h-5" />
+                  {pdfDownloadProgress?.active ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <Download className="w-5 h-5" />
+                  )}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-bold text-zinc-900 group-hover:text-teal-900 transition-colors">
-                    Descargar PDF Oficial
+                    {pdfDownloadProgress?.active
+                      ? `Generando PDF (${pdfDownloadProgress.percent}%)...`
+                      : 'Descargar PDF Oficial'}
                   </p>
                   <p className="text-xs text-zinc-500 mt-0.5 leading-relaxed">
-                    Generar y descargar el documento PDF con membrete de la empresa, familias y desglose.
+                    {pdfDownloadProgress?.active
+                      ? pdfDownloadProgress.stage
+                      : 'Generar y descargar el documento PDF con membrete de la empresa, familias y desglose.'}
+                  </p>
+                </div>
+              </button>
+
+              {/* 5b. Adjuntar documento (OneDrive) */}
+              <button
+                type="button"
+                onClick={() => {
+                  const p = presupuestoParaAcciones;
+                  setPresupuestoParaAcciones(null);
+                  setPresupuestoParaAdjuntos(p);
+                }}
+                className="w-full text-left p-3.5 rounded-2xl border border-zinc-200/80 hover:border-sky-400 bg-white hover:bg-sky-50/40 transition-all flex items-start gap-3.5 group cursor-pointer shadow-xs hover:shadow"
+              >
+                <div className="w-10 h-10 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <Paperclip className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-bold text-zinc-900 group-hover:text-sky-900 transition-colors">
+                      Adjuntar documento
+                    </p>
+                    {Array.isArray(presupuestoParaAcciones.documentosAdjuntos) && presupuestoParaAcciones.documentosAdjuntos.length > 0 && (
+                      <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 border border-sky-200">
+                        {presupuestoParaAcciones.documentosAdjuntos.length} archivo{presupuestoParaAcciones.documentosAdjuntos.length !== 1 ? 's' : ''}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-zinc-500 mt-0.5 leading-relaxed">
+                    Subir, previsualizar, descargar o eliminar adjuntos en OneDrive junto con copia del presupuesto.
                   </p>
                 </div>
               </button>
@@ -3706,6 +3850,70 @@ export default function Presupuestos() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* INDICADOR DE PROGRESO DE GENERACIÓN Y DESCARGA DE PDF */}
+      {pdfDownloadProgress?.active && (
+        <div className="fixed bottom-6 right-6 z-[200] w-80 sm:w-96 bg-white rounded-2xl shadow-2xl border border-teal-200 p-4 animate-in fade-in slide-in-from-bottom-4 duration-200">
+          <div className="flex items-center justify-between gap-3 mb-2.5">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                pdfDownloadProgress.percent >= 100
+                  ? 'bg-emerald-100 text-emerald-600'
+                  : 'bg-teal-100 text-teal-700'
+              }`}>
+                {pdfDownloadProgress.percent >= 100 ? (
+                  <CheckCircle className="w-5 h-5" />
+                ) : (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                )}
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-extrabold text-zinc-900 truncate">
+                  {pdfDownloadProgress.percent >= 100 ? 'Descarga completada' : 'Generando documento PDF'}
+                </p>
+                <p className="text-[11px] font-mono font-semibold text-zinc-500 truncate">
+                  {pdfDownloadProgress.codigo}
+                </p>
+              </div>
+            </div>
+            <span className={`text-base font-black tabular-nums shrink-0 ${
+              pdfDownloadProgress.percent >= 100 ? 'text-emerald-600' : 'text-teal-700'
+            }`}>
+              {pdfDownloadProgress.percent}%
+            </span>
+          </div>
+          <div className="w-full h-2.5 bg-zinc-100 rounded-full overflow-hidden border border-zinc-200/70">
+            <div
+              className={`h-full rounded-full transition-all duration-200 ease-out ${
+                pdfDownloadProgress.percent >= 100 ? 'bg-emerald-500' : 'bg-teal-600'
+              }`}
+              style={{ width: `${pdfDownloadProgress.percent}%` }}
+            />
+          </div>
+          <p className="text-[11px] font-medium text-zinc-600 mt-2 truncate">
+            {pdfDownloadProgress.stage}
+          </p>
+        </div>
+      )}
+
+      {/* MODAL DE DOCUMENTOS ADJUNTOS EN ONEDRIVE */}
+      {presupuestoParaAdjuntos && (
+        <PresupuestoAdjuntosOneDriveModal
+          presupuesto={presupuestoParaAdjuntos}
+          clientes={clientes}
+          centros={centros}
+          empresas={empresas}
+          onClose={() => setPresupuestoParaAdjuntos(null)}
+          onUpdatePresupuestoLocal={(updated) => {
+            setPresupuestoParaAdjuntos(updated);
+            setPresupuestos((prev) =>
+              prev.map((item) =>
+                item.id === updated.id || (item._docId && item._docId === updated._docId) ? updated : item
+              )
+            );
+          }}
+        />
       )}
 
       {/* TOAST DE ÉXITO */}

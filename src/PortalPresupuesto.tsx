@@ -191,6 +191,9 @@ export default function PortalPresupuesto({ token }: PortalPresupuestoProps) {
         fechaValidez: presupuesto.fechaValidez,
         estado: presupuesto.estado,
         lineas: (presupuesto.lineas || []).map(l => ({
+          tipo: l.tipo,
+          capitulo: l.capitulo,
+          capituloId: l.capituloId,
           familia: l.familia,
           concepto: l.concepto,
           descripcion: l.descripcion,

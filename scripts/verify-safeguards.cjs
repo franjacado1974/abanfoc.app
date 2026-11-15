@@ -2029,6 +2029,210 @@ if (fs.existsSync(pdfGenPath)) {
     }
   }
 
+  // ============================================================================
+  // REGLA 131: Blindaje de Capítulos en Azul, Descripción, Progreso PDF, Desglose de Totales y Duplicar Línea en Presupuestos
+  // ============================================================================
+  const presPath131 = path.join(__dirname, '..', 'src', 'Presupuestos.tsx');
+  const pdfGenPath131 = path.join(__dirname, '..', 'src', 'pdfGenerator.ts');
+
+  if (fs.existsSync(presPath131)) {
+    const pContent131 = fs.readFileSync(presPath131, 'utf8');
+    if (!pContent131.includes('tipo: l.tipo') || !pContent131.includes('handleDuplicarLinea') || !pContent131.includes('pdfDownloadProgress')) {
+      errors.push('CRÍTICO: Presupuestos.tsx carece de paso de tipo en descarga, duplicación de líneas o indicador de progreso PDF (REGLA 131).');
+    }
+    if (!pContent131.includes('Total presupuesto:') || !pContent131.includes('Subtotal sin impuestos:') || !pContent131.includes('TOTAL con impuestos:')) {
+      errors.push('CRÍTICO: Presupuestos.tsx no mantiene el desglose de totales (Total presupuesto / Subtotal sin impuestos / TOTAL con impuestos) (REGLA 131).');
+    }
+  }
+  if (fs.existsSync(pdfGenPath131)) {
+    const pdfContent131 = fs.readFileSync(pdfGenPath131, 'utf8');
+    if (!pdfContent131.includes('isCapitulo') || !pdfContent131.includes("'CAPÍTULO:'") || !pdfContent131.includes('_savedCapText')) {
+      errors.push('CRÍTICO: pdfGenerator.ts carece de resaltado de capítulos en azul, código CAPÍTULO: o descripción debajo del título (REGLA 131).');
+    }
+    if (!pdfContent131.includes("'Total presupuesto:'") || !pdfContent131.includes("'Subtotal sin impuestos:'") || !pdfContent131.includes("'TOTAL con impuestos:'")) {
+      errors.push('CRÍTICO: pdfGenerator.ts no mantiene el desglose de totales (Total presupuesto / Subtotal sin impuestos / TOTAL con impuestos) (REGLA 131).');
+    }
+    if (!pdfContent131.includes('onProgress?:')) {
+      errors.push('CRÍTICO: pdfGenerator.ts carece del callback onProgress en generarPresupuestoPDF (REGLA 131).');
+    }
+  }
+
+  // ============================================================================
+  // REGLA 132: Blindaje de Albarán PDF en 1 línea, Móvil (Calendario, Partes, Técnico) y Flujo Finalizado -> Albarán
+  // ============================================================================
+  if (fs.existsSync(pdfGenPath131)) {
+    const pdfContent132 = fs.readFileSync(pdfGenPath131, 'utf8');
+    if (!pdfContent132.includes("content: `IVA (${ivaPorc}%):`, colSpan: 2") || !pdfContent132.includes("content: 'Total + IVA:', colSpan: 2")) {
+      errors.push('CRÍTICO: pdfGenerator.ts debe mantener colSpan: 2 en IVA y Total + IVA para evitar saltos a 2 líneas (REGLA 132).');
+    }
+  }
+
+  const calPath132 = path.join(__dirname, '..', 'src', 'Calendario.tsx');
+  if (fs.existsSync(calPath132)) {
+    const calContent132 = fs.readFileSync(calPath132, 'utf8');
+    if (!calContent132.includes('selectedDayModal') || !calContent132.includes('z-[90]')) {
+      errors.push('CRÍTICO: Calendario.tsx carece del modal ampliado de día para móvil (selectedDayModal) (REGLA 132).');
+    }
+    if (!calContent132.includes('showConfirmAlbaranModal') || !calContent132.includes('handleIrAAlbaranDesdeCalendario') || !calContent132.includes('¿Quieres hacer el albarán de esta tarea?')) {
+      errors.push('CRÍTICO: Calendario.tsx carece del modal de confirmación para generar/abrir el albarán al pulsar Finalizado (REGLA 132).');
+    }
+    if (!calContent132.includes('showTiposDropdown') || !calContent132.includes('tiposDropdownRef')) {
+      errors.push('CRÍTICO: Calendario.tsx carece del desplegable móvil de tipos de tareas (showTiposDropdown) (REGLA 132).');
+    }
+  }
+
+  const appPath132 = path.join(__dirname, '..', 'src', 'App.tsx');
+  if (fs.existsSync(appPath132)) {
+    const appContent132 = fs.readFileSync(appPath132, 'utf8');
+    if (!appContent132.includes('flex-1 min-w-0 overflow-y-auto')) {
+      errors.push('CRÍTICO: App.tsx PageLayout debe mantener min-w-0 en el contenedor flex-1 para evitar desbordamiento horizontal en móvil (REGLA 132).');
+    }
+  }
+
+  const ptTecPath132 = path.join(__dirname, '..', 'src', 'PartesTecnico.tsx');
+  if (fs.existsSync(ptTecPath132)) {
+    const ptTecContent132 = fs.readFileSync(ptTecPath132, 'utf8');
+    if (!ptTecContent132.includes('grid grid-cols-2 md:flex')) {
+      errors.push('CRÍTICO: PartesTecnico.tsx debe mantener la distribución móvil de búsqueda y estado en 2 columnas debajo de la fecha (REGLA 132).');
+    }
+  }
+
+  const ptoPath132 = path.join(__dirname, '..', 'src', 'PartesTrabajoOperaciones.tsx');
+  if (fs.existsSync(ptoPath132)) {
+    const ptoContent132 = fs.readFileSync(ptoPath132, 'utf8');
+    if (!ptoContent132.includes('showTipoDropdown') || !ptoContent132.includes('tipoDropdownRef')) {
+      errors.push('CRÍTICO: PartesTrabajoOperaciones.tsx carece del desplegable móvil de tipos de tareas en modo técnico (REGLA 132).');
+    }
+  }
+
+  const dtPath132 = path.join(__dirname, '..', 'src', 'DashboardTecnico.tsx');
+  if (fs.existsSync(dtPath132)) {
+    const dtContent132 = fs.readFileSync(dtPath132, 'utf8');
+    if (!dtContent132.includes('<Albaranes isTecnicoMode={true} tipoAlbaranFiltro="facturacion" />')) {
+      errors.push('CRÍTICO: DashboardTecnico.tsx debe abrir Albaranes en modo facturación (tipoAlbaranFiltro="facturacion") (REGLA 132).');
+    }
+  }
+
+  if (fs.existsSync(albaranesPath130)) {
+    const albContent132 = fs.readFileSync(albaranesPath130, 'utf8');
+    if (!albContent132.includes('editAlbaranId')) {
+      errors.push('CRÍTICO: Albaranes.tsx carece del soporte editAlbaranId para abrir albaranes existentes desde Calendario (REGLA 132).');
+    }
+  }
+
+  // REGLA 133: Blindaje de integración segura OneDrive + Make (Firebase Custom Token + Proxy) y maquetación ancha/suave de capítulos en PDF de Presupuestos
+  const fnIndexPath133 = path.join(__dirname, '..', 'functions', 'src', 'index.ts');
+  if (!fs.existsSync(fnIndexPath133)) {
+    errors.push('CRÍTICO: Falta functions/src/index.ts con salamandraAuth y onedriveProxy (REGLA 133).');
+  } else {
+    const fnIndexContent = fs.readFileSync(fnIndexPath133, 'utf8');
+    if (
+      !fnIndexContent.includes('export const salamandraAuth') ||
+      !fnIndexContent.includes('export const onedriveProxy') ||
+      !fnIndexContent.includes('verifyIdToken') ||
+      !fnIndexContent.includes('MAKE_ONEDRIVE_WEBHOOK_URL')
+    ) {
+      errors.push('CRÍTICO: functions/src/index.ts debe mantener salamandraAuth, onedriveProxy, verifyIdToken y MAKE_ONEDRIVE_WEBHOOK_URL (REGLA 133).');
+    }
+  }
+
+  const authSvcPath133 = path.join(__dirname, '..', 'src', 'services', 'salamandraAuthService.ts');
+  if (!fs.existsSync(authSvcPath133)) {
+    errors.push('CRÍTICO: Falta src/services/salamandraAuthService.ts (REGLA 133).');
+  } else {
+    const authSvcContent = fs.readFileSync(authSvcPath133, 'utf8');
+    if (
+      !authSvcContent.includes('syncFirebaseAuthSession') ||
+      !authSvcContent.includes('getSalamandraIdToken') ||
+      !authSvcContent.includes('clearFirebaseAuthSession') ||
+      !authSvcContent.includes('authStateReady')
+    ) {
+      errors.push('CRÍTICO: salamandraAuthService.ts debe mantener syncFirebaseAuthSession, getSalamandraIdToken, clearFirebaseAuthSession y authStateReady (REGLA 133).');
+    }
+  }
+
+  if (fs.existsSync(appPath132)) {
+    const appContent133 = fs.readFileSync(appPath132, 'utf8');
+    if (!appContent133.includes('syncFirebaseAuthSession') || !appContent133.includes('clearFirebaseAuthSession')) {
+      errors.push('CRÍTICO: App.tsx debe mantener syncFirebaseAuthSession y clearFirebaseAuthSession (REGLA 133).');
+    }
+  }
+
+  const modalOneDrivePath133 = path.join(__dirname, '..', 'src', 'components', 'PresupuestoAdjuntosOneDriveModal.tsx');
+  if (!fs.existsSync(modalOneDrivePath133)) {
+    errors.push('CRÍTICO: Falta src/components/PresupuestoAdjuntosOneDriveModal.tsx (REGLA 133).');
+  } else {
+    const modalOneDriveContent = fs.readFileSync(modalOneDrivePath133, 'utf8');
+    if (!modalOneDriveContent.includes('max-w-4xl') || !modalOneDriveContent.includes('25 MB')) {
+      errors.push('CRÍTICO: PresupuestoAdjuntosOneDriveModal.tsx debe mantener la ventana ampliada (max-w-4xl) y el límite de 25 MB (REGLA 133).');
+    }
+  }
+
+  const pdfGenPath133 = path.join(__dirname, '..', 'src', 'pdfGenerator.ts');
+  if (fs.existsSync(pdfGenPath133)) {
+    const pdfContent133 = fs.readFileSync(pdfGenPath133, 'utf8');
+    if (
+      !pdfContent133.includes('[246, 249, 255]') ||
+      !pdfContent133.includes('doc.setTextColor(59, 98, 173)') ||
+      !pdfContent133.includes('Math.max(40, cell.width - leftPad - rightPad)')
+    ) {
+      errors.push('CRÍTICO: pdfGenerator.ts debe mantener el azul suave de capítulos y el ajuste de ancho completo en didDrawCell (REGLA 133).');
+    }
+  }
+
+  const fbJsonPath133 = path.join(__dirname, '..', 'firebase.json');
+  if (fs.existsSync(fbJsonPath133)) {
+    const fbJsonContent = fs.readFileSync(fbJsonPath133, 'utf8');
+    if (
+      !fbJsonContent.includes('/api/salamandra-auth') ||
+      !fbJsonContent.includes('/api/onedrive-upload') ||
+      !fbJsonContent.includes('service-account*.json')
+    ) {
+      errors.push('CRÍTICO: firebase.json debe mantener los rewrites /api/salamandra-auth, /api/onedrive-upload y la exclusión de service-account*.json (REGLA 133).');
+    }
+  }
+
+  // REGLA 134: Tipo de equipo en anomalías (Acta y Reporte), sin negrita, agrupación por equipo, extintor +20 años sin aviso de retimbrado, deduplicación en PDF y toast de descarga en esquina en Partes.tsx
+  const pdfGenPath134 = path.join(__dirname, '..', 'src', 'pdfGenerator.ts');
+  if (fs.existsSync(pdfGenPath134)) {
+    const pdfContent134 = fs.readFileSync(pdfGenPath134, 'utf8');
+    if (
+      !pdfContent134.includes('const tipoPart = rawTipoTexto ?') ||
+      !pdfContent134.includes('seenNorm') ||
+      !pdfContent134.includes("lines.some(line => line.toLowerCase().includes('extintor caducado'))")
+    ) {
+      errors.push('CRÍTICO: pdfGenerator.ts debe mantener el tipo en EQUIPO Nº, supresión de retimbrado en extintor +20 años y deduplicación de anomalías (REGLA 134).');
+    }
+  }
+
+  const pdfRepPath134 = path.join(__dirname, '..', 'src', 'pdfReporteAnomaliasGenerator.ts');
+  if (fs.existsSync(pdfRepPath134)) {
+    const pdfRepContent134 = fs.readFileSync(pdfRepPath134, 'utf8');
+    if (
+      !pdfRepContent134.includes('gruposPorEquipo') ||
+      !pdfRepContent134.includes('EQUIPO Nº ') ||
+      !pdfRepContent134.includes("lista.some(a => a.toLowerCase().includes('extintor caducado'))")
+    ) {
+      errors.push('CRÍTICO: pdfReporteAnomaliasGenerator.ts debe mantener EQUIPO Nº + tipo, agrupación por equipo y supresión de retimbrado en extintor +20 años (REGLA 134).');
+    }
+  }
+
+  const rcPath134 = path.join(__dirname, '..', 'src', 'RevisionChecklist.tsx');
+  if (fs.existsSync(rcPath134)) {
+    const rcContent134 = fs.readFileSync(rcPath134, 'utf8');
+    if (!rcContent134.includes('!caducado20 && retimbre5')) {
+      errors.push('CRÍTICO: RevisionChecklist.tsx debe mantener !caducado20 && retimbre5 para no mostrar retimbrado obligatorio en extintores de +20 años (REGLA 134).');
+    }
+  }
+
+  const partesPath134 = path.join(__dirname, '..', 'src', 'Partes.tsx');
+  if (fs.existsSync(partesPath134)) {
+    const partesContent134 = fs.readFileSync(partesPath134, 'utf8');
+    if (!partesContent134.includes('fixed bottom-6 right-6 z-[200]')) {
+      errors.push('CRÍTICO: Partes.tsx debe mantener el aviso compacto de descarga de PDFs en esquina inferior derecha (REGLA 134).');
+    }
+  }
+
 // Resultado de la verificación
 if (errors.length > 0) {
   console.error('\n❌ ERROR CRÍTICO DE BLINDAJE INTEGRAL (AGENTS.md):');

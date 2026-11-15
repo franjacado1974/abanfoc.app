@@ -58,12 +58,15 @@ export function extraerReporteAnomalias(
         }
       }
 
-      const lista = desglosarAnomaliasEquipo(rawAnom);
+      let lista = desglosarAnomaliasEquipo(rawAnom);
+      if (lista.some(a => a.toLowerCase().includes('extintor caducado'))) {
+        lista = lista.filter(a => !a.toLowerCase().includes('extintor necesita retimbr'));
+      }
       for (const item of lista) {
         reporte.push({
           sistemaNombre: sistNombre,
           codigo: eq.codigo || eq.numero || eq.id || 'S/N',
-          tipo: eq.tipo || eq.modelo || eq.clase || '-',
+          tipo: eq.tipo || eq.clase || eq.nombre || eq.modelo || eq.pesoCapacidad || '-',
           ubicacion: eq.ubicacion || eq.nivelPlanta || eq.cobertura || 'Sin especificar',
           anomalia: item
         });
@@ -224,12 +227,38 @@ export const generarReporteAnomaliasPDF = async (
     doc.setTextColor(21, 128, 61);
     doc.text('No se han registrado anomalías ni defectos en los sistemas y equipos inspeccionados durante este mantenimiento.', margin + 6, y + 13);
   } else {
-    // Construir filas de la tabla
-    const tableBody = anomalias.map(item => [
-      item.sistemaNombre,
-      `${item.codigo}${item.tipo && item.tipo !== '-' ? ` (${item.tipo})` : ''}`,
-      item.ubicacion,
-      item.anomalia
+    // Agrupar anomalías por equipo para mostrar una sola fila por equipo con cada anomalía en su propia línea
+    const gruposPorEquipo = new Map<string, {
+      sistemaNombre: string;
+      equipoLabel: string;
+      ubicacion: string;
+      anomalias: string[];
+    }>();
+
+    for (const item of anomalias) {
+      const equipoLabel = `EQUIPO Nº ${String(item.codigo || 'S/N').toUpperCase()}${item.tipo && item.tipo !== '-' ? ` - ${item.tipo}` : ''}`;
+      const key = `${item.sistemaNombre}||${equipoLabel}||${item.ubicacion}`;
+      const existente = gruposPorEquipo.get(key);
+      const textoAnomalia = `- ${item.anomalia}`;
+      if (existente) {
+        if (!existente.anomalias.includes(textoAnomalia)) {
+          existente.anomalias.push(textoAnomalia);
+        }
+      } else {
+        gruposPorEquipo.set(key, {
+          sistemaNombre: item.sistemaNombre,
+          equipoLabel,
+          ubicacion: item.ubicacion,
+          anomalias: [textoAnomalia]
+        });
+      }
+    }
+
+    const tableBody = Array.from(gruposPorEquipo.values()).map(g => [
+      g.sistemaNombre,
+      g.equipoLabel,
+      g.ubicacion,
+      g.anomalias.join('\n')
     ]);
 
     autoTable(doc, {

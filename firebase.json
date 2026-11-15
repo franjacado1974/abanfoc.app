@@ -37,9 +37,32 @@
     ],
     "rewrites": [
       {
+        "source": "/api/salamandra-auth",
+        "function": {
+          "functionId": "salamandraAuth",
+          "region": "europe-west1"
+        }
+      },
+      {
+        "source": "/api/onedrive-upload",
+        "function": {
+          "functionId": "onedriveProxy",
+          "region": "europe-west1"
+        }
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }
+    ]
+  },
+  "functions": {
+    "source": "functions",
+    "ignore": [
+      "node_modules",
+      ".git",
+      "service-account*.json",
+      "*.local"
     ]
   },
   "firestore": {
