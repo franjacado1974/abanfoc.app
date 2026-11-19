@@ -94,6 +94,8 @@ export default function Presupuestos() {
   const [statusFilter, setStatusFilter] = useState<string>('Todos');
   const [showForm, setShowForm] = useState(false);
   const [editingPresupuesto, setEditingPresupuesto] = useState<Presupuesto | null>(null);
+  const [isSavingPresupuesto, setIsSavingPresupuesto] = useState(false);
+  const [savedContinueNotice, setSavedContinueNotice] = useState<string | null>(null);
   const [showDetail, setShowDetail] = useState<Presupuesto | null>(null);
   const [showCatalogo, setShowCatalogo] = useState<'articulo' | 'servicio' | null>(null);
   const [presupuestoParaAcciones, setPresupuestoParaAcciones] = useState<Presupuesto | null>(null);
@@ -839,7 +841,8 @@ export default function Presupuestos() {
   };
 
   // Guardar presupuesto
-  const handleGuardar = async () => {
+  const handleGuardar = async (cerrarAlFinal: boolean = true) => {
+    if (isSavingPresupuesto) return;
     if (!formTitulo.trim()) return alert('Introduce un título para el presupuesto.');
     if (!formClienteId) return alert('Selecciona un cliente.');
     if (formLineas.length === 0) return alert('Añade al menos una línea al presupuesto.');
@@ -916,23 +919,40 @@ export default function Presupuestos() {
       presupuestoData.anomaliasReporte = editingPresupuesto.anomaliasReporte;
     }
 
+    setIsSavingPresupuesto(true);
     try {
       if (editingPresupuesto) {
         const docId = (editingPresupuesto as any)._docId || editingPresupuesto.id;
         await updatePresupuesto(docId, presupuestoData);
-        setPresupuestos(prev => prev.map(item => ((item as any)._docId === docId || item.id === editingPresupuesto.id) ? { ...item, ...presupuestoData, _docId: docId } : item));
+        const updatedObj = { ...editingPresupuesto, ...presupuestoData, _docId: docId };
+        setPresupuestos(prev => prev.map(item => ((item as any)._docId === docId || item.id === editingPresupuesto.id) ? updatedObj : item));
+        if (!cerrarAlFinal) {
+          setEditingPresupuesto(updatedObj);
+        }
       } else {
         const saved = await addPresupuesto(presupuestoData);
         if (saved) {
           setPresupuestos(prev => [saved as any, ...prev]);
+          if (!cerrarAlFinal) {
+            setEditingPresupuesto(saved as any);
+          }
         }
       }
-      setShowForm(false);
-      setEditingPresupuesto(null);
-      setAnomaliasSplitList([]);
+
+      if (cerrarAlFinal) {
+        setShowForm(false);
+        setEditingPresupuesto(null);
+        setAnomaliasSplitList([]);
+        setSavedContinueNotice(null);
+      } else {
+        setSavedContinueNotice('Guardado. Puedes seguir editando.');
+        setTimeout(() => setSavedContinueNotice(null), 3000);
+      }
     } catch (e: any) {
       console.error('Error guardando presupuesto:', e);
       alert(`Error al guardar el presupuesto: ${e?.message || 'Error desconocido'}`);
+    } finally {
+      setIsSavingPresupuesto(false);
     }
   };
 
@@ -2603,19 +2623,41 @@ export default function Presupuestos() {
           </div>
 
           {/* Footer */}
-          <div className="px-4 sm:px-6 py-3 sm:py-4 bg-white border-t border-zinc-100 flex items-center justify-between gap-3 shrink-0">
+          <div className="px-4 sm:px-6 py-3 sm:py-4 bg-white border-t border-zinc-100 flex flex-wrap items-center justify-between gap-3 shrink-0">
             <button
               onClick={() => {
                 setShowForm(false);
                 setAnomaliasSplitList([]);
+                setSavedContinueNotice(null);
               }}
               className="px-4 sm:px-6 py-2 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm text-zinc-500 hover:bg-zinc-100 transition-colors cursor-pointer"
             >
               Cancelar
             </button>
-            <button onClick={handleGuardar} className="flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl font-bold text-xs sm:text-sm shadow-lg shadow-orange-200 transition-all cursor-pointer">
-              <Save className="w-4 h-4" /> {editingPresupuesto ? 'Guardar cambios' : 'Crear presupuesto'}
-            </button>
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3 ml-auto">
+              {savedContinueNotice && (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold animate-in fade-in duration-200">
+                  <CheckCircle className="w-3.5 h-3.5" />
+                  {savedContinueNotice}
+                </span>
+              )}
+              <button
+                type="button"
+                disabled={isSavingPresupuesto}
+                onClick={() => handleGuardar(false)}
+                className="flex items-center gap-2 px-4 sm:px-5 py-2 sm:py-2.5 bg-zinc-900 hover:bg-zinc-800 disabled:opacity-50 text-white rounded-xl font-bold text-xs sm:text-sm shadow-sm transition-all cursor-pointer"
+              >
+                <Save className="w-4 h-4" /> Guardar y seguir editando
+              </button>
+              <button
+                type="button"
+                disabled={isSavingPresupuesto}
+                onClick={() => handleGuardar(true)}
+                className="flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-2.5 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white rounded-xl font-bold text-xs sm:text-sm shadow-lg shadow-orange-200 transition-all cursor-pointer"
+              >
+                <Save className="w-4 h-4" /> {editingPresupuesto ? 'Guardar cambios' : 'Crear presupuesto'}
+              </button>
+            </div>
           </div>
         </div>
       </div>

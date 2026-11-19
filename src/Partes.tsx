@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileText, Building2, MapPin, CalendarDays, Search, Trash2, Download, Eye, X, Check, Filter, ChevronDown, ArrowUp, ArrowDown, ArrowUpDown, Loader2, CheckCircle2, RotateCcw } from 'lucide-react';
+import { FileText, FileCheck, FileDigit, Receipt, ScrollText, AlertTriangle, Calculator, Building2, MapPin, CalendarDays, Search, Trash2, Download, Eye, X, Check, Filter, ChevronDown, ArrowUp, ArrowDown, ArrowUpDown, Loader2, CheckCircle2, RotateCcw } from 'lucide-react';
 import { HandOptionsIcon } from './components/HandOptionsIcon';
 import { subscribePartes, subscribeCentros, subscribeClientes, subscribeTecnicos, deleteParte, db, updateParte, getEquiposInstalados, updateEquipoInstalado } from './firebase';
 import { collection, getDocs, doc, getDoc, query, where } from 'firebase/firestore';
@@ -146,7 +146,8 @@ export default function Partes() {
   const [downloadOptions, setDownloadOptions] = useState({
     acta: true,
     certificado: true,
-    albaran: true,
+    albaranSinValorar: true,
+    albaranValorado: false,
     contrato: false,
     reporteAnomalias: false,
     generarPresupuesto: false
@@ -700,7 +701,8 @@ export default function Partes() {
     setDownloadOptions({
       acta: true,
       certificado: true,
-      albaran: true,
+      albaranSinValorar: true,
+      albaranValorado: false,
       contrato: false,
       reporteAnomalias: false,
       generarPresupuesto: false
@@ -970,12 +972,13 @@ export default function Partes() {
         );
       }
 
-      // 3. Albarán
-      if (downloadOptions.albaran) {
+      // 3. Albarán (Sin Valorar y/o Valorado según selección)
+      if (downloadOptions.albaranSinValorar || downloadOptions.albaranValorado) {
         setDownloadProgress(88);
-        setDownloadStepText('Generando Albarán de Trabajo...');
+        setDownloadStepText('Generando Albarán...');
         await new Promise(r => setTimeout(r, 60));
         let numeroPedido = (parte as any).numeroPedido || '';
+        let itemsValorados: any[] | undefined = undefined;
         try {
           const albaranesCol = collection(db, 'albaranes');
           let q = query(albaranesCol, where('parteId', '==', parte.id));
@@ -985,19 +988,34 @@ export default function Partes() {
             snap = await getDocs(q);
           }
           if (!snap.empty) {
-            const albData = snap.docs[0].data();
-            if (albData && albData.numeroPedido) {
-              numeroPedido = albData.numeroPedido;
-            }
+            snap.docs.forEach(d => {
+              const albData = d.data();
+              if (albData && albData.numeroPedido && !numeroPedido) {
+                numeroPedido = albData.numeroPedido;
+              }
+              if (albData && !albData.sinValorar && Array.isArray(albData.items) && albData.items.length > 0) {
+                itemsValorados = albData.items;
+              }
+            });
           }
         } catch (err) {
           console.error("Error fetching albaran for numeroPedido:", err);
         }
 
-        await generarAlbaranPDF(
-          cliente, centro, equiposTodos, numeroMantenimiento, tecnicoNombre,
-          firmaCliente, firmaTecnico, nombreFirmante, undefined, empresaSeleccionada, false, 'ALBARÁN DE REVISIÓN', parte.periodicidad, sistemasDelCentro, numeroPedido, parte.fechaCreacion
-        );
+        if (downloadOptions.albaranSinValorar) {
+          setDownloadStepText('Generando Albarán Sin Valorar...');
+          await generarAlbaranPDF(
+            cliente, centro, equiposTodos, numeroMantenimiento, tecnicoNombre,
+            firmaCliente, firmaTecnico, nombreFirmante, undefined, empresaSeleccionada, false, 'ALBARÁN DE REVISIÓN (SIN VALORAR)', parte.periodicidad, sistemasDelCentro, numeroPedido, parte.fechaCreacion, true
+          );
+        }
+        if (downloadOptions.albaranValorado) {
+          setDownloadStepText('Generando Albarán Valorado...');
+          await generarAlbaranPDF(
+            cliente, centro, equiposTodos, numeroMantenimiento, tecnicoNombre,
+            firmaCliente, firmaTecnico, nombreFirmante, itemsValorados, empresaSeleccionada, false, 'ALBARÁN DE REVISIÓN (VALORADO)', parte.periodicidad, sistemasDelCentro, numeroPedido, parte.fechaCreacion, false
+          );
+        }
       }
 
       // 4. Contrato de Mantenimiento
@@ -2070,6 +2088,9 @@ export default function Partes() {
                     checked={downloadOptions.acta}
                     onChange={(e) => setDownloadOptions(prev => ({ ...prev, acta: e.target.checked }))}
                   />
+                  <div className="w-8 h-8 rounded-lg bg-zinc-100 text-zinc-700 flex items-center justify-center mr-3 shrink-0">
+                    <FileText className="w-4 h-4" />
+                  </div>
                   <span className="font-medium text-zinc-700">Acta de Revisión</span>
                 </label>
                 
@@ -2083,20 +2104,42 @@ export default function Partes() {
                     checked={downloadOptions.certificado}
                     onChange={(e) => setDownloadOptions(prev => ({ ...prev, certificado: e.target.checked }))}
                   />
+                  <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center mr-3 shrink-0">
+                    <FileCheck className="w-4 h-4" />
+                  </div>
                   <span className="font-medium text-zinc-700">Certificado</span>
                 </label>
                 
                 <label className="flex items-center p-3 rounded-xl border border-zinc-200 hover:bg-zinc-50 cursor-pointer transition-colors">
-                  <div className={`w-5 h-5 rounded flex items-center justify-center mr-3 transition-colors shrink-0 ${downloadOptions.albaran ? 'bg-red-600 border-red-600' : 'border-2 border-zinc-300'}`}>
-                    {downloadOptions.albaran && <Check className="w-3.5 h-3.5 text-white" />}
+                  <div className={`w-5 h-5 rounded flex items-center justify-center mr-3 transition-colors shrink-0 ${downloadOptions.albaranSinValorar ? 'bg-red-600 border-red-600' : 'border-2 border-zinc-300'}`}>
+                    {downloadOptions.albaranSinValorar && <Check className="w-3.5 h-3.5 text-white" />}
                   </div>
                   <input 
                     type="checkbox" 
                     className="hidden"
-                    checked={downloadOptions.albaran}
-                    onChange={(e) => setDownloadOptions(prev => ({ ...prev, albaran: e.target.checked }))}
+                    checked={downloadOptions.albaranSinValorar}
+                    onChange={(e) => setDownloadOptions(prev => ({ ...prev, albaranSinValorar: e.target.checked }))}
                   />
-                  <span className="font-medium text-zinc-700">Albarán de Trabajo</span>
+                  <div className="w-8 h-8 rounded-lg bg-sky-50 text-sky-600 flex items-center justify-center mr-3 shrink-0">
+                    <FileDigit className="w-4 h-4" />
+                  </div>
+                  <span className="font-medium text-zinc-700">Albarán Sin Valorar</span>
+                </label>
+
+                <label className="flex items-center p-3 rounded-xl border border-zinc-200 hover:bg-zinc-50 cursor-pointer transition-colors">
+                  <div className={`w-5 h-5 rounded flex items-center justify-center mr-3 transition-colors shrink-0 ${downloadOptions.albaranValorado ? 'bg-red-600 border-red-600' : 'border-2 border-zinc-300'}`}>
+                    {downloadOptions.albaranValorado && <Check className="w-3.5 h-3.5 text-white" />}
+                  </div>
+                  <input 
+                    type="checkbox" 
+                    className="hidden"
+                    checked={downloadOptions.albaranValorado}
+                    onChange={(e) => setDownloadOptions(prev => ({ ...prev, albaranValorado: e.target.checked }))}
+                  />
+                  <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center mr-3 shrink-0">
+                    <Receipt className="w-4 h-4" />
+                  </div>
+                  <span className="font-medium text-zinc-700">Albarán Valorado</span>
                 </label>
  
                 <label className="flex items-center p-3 rounded-xl border border-zinc-200 hover:bg-zinc-50 cursor-pointer transition-colors">
@@ -2109,6 +2152,9 @@ export default function Partes() {
                     checked={downloadOptions.contrato}
                     onChange={(e) => setDownloadOptions(prev => ({ ...prev, contrato: e.target.checked }))}
                   />
+                  <div className="w-8 h-8 rounded-lg bg-violet-50 text-violet-600 flex items-center justify-center mr-3 shrink-0">
+                    <ScrollText className="w-4 h-4" />
+                  </div>
                   <span className="font-medium text-zinc-700">Contrato de Mantenimiento</span>
                 </label>
 
@@ -2123,6 +2169,9 @@ export default function Partes() {
                     checked={downloadOptions.reporteAnomalias}
                     onChange={(e) => setDownloadOptions(prev => ({ ...prev, reporteAnomalias: e.target.checked }))}
                   />
+                  <div className="w-8 h-8 rounded-lg bg-red-50 text-red-600 flex items-center justify-center mr-3 shrink-0">
+                    <AlertTriangle className="w-4 h-4" />
+                  </div>
                   <div className="flex-1">
                     <span className="font-medium text-zinc-700">Reporte de anomalías (PDF)</span>
                     <p className="text-[11px] text-zinc-400">Listado agrupado por sistemas con equipo, ubicación y defecto.</p>
@@ -2140,6 +2189,9 @@ export default function Partes() {
                     checked={downloadOptions.generarPresupuesto}
                     onChange={(e) => setDownloadOptions(prev => ({ ...prev, generarPresupuesto: e.target.checked }))}
                   />
+                  <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center mr-3 shrink-0">
+                    <Calculator className="w-4 h-4" />
+                  </div>
                   <div className="flex-1">
                     <span className="font-semibold text-amber-950">Generar presupuesto</span>
                     <p className="text-[11px] text-amber-700/90">Abre el formulario de presupuesto con los datos del mantenimiento y cliente.</p>
@@ -2156,7 +2208,7 @@ export default function Partes() {
                 </button>
                 <button
                   onClick={confirmDownloadPDFs}
-                  disabled={!downloadOptions.acta && !downloadOptions.certificado && !downloadOptions.albaran && !downloadOptions.contrato && !downloadOptions.reporteAnomalias && !downloadOptions.generarPresupuesto}
+                  disabled={!downloadOptions.acta && !downloadOptions.certificado && !downloadOptions.albaranSinValorar && !downloadOptions.albaranValorado && !downloadOptions.contrato && !downloadOptions.reporteAnomalias && !downloadOptions.generarPresupuesto}
                   className="flex-1 py-2.5 px-4 rounded-xl font-medium bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   <Download className="w-4 h-4" />

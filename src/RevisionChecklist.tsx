@@ -562,13 +562,14 @@ export function evaluarObservacionesPorFecha(eq: any, sistema?: any): string {
     let lineas = rawObs.split(/\r?\n/);
 
     const sStr = `${sistema?.nombre || ''} ${sistema?.tipo || ''} ${sistema?.familia || ''} ${sistema?.categoria || ''} ${sistema?.id || ''} ${eq?.nombre || ''} ${eq?.tipo || ''} ${eq?.codigo || ''}`.toLowerCase();
-    const esBomba = sStr.includes('bomba') || sStr.includes('abastecimiento') || sStr.includes('grupo') || sStr.includes('rociador') || sStr.includes('bie');
-    const isExtintor = !esBomba && (sStr.includes('extintor') || (typeof eq?.codigo === 'string' && eq.codigo.toUpperCase().startsWith('EXT')));
+    const esBomba = sStr.includes('bomba') || sStr.includes('abastecimiento') || sStr.includes('grupo') || sStr.includes('rociador');
+    const isExtintor = !esBomba && !sStr.includes('bie') && (sStr.includes('extintor') || (typeof eq?.codigo === 'string' && eq.codigo.toUpperCase().startsWith('EXT')));
+    const isBie = !esBomba && (sStr.includes('bie') || sStr.includes('boca'));
 
     const today = new Date();
     let seAproxima = false;
 
-    if (isExtintor) {
+    if (isExtintor || isBie) {
         const { dateFab, dateRet } = extraerFechasEquipo(eq);
 
         // 1. Proximidad de retimbrado de 5 años: fecha de referencia es dateRet o dateFab si no hay retimbre previo

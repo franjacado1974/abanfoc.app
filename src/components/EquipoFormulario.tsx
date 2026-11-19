@@ -570,7 +570,6 @@ export default function EquipoFormulario({
                         autoMsg = "Extintor necesita retimbre";
                     } else if (monthsSinceFab >= 237 || monthsSinceRef >= 57) {
                         seAproxima = true;
-                        autoMsg = "Se aproxima caducidad o retimbrado del equipo";
                     }
                 }
             }

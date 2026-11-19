@@ -1768,13 +1768,12 @@ export const generarActaExtintoresPDF = async (
         }
       } else {
         const fallosStr = checksFallados.length > 0 ? `Falló en: ${checksFallados.join(', ')}.` : '';
-        const dateWarning = tieneFechaInvalida(eq) ? 'Fecha de fabricación/retimbrado caducada o próxima a caducar.' : '';
         if (anomaliasValue) {
           rawText = fallosStr 
             ? `${fallosStr} ${anomaliasValue}` 
-            : (dateWarning ? `${dateWarning} ${anomaliasValue}` : anomaliasValue);
+            : anomaliasValue;
         } else {
-          rawText = fallosStr || dateWarning || '';
+          rawText = fallosStr || '';
         }
       }
 
@@ -1800,6 +1799,15 @@ export const generarActaExtintoresPDF = async (
         // Si el extintor tiene +20 años (caducado), se retira y no debe mostrarse aviso de retimbrado
         lines = lines.filter(line => !line.toLowerCase().includes('extintor necesita retimbr'));
       }
+
+      // Los avisos de proximidad de caducidad/retimbrado van en Observaciones (azul), nunca como anomalía en rojo
+      lines = lines.filter(line => {
+        const lLow = line.toLowerCase();
+        return !lLow.includes('se aproxima caducidad') &&
+               !lLow.includes('próxima a caducar') &&
+               !lLow.includes('proxima a caducar') &&
+               !lLow.includes('fecha próxima a operación obligatoria');
+      });
 
       // Deduplicar líneas equivalentes (ej. eq.anomalias vs campo dinámico con/sin punto final)
       const seenNorm = new Set<string>();
@@ -1834,7 +1842,13 @@ export const generarActaExtintoresPDF = async (
       if (obsDinamico && !textObservacion.includes(obsDinamico)) {
         textObservacion = textObservacion ? `${textObservacion}\n${obsDinamico}` : obsDinamico;
       }
-      return textObservacion.split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean);
+      const obsLines: string[] = textObservacion.split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean);
+      const rawAnomStr = typeof eq.anomalias === 'string' ? eq.anomalias.toLowerCase() : '';
+      const hadLegacyProximity = rawAnomStr.includes('se aproxima caducidad') || rawAnomStr.includes('próxima a caducar') || rawAnomStr.includes('proxima a caducar');
+      if (hadLegacyProximity && !obsLines.some((l: string) => l.toLowerCase().includes('fecha próxima a operación obligatoria') || l.toLowerCase().includes('se aproxima caducidad'))) {
+        obsLines.push('Se informa de fecha próxima a operación obligatoria del equipo. Posible retimbrado o sustitución en el próximo mantenimiento.');
+      }
+      return obsLines;
     };
 
     const renderAnomaliasParaEquipos = async (eqsToRender: any[], startY: number, showSinAnomalias: boolean = true) => {
@@ -7022,9 +7036,9 @@ export const generarPresupuestoPDF = async (
         0: { cellWidth: colFotoWidth, halign: 'center', cellPadding: { left: 1, right: 1 } },
         1: { cellWidth: 16, halign: 'left', fontStyle: 'bold', fontSize: 6.5, textColor: [110, 115, 125], cellPadding: { left: 1, right: 1 } },
         2: { cellWidth: 'auto', halign: 'left', cellPadding: { top: 2.2, bottom: 2.2, left: 1.5, right: 1 } },
-        3: { cellWidth: 15, halign: 'right', cellPadding: { left: 1, right: 1.5 } },
+        3: { cellWidth: 15, halign: 'right', textColor: [0, 0, 0], fontStyle: 'normal', cellPadding: { left: 1, right: 1.5 } },
         4: { cellWidth: 11, halign: 'center', cellPadding: { left: 1, right: 1 } },
-        5: { cellWidth: 19, halign: 'right', cellPadding: { left: 1, right: 2 } }
+        5: { cellWidth: 19, halign: 'right', textColor: [0, 0, 0], fontStyle: 'normal', cellPadding: { left: 1, right: 2 } }
       };
 
   await reportProgress(82, 'Maquetando tabla y totales...');

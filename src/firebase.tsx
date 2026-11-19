@@ -1355,6 +1355,7 @@ async function enviarCorreoAlbaran(albaran: Albaran) {
         empresaId: empId
       } : { nombre: 'Centro sin nombre' });
 
+      const esAlbaranSinValorar = Boolean(albaran.sinValorar || albaran.tipoAlbaran === 'trabajo');
       const pdfDoc = await generarAlbaranPDF(
         clienteParaPDF as any,
         centroParaPDF as any,
@@ -1371,7 +1372,8 @@ async function enviarCorreoAlbaran(albaran: Albaran) {
         albaran.periodicidad,
         undefined,
         albaran.numeroPedido,
-        albaran.fechaCreacion
+        albaran.fechaCreacion,
+        esAlbaranSinValorar
       );
 
       const dataUri = pdfDoc.output('datauristring');
@@ -1803,10 +1805,14 @@ export async function addAlbaran(albaran: Albaran) {
       localStorage.setItem('firecheck_db_albaranes', JSON.stringify(filtered));
     } catch {}
 
-    try {
-      await enviarCorreoAlbaran(finalAlbaran);
-    } catch (emailErr) {
-      console.error('Error in enviarCorreoAlbaran inside addAlbaran:', emailErr);
+    // Por defecto al firmar un parte, enviar por correo solo el albarán sin valorar de la empresa mantenedora
+    const esFacturacionDeParte = finalAlbaran.tipoAlbaran === 'facturacion' && (finalAlbaran.parteId || finalAlbaran.albaranRelacionadoId);
+    if (!esFacturacionDeParte) {
+      try {
+        await enviarCorreoAlbaran(finalAlbaran);
+      } catch (emailErr) {
+        console.error('Error in enviarCorreoAlbaran inside addAlbaran:', emailErr);
+      }
     }
 
     return finalAlbaran;
@@ -1847,8 +1853,9 @@ export async function updateAlbaran(idOrAlbaran: string | Albaran, data?: Partia
     await setDoc(docRef, albaranToUpdate, { merge: true });
     console.info('updateAlbaran: updated', albaranId);
 
-    // Solo enviar correo si antes NO estaba firmado y ahora SÍ está firmado
-    if (!alreadySigned && isFirmaValida((albaranToUpdate as any).firmaCliente)) {
+    // Solo enviar correo si antes NO estaba firmado, ahora SÍ está firmado y no es el albarán de facturación vinculado a parte
+    const esFacturacionDeParteUpdate = (albaranToUpdate as any).tipoAlbaran === 'facturacion' && ((albaranToUpdate as any).parteId || (albaranToUpdate as any).albaranRelacionadoId);
+    if (!alreadySigned && !esFacturacionDeParteUpdate && isFirmaValida((albaranToUpdate as any).firmaCliente)) {
       try {
         await enviarCorreoAlbaran(albaranToUpdate as Albaran);
       } catch (emailErr) {

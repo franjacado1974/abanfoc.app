@@ -2288,6 +2288,51 @@ if (fs.existsSync(pdfGenPath)) {
     }
   }
 
+  // REGLA 136: Guardar y seguir editando en Presupuestos, importes en negro en PDF Presupuesto, proximidad en Observaciones (Extintores y BIEs) y Albarán Sin Valorar/Valorado en Partes y correo
+  const presPath136 = path.join(__dirname, '..', 'src', 'Presupuestos.tsx');
+  if (fs.existsSync(presPath136)) {
+    const presContent136 = fs.readFileSync(presPath136, 'utf8');
+    if (!presContent136.includes('Guardar y seguir editando') || !presContent136.includes('savedContinueNotice')) {
+      errors.push('CRÍTICO: Presupuestos.tsx debe mantener el botón "Guardar y seguir editando" y savedContinueNotice (REGLA 136).');
+    }
+  }
+
+  const pdfPath136 = path.join(__dirname, '..', 'src', 'pdfGenerator.ts');
+  if (fs.existsSync(pdfPath136)) {
+    const pdfContent136 = fs.readFileSync(pdfPath136, 'utf8');
+    if (
+      !pdfContent136.includes("textColor: [0, 0, 0], fontStyle: 'normal'") ||
+      !pdfContent136.includes("!lLow.includes('se aproxima caducidad')") ||
+      !pdfContent136.includes('hadLegacyProximity')
+    ) {
+      errors.push('CRÍTICO: pdfGenerator.ts debe mantener los importes en negro sin negrita en presupuestos y los avisos de proximidad en observaciones azules (REGLA 136).');
+    }
+  }
+
+  const rcPath136 = path.join(__dirname, '..', 'src', 'RevisionChecklist.tsx');
+  if (fs.existsSync(rcPath136)) {
+    const rcContent136 = fs.readFileSync(rcPath136, 'utf8');
+    if (!rcContent136.includes('if (isExtintor || isBie)')) {
+      errors.push('CRÍTICO: RevisionChecklist.tsx debe mantener la evaluación de proximidad en observaciones para Extintores y BIEs (REGLA 136).');
+    }
+  }
+
+  const fbPath136 = path.join(__dirname, '..', 'src', 'firebase.tsx');
+  if (fs.existsSync(fbPath136)) {
+    const fbContent136 = fs.readFileSync(fbPath136, 'utf8');
+    if (!fbContent136.includes('esAlbaranSinValorar') || !fbContent136.includes('esFacturacionDeParte')) {
+      errors.push('CRÍTICO: firebase.tsx debe mantener el envío por correo exclusivo del albarán sin valorar al firmar parte (REGLA 136).');
+    }
+  }
+
+  const partesPath136 = path.join(__dirname, '..', 'src', 'Partes.tsx');
+  if (fs.existsSync(partesPath136)) {
+    const partesContent136 = fs.readFileSync(partesPath136, 'utf8');
+    if (!partesContent136.includes('albaranSinValorar') || !partesContent136.includes('albaranValorado')) {
+      errors.push('CRÍTICO: Partes.tsx debe mantener las opciones separadas Albarán Sin Valorar y Albarán Valorado (REGLA 136).');
+    }
+  }
+
 // Resultado de la verificación
 if (errors.length > 0) {
   console.error('\n❌ ERROR CRÍTICO DE BLINDAJE INTEGRAL (AGENTS.md):');
