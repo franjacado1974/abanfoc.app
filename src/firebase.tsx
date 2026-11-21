@@ -255,7 +255,7 @@ export interface Presupuesto {
   centroId?: string;
   fechaCreacion: string;
   fechaValidez?: string;
-  estado: 'Borrador' | 'Enviado' | 'En espera' | 'Aprobado' | 'Rechazado';
+  estado: 'Borrador' | 'Enviado' | 'Descargado y enviado fuera de Salamandra' | 'En espera' | 'Aprobado' | 'Rechazado';
   lineas: PresupuestoLinea[];
   subtotal: number;
   descuentoPorcentaje?: number;

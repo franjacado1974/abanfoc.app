@@ -5,7 +5,7 @@ import { ArrowLeft, Save, Plus, Search, Edit, Trash2, MapPin, Layers, X, Copy, A
 import { HandOptionsIcon } from './components/HandOptionsIcon';
 import * as XLSX from 'xlsx';
 import { CATEGORIAS_POR_DEFECTO, getIconForSistema } from './Sistemas';
-import { addCentro, updateCentro, deleteCentro, subscribeCentros, subscribeClientes, subscribeFamilias, subscribeArticulos, subscribeTecnicos, subscribeEmpresas, addCentroSistema, deleteCentroSistema, subscribeCentroSistemas, addEquipoInstalado, updateEquipoInstalado, deleteEquipoInstalado, subscribeEquiposInstalados, sistemaToSlug, saveContrato, syncContratosExistentes, updateParte as updateParteFirestore, subscribeSistemasCategorias } from './firebase';
+import { addCentro, updateCentro, deleteCentro, subscribeCentros, subscribeClientes, subscribeFamilias, subscribeArticulos, subscribeTecnicos, subscribeEmpresas, addCentroSistema, deleteCentroSistema, subscribeCentroSistemas, addEquipoInstalado, updateEquipoInstalado, deleteEquipoInstalado, subscribeEquiposInstalados, getEquiposInstalados, sistemaToSlug, saveContrato, syncContratosExistentes, updateParte as updateParteFirestore, subscribeSistemasCategorias } from './firebase';
 import type { Articulo, Tecnico } from './firebase';
 import ConfirmationModal from './ConfirmationModal';
 import DetailModal from './components/DetailModal';
@@ -463,9 +463,9 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
     return () => unsub();
   }, []);
 
-  // Suscripción en tiempo real a los sistemas del centro seleccionado
+  // Suscripción en tiempo real a los sistemas del centro seleccionado o en edición
   useEffect(() => {
-    const centroDocId = centroSeleccionado?._docId || centroSeleccionado?.id;
+    const centroDocId = centroSeleccionado?._docId || centroSeleccionado?.id || (view === 'form' ? (form._docId || form.id) : '');
     if (!centroDocId) return;
     const unsub = subscribeCentroSistemas(centroDocId, (items: CentroSistema[]) => {
       // Actualizar solo los sistemas de este centro
@@ -477,7 +477,7 @@ export default function Centros({ hideHeader }: { hideHeader?: boolean } = {}) {
       });
     });
     return () => unsub();
-  }, [centroSeleccionado?._docId, centroSeleccionado?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [centroSeleccionado?._docId, centroSeleccionado?.id, view, form._docId, form.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Suscripción en tiempo real a los equipos de los sistemas del centro seleccionado
   // Se re-ejecuta cuando cambia el centro O cuando cambia la lista de sistemas de ese centro
@@ -1634,26 +1634,37 @@ const renderModals = () => {
                     type="button"
                     onClick={async () => {
                       const client = clientes.find(cl => cl.id === centroForContrato.clienteId);
-                      const systems = centroSistemas
-                        .filter(s => s.centroId === centroForContrato._docId || s.centroId === centroForContrato.id)
-                        .map(s => {
-                          const count = equiposInstalados.filter(eq => 
-                            (eq.centroId === centroForContrato.id || eq.centroId === centroForContrato._docId) && 
-                            eq.sistemaId === s.id
-                          ).length;
-                          const pAnual = parseFloat(formContrato.preciosSistemasAnual[s.id] || formContrato.preciosSistemasAnual[s.tipo] || formContrato.preciosSistemasAnual[s.familia] || formContrato.preciosSistemas[s.id] || '0') || 0;
-                          const pTrim = parseFloat(formContrato.preciosSistemasTrimestral[s.id] || formContrato.preciosSistemasTrimestral[s.tipo] || formContrato.preciosSistemasTrimestral[s.familia] || '') || (pAnual > 0 ? pAnual : 0);
-                          return {
-                            ...s,
-                            cantidadEquipos: count,
-                            precioUnitario: pAnual,
-                            precioUnitarioAnual: pAnual,
-                            precioUnitarioTrimestral: pTrim,
-                            subtotalAnual: Math.round(count * pAnual * 100) / 100,
-                            subtotalTrimestral: Math.round(count * pTrim * 100) / 100,
-                            subtotal: Math.round(count * pAnual * 100) / 100
-                          };
-                        });
+                      const docIdCentroContrato = centroForContrato._docId || centroForContrato.id;
+                      const sistListCentro = centroSistemas.filter(s => s.centroId === centroForContrato._docId || s.centroId === centroForContrato.id);
+                      const systems = await Promise.all(sistListCentro.map(async (s) => {
+                        let eqsSistema = equiposInstalados.filter(eq =>
+                          (eq.centroId === centroForContrato.id || eq.centroId === centroForContrato._docId) &&
+                          eq.sistemaId === s.id
+                        );
+                        if (eqsSistema.length === 0 && docIdCentroContrato) {
+                          try {
+                            const fetched = await getEquiposInstalados(docIdCentroContrato, s.id);
+                            if (Array.isArray(fetched) && fetched.length > 0) {
+                              eqsSistema = fetched;
+                            }
+                          } catch (err) {
+                            console.error('Error cargando equipos del sistema para contrato:', err);
+                          }
+                        }
+                        const count = eqsSistema.length;
+                        const pAnual = parseFloat(formContrato.preciosSistemasAnual[s.id] || formContrato.preciosSistemasAnual[s.tipo] || formContrato.preciosSistemasAnual[s.familia] || formContrato.preciosSistemas[s.id] || '0') || 0;
+                        const pTrim = parseFloat(formContrato.preciosSistemasTrimestral[s.id] || formContrato.preciosSistemasTrimestral[s.tipo] || formContrato.preciosSistemasTrimestral[s.familia] || '') || 0;
+                        return {
+                          ...s,
+                          cantidadEquipos: count,
+                          precioUnitario: pAnual,
+                          precioUnitarioAnual: pAnual,
+                          precioUnitarioTrimestral: pTrim,
+                          subtotalAnual: Math.round(count * pAnual * 100) / 100,
+                          subtotalTrimestral: Math.round(count * pTrim * 100) / 100,
+                          subtotal: Math.round(count * pAnual * 100) / 100
+                        };
+                      }));
                       
                       let total = 0;
                       const isMensual = formContrato.periodicidad.includes('Mensual');
@@ -2813,7 +2824,7 @@ const renderModals = () => {
                           <div className="flex flex-col">
                             <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Sistemas Instalados</span>
                             {(() => {
-                              const count = centroSistemas.filter(s => s.centroId === form._docId || s.centroId === form.id).length;
+                              const count = centroSistemas.filter(s => (form._docId && s.centroId === form._docId) || (form.id && s.centroId === form.id)).length;
                               return (
                                 <span className={'text-xs font-bold mt-1 ' + (count > 0 ? 'text-green-600' : 'text-red-500')}>
                                   {count > 0 ? count + ' sistema(s) instalado(s)' : 'Sin configurar'}

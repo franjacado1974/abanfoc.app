@@ -36,6 +36,7 @@ export function formatCodigoPedido(numero?: string, fallbackId?: string): string
 const ESTADOS: { valor: Presupuesto['estado']; etiqueta: string; color: string; bg: string; icono: React.ElementType }[] = [
   { valor: 'Borrador', etiqueta: 'Borrador', color: 'text-zinc-600', bg: 'bg-zinc-100', icono: FileText },
   { valor: 'Enviado', etiqueta: 'Enviado', color: 'text-red-600', bg: 'bg-sky-100', icono: Send },
+  { valor: 'Descargado y enviado fuera de Salamandra', etiqueta: 'Descargado y enviado fuera de Salamandra', color: 'text-teal-700', bg: 'bg-teal-100', icono: Download },
   { valor: 'En espera', etiqueta: 'En espera', color: 'text-amber-600', bg: 'bg-amber-100', icono: Clock },
   { valor: 'Aprobado', etiqueta: 'Aprobado', color: 'text-emerald-600', bg: 'bg-emerald-100', icono: CheckCircle },
   { valor: 'Rechazado', etiqueta: 'Rechazado', color: 'text-red-600', bg: 'bg-red-100', icono: Ban },
@@ -99,6 +100,7 @@ export default function Presupuestos() {
   const [showDetail, setShowDetail] = useState<Presupuesto | null>(null);
   const [showCatalogo, setShowCatalogo] = useState<'articulo' | 'servicio' | null>(null);
   const [presupuestoParaAcciones, setPresupuestoParaAcciones] = useState<Presupuesto | null>(null);
+  const [confirmCloseAcciones, setConfirmCloseAcciones] = useState(false);
   const [presupuestoParaAdjuntos, setPresupuestoParaAdjuntos] = useState<Presupuesto | null>(null);
   const [pdfDownloadProgress, setPdfDownloadProgress] = useState<{ active: boolean; percent: number; stage: string; codigo: string } | null>(null);
   const [catalogoSearch, setCatalogoSearch] = useState('');
@@ -1416,6 +1418,21 @@ export default function Presupuestos() {
                 statusFilter === 'Enviado' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-zinc-200 text-zinc-500'
               }`}>
                 {presupuestos.filter(p => p.estado === 'Enviado').length}
+              </span>
+            </button>
+            <button
+              onClick={() => setStatusFilter('Descargado y enviado fuera de Salamandra')}
+              className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
+                statusFilter === 'Descargado y enviado fuera de Salamandra'
+                  ? 'bg-white text-zinc-950 shadow-sm border border-zinc-200/20 font-extrabold'
+                  : 'text-zinc-500 hover:text-zinc-900 hover:bg-white/50'
+              }`}
+            >
+              Enviados fuera
+              <span className={`text-[9px] font-black font-sans px-1.5 py-0.5 rounded transition-colors ${
+                statusFilter === 'Descargado y enviado fuera de Salamandra' ? 'bg-teal-50 text-teal-700 border border-teal-100' : 'bg-zinc-200 text-zinc-500'
+              }`}>
+                {presupuestos.filter(p => p.estado === 'Descargado y enviado fuera de Salamandra').length}
               </span>
             </button>
             <button
@@ -3586,10 +3603,10 @@ export default function Presupuestos() {
       {presupuestoParaAcciones && (
         <div 
           className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4 animate-in fade-in duration-200"
-          onClick={() => setPresupuestoParaAcciones(null)}
+          onClick={() => setConfirmCloseAcciones(true)}
         >
           <div 
-            className="bg-white rounded-3xl w-full max-w-2xl sm:max-w-3xl shadow-2xl overflow-hidden border border-zinc-100 flex flex-col max-h-[90vh]"
+            className="bg-white rounded-3xl w-full max-w-4xl lg:max-w-5xl shadow-2xl overflow-hidden border border-zinc-100 flex flex-col max-h-[90vh]"
             onClick={e => e.stopPropagation()}
           >
             {/* Cabecera del modal */}
@@ -3614,7 +3631,7 @@ export default function Presupuestos() {
               </div>
               <button
                 type="button"
-                onClick={() => setPresupuestoParaAcciones(null)}
+                onClick={() => setConfirmCloseAcciones(true)}
                 className="p-2 bg-red-600 hover:bg-red-700 text-white rounded-xl transition-all shadow-sm hover:shadow active:scale-95 cursor-pointer flex items-center justify-center"
                 title="Cerrar"
               >
@@ -3852,7 +3869,7 @@ export default function Presupuestos() {
               <p className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider mb-2.5">
                 Cambiar estado del presupuesto:
               </p>
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
                 {ESTADOS.map(e => {
                   const Icono = e.icono;
                   const esActivo = presupuestoParaAcciones.estado === e.valor;
@@ -3863,12 +3880,14 @@ export default function Presupuestos() {
                       onClick={async () => {
                         const p = presupuestoParaAcciones;
                         if (e.valor === 'Aprobado') {
+                          setConfirmCloseAcciones(false);
                           setPresupuestoParaAcciones(null);
                           setPresupuestoParaAceptar(p);
                           setTipoTrabajoSeleccionado((p.tipoTrabajo as any) || 'Reparación');
                           return;
                         }
                         if (e.valor === 'Enviado') {
+                          setConfirmCloseAcciones(false);
                           setPresupuestoParaAcciones(null);
                           handleAbrirModalEnvio(p);
                           return;
@@ -3876,19 +3895,71 @@ export default function Presupuestos() {
                         await handleCambiarEstado(p, e.valor);
                         setPresupuestoParaAcciones(prev => prev ? { ...prev, estado: e.valor } : null);
                       }}
-                      className={`flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
+                      className={`flex items-center justify-center gap-1.5 px-2.5 py-2.5 rounded-xl text-[11px] font-bold transition-all border cursor-pointer text-center leading-tight ${
                         esActivo
                           ? `${e.bg} ${e.color} border-current ring-2 ring-offset-1 ring-zinc-300 shadow-sm scale-[1.02]`
                           : 'bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-100 hover:text-zinc-900'
                       }`}
                     >
                       <Icono className="w-3.5 h-3.5 shrink-0" />
-                      <span className="whitespace-nowrap">{e.etiqueta}</span>
+                      <span>{e.etiqueta}</span>
                       {esActivo && <Check className="w-3.5 h-3.5 ml-0.5 stroke-[3] shrink-0" />}
                     </button>
                   );
                 })}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* RECORDATORIO ANTES DE CERRAR ACCIONES DE PRESUPUESTO */}
+      {confirmCloseAcciones && presupuestoParaAcciones && (
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[130] flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={() => setConfirmCloseAcciones(false)}
+        >
+          <div
+            className="bg-white rounded-3xl w-full max-w-md shadow-2xl border border-zinc-200 p-6 space-y-4 animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="w-11 h-11 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-zinc-900">Recordatorio de seguimiento</h3>
+                <p className="text-xs text-zinc-600 mt-1 leading-relaxed">
+                  ¿Has marcado correctamente el estado del envío o acción para poder hacer un seguimiento?
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-zinc-50 border border-zinc-200/80 rounded-2xl px-4 py-3 flex items-center justify-between text-xs">
+              <span className="font-semibold text-zinc-500">Estado actual:</span>
+              <span className={`font-extrabold px-2.5 py-1 rounded-full ${getEstadoInfo(presupuestoParaAcciones.estado).bg} ${getEstadoInfo(presupuestoParaAcciones.estado).color}`}>
+                {getEstadoInfo(presupuestoParaAcciones.estado).etiqueta}
+              </span>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-2.5 pt-1">
+              <button
+                type="button"
+                onClick={() => setConfirmCloseAcciones(false)}
+                className="flex-1 px-4 py-2.5 rounded-xl text-xs font-bold bg-zinc-900 text-white hover:bg-zinc-800 transition-colors cursor-pointer"
+              >
+                Volver para cambiar estado
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setConfirmCloseAcciones(false);
+                  setPresupuestoParaAcciones(null);
+                }}
+                className="flex-1 px-4 py-2.5 rounded-xl text-xs font-bold border border-zinc-200 text-zinc-700 hover:bg-zinc-100 transition-colors cursor-pointer"
+              >
+                Sí, cerrar ventana
+              </button>
             </div>
           </div>
         </div>

@@ -22,6 +22,7 @@ import SistemaArquetaAcometida from './components/RevisionSistemas/SistemaArquet
 import SistemaExtincionCampanaCocina from './components/RevisionSistemas/SistemaExtincionCampanaCocina';
 import SistemaFuenteAlimentacionAuxiliar from './components/RevisionSistemas/SistemaFuenteAlimentacionAuxiliar';
 import SistemaAlumbradoEmergencia from './components/RevisionSistemas/SistemaAlumbradoEmergencia';
+import SistemaSenalizacion from './components/RevisionSistemas/SistemaSenalizacion';
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Save, Layers, ChevronDown, ChevronUp, Plus, X, CheckCircle2, AlertTriangle, PenLine, RotateCcw, CheckCheck, Lock, MessageSquare, Unlock, Calendar, Wifi, WifiOff, RefreshCw } from 'lucide-react';
@@ -3390,6 +3391,7 @@ export default function RevisionChecklist() {
                                                         const isExtincionGas = (sistLower.includes('gas') || (sistLower.includes('extinci') && !isExtintor)) && !isExtincionCampanaCocina && !isExtincionAguaEspuma && !isExtincionManualAgua && !isCanonMonitorEspuma;
                                                         const isFuenteAlimentacionAuxiliar = sistLower.includes('fuente') || (sistLower.includes('alimentaci') && sistLower.includes('auxiliar')) || (sistLower.includes('alimentac') && sistLower.includes('auxiliar'));
                                                         const isAlumbradoEmergencia = sistLower.includes('alumbrado') || sistLower.includes('emergencia');
+                                                        const isSenalizacion = sistLower.includes('senaliz') || sistLower.includes('señaliz');
 
                                                         const commonProps = {
                                                             sist,
@@ -3434,6 +3436,7 @@ export default function RevisionChecklist() {
                                                         if (isExtincionGas) return <SistemaExtincionGas {...commonProps} />;
                                                         if (isFuenteAlimentacionAuxiliar) return <SistemaFuenteAlimentacionAuxiliar {...commonProps} />;
                                                         if (isAlumbradoEmergencia) return <SistemaAlumbradoEmergencia {...commonProps} />;
+                                                        if (isSenalizacion) return <SistemaSenalizacion {...commonProps} />;
                                                         return <SistemaGenerico {...commonProps} />;
                                                     })()
                                                 );

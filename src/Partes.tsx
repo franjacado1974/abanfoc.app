@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FileText, FileCheck, FileDigit, Receipt, ScrollText, AlertTriangle, Calculator, Building2, MapPin, CalendarDays, Search, Trash2, Download, Eye, X, Check, Filter, ChevronDown, ArrowUp, ArrowDown, ArrowUpDown, Loader2, CheckCircle2, RotateCcw } from 'lucide-react';
 import { HandOptionsIcon } from './components/HandOptionsIcon';
-import { subscribePartes, subscribeCentros, subscribeClientes, subscribeTecnicos, deleteParte, db, updateParte, getEquiposInstalados, updateEquipoInstalado } from './firebase';
+import { subscribePartes, subscribeCentros, subscribeClientes, subscribeTecnicos, deleteParte, db, updateParte, getEquiposInstalados, updateEquipoInstalado, obtenerEmpresaAvanfoc } from './firebase';
 import { collection, getDocs, doc, getDoc, query, where } from 'firebase/firestore';
 import { generarActaExtintoresPDF, generarAlbaranPDF, generarCertificadoPDF } from './pdfGenerator';
 import { generarContratoPDF } from './pdfContratoGenerator';
@@ -1011,9 +1011,21 @@ export default function Partes() {
         }
         if (downloadOptions.albaranValorado) {
           setDownloadStepText('Generando Albarán Valorado...');
+          let empresaAbanfoc: any = undefined;
+          try {
+            const empresasLocal = JSON.parse(localStorage.getItem('firecheck_db_empresas') || '[]');
+            empresaAbanfoc = obtenerEmpresaAvanfoc(empresasLocal);
+            if (!empresaAbanfoc) {
+              const empSnap = await getDocs(collection(db, 'empresa'));
+              const empList = empSnap.docs.map(d => ({ _docId: d.id, id: d.id, ...(d.data() as any) }));
+              empresaAbanfoc = obtenerEmpresaAvanfoc(empList);
+            }
+          } catch (err) {
+            console.error("Error resolviendo empresa ABANFOC para Albarán Valorado:", err);
+          }
           await generarAlbaranPDF(
             cliente, centro, equiposTodos, numeroMantenimiento, tecnicoNombre,
-            firmaCliente, firmaTecnico, nombreFirmante, itemsValorados, empresaSeleccionada, false, 'ALBARÁN DE REVISIÓN (VALORADO)', parte.periodicidad, sistemasDelCentro, numeroPedido, parte.fechaCreacion, false
+            firmaCliente, firmaTecnico, nombreFirmante, itemsValorados, empresaAbanfoc || empresaSeleccionada, false, 'ALBARÁN DE REVISIÓN (VALORADO)', parte.periodicidad, sistemasDelCentro, numeroPedido, parte.fechaCreacion, false
           );
         }
       }

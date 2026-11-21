@@ -25,41 +25,51 @@ export const generarContratoPDF = async (
   const sealUrl = empData?.selloUrl;
   const sealBase64 = sealUrl ? await fetchImageToBase64(sealUrl) : null;
 
-  let y = 12;
+  const dibujarCabeceraContrato = async (tituloCabecera: string): Promise<number> => {
+    const startY = 12;
+    // Título del Documento
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(16);
+    doc.setTextColor(40, 40, 40);
+    doc.text(tituloCabecera, margen, startY + 11);
 
-  // Cabecera: Título del Documento
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(16);
-  doc.setTextColor(40, 40, 40);
-  doc.text('CONTRATO DE MANTENIMIENTO', margen, y + 11);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.setTextColor(100, 100, 100);
-  doc.text(`Contrato de mantenimiento nº ${centro.id || ''} de instalaciones y sistemas de protección contra incendios.`, pageWidth / 2, y + 18, { align: 'center' });
-
-  // Dibujar Logo junto al título (esquina superior derecha)
-  if (logoBase64) {
-    try {
-      const { base64: logoOpt, format } = await optimizarImagenParaPDF(logoBase64, 800, 0.75);
-      const logoProps = doc.getImageProperties(logoOpt);
-      const maxLogoWidth = 45;
-      const maxLogoHeight = 12;
-      const logoRatio = logoProps.width / logoProps.height;
-      const logoWidth = Math.min(maxLogoWidth, maxLogoHeight * logoRatio);
-      const logoHeight = logoWidth / logoRatio;
-      doc.addImage(logoOpt, format, pageWidth - margen - logoWidth, y + 5, logoWidth, logoHeight);
-    } catch (e) {
-      console.error('Error dibujando logo en cabecera del contrato:', e);
+    // Dibujar Logo junto al título (esquina superior derecha)
+    if (logoBase64) {
+      try {
+        const { base64: logoOpt, format } = await optimizarImagenParaPDF(logoBase64, 800, 0.75);
+        const logoProps = doc.getImageProperties(logoOpt);
+        const maxLogoWidth = 45;
+        const maxLogoHeight = 12;
+        const logoRatio = logoProps.width / logoProps.height;
+        const logoWidth = Math.min(maxLogoWidth, maxLogoHeight * logoRatio);
+        const logoHeight = logoWidth / logoRatio;
+        doc.addImage(logoOpt, format, pageWidth - margen - logoWidth, startY + 2, logoWidth, logoHeight);
+      } catch (e) {
+        console.error('Error dibujando logo en cabecera del contrato:', e);
+      }
     }
-  }
 
-  y += 21;
+    const lineY = startY + 16;
+    // Línea divisoria debajo del título
+    doc.setDrawColor(40, 40, 40);
+    doc.setLineWidth(0.6);
+    doc.line(margen, lineY, pageWidth - margen, lineY);
 
-  // Línea divisoria
-  doc.setDrawColor(40, 40, 40);
-  doc.setLineWidth(0.6);
-  doc.line(margen, y, pageWidth - margen, y);
-  y += 8;
+    // Subtítulo debajo de la línea divisoria
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(100, 100, 100);
+    doc.text(
+      `Contrato de mantenimiento nº ${centro.id || contrato.numeroContrato || ''} de instalaciones y sistemas de protección contra incendios.`,
+      pageWidth / 2,
+      lineY + 5,
+      { align: 'center' }
+    );
+
+    return lineY + 11;
+  };
+
+  let y = await dibujarCabeceraContrato('CONTRATO DE MANTENIMIENTO');
 
   // Cargar datos de la empresa mantenedora
   const empNombre = empData?.nombre || 'ABANFOC S.L.';
@@ -232,10 +242,10 @@ export const generarContratoPDF = async (
     valorAnualSubtotal = totalImporte;
   }
 
-  // Inciso a)
+  // Inciso a) - referencia al anexo INVENTARIO DE SISTEMAS Y CUOTAS en hoja aparte
   const clientAIntro = esPorSistema
-    ? 'a) Se compromete al pago de las siguientes tarifas acordadas por sistema y equipo:'
-    : 'a) Se compromete al pago de las siguientes cuotas acordadas:';
+    ? 'a) Se compromete al pago de las tarifas acordadas por sistema y equipo detalladas en el anexo "INVENTARIO DE SISTEMAS Y CUOTAS" adjunto al presente contrato.'
+    : 'a) Se compromete al pago de las cuotas acordadas detalladas en el anexo "INVENTARIO DE SISTEMAS Y CUOTAS" adjunto al presente contrato.';
   const introSplit = doc.splitTextToSize(clientAIntro, pageWidth - margen * 2);
   introSplit.forEach((line: string) => {
     if (y > pageHeight - 20) {
@@ -246,9 +256,9 @@ export const generarContratoPDF = async (
     y += 3.5;
   });
 
-  y += 2;
+  y += 1.5;
 
-  // Dibujar tabla dinámica (4 columnas para cuota fija, 5 columnas para precio por sistema con Anual y Trimestral)
+  // Preparar las filas de la tabla dinámica para dibujarlas en la hoja anexa "INVENTARIO DE SISTEMAS Y CUOTAS"
   const colWidths = esPorSistema
     ? [66, 18, 32, 34, 36]
     : [80, 25, 38, 43];
@@ -262,26 +272,27 @@ export const generarContratoPDF = async (
   ];
   const rowHeight = 5.5;
 
-  // Preparar las filas que realmente tienen contenido
   const tableRows: { concepto: string; cantidad: string; unitarioAnual?: string; unitarioTrim?: string; unitario?: string; subtotal: string }[] = [];
   let totalSuma = 0;
 
   if (esPorSistema) {
-    // Modalidad Precio por Sistemas / Equipos (con precio Anual y Trimestral)
+    const numTrimestrales = isTrimestral ? (isAnual ? 3 : 4) : 0;
     if (_sistemas && _sistemas.length > 0) {
       _sistemas.forEach((s: any) => {
         const nombre = s.descripcion || s.tipo || s.familia || s.nombre || 'Sistema PCI';
         const cant = Number(s.cantidadEquipos) || 0;
         const pAnual = Number(s.precioUnitarioAnual !== undefined ? s.precioUnitarioAnual : s.precioUnitario) || 0;
-        const pTrim = Number(s.precioUnitarioTrimestral !== undefined ? s.precioUnitarioTrimestral : s.precioUnitario) || (pAnual > 0 ? pAnual : 0);
-        const sub = Math.round(cant * pAnual * 100) / 100;
-        totalSuma += sub;
+        const pTrim = isTrimestral ? (Number(s.precioUnitarioTrimestral || 0) || 0) : 0;
+        const subAnual = Math.round(cant * pAnual * 100) / 100;
+        const subTrimTotal = Math.round(cant * pTrim * numTrimestrales * 100) / 100;
+        const subTotalLinea = Math.round((subAnual + subTrimTotal) * 100) / 100;
+        totalSuma += subTotalLinea;
         tableRows.push({
           concepto: nombre,
           cantidad: String(cant),
           unitarioAnual: `${pAnual.toFixed(2)} €/ud`,
-          unitarioTrim: `${pTrim.toFixed(2)} €/ud`,
-          subtotal: `${sub.toFixed(2)} € : + i.v.a.`
+          unitarioTrim: isTrimestral && pTrim > 0 ? `${pTrim.toFixed(2)} €/ud` : '—',
+          subtotal: `${subTotalLinea.toFixed(2)} € : + i.v.a.`
         });
       });
     }
@@ -291,13 +302,12 @@ export const generarContratoPDF = async (
         concepto: 'Sistemas PCI del Centro',
         cantidad: '1',
         unitarioAnual: `${totalImporte.toFixed(2)} €/ud`,
-        unitarioTrim: `${totalImporte.toFixed(2)} €/ud`,
+        unitarioTrim: isTrimestral ? `${totalImporte.toFixed(2)} €/ud` : '—',
         subtotal: `${totalImporte.toFixed(2)} € : + i.v.a.`
       });
       totalSuma = totalImporte;
     }
   } else {
-    // Modalidad Cuota Fija
     const cantAnual = isAnual || (!isTrimestral && !isMensual) ? '1' : '0';
     if (cantAnual !== '0' || valorAnualSubtotal > 0) {
       tableRows.push({
@@ -308,7 +318,6 @@ export const generarContratoPDF = async (
       });
     }
 
-    // Fila Trimestral
     const cantTrimestral = isTrimestral ? (isAnual ? '3' : '4') : '0';
     if (cantTrimestral !== '0' || valorTrimestralSubtotal > 0) {
       tableRows.push({
@@ -319,7 +328,6 @@ export const generarContratoPDF = async (
       });
     }
 
-    // Fila Mensual
     const cantMensual = isMensual ? (isAnual ? '11' : (isTrimestral ? '8' : '12')) : '0';
     if (cantMensual !== '0' || valorMensualSubtotal > 0) {
       tableRows.push({
@@ -339,98 +347,13 @@ export const generarContratoPDF = async (
       });
     }
 
-    totalSuma = (valorAnualSubtotal > 0 ? valorAnualSubtotal : 0) + 
-                (valorTrimestralSubtotal > 0 ? valorTrimestralSubtotal : 0) + 
+    totalSuma = (valorAnualSubtotal > 0 ? valorAnualSubtotal : 0) +
+                (valorTrimestralSubtotal > 0 ? valorTrimestralSubtotal : 0) +
                 (valorMensualSubtotal > 0 ? valorMensualSubtotal : 0);
     if (totalSuma === 0) {
       totalSuma = totalImporte;
     }
   }
-
-  const numRows = tableRows.length + 1; // +1 de cabecera
-  const tableHeight = numRows * rowHeight;
-
-  if (y > pageHeight - 30) {
-    doc.addPage();
-    y = 4;
-  }
-
-  // Dibujar fondo cabecera
-  doc.setFillColor(240, 242, 245);
-  doc.rect(margen, y, pageWidth - margen * 2, rowHeight, 'F');
-
-  // Bordes y líneas horizontales
-  doc.setDrawColor(210, 214, 219);
-  doc.setLineWidth(0.2);
-  doc.line(margen, y, pageWidth - margen, y); // Línea superior
-  for (let i = 1; i <= numRows; i++) {
-    doc.line(margen, y + rowHeight * i, pageWidth - margen, y + rowHeight * i);
-  }
-
-  // Líneas verticales
-  doc.line(margen, y, margen, y + tableHeight); // Izquierda
-  colX.slice(1).forEach(cx => {
-    doc.line(cx, y, cx, y + tableHeight);
-  });
-  doc.line(pageWidth - margen, y, pageWidth - margen, y + tableHeight); // Derecha
-
-  // Escribir cabecera
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(6.5);
-  doc.setTextColor(60, 60, 60);
-  if (esPorSistema) {
-    doc.text('Sistema / Elemento PCI', colX[0] + 3, y + 3.8);
-    doc.text('Equipos', colX[1] + 2, y + 3.8);
-    doc.text('P. Unit. Anual', colX[2] + 2, y + 3.8);
-    doc.text('P. Unit. Trim.', colX[3] + 2, y + 3.8);
-    doc.text('Subtotal Anual', colX[4] + 2, y + 3.8);
-  } else {
-    doc.text('Concepto', colX[0] + 3, y + 3.8);
-    doc.text('Cantidad', colX[1] + 3, y + 3.8);
-    doc.text('Precio Unitario', colX[2] + 3, y + 3.8);
-    doc.text('Subtotal', colX[3] + 3, y + 3.8);
-  }
-
-  // Escribir filas de datos
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(80, 80, 80);
-  tableRows.forEach((row, index) => {
-    const rowY = y + rowHeight * (index + 1);
-    if (esPorSistema) {
-      doc.text(row.concepto, colX[0] + 3, rowY + 3.8);
-      doc.text(row.cantidad, colX[1] + 2, rowY + 3.8);
-      doc.text(row.unitarioAnual || '', colX[2] + 2, rowY + 3.8);
-      doc.text(row.unitarioTrim || '', colX[3] + 2, rowY + 3.8);
-      doc.text(row.subtotal, colX[4] + 2, rowY + 3.8);
-    } else {
-      doc.text(row.concepto, colX[0] + 3, rowY + 3.8);
-      doc.text(row.cantidad, colX[1] + 3, rowY + 3.8);
-      doc.text(row.unitario || '', colX[2] + 3, rowY + 3.8);
-      doc.text(row.subtotal, colX[3] + 3, rowY + 3.8);
-    }
-  });
-
-  // Dibujar la celda de Total debajo de la columna Subtotal
-  const totalColIndex = esPorSistema ? 4 : 3;
-  const totalCellY = y + tableHeight;
-  doc.setFillColor(248, 250, 252);
-  doc.rect(colX[totalColIndex], totalCellY, pageWidth - margen - colX[totalColIndex], rowHeight, 'F');
-  
-  doc.setDrawColor(210, 214, 219);
-  doc.setLineWidth(0.2);
-  doc.line(colX[totalColIndex], totalCellY, colX[totalColIndex], totalCellY + rowHeight);
-  doc.line(pageWidth - margen, totalCellY, pageWidth - margen, totalCellY + rowHeight);
-  doc.line(colX[totalColIndex], totalCellY + rowHeight, pageWidth - margen, totalCellY + rowHeight);
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(6.5);
-  doc.setTextColor(40, 40, 40);
-  doc.text(esPorSistema ? `Total Anual: ${totalSuma.toFixed(2)} € : + i.v.a.` : `Total: ${totalSuma.toFixed(2)} € : + i.v.a.`, colX[totalColIndex] + 2, totalCellY + 3.8);
-
-  y += tableHeight + rowHeight + 3;
-
-  doc.setFont('helvetica', 'normal');
-  y += 2;
 
   const formaPagoTxt = contrato.formaPago || 'Transferencia bancaria';
   
@@ -605,32 +528,142 @@ export const generarContratoPDF = async (
 
   y += 1;
 
-  // Firmas
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
-  doc.text('Por la Empresa Mantenedora', margen + 20, y);
-  doc.text('Por el Cliente / Titular', pageWidth - margen - 50, y);
-
-  if (sealBase64) {
-    try {
-      const { base64: sealOpt, format } = await optimizarImagenParaPDF(sealBase64, 800, 0.75);
-      const sealProps = doc.getImageProperties(sealOpt);
-      const maxSealWidth = 45;
-      const maxSealHeight = 27;
-      const sealRatio = sealProps.width / sealProps.height;
-      const sealWidth = Math.min(maxSealWidth, maxSealHeight * sealRatio);
-      const sealHeight = sealWidth / sealRatio;
-      doc.addImage(sealOpt, format, margen + 18, y + 2, sealWidth, sealHeight);
-    } catch (e) {
-      console.error('Error dibujando el sello en el contrato:', e);
+  const dibujarFirmasContrato = async (startY: number) => {
+    let fY = startY;
+    if (fY > pageHeight - 36) {
+      doc.addPage();
+      fY = 16;
     }
-  }
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(40, 40, 40);
+    doc.text('Por la Empresa Mantenedora', margen + 20, fY);
+    doc.text('Por el Cliente / Titular', pageWidth - margen - 50, fY);
 
-  y += 12;
+    if (sealBase64) {
+      try {
+        const { base64: sealOpt, format } = await optimizarImagenParaPDF(sealBase64, 800, 0.75);
+        const sealProps = doc.getImageProperties(sealOpt);
+        const maxSealWidth = 45;
+        const maxSealHeight = 27;
+        const sealRatio = sealProps.width / sealProps.height;
+        const sealWidth = Math.min(maxSealWidth, maxSealHeight * sealRatio);
+        const sealHeight = sealWidth / sealRatio;
+        doc.addImage(sealOpt, format, margen + 18, fY + 2, sealWidth, sealHeight);
+      } catch (e) {
+        console.error('Error dibujando el sello en el contrato:', e);
+      }
+    }
+
+    fY += 12;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.setTextColor(40, 40, 40);
+    doc.text('Firma y Sello:', margen + 8, fY);
+    doc.text('Firma y Sello:', pageWidth - margen - 62, fY);
+  };
+
+  // Firmas en primera hoja (condiciones)
+  await dibujarFirmasContrato(y);
+
+  // ============================================================================
+  // HOJA ANEXA: INVENTARIO DE SISTEMAS Y CUOTAS + FIRMAS
+  // ============================================================================
+  doc.addPage();
+  let yAnexo = await dibujarCabeceraContrato('INVENTARIO DE SISTEMAS Y CUOTAS');
+  yAnexo += 10;
+
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7);
-  doc.text('Firma y Sello:', margen + 8, y);
-  doc.text('Firma y Sello:', pageWidth - margen - 62, y);
+  doc.setFontSize(8);
+  doc.setTextColor(90, 95, 105);
+  doc.text(`Cliente: ${cliente?.nombre || 'TITULAR'}  |  Centro: ${centro?.nombre || 'Centro'}`, margen, yAnexo);
+  yAnexo += 6;
+
+  const colCenter = (idx: number) => colX[idx] + colWidths[idx] / 2;
+
+  const dibujarCabeceraTabla = (yCab: number) => {
+    doc.setFillColor(240, 242, 245);
+    doc.rect(margen, yCab, pageWidth - margen * 2, rowHeight, 'F');
+    doc.setDrawColor(210, 214, 219);
+    doc.setLineWidth(0.2);
+    doc.line(margen, yCab, pageWidth - margen, yCab);
+    doc.line(margen, yCab + rowHeight, pageWidth - margen, yCab + rowHeight);
+    doc.line(margen, yCab, margen, yCab + rowHeight);
+    colX.slice(1).forEach(cx => doc.line(cx, yCab, cx, yCab + rowHeight));
+    doc.line(pageWidth - margen, yCab, pageWidth - margen, yCab + rowHeight);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(6.5);
+    doc.setTextColor(60, 60, 60);
+    if (esPorSistema) {
+      doc.text('Sistema / Elemento PCI', colX[0] + 3, yCab + 3.8);
+      doc.text('Equipos', colCenter(1), yCab + 3.8, { align: 'center' });
+      doc.text('P. Unit. Anual', colCenter(2), yCab + 3.8, { align: 'center' });
+      doc.text('P. Unit. Trim.', colCenter(3), yCab + 3.8, { align: 'center' });
+      doc.text('Subtotal Anual', colCenter(4), yCab + 3.8, { align: 'center' });
+    } else {
+      doc.text('Concepto', colX[0] + 3, yCab + 3.8);
+      doc.text('Cantidad', colCenter(1), yCab + 3.8, { align: 'center' });
+      doc.text('Precio Unitario', colCenter(2), yCab + 3.8, { align: 'center' });
+      doc.text('Subtotal', colCenter(3), yCab + 3.8, { align: 'center' });
+    }
+  };
+
+  dibujarCabeceraTabla(yAnexo);
+  yAnexo += rowHeight;
+
+  tableRows.forEach((row) => {
+    if (yAnexo > pageHeight - 42) {
+      doc.addPage();
+      yAnexo = 16;
+      dibujarCabeceraTabla(yAnexo);
+      yAnexo += rowHeight;
+    }
+
+    doc.setDrawColor(210, 214, 219);
+    doc.setLineWidth(0.2);
+    doc.line(margen, yAnexo + rowHeight, pageWidth - margen, yAnexo + rowHeight);
+    doc.line(margen, yAnexo, margen, yAnexo + rowHeight);
+    colX.slice(1).forEach(cx => doc.line(cx, yAnexo, cx, yAnexo + rowHeight));
+    doc.line(pageWidth - margen, yAnexo, pageWidth - margen, yAnexo + rowHeight);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6.5);
+    doc.setTextColor(80, 80, 80);
+    if (esPorSistema) {
+      doc.text(row.concepto, colX[0] + 3, yAnexo + 3.8);
+      doc.text(row.cantidad, colCenter(1), yAnexo + 3.8, { align: 'center' });
+      doc.text(row.unitarioAnual || '', colCenter(2), yAnexo + 3.8, { align: 'center' });
+      doc.text(row.unitarioTrim || '', colCenter(3), yAnexo + 3.8, { align: 'center' });
+      doc.text(row.subtotal, colCenter(4), yAnexo + 3.8, { align: 'center' });
+    } else {
+      doc.text(row.concepto, colX[0] + 3, yAnexo + 3.8);
+      doc.text(row.cantidad, colCenter(1), yAnexo + 3.8, { align: 'center' });
+      doc.text(row.unitario || '', colCenter(2), yAnexo + 3.8, { align: 'center' });
+      doc.text(row.subtotal, colCenter(3), yAnexo + 3.8, { align: 'center' });
+    }
+    yAnexo += rowHeight;
+  });
+
+  // Celda de Total debajo de la columna Subtotal
+  const totalColIndex = esPorSistema ? 4 : 3;
+  doc.setFillColor(248, 250, 252);
+  doc.rect(colX[totalColIndex], yAnexo, pageWidth - margen - colX[totalColIndex], rowHeight, 'F');
+  doc.setDrawColor(210, 214, 219);
+  doc.setLineWidth(0.2);
+  doc.line(colX[totalColIndex], yAnexo, colX[totalColIndex], yAnexo + rowHeight);
+  doc.line(pageWidth - margen, yAnexo, pageWidth - margen, yAnexo + rowHeight);
+  doc.line(colX[totalColIndex], yAnexo + rowHeight, pageWidth - margen, yAnexo + rowHeight);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(6.5);
+  doc.setTextColor(40, 40, 40);
+  doc.text(esPorSistema ? `Total Anual: ${totalSuma.toFixed(2)} € : + i.v.a.` : `Total: ${totalSuma.toFixed(2)} € : + i.v.a.`, colCenter(totalColIndex), yAnexo + 3.8, { align: 'center' });
+
+  yAnexo += rowHeight + 12;
+
+  // Firmas debajo de la tabla en la hoja anexa
+  await dibujarFirmasContrato(yAnexo);
 
   // Guardar documento
   doc.save(`Contrato_${contrato.numeroContrato || 'Mantenimiento'}_${centro.nombre || 'Centro'}.pdf`);

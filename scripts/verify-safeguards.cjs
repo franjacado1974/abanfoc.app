@@ -2333,6 +2333,103 @@ if (fs.existsSync(pdfGenPath)) {
     }
   }
 
+  // REGLA 137: Sistemas Instalados en Editar Centro, Albarán Valorado ABANFOC (Albaran_valorado_), estado "Descargado y enviado fuera de Salamandra" + recordatorio, y Contrato en 2 hojas con INVENTARIO DE SISTEMAS Y CUOTAS
+  const centrosPath137 = path.join(__dirname, '..', 'src', 'Centros.tsx');
+  if (fs.existsSync(centrosPath137)) {
+    const centrosContent137 = fs.readFileSync(centrosPath137, 'utf8');
+    if (
+      !centrosContent137.includes("view === 'form' ? (form._docId || form.id) : ''") ||
+      !centrosContent137.includes('getEquiposInstalados(docIdCentroContrato, s.id)')
+    ) {
+      errors.push('CRÍTICO: Centros.tsx debe mantener la suscripción de sistemas en edición y carga de equipos para contrato (REGLA 137).');
+    }
+  }
+
+  const partesPath137 = path.join(__dirname, '..', 'src', 'Partes.tsx');
+  if (fs.existsSync(partesPath137)) {
+    const partesContent137 = fs.readFileSync(partesPath137, 'utf8');
+    if (!partesContent137.includes('obtenerEmpresaAvanfoc(empresasLocal)')) {
+      errors.push('CRÍTICO: Partes.tsx debe mantener obtenerEmpresaAvanfoc para el Albarán Valorado (REGLA 137).');
+    }
+  }
+
+  const pdfGenPath137 = path.join(__dirname, '..', 'src', 'pdfGenerator.ts');
+  if (fs.existsSync(pdfGenPath137)) {
+    const pdfGenContent137 = fs.readFileSync(pdfGenPath137, 'utf8');
+    if (!pdfGenContent137.includes("'Albaran_valorado'")) {
+      errors.push('CRÍTICO: pdfGenerator.ts debe mantener el nombre de archivo Albaran_valorado para albaranes valorados (REGLA 137).');
+    }
+  }
+
+  const presPath137 = path.join(__dirname, '..', 'src', 'Presupuestos.tsx');
+  if (fs.existsSync(presPath137)) {
+    const presContent137 = fs.readFileSync(presPath137, 'utf8');
+    if (
+      !presContent137.includes('Descargado y enviado fuera de Salamandra') ||
+      !presContent137.includes('confirmCloseAcciones') ||
+      !presContent137.includes('max-w-4xl lg:max-w-5xl')
+    ) {
+      errors.push('CRÍTICO: Presupuestos.tsx debe mantener el estado "Descargado y enviado fuera de Salamandra", modal ensanchado y recordatorio al cerrar (REGLA 137).');
+    }
+  }
+
+  const contratoPath137 = path.join(__dirname, '..', 'src', 'pdfContratoGenerator.ts');
+  if (fs.existsSync(contratoPath137)) {
+    const contratoContent137 = fs.readFileSync(contratoPath137, 'utf8');
+    if (
+      !contratoContent137.includes('INVENTARIO DE SISTEMAS Y CUOTAS') ||
+      !contratoContent137.includes('dibujarCabeceraContrato') ||
+      !contratoContent137.includes('dibujarFirmasContrato') ||
+      !contratoContent137.includes('colCenter')
+    ) {
+      errors.push('CRÍTICO: pdfContratoGenerator.ts debe mantener la hoja anexa INVENTARIO DE SISTEMAS Y CUOTAS, cabeceras/firmas en ambas hojas y columnas centradas (REGLA 137).');
+    }
+  }
+
+  // REGLA 138: Sistema SEÑALIZACIÓN completo (componente, RevisionChecklist, constants, PDF horizontal 269mm verde/rojo) y título de anomalías con sistema en negrita cursiva
+  const senalPath138 = path.join(__dirname, '..', 'src', 'components', 'RevisionSistemas', 'SistemaSenalizacion.tsx');
+  if (!fs.existsSync(senalPath138)) {
+    errors.push('CRÍTICO: Falta src/components/RevisionSistemas/SistemaSenalizacion.tsx (REGLA 138).');
+  } else {
+    const senalContent138 = fs.readFileSync(senalPath138, 'utf8');
+    if (
+      !senalContent138.includes('Anomalías del equipo:') ||
+      !senalContent138.includes('Observaciones del equipo:') ||
+      !senalContent138.includes('BotonGuardarEquipo')
+    ) {
+      errors.push('CRÍTICO: SistemaSenalizacion.tsx debe mantener los cuadros independientes y BotonGuardarEquipo (REGLA 138).');
+    }
+  }
+
+  const constPath138 = path.join(__dirname, '..', 'src', 'constants.ts');
+  if (fs.existsSync(constPath138)) {
+    const constContent138 = fs.readFileSync(constPath138, 'utf8');
+    if (!constContent138.includes('SISTEMA SEÑALIZACIÓN')) {
+      errors.push('CRÍTICO: constants.ts debe mantener SISTEMA SEÑALIZACIÓN en FAMILIAS_SISTEMAS_EXISTENTES (REGLA 138).');
+    }
+  }
+
+  const rcPath138 = path.join(__dirname, '..', 'src', 'RevisionChecklist.tsx');
+  if (fs.existsSync(rcPath138)) {
+    const rcContent138 = fs.readFileSync(rcPath138, 'utf8');
+    if (!rcContent138.includes('SistemaSenalizacion') || !rcContent138.includes('isSenalizacion')) {
+      errors.push('CRÍTICO: RevisionChecklist.tsx debe mantener la integración de SistemaSenalizacion (REGLA 138).');
+    }
+  }
+
+  const pdfPath138 = path.join(__dirname, '..', 'src', 'pdfGenerator.ts');
+  if (fs.existsSync(pdfPath138)) {
+    const pdfContent138 = fs.readFileSync(pdfPath138, 'utf8');
+    if (
+      !pdfContent138.includes('esSenalizacion') ||
+      !pdfContent138.includes('senalizacionTodosItems') ||
+      !pdfContent138.includes("a.includes('senaliz') && b.includes('senaliz')") ||
+      !pdfContent138.includes('bolditalic')
+    ) {
+      errors.push('CRÍTICO: pdfGenerator.ts debe mantener la tabla horizontal de SEÑALIZACIÓN (269mm, verde/rojo) y el título de anomalías con sistema en bolditalic (REGLA 138).');
+    }
+  }
+
 // Resultado de la verificación
 if (errors.length > 0) {
   console.error('\n❌ ERROR CRÍTICO DE BLINDAJE INTEGRAL (AGENTS.md):');
