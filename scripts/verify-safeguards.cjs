@@ -2606,9 +2606,10 @@ if (fs.existsSync(pdfGenPath)) {
       !edContent142.includes('MonthYearSelect') ||
       !edContent142.includes('Movimiento icono') ||
       !edContent142.includes('Posición etiqueta') ||
-      !edContent142.includes('Color del icono')
+      !edContent142.includes('handleRecolorSelected') ||
+      !edContent142.includes('handleRedo')
     ) {
-      errors.push('CRÍTICO: NotaSeccionesEditor.tsx debe mantener Puerta corredera RF, presets RF 60/90/120, MonthYearSelect y encabezados Color del icono / Movimiento icono / Posición etiqueta (REGLA 142).');
+      errors.push('CRÍTICO: NotaSeccionesEditor.tsx debe mantener Puerta corredera RF, presets RF 60/90/120, MonthYearSelect, paleta unificada, Rehacer y encabezados Movimiento icono / Posición etiqueta (REGLA 142).');
     }
   }
 
@@ -2617,6 +2618,58 @@ if (fs.existsSync(pdfGenPath)) {
     const fbContent142 = fs.readFileSync(fbPath142, 'utf8');
     if (!fbContent142.includes("'puerta-corredera'")) {
       errors.push('CRÍTICO: firebase.tsx debe mantener puerta-corredera en NotaPlanoElemento (REGLA 142).');
+    }
+    if (!fbContent142.includes("'polygon'") || !fbContent142.includes('subscribeVacacionesSolicitudes')) {
+      errors.push('CRÍTICO: firebase.tsx debe mantener polygon en NotaPlanoElemento y subscribeVacacionesSolicitudes (REGLA 143).');
+    }
+  }
+
+  // REGLA 143: Blindaje de Polígono 90°, Puerta sin numerar, Puertas RF correlativas, Leyenda vertical PDF, Nitidez 2x, Aplicar verde 3s y 3 Calendarios unificados
+  if (fs.existsSync(editorPath139)) {
+    const edContent143 = fs.readFileSync(editorPath139, 'utf8');
+    if (
+      !edContent143.includes("'polygon'") ||
+      !edContent143.includes('polygonOrtho') ||
+      !edContent143.includes('getEquipoGrupoKey') ||
+      !edContent143.includes('ExtintorIcon') ||
+      !edContent143.includes('dibujarLeyendaEnCanvas') ||
+      !edContent143.includes('renderPlanoConCajetinHiRes') ||
+      !edContent143.includes('appliedFeedback')
+    ) {
+      errors.push('CRÍTICO: NotaSeccionesEditor.tsx debe mantener Área/Polígono, getEquipoGrupoKey, ExtintorIcon, dibujarLeyendaEnCanvas, renderPlanoConCajetinHiRes y appliedFeedback (REGLA 143).');
+    }
+  }
+  const notasPath143 = path.join(__dirname, '..', 'src', 'Notas.tsx');
+  if (fs.existsSync(notasPath143)) {
+    const notasContent143 = fs.readFileSync(notasPath143, 'utf8');
+    if (!notasContent143.includes('renderPlanoConCajetinHiRes') || notasContent143.includes("doc.text('MOTIVO / QUÉ HAY QUE HACER:'")) {
+      errors.push('CRÍTICO: Notas.tsx debe usar renderPlanoConCajetinHiRes y omitir la etiqueta MOTIVO / QUÉ HAY QUE HACER: en el PDF (REGLA 143).');
+    }
+  }
+  const calPath143 = path.join(__dirname, '..', 'src', 'Calendario.tsx');
+  const calLabPath143 = path.join(__dirname, '..', 'src', 'components', 'CalendarioLaboral.tsx');
+  const calVacPath143 = path.join(__dirname, '..', 'src', 'components', 'CalendarioVacaciones.tsx');
+  if (!fs.existsSync(calLabPath143) || !fs.existsSync(calVacPath143)) {
+    errors.push('CRÍTICO: Deben existir src/components/CalendarioLaboral.tsx y src/components/CalendarioVacaciones.tsx (REGLA 143).');
+  } else {
+    const labContent143 = fs.readFileSync(calLabPath143, 'utf8');
+    const vacContent143 = fs.readFileSync(calVacPath143, 'utf8');
+    if (fs.existsSync(sidebarPath)) {
+      const sideContent143 = fs.readFileSync(sidebarPath, 'utf8');
+      if (
+        !sideContent143.includes('Calendario de Tareas') ||
+        !sideContent143.includes('Calendario Laboral') ||
+        !sideContent143.includes('Calendario Vacaciones') ||
+        !sideContent143.includes('SombrillaIcon')
+      ) {
+        errors.push('CRÍTICO: Sidebar.tsx debe incluir los 3 submenús de Calendario y el icono SombrillaIcon en Vacaciones (REGLA 143).');
+      }
+    }
+    if (!labContent143.includes('BARCELONA_FESTIVOS_OFICIALES') || !labContent143.includes('https://ajuntament.barcelona.cat/calendarifestius/es/') || !labContent143.includes('lg:grid-cols-4')) {
+      errors.push('CRÍTICO: CalendarioLaboral.tsx debe incluir BARCELONA_FESTIVOS_OFICIALES, la URL oficial de Barcelona y el diseño 3x4 (lg:grid-cols-4) (REGLA 143).');
+    }
+    if (!vacContent143.includes('addVacacionSolicitud') || !vacContent143.includes('https://ajuntament.barcelona.cat/calendarifestius/es/') || !vacContent143.includes('min-h-[125px]')) {
+      errors.push('CRÍTICO: CalendarioVacaciones.tsx debe incluir addVacacionSolicitud, la URL oficial de Barcelona y casillas altas (min-h-[125px]) (REGLA 143).');
     }
   }
 

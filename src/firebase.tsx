@@ -3927,6 +3927,7 @@ export interface NotaPlanoElemento {
     | 'arrow'
     | 'rect'
     | 'circle'
+    | 'polygon'
     | 'escalera'
     | 'door'
     | 'puerta-rf'
@@ -3961,6 +3962,7 @@ export interface NotaPlanoElemento {
   estadoSenal?: string;
   labelPos?: 'bottom' | 'top' | 'left' | 'right';
   rotation?: number;
+  closed?: boolean;
   points?: { x: number; y: number }[];
 }
 
@@ -4849,6 +4851,105 @@ export async function deleteCompra(docId: string) {
     await deleteDoc(docRef);
   } catch (e) {
     console.error('deleteCompra error:', e);
+    throw e;
+  }
+}
+
+export interface VacacionSolicitud {
+  _docId?: string;
+  id?: string;
+  usuarioId?: string;
+  usuarioNombre: string;
+  tipo: 'vacaciones' | 'festivo' | 'puente';
+  fechaInicio: string; // YYYY-MM-DD
+  fechaFin: string;    // YYYY-MM-DD
+  motivo?: string;
+  estado: 'pendiente' | 'aprobada' | 'rechazada';
+  aprobadoPor?: string;
+  fechaResolucion?: string;
+  fechaCreacion?: string;
+}
+
+export function subscribeVacacionesSolicitudes(callback: (items: VacacionSolicitud[]) => void) {
+  try {
+    const col = collection(db, 'vacaciones_solicitudes');
+    const unsub = onSnapshot(col, (snap) => {
+      const items = snap.docs.map((d) => {
+        const data = d.data() as any;
+        return {
+          ...data,
+          _docId: d.id,
+          id: data?.id ?? d.id,
+          usuarioNombre: data?.usuarioNombre || 'Usuario',
+          usuarioId: data?.usuarioId || '',
+          tipo: data?.tipo || 'vacaciones',
+          fechaInicio: data?.fechaInicio || '',
+          fechaFin: data?.fechaFin || data?.fechaInicio || '',
+          motivo: data?.motivo || '',
+          estado: data?.estado || 'pendiente',
+          aprobadoPor: data?.aprobadoPor || '',
+          fechaResolucion: data?.fechaResolucion || '',
+          fechaCreacion: data?.fechaCreacion || new Date().toISOString()
+        } as VacacionSolicitud;
+      });
+      try {
+        localStorage.setItem('firecheck_db_vacaciones_solicitudes', JSON.stringify(items));
+      } catch (e) {
+        console.error('Error guardando vacaciones_solicitudes en localStorage:', e);
+      }
+      callback(items);
+    }, (err) => {
+      console.error('subscribeVacacionesSolicitudes error:', err);
+      try {
+        const cached = localStorage.getItem('firecheck_db_vacaciones_solicitudes');
+        if (cached) callback(JSON.parse(cached));
+      } catch {
+        callback([]);
+      }
+    });
+    return unsub;
+  } catch (e) {
+    console.error('subscribeVacacionesSolicitudes error:', e);
+    return () => {};
+  }
+}
+
+export async function addVacacionSolicitud(data: Omit<VacacionSolicitud, '_docId' | 'id'>) {
+  try {
+    const col = collection(db, 'vacaciones_solicitudes');
+    const dataToSave = cleanUndefinedForFirestore({
+      ...data,
+      fechaCreacion: data.fechaCreacion || new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+    const docRef = await addDoc(col, dataToSave);
+    return { ...dataToSave, _docId: docRef.id, id: docRef.id } as VacacionSolicitud;
+  } catch (e) {
+    console.error('addVacacionSolicitud error:', e);
+    throw e;
+  }
+}
+
+export async function updateVacacionSolicitud(docId: string, data: Partial<VacacionSolicitud>) {
+  try {
+    const docRef = doc(db, 'vacaciones_solicitudes', docId);
+    const dataToSave = cleanUndefinedForFirestore({
+      ...data,
+      updatedAt: new Date().toISOString()
+    });
+    await updateDoc(docRef, dataToSave);
+  } catch (e) {
+    console.error('updateVacacionSolicitud error:', e);
+    throw e;
+  }
+}
+
+export async function deleteVacacionSolicitud(docId: string) {
+  try {
+    const docRef = doc(db, 'vacaciones_solicitudes', docId);
+    await deleteDoc(docRef);
+  } catch (e) {
+    console.error('deleteVacacionSolicitud error:', e);
     throw e;
   }
 }

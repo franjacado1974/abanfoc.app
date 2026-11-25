@@ -2112,7 +2112,17 @@ export default function App() {
         
         <Route path="/calendario" element={
           <ProtectedRoute allowedRoles={['super-administrador', 'administrador', 'editor', 'visualizador']} user={loggedUser}>
-            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Calendario /></PageLayout>
+            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Calendario user={loggedUser} initialTab="tareas" /></PageLayout>
+          </ProtectedRoute>
+        } />
+        <Route path="/calendario-laboral" element={
+          <ProtectedRoute allowedRoles={['super-administrador', 'administrador', 'editor', 'visualizador']} user={loggedUser}>
+            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Calendario user={loggedUser} initialTab="laboral" /></PageLayout>
+          </ProtectedRoute>
+        } />
+        <Route path="/calendario-vacaciones" element={
+          <ProtectedRoute allowedRoles={['super-administrador', 'administrador', 'editor', 'visualizador']} user={loggedUser}>
+            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Calendario user={loggedUser} initialTab="vacaciones" /></PageLayout>
           </ProtectedRoute>
         } />
         

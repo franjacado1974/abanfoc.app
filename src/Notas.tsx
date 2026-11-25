@@ -10,12 +10,16 @@ import {
   updateNotaBloc,
   deleteNotaBloc,
   type NotaBlocItem,
-  type NotaSeccionItem
+  type NotaSeccionItem,
+  type NotaPlanoElemento
 } from './firebase';
 import { optimizarImagenParaPDF } from './pdfGenerator';
 import NotaSeccionesEditor, {
   exportarDataUrlConCajetin,
+  renderPlanoConCajetinHiRes,
   buildReporteEquiposPorSecciones,
+  hasLeyendaSimbolos,
+  LEYENDA_W,
   type CajetinPlanoMeta
 } from './components/NotaSeccionesEditor';
 
@@ -156,10 +160,14 @@ export default function Notas({ user }: NotasProps) {
     } catch { return []; }
   }, []);
 
-  const defaultEmpresaNombre = empresasList[0]?.nombre || 'ABANFOC';
+  const defaultEmpresaNombre = 'ABANFOC S.L.';
 
-  const formatFechaCorta = (iso?: string) => {
-    const d = iso ? new Date(iso) : new Date();
+  const formatFechaCorta = (iso?: unknown) => {
+    if (!iso) return new Date().toLocaleDateString('es-ES');
+    if (typeof iso === 'object' && iso !== null && 'seconds' in iso && typeof (iso as { seconds: number }).seconds === 'number') {
+      return new Date((iso as { seconds: number }).seconds * 1000).toLocaleDateString('es-ES');
+    }
+    const d = new Date(iso as string | number | Date);
     if (isNaN(d.getTime())) return new Date().toLocaleDateString('es-ES');
     return d.toLocaleDateString('es-ES');
   };
@@ -255,16 +263,15 @@ export default function Notas({ user }: NotasProps) {
       doc.line(margin, y, pageW - margin, y);
       y += 6;
 
-      // Motivo
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(10);
-      doc.setTextColor(15, 23, 42);
-      doc.text('MOTIVO / QUÉ HAY QUE HACER:', margin, y);
-      y += 5;
-      doc.setFont('helvetica', 'normal');
-      const motivoLines = doc.splitTextToSize(nota.motivo || '', maxW);
-      doc.text(motivoLines, margin, y);
-      y += motivoLines.length * 5 + 4;
+      // Motivo (sin etiqueta "MOTIVO / QUÉ HAY QUE HACER:")
+      if (nota.motivo && nota.motivo.trim()) {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        doc.setTextColor(15, 23, 42);
+        const motivoLines = doc.splitTextToSize(nota.motivo.trim(), maxW);
+        doc.text(motivoLines, margin, y);
+        y += motivoLines.length * 5 + 4;
+      }
 
       // Detalles adicionales
       if (nota.contenido && nota.contenido.trim()) {
@@ -284,6 +291,7 @@ export default function Notas({ user }: NotasProps) {
 
       // Secciones por zonas y planos
       if (nota.secciones && nota.secciones.length > 0) {
+        let prevPlanoElementos: NotaPlanoElemento[] = [];
         for (let i = 0; i < nota.secciones.length; i++) {
           const sec = nota.secciones[i];
           ensureSpace(16);
@@ -310,24 +318,29 @@ export default function Notas({ user }: NotasProps) {
             y += 3;
           }
 
-          if (sec.dibujoDataUrl) {
+          if (sec.dibujoDataUrl || (sec.planoElementos && sec.planoElementos.length > 0)) {
             try {
-              const conCajetin = await exportarDataUrlConCajetin(
-                sec.dibujoDataUrl,
-                buildCajetinMeta(
-                  nota,
-                  sec.titulo?.trim() ? `Zona ${i + 1} ${sec.titulo.trim()}` : `Zona ${i + 1}`
-                )
+              const metaCajetin = buildCajetinMeta(
+                nota,
+                sec.titulo?.trim() ? `Zona ${i + 1} ${sec.titulo.trim()}` : `Zona ${i + 1}`
               );
-              const optimized = await optimizarImagenParaPDF(conCajetin, 800, 0.75);
+              const conCajetin =
+                sec.planoElementos && sec.planoElementos.length > 0
+                  ? renderPlanoConCajetinHiRes(sec.planoElementos, metaCajetin, prevPlanoElementos, 2)
+                  : await exportarDataUrlConCajetin(sec.dibujoDataUrl || '', metaCajetin, sec.planoElementos);
+              const optimized = await optimizarImagenParaPDF(conCajetin, 1800, 0.92);
+              const totalW = 720 + (hasLeyendaSimbolos(sec.planoElementos) ? LEYENDA_W : 0);
               const imgW = maxW;
-              const imgH = imgW * ((380 + 74) / 720);
+              const imgH = imgW * ((380 + 74) / totalW);
               ensureSpace(imgH + 6);
               doc.addImage(optimized.base64, optimized.format, margin, y, imgW, imgH);
               y += imgH + 6;
             } catch (err) {
               console.error('Error optimizando plano para PDF:', err);
             }
+          }
+          if (sec.planoElementos && sec.planoElementos.length > 0) {
+            prevPlanoElementos = [...prevPlanoElementos, ...sec.planoElementos];
           }
           y += 2;
         }
@@ -1449,7 +1462,7 @@ export default function Notas({ user }: NotasProps) {
                   </div>
                   <div>
                     <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                      Cliente (Cajetín)
+                      Nombre del cliente (se mostrará en el cajetín)
                     </label>
                     <input
                       type="text"
@@ -1467,7 +1480,7 @@ export default function Notas({ user }: NotasProps) {
                   </div>
                   <div>
                     <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                      Centro (Cajetín)
+                      Centro del cliente (se mostrará en el cajetín)
                     </label>
                     <input
                       type="text"

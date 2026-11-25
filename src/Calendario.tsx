@@ -37,12 +37,16 @@ import {
   subscribeClientes,
   subscribeAlbaranes,
   obtenerEmpresaPorDefecto,
+  subscribeVacacionesSolicitudes,
   type ParteFirestore,
   type ReparacionItem,
   type InstalacionItem,
   type UrgenciaItem,
-  type Albaran
+  type Albaran,
+  type VacacionSolicitud
 } from './firebase';
+import CalendarioLaboral from './components/CalendarioLaboral';
+import CalendarioVacaciones from './components/CalendarioVacaciones';
 
 const MESES = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -146,8 +150,15 @@ export interface EventoCalendario {
   fechaConfirmada?: boolean;
 }
 
-export default function Calendario() {
+interface CalendarioProps {
+  user?: { id?: string; nombre: string; apellidos?: string; rol?: string; usuario?: string } | null;
+  initialTab?: 'tareas' | 'laboral' | 'vacaciones';
+}
+
+export default function Calendario({ user, initialTab = 'tareas' }: CalendarioProps) {
   const navigate = useNavigate();
+  const [calendarTab, setCalendarTab] = useState<'tareas' | 'laboral' | 'vacaciones'>(initialTab);
+  const [vacacionesSolicitudes, setVacacionesSolicitudes] = useState<VacacionSolicitud[]>([]);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [partes, setPartes] = useState<ParteFirestore[]>([]);
   const [reparaciones, setReparaciones] = useState<ReparacionItem[]>([]);
@@ -169,6 +180,15 @@ export default function Calendario() {
   const [guardandoCambios, setGuardandoCambios] = useState(false);
   const [selectedDayModal, setSelectedDayModal] = useState<{ iso: string; date: Date } | null>(null);
   const [showConfirmAlbaranModal, setShowConfirmAlbaranModal] = useState(false);
+
+  useEffect(() => {
+    setCalendarTab(initialTab);
+  }, [initialTab]);
+
+  useEffect(() => {
+    const unsubVac = subscribeVacacionesSolicitudes((items) => setVacacionesSolicitudes(items));
+    return () => unsubVac();
+  }, []);
 
   useEffect(() => {
     if (selectedEvento) {
@@ -1145,6 +1165,28 @@ export default function Calendario() {
       }
     });
   };
+
+  const isSuperAdmin =
+    (user?.rol || '').toLowerCase().replace(/[^a-z]/g, '') === 'superadministrador';
+  const workerName =
+    [user?.nombre, user?.apellidos].filter(Boolean).join(' ').trim() || user?.usuario || 'Usuario';
+  const aprobadasVac = vacacionesSolicitudes.filter((s) => s.estado === 'aprobada');
+
+  if (calendarTab !== 'tareas') {
+    return (
+      <div className="min-h-screen bg-[#F8FAFC] p-2 sm:p-4 lg:p-5">
+        {calendarTab === 'laboral' ? (
+          <CalendarioLaboral workerName={workerName} vacacionesAprobadas={aprobadasVac} />
+        ) : (
+          <CalendarioVacaciones
+            user={user}
+            solicitudes={vacacionesSolicitudes}
+            isSuperAdmin={isSuperAdmin}
+          />
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="h-screen max-h-screen bg-[#F8FAFC] flex flex-col p-2 sm:p-4 lg:p-5 select-none overflow-hidden">

@@ -11,6 +11,7 @@ import {
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
 import { APP_VERSION } from '../constants';
+import { SombrillaIcon } from './CalendarioVacaciones';
 
 interface SidebarProps {
   user: { nombre: string; apellidos: string; rol: string } | null;
@@ -46,13 +47,17 @@ const CATEGORIAS_MENU: NavCategory[] = [
     allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador']
   },
 
-  // 1.1 Calendario (Vista mensual a pantalla completa)
+  // 1.1 Calendario (Tareas, Laboral, Vacaciones)
   {
     id: 'calendario',
     title: 'Calendario',
     Icon: Calendar,
-    path: '/calendario',
-    allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador']
+    allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador'],
+    subItems: [
+      { id: 'calendario-tareas', path: '/calendario', title: 'Calendario de Tareas', Icon: CalendarDays, allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador'] },
+      { id: 'calendario-laboral', path: '/calendario-laboral', title: 'Calendario Laboral', Icon: Calendar, allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador'] },
+      { id: 'calendario-vacaciones', path: '/calendario-vacaciones', title: 'Calendario Vacaciones', Icon: SombrillaIcon, allowedRoles: ['super-administrador', 'administrador', 'editor', 'visualizador'] }
+    ]
   },
 
   // 2. Gestión (Clientes, Centros, Catálogo, Taller, Vehículos)

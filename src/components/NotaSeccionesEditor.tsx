@@ -1,12 +1,33 @@
 import { useState, useRef, useEffect } from 'react';
 import {
   Plus, Trash2, Bold, Italic, Underline, List, ListOrdered, Eraser,
-  Pencil, Square, Circle, Minus, DoorOpen, Ruler, Type, Undo2,
+  Pencil, Square, Circle, Minus, DoorOpen, Ruler, Type, Undo2, Redo2, ZoomIn, ZoomOut,
   Grid3X3, ChevronDown, ChevronUp, Check, MousePointer2, Flame, ShieldAlert, Radio, Droplets, Download,
   Monitor, BellRing, Volume2, AlertTriangle, Maximize2, X, CircleDot, Cylinder, Gauge, FlipHorizontal2, AlignJustify, Save,
   ArrowRight, ArrowLeft, ArrowUp, ArrowDown, RotateCcw, RotateCw, ClipboardList
 } from 'lucide-react';
 import type { NotaSeccionItem, NotaPlanoElemento } from '../firebase';
+
+function ExtintorIcon({ className = 'w-4 h-4' }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M15 6.5V3a1 1 0 0 0-1-1h-2a1 1 0 0 0-1 1v3.5" />
+      <path d="M9 18h8" />
+      <path d="M18 3h-3" />
+      <path d="M11 3a6 6 0 0 0-6 6v11" />
+      <rect x="9" y="6.5" width="8" height="14.5" rx="3" />
+      <path d="M11 11h4" />
+    </svg>
+  );
+}
 
 export interface CajetinPlanoMeta {
   empresaMantenedora?: string;
@@ -37,6 +58,7 @@ type DrawTool =
   | 'arrow'
   | 'rect'
   | 'circle'
+  | 'polygon'
   | 'escalera'
   | 'door'
   | 'puerta-rf'
@@ -157,7 +179,7 @@ export function dibujarCajetinEnCanvas(
   ctx.fillText('EMPRESA MANTENEDORA', x + 10, y + 10);
   ctx.fillStyle = '#0f2342';
   ctx.font = 'bold 12px sans-serif';
-  let empTxt = (meta.empresaMantenedora || 'ABANFOC').toUpperCase();
+  let empTxt = (meta.empresaMantenedora || 'ABANFOC S.L.').toUpperCase();
   while (empTxt.length > 3 && ctx.measureText(empTxt).width > col1W - 20) {
     empTxt = empTxt.slice(0, -4) + '...';
   }
@@ -178,25 +200,178 @@ export function dibujarCajetinEnCanvas(
   ctx.restore();
 }
 
+export const LEYENDA_W = 152;
+
+const LEYENDA_SIMBOLOS: { tipo: NotaPlanoElemento['tipo']; label: string }[] = [
+  { tipo: 'extintor', label: 'Extintor' },
+  { tipo: 'bie', label: 'BIE' },
+  { tipo: 'hidrante', label: 'Hidrante' },
+  { tipo: 'detector', label: 'Detector' },
+  { tipo: 'pulsador', label: 'Pulsador' },
+  { tipo: 'centralita', label: 'Centralita' },
+  { tipo: 'sirena', label: 'Sirena' },
+  { tipo: 'barrera', label: 'Barrera lineal' },
+  { tipo: 'deposito', label: 'Depósito' },
+  { tipo: 'grupo-presion', label: 'Grupo presión' },
+  { tipo: 'sprinkler', label: 'Sprinkler' },
+  { tipo: 'puerta-rf', label: 'Puerta RF' },
+  { tipo: 'puerta-corredera', label: 'Puerta corredera RF' },
+  { tipo: 'door', label: 'Puerta' }
+];
+
+export function getLeyendaSimbolosPresentes(elementos?: NotaPlanoElemento[]) {
+  if (!elementos || elementos.length === 0) return [];
+  const tiposPresentes = new Set(elementos.map((el) => el.tipo));
+  return LEYENDA_SIMBOLOS.filter((item) => {
+    if (item.tipo === 'barrera') {
+      return tiposPresentes.has('barrera') || tiposPresentes.has('barrera-espejo');
+    }
+    return tiposPresentes.has(item.tipo);
+  });
+}
+
+export function hasLeyendaSimbolos(elementos?: NotaPlanoElemento[]): boolean {
+  return getLeyendaSimbolosPresentes(elementos).length > 0;
+}
+
+function drawLegendSymbolPreview(
+  ctx: CanvasRenderingContext2D,
+  tipo: NotaPlanoElemento['tipo'],
+  ix: number,
+  iy: number,
+  iw: number,
+  ih: number
+) {
+  const color = '#dc2626';
+  const lw = 1.5;
+  if (tipo === 'door') {
+    const r = Math.min(iw - 4, ih - 4);
+    drawDoorSymbol(ctx, ix + 2, iy + ih - 2, ix + 2 + r, iy + ih - 2, color, lw);
+  } else if (tipo === 'puerta-rf') {
+    const r = Math.min(iw - 4, ih - 4);
+    drawPuertaRFSymbol(ctx, ix + 2, iy + ih - 2, ix + 2 + r, iy + ih - 2, color, lw);
+  } else if (tipo === 'puerta-corredera') {
+    drawPuertaCorrederaSymbol(ctx, ix + 1, iy + 3, ix + iw - 1, iy + ih - 3, color, 1.4);
+  } else if (tipo === 'detector') {
+    drawDetectorSymbol(ctx, ix + 3, iy + 2, ix + iw - 3, iy + ih - 2, color, lw);
+  } else if (tipo === 'extintor') {
+    const cx = ix + iw / 2;
+    const cy = iy + ih / 2;
+    const halfLen = Math.min(iw - 2, 18) / 2;
+    const halfThick = Math.min(ih - 2, 11) / 2;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(-Math.PI / 2);
+    drawExtintorSymbol(ctx, -halfThick, -halfLen, halfThick, halfLen, color, lw);
+    ctx.restore();
+  } else if (tipo === 'bie') {
+    drawBieSymbol(ctx, ix + 1, iy + 3, ix + iw - 1, iy + ih - 3, color, lw);
+  } else if (tipo === 'hidrante') {
+    drawHidranteSymbol(ctx, ix + 2, iy + 2, ix + iw - 2, iy + ih - 2, color, lw);
+  } else if (tipo === 'centralita') {
+    drawCentralitaSymbol(ctx, ix + 1, iy + 3, ix + iw - 1, iy + ih - 3, color, lw);
+  } else if (tipo === 'pulsador') {
+    drawPulsadorSymbol(ctx, ix + 3, iy + 2, ix + iw - 3, iy + ih - 2, color, lw);
+  } else if (tipo === 'sirena') {
+    drawSirenaSymbol(ctx, ix + 2, iy + 2, ix + iw - 2, iy + ih - 2, color, lw);
+  } else if (tipo === 'barrera' || tipo === 'barrera-espejo') {
+    drawBarreraSymbol(ctx, ix + 1, iy + 3, ix + iw - 1, iy + ih - 3, color, lw);
+  } else if (tipo === 'deposito') {
+    drawDepositoSymbol(ctx, ix + 1, iy + 2, ix + iw - 1, iy + ih - 2, color, lw);
+  } else if (tipo === 'grupo-presion') {
+    drawGrupoPresionSymbol(ctx, ix + 1, iy + 2, ix + iw - 1, iy + ih - 2, color, lw);
+  } else if (tipo === 'sprinkler') {
+    drawSprinklerSymbol(ctx, ix + 2, iy + 2, ix + iw - 2, iy + ih - 2, color, lw);
+  }
+}
+
+export function dibujarLeyendaEnCanvas(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  elementos: NotaPlanoElemento[]
+) {
+  const items = getLeyendaSimbolosPresentes(elementos);
+  if (items.length === 0) return;
+
+  ctx.save();
+  ctx.fillStyle = '#f8fafc';
+  ctx.fillRect(x, y, w, h);
+
+  ctx.strokeStyle = '#0f172a';
+  ctx.lineWidth = 1.6;
+  ctx.strokeRect(x, y, w, h);
+
+  const headerH = 24;
+  ctx.fillStyle = '#e2e8f0';
+  ctx.fillRect(x + 1, y + 1, w - 2, headerH - 1);
+  ctx.beginPath();
+  ctx.moveTo(x, y + headerH);
+  ctx.lineTo(x + w, y + headerH);
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  ctx.fillStyle = '#0f2342';
+  ctx.font = 'bold 10px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('LEYENDA', x + w / 2, y + headerH / 2);
+
+  const bodyY = y + headerH + 4;
+  const availH = h - headerH - 8;
+  const rowH = Math.min(28, Math.max(20, Math.floor(availH / items.length)));
+
+  items.forEach((item, idx) => {
+    const ry = bodyY + idx * rowH;
+    const ix = x + 8;
+    const iy = ry + 3;
+    const iw = 22;
+    const ih = rowH - 6;
+
+    drawLegendSymbolPreview(ctx, item.tipo, ix, iy, iw, ih);
+
+    ctx.fillStyle = '#0f172a';
+    ctx.font = 'bold 9.5px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    let label = item.label;
+    const maxTextW = w - (ix - x + iw + 12);
+    while (label.length > 3 && ctx.measureText(label).width > maxTextW) {
+      label = label.slice(0, -4) + '...';
+    }
+    ctx.fillText(label, ix + iw + 7, ry + rowH / 2);
+  });
+
+  ctx.restore();
+}
+
 export function composarCanvasConCajetin(
   sourceCanvas: HTMLCanvasElement,
-  meta: CajetinPlanoMeta
+  meta: CajetinPlanoMeta,
+  elementos?: NotaPlanoElemento[]
 ): string {
+  const showLeyenda = hasLeyendaSimbolos(elementos);
   const out = document.createElement('canvas');
-  out.width = sourceCanvas.width;
+  out.width = sourceCanvas.width + (showLeyenda ? LEYENDA_W : 0);
   out.height = sourceCanvas.height + CAJETIN_H;
   const ctx = out.getContext('2d');
   if (!ctx) return sourceCanvas.toDataURL('image/png');
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, out.width, out.height);
   ctx.drawImage(sourceCanvas, 0, 0);
+  if (showLeyenda && elementos) {
+    dibujarLeyendaEnCanvas(ctx, sourceCanvas.width, 2, LEYENDA_W - 2, sourceCanvas.height - 4, elementos);
+  }
   dibujarCajetinEnCanvas(ctx, 2, sourceCanvas.height, out.width - 4, CAJETIN_H - 2, meta);
   return out.toDataURL('image/png');
 }
 
 export function exportarDataUrlConCajetin(
   dataUrl: string,
-  meta: CajetinPlanoMeta
+  meta: CajetinPlanoMeta,
+  elementos?: NotaPlanoElemento[]
 ): Promise<string> {
   return new Promise((resolve) => {
     const img = new Image();
@@ -209,7 +384,7 @@ export function exportarDataUrlConCajetin(
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, c.width, c.height);
         ctx.drawImage(img, 0, 0, c.width, c.height);
-        resolve(composarCanvasConCajetin(c, meta));
+        resolve(composarCanvasConCajetin(c, meta, elementos));
       } else {
         resolve(dataUrl);
       }
@@ -217,6 +392,37 @@ export function exportarDataUrlConCajetin(
     img.onerror = () => resolve(dataUrl);
     img.src = dataUrl;
   });
+}
+
+export function renderPlanoConCajetinHiRes(
+  elementos: NotaPlanoElemento[],
+  meta: CajetinPlanoMeta,
+  prevElementos: NotaPlanoElemento[] = [],
+  scale: number = 2
+): string {
+  const showLeyenda = hasLeyendaSimbolos(elementos);
+  const totalW = CANVAS_W + (showLeyenda ? LEYENDA_W : 0);
+  const totalH = CANVAS_H + CAJETIN_H;
+  const out = document.createElement('canvas');
+  out.width = Math.round(totalW * scale);
+  out.height = Math.round(totalH * scale);
+  const ctx = out.getContext('2d');
+  if (!ctx) return '';
+
+  ctx.save();
+  ctx.scale(scale, scale);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, totalW, totalH);
+
+  elementos.forEach((el) => renderElemento(ctx, el, elementos, prevElementos));
+
+  if (showLeyenda) {
+    dibujarLeyendaEnCanvas(ctx, CANVAS_W, 2, LEYENDA_W - 2, CANVAS_H - 4, elementos);
+  }
+  dibujarCajetinEnCanvas(ctx, 2, CANVAS_H, totalW - 4, CAJETIN_H - 2, meta);
+  ctx.restore();
+
+  return out.toDataURL('image/png');
 }
 
 const DRAW_COLORS = [
@@ -233,7 +439,6 @@ const PUERTA_RF_PRESETS = ['RF 60', 'RF 90', 'RF 120'];
 const ESTADOS_SENAL = ['Correcta', 'Falta señal', 'Deteriorada', 'Mal ubicada', 'No visible'];
 
 const EQUIPO_LABELS: Partial<Record<NotaPlanoElemento['tipo'], string>> = {
-  door: 'PUERTA',
   'puerta-rf': 'PUERTA RF',
   'puerta-corredera': 'PUERTA CORREDERA RF',
   detector: 'DETECTOR',
@@ -253,13 +458,19 @@ function isEquipoNumerado(tipo: NotaPlanoElemento['tipo']): boolean {
   return Boolean(EQUIPO_LABELS[tipo]);
 }
 
+function getEquipoGrupoKey(tipo: NotaPlanoElemento['tipo']): string {
+  if (tipo === 'puerta-rf' || tipo === 'puerta-corredera') return 'puerta-rf';
+  return tipo;
+}
+
 function getNumeroEquipo(
   el: NotaPlanoElemento,
   currentList: NotaPlanoElemento[],
   prevList: NotaPlanoElemento[] = []
 ): number {
-  const prevCount = prevList.filter((x) => x.tipo === el.tipo).length;
-  const sameType = currentList.filter((x) => x.tipo === el.tipo);
+  const groupKey = getEquipoGrupoKey(el.tipo);
+  const prevCount = prevList.filter((x) => getEquipoGrupoKey(x.tipo) === groupKey).length;
+  const sameType = currentList.filter((x) => getEquipoGrupoKey(x.tipo) === groupKey);
   const idx = sameType.findIndex((x) => x.id === el.id);
   return prevCount + (idx >= 0 ? idx + 1 : sameType.length + 1);
 }
@@ -1616,6 +1827,7 @@ function renderElemento(
     rotDeg !== 0 &&
     el.tipo !== 'pen' &&
     el.tipo !== 'eraser' &&
+    el.tipo !== 'polygon' &&
     el.tipo !== 'text' &&
     !isEquipoNumerado(el.tipo);
   if (rotateNonFooter) {
@@ -1671,16 +1883,23 @@ function renderElemento(
     ctx.beginPath();
     ctx.ellipse(cx, cy, Math.max(1, rx), Math.max(1, ry), 0, 0, Math.PI * 2);
     ctx.stroke();
+  } else if (el.tipo === 'polygon') {
+    const pts = el.points || [];
+    if (pts.length >= 2) {
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length; i++) {
+        ctx.lineTo(pts[i].x, pts[i].y);
+      }
+      if (el.closed !== false && pts.length >= 3) {
+        ctx.closePath();
+      }
+      ctx.stroke();
+    }
   } else if (el.tipo === 'escalera') {
     drawEscaleraShape(ctx, el.x1 ?? 0, el.y1 ?? 0, el.x2 ?? 0, el.y2 ?? 0, el.color, el.lineWidth);
   } else if (el.tipo === 'door') {
-    const minX = Math.min(el.x1 ?? 0, el.x2 ?? 0);
-    const minY = Math.min(el.y1 ?? 0, el.y2 ?? 0);
-    const w = Math.max(8, Math.abs((el.x2 ?? 0) - (el.x1 ?? 0)));
-    const h = Math.max(8, Math.abs((el.y2 ?? 0) - (el.y1 ?? 0)));
-    drawSymbolWithNumber(ctx, el, allElementos, prevElementos, minX, minY, w, h, () =>
-      drawDoorSymbol(ctx, el.x1 ?? 0, el.y1 ?? 0, el.x2 ?? 0, el.y2 ?? 0, el.color, el.lineWidth)
-    );
+    drawDoorSymbol(ctx, el.x1 ?? 0, el.y1 ?? 0, el.x2 ?? 0, el.y2 ?? 0, el.color, el.lineWidth);
   } else if (el.tipo === 'puerta-rf') {
     const minX = Math.min(el.x1 ?? 0, el.x2 ?? 0);
     const minY = Math.min(el.y1 ?? 0, el.y2 ?? 0);
@@ -1912,6 +2131,21 @@ function hitTestElemento(
     return Math.hypot(px - el.points[0].x, py - el.points[0].y) <= 10;
   }
 
+  if (el.tipo === 'polygon' && el.points && el.points.length > 0) {
+    const pts = el.points;
+    for (let i = 0; i < pts.length - 1; i++) {
+      if (distToSegment(px, py, pts[i].x, pts[i].y, pts[i + 1].x, pts[i + 1].y) <= 12) {
+        return true;
+      }
+    }
+    if (el.closed !== false && pts.length >= 3) {
+      if (distToSegment(px, py, pts[pts.length - 1].x, pts[pts.length - 1].y, pts[0].x, pts[0].y) <= 12) {
+        return true;
+      }
+    }
+    return Math.hypot(px - pts[0].x, py - pts[0].y) <= 10;
+  }
+
   return false;
 }
 
@@ -1928,7 +2162,7 @@ function getElementoBounds(el: NotaPlanoElemento, ctx: CanvasRenderingContext2D 
     }
     return { x: x - 6, y: y - 12, w: w + 12, h: 24 };
   }
-  if (el.tipo === 'pen' && el.points?.length) {
+  if ((el.tipo === 'pen' || el.tipo === 'polygon') && el.points?.length) {
     const xs = el.points.map((p) => p.x);
     const ys = el.points.map((p) => p.y);
     const minX = Math.min(...xs);
@@ -1972,6 +2206,8 @@ function SeccionPlanoCanvas({
 
   const [elementos, setElementos] = useState<NotaPlanoElemento[]>(() => initialElementos || []);
   const [history, setHistory] = useState<NotaPlanoElemento[][]>(() => [initialElementos || []]);
+  const [redoStack, setRedoStack] = useState<NotaPlanoElemento[][]>([]);
+  const [zoom, setZoom] = useState<number>(1);
   const [tool, setTool] = useState<DrawTool>('pen');
   const [toolMode, setToolMode] = useState<'create' | 'move'>('create');
   const [symbolSize, setSymbolSize] = useState<SymbolSizeMode>(() => initialSymbolSize || 'grande');
@@ -1984,7 +2220,7 @@ function SeccionPlanoCanvas({
   const [editSelectedUt, setEditSelectedUt] = useState<string>('');
   const [editSelectedPh, setEditSelectedPh] = useState<string>('');
   const [editSelectedSenal, setEditSelectedSenal] = useState<string>('');
-  const [openMenu, setOpenMenu] = useState<'formas' | 'simbolos' | null>(null);
+  const [openMenu, setOpenMenu] = useState<'pen' | 'formas' | 'simbolos' | null>(null);
   const [symbolLabel, setSymbolLabel] = useState<string>('');
   const [symbolLabelPos, setSymbolLabelPos] = useState<'bottom' | 'top' | 'left' | 'right'>('bottom');
   const [confirmClearOpen, setConfirmClearOpen] = useState<boolean>(false);
@@ -2009,6 +2245,11 @@ function SeccionPlanoCanvas({
     y: number;
     text: string;
   } | null>(null);
+  const [polygonPts, setPolygonPts] = useState<{ x: number; y: number }[]>([]);
+  const [polygonOrtho, setPolygonOrtho] = useState<boolean>(true);
+  const polygonHoverRef = useRef<{ x: number; y: number } | null>(null);
+  const [appliedFeedback, setAppliedFeedback] = useState<boolean>(false);
+  const appliedTimerRef = useRef<number | null>(null);
 
   // Cargar imagen heredada solo si no hay elementos vectoriales previos
   useEffect(() => {
@@ -2024,6 +2265,13 @@ function SeccionPlanoCanvas({
       redrawCanvas(elementos, selectedId);
     }
   }, []);
+
+  const snapPolygonPoint = (raw: { x: number; y: number }, prev?: { x: number; y: number }) => {
+    if (!prev || !polygonOrtho) return raw;
+    const dx = Math.abs(raw.x - prev.x);
+    const dy = Math.abs(raw.y - prev.y);
+    return dx >= dy ? { x: raw.x, y: prev.y } : { x: prev.x, y: raw.y };
+  };
 
   const drawScene = (
     ctx: CanvasRenderingContext2D,
@@ -2057,7 +2305,7 @@ function SeccionPlanoCanvas({
         ctx.strokeRect(b.x, b.y, b.w, b.h);
         ctx.setLineDash([]);
 
-        if (sel.tipo !== 'text' && sel.tipo !== 'pen' && sel.tipo !== 'eraser') {
+        if (sel.tipo !== 'text' && sel.tipo !== 'pen' && sel.tipo !== 'eraser' && sel.tipo !== 'polygon') {
           const pts = [
             { x: sel.x1 ?? 0, y: sel.y1 ?? 0 },
             { x: sel.x2 ?? 0, y: sel.y2 ?? 0 }
@@ -2075,6 +2323,44 @@ function SeccionPlanoCanvas({
         ctx.restore();
       }
     }
+
+    if (includeSelectionUI && polygonPts.length > 0) {
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = lineWidth;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      ctx.moveTo(polygonPts[0].x, polygonPts[0].y);
+      for (let i = 1; i < polygonPts.length; i++) {
+        ctx.lineTo(polygonPts[i].x, polygonPts[i].y);
+      }
+      ctx.stroke();
+
+      if (polygonHoverRef.current) {
+        const lastPt = polygonPts[polygonPts.length - 1];
+        const hoverPt = snapPolygonPoint(polygonHoverRef.current, lastPt);
+        ctx.setLineDash([5, 4]);
+        ctx.strokeStyle = '#2563eb';
+        ctx.lineWidth = Math.max(1.5, lineWidth);
+        ctx.beginPath();
+        ctx.moveTo(lastPt.x, lastPt.y);
+        ctx.lineTo(hoverPt.x, hoverPt.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
+      polygonPts.forEach((p, idx) => {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, idx === 0 && polygonPts.length >= 3 ? 6 : 4, 0, Math.PI * 2);
+        ctx.fillStyle = idx === 0 && polygonPts.length >= 3 ? '#10b981' : '#ffffff';
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = idx === 0 && polygonPts.length >= 3 ? '#047857' : '#2563eb';
+        ctx.stroke();
+      });
+      ctx.restore();
+    }
   };
 
   const redrawCanvas = (list: NotaPlanoElemento[], activeSelectedId: string | null) => {
@@ -2088,7 +2374,7 @@ function SeccionPlanoCanvas({
     workingListRef.current = elementos;
     redrawCanvas(elementos, selectedId);
     const sel = elementos.find((e) => e.id === selectedId);
-    if (sel && sel.tipo !== 'pen' && sel.tipo !== 'eraser' && sel.tipo !== 'line' && sel.tipo !== 'rect' && sel.tipo !== 'circle') {
+    if (sel && sel.tipo !== 'pen' && sel.tipo !== 'eraser' && sel.tipo !== 'line' && sel.tipo !== 'rect' && sel.tipo !== 'circle' && sel.tipo !== 'polygon') {
       setEditSelectedText(sel.text || '');
       setEditSelectedFf(sel.ff || '');
       setEditSelectedUt(sel.ut || '');
@@ -2101,7 +2387,7 @@ function SeccionPlanoCanvas({
       setEditSelectedPh('');
       setEditSelectedSenal('');
     }
-  }, [elementos, selectedId, tool, toolMode, prevSectionsElementos]);
+  }, [elementos, selectedId, tool, toolMode, prevSectionsElementos, polygonPts, polygonOrtho]);
 
   const exportCleanDataUrl = (list: NotaPlanoElemento[]): string => {
     const canvas = canvasRef.current;
@@ -2118,9 +2404,29 @@ function SeccionPlanoCanvas({
     setElementos(next);
     if (pushHist) {
       setHistory((prev) => [...prev.slice(-24), next]);
+      setRedoStack([]);
     }
     const dataUrl = exportCleanDataUrl(next);
     onChange(next, dataUrl, nextSize);
+  };
+
+  const commitPolygon = (ptsToCommit: { x: number; y: number }[], closed = true) => {
+    if (ptsToCommit.length < 2) {
+      setPolygonPts([]);
+      polygonHoverRef.current = null;
+      return;
+    }
+    const newEl: NotaPlanoElemento = {
+      id: `el_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      tipo: 'polygon',
+      color,
+      lineWidth,
+      points: ptsToCommit,
+      closed
+    };
+    setPolygonPts([]);
+    polygonHoverRef.current = null;
+    commitElementos([...elementos, newEl]);
   };
 
   const handleChangeSymbolSize = (nextSize: SymbolSizeMode) => {
@@ -2144,20 +2450,36 @@ function SeccionPlanoCanvas({
 
   const handleUndo = () => {
     if (history.length <= 1) {
-      handleClear();
+      if (elementos.length > 0) {
+        setRedoStack((prev) => [...prev.slice(-24), elementos]);
+        setSelectedId(null);
+        setHistory([[]]);
+        commitElementos([], false);
+      }
       return;
     }
     const nextHist = history.slice(0, -1);
     const prevList = nextHist[nextHist.length - 1];
+    setRedoStack((prev) => [...prev.slice(-24), elementos]);
     setHistory(nextHist);
     setSelectedId(null);
     commitElementos(prevList, false);
+  };
+
+  const handleRedo = () => {
+    if (redoStack.length === 0) return;
+    const nextList = redoStack[redoStack.length - 1];
+    setRedoStack((prev) => prev.slice(0, -1));
+    setHistory((prev) => [...prev.slice(-24), nextList]);
+    setSelectedId(null);
+    commitElementos(nextList, false);
   };
 
   const handleClear = () => {
     bgImageRef.current = null;
     setSelectedId(null);
     setHistory([[]]);
+    setRedoStack([]);
     commitElementos([], false);
   };
 
@@ -2166,10 +2488,14 @@ function SeccionPlanoCanvas({
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx) return;
     drawScene(ctx, elementos, null, false);
-    const pngUrl = composarCanvasConCajetin(canvas, {
-      ...cajetinMeta,
-      seccionTitulo: seccionTitulo || cajetinMeta?.seccionTitulo
-    });
+    const pngUrl = composarCanvasConCajetin(
+      canvas,
+      {
+        ...cajetinMeta,
+        seccionTitulo: seccionTitulo || cajetinMeta?.seccionTitulo
+      },
+      elementos
+    );
     drawScene(ctx, elementos, selectedId, true);
     const slug = (seccionTitulo || 'plano')
       .toLowerCase()
@@ -2184,9 +2510,11 @@ function SeccionPlanoCanvas({
   const getCoords = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current!;
     const rect = canvas.getBoundingClientRect();
+    const rawX = ((e.clientX - rect.left) / rect.width) * CANVAS_W;
+    const rawY = ((e.clientY - rect.top) / rect.height) * CANVAS_H;
     return {
-      x: ((e.clientX - rect.left) / rect.width) * CANVAS_W,
-      y: ((e.clientY - rect.top) / rect.height) * CANVAS_H
+      x: Math.max(6, Math.min(CANVAS_W - 6, rawX)),
+      y: Math.max(6, Math.min(CANVAS_H - 6, rawY))
     };
   };
 
@@ -2201,7 +2529,7 @@ function SeccionPlanoCanvas({
       if (selectedId) {
         const sel = elementos.find((el) => el.id === selectedId);
         const selMatchesFilter = tool === 'select' || sel?.tipo === tool;
-        if (sel && selMatchesFilter && sel.tipo !== 'text' && sel.tipo !== 'pen' && sel.tipo !== 'eraser') {
+        if (sel && selMatchesFilter && sel.tipo !== 'text' && sel.tipo !== 'pen' && sel.tipo !== 'eraser' && sel.tipo !== 'polygon') {
           if (Math.hypot(pos.x - (sel.x1 ?? 0), pos.y - (sel.y1 ?? 0)) <= 10) {
             e.currentTarget.setPointerCapture(e.pointerId);
             dragModeRef.current = 'p1';
@@ -2270,6 +2598,20 @@ function SeccionPlanoCanvas({
       return;
     }
 
+    if (tool === 'polygon') {
+      if (polygonPts.length >= 3 && Math.hypot(pos.x - polygonPts[0].x, pos.y - polygonPts[0].y) <= 12) {
+        commitPolygon(polygonPts, true);
+        return;
+      }
+      const prevPt = polygonPts[polygonPts.length - 1];
+      const nextPt = snapPolygonPoint(pos, prevPt);
+      if (prevPt && Math.hypot(nextPt.x - prevPt.x, nextPt.y - prevPt.y) < 3) {
+        return;
+      }
+      setPolygonPts((prev) => [...prev, nextPt]);
+      return;
+    }
+
     e.currentTarget.setPointerCapture(e.pointerId);
     dragModeRef.current = 'draw';
     lastPointerRef.current = pos;
@@ -2299,8 +2641,9 @@ function SeccionPlanoCanvas({
         tool === 'deposito' ||
         tool === 'grupo-presion' ||
         tool === 'sprinkler';
-      const prevCount = prevSectionsElementos.filter((x) => x.tipo === tool).length;
-      const currCount = elementos.filter((x) => x.tipo === tool).length;
+      const groupKey = getEquipoGrupoKey(tool as NotaPlanoElemento['tipo']);
+      const prevCount = prevSectionsElementos.filter((x) => getEquipoGrupoKey(x.tipo) === groupKey).length;
+      const currCount = elementos.filter((x) => getEquipoGrupoKey(x.tipo) === groupKey).length;
       const nextNumeroEquipo = isEquipoNumerado(tool as NotaPlanoElemento['tipo'])
         ? prevCount + currCount + 1
         : undefined;
@@ -2322,7 +2665,13 @@ function SeccionPlanoCanvas({
 
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const mode = dragModeRef.current;
-    if (mode === 'none') return;
+    if (mode === 'none') {
+      if (tool === 'polygon' && toolMode === 'create' && polygonPts.length > 0) {
+        polygonHoverRef.current = getCoords(e);
+        redrawCanvas(elementos, selectedId);
+      }
+      return;
+    }
 
     const pos = getCoords(e);
     const ctx = canvasRef.current?.getContext('2d');
@@ -2348,15 +2697,39 @@ function SeccionPlanoCanvas({
           if (el.tipo === 'text') {
             return { ...el, x: (el.x ?? 0) + dx, y: (el.y ?? 0) + dy };
           }
-          if (el.tipo === 'pen' && el.points) {
-            return { ...el, points: el.points.map((p) => ({ x: p.x + dx, y: p.y + dy })) };
+          if ((el.tipo === 'pen' || el.tipo === 'polygon') && el.points) {
+            const xs = el.points.map((p) => p.x + dx);
+            const ys = el.points.map((p) => p.y + dy);
+            const minX = Math.min(...xs);
+            const maxX = Math.max(...xs);
+            const minY = Math.min(...ys);
+            const maxY = Math.max(...ys);
+            const shiftX = minX < 6 ? 6 - minX : maxX > CANVAS_W - 6 ? CANVAS_W - 6 - maxX : 0;
+            const shiftY = minY < 6 ? 6 - minY : maxY > CANVAS_H - 6 ? CANVAS_H - 6 - maxY : 0;
+            return {
+              ...el,
+              points: el.points.map((p) => ({
+                x: p.x + dx + shiftX,
+                y: p.y + dy + shiftY
+              }))
+            };
           }
+          const nx1 = (el.x1 ?? 0) + dx;
+          const ny1 = (el.y1 ?? 0) + dy;
+          const nx2 = (el.x2 ?? 0) + dx;
+          const ny2 = (el.y2 ?? 0) + dy;
+          const minX = Math.min(nx1, nx2);
+          const maxX = Math.max(nx1, nx2);
+          const minY = Math.min(ny1, ny2);
+          const maxY = Math.max(ny1, ny2);
+          const shiftX = minX < 6 ? 6 - minX : maxX > CANVAS_W - 6 ? CANVAS_W - 6 - maxX : 0;
+          const shiftY = minY < 6 ? 6 - minY : maxY > CANVAS_H - 6 ? CANVAS_H - 6 - maxY : 0;
           return {
             ...el,
-            x1: (el.x1 ?? 0) + dx,
-            y1: (el.y1 ?? 0) + dy,
-            x2: (el.x2 ?? 0) + dx,
-            y2: (el.y2 ?? 0) + dy
+            x1: nx1 + shiftX,
+            y1: ny1 + shiftY,
+            x2: nx2 + shiftX,
+            y2: ny2 + shiftY
           };
         }
         if (mode === 'p1') {
@@ -2450,6 +2823,16 @@ function SeccionPlanoCanvas({
             return;
           }
         }
+        const dMinX = Math.min(draft.x1 ?? 0, draft.x2 ?? 0);
+        const dMaxX = Math.max(draft.x1 ?? 0, draft.x2 ?? 0);
+        const dMinY = Math.min(draft.y1 ?? 0, draft.y2 ?? 0);
+        const dMaxY = Math.max(draft.y1 ?? 0, draft.y2 ?? 0);
+        const sX = dMinX < 6 ? 6 - dMinX : dMaxX > CANVAS_W - 6 ? CANVAS_W - 6 - dMaxX : 0;
+        const sY = dMinY < 6 ? 6 - dMinY : dMaxY > CANVAS_H - 6 ? CANVAS_H - 6 - dMaxY : 0;
+        draft.x1 = (draft.x1 ?? 0) + sX;
+        draft.x2 = (draft.x2 ?? 0) + sX;
+        draft.y1 = (draft.y1 ?? 0) + sY;
+        draft.y2 = (draft.y2 ?? 0) + sY;
       }
 
       if (draft.tipo === 'barrera') {
@@ -2529,6 +2912,11 @@ function SeccionPlanoCanvas({
         : e
     );
     commitElementos(next);
+    setAppliedFeedback(true);
+    if (appliedTimerRef.current) window.clearTimeout(appliedTimerRef.current);
+    appliedTimerRef.current = window.setTimeout(() => {
+      setAppliedFeedback(false);
+    }, 3000);
   };
 
   const handleRecolorSelected = (newColor: string) => {
@@ -2549,6 +2937,17 @@ function SeccionPlanoCanvas({
   const handleFlipSelected = () => {
     if (!selectedElemento) return;
     if (selectedElemento.tipo === 'text' || selectedElemento.tipo === 'pen' || selectedElemento.tipo === 'eraser') return;
+    if (selectedElemento.tipo === 'polygon' && selectedElemento.points?.length) {
+      const xs = selectedElemento.points.map((p) => p.x);
+      const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+      const next = elementos.map((e) =>
+        e.id === selectedElemento.id && e.points
+          ? { ...e, points: e.points.map((p) => ({ x: 2 * cx - p.x, y: p.y })) }
+          : e
+      );
+      commitElementos(next);
+      return;
+    }
     const next = elementos.map((e) =>
       e.id === selectedElemento.id
         ? { ...e, x1: e.x2 ?? 0, x2: e.x1 ?? 0 }
@@ -2560,6 +2959,40 @@ function SeccionPlanoCanvas({
   const handleRotateSelected = (deltaDeg: number) => {
     if (!selectedElemento) return;
     if (selectedElemento.tipo === 'text' || selectedElemento.tipo === 'pen' || selectedElemento.tipo === 'eraser') return;
+    if (selectedElemento.tipo === 'polygon' && selectedElemento.points?.length) {
+      const xs = selectedElemento.points.map((p) => p.x);
+      const ys = selectedElemento.points.map((p) => p.y);
+      const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+      const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+      const rad = (deltaDeg * Math.PI) / 180;
+      const cos = Math.cos(rad);
+      const sin = Math.sin(rad);
+      const rotated = selectedElemento.points.map((p) => {
+        const dx = p.x - cx;
+        const dy = p.y - cy;
+        return {
+          x: cx + dx * cos - dy * sin,
+          y: cy + dx * sin + dy * cos
+        };
+      });
+      const rXs = rotated.map((p) => p.x);
+      const rYs = rotated.map((p) => p.y);
+      const minX = Math.min(...rXs);
+      const maxX = Math.max(...rXs);
+      const minY = Math.min(...rYs);
+      const maxY = Math.max(...rYs);
+      const shiftX = minX < 6 ? 6 - minX : maxX > CANVAS_W - 6 ? CANVAS_W - 6 - maxX : 0;
+      const shiftY = minY < 6 ? 6 - minY : maxY > CANVAS_H - 6 ? CANVAS_H - 6 - maxY : 0;
+      const clampedPts = rotated.map((p) => ({
+        x: Math.round((p.x + shiftX) * 10) / 10,
+        y: Math.round((p.y + shiftY) * 10) / 10
+      }));
+      const next = elementos.map((e) =>
+        e.id === selectedElemento.id ? { ...e, points: clampedPts } : e
+      );
+      commitElementos(next);
+      return;
+    }
     const next = elementos.map((e) => {
       if (e.id !== selectedElemento.id) return e;
       const nextRot = (((e.rotation ?? 0) + deltaDeg) % 360 + 360) % 360;
@@ -2582,16 +3015,17 @@ function SeccionPlanoCanvas({
     { id: 'arrow', label: 'Flecha', icon: ArrowRight },
     { id: 'rect', label: 'Cuadrado', icon: Square },
     { id: 'circle', label: 'Círculo', icon: Circle },
+    { id: 'polygon', label: 'Área / Polígono', icon: Square },
     { id: 'escalera', label: 'Escalera', icon: AlignJustify },
     { id: 'measure', label: 'Medida / Cota', icon: Ruler }
   ];
 
-  const simbolosList: { id: DrawTool; label: string; icon: typeof Pencil }[] = [
+  const simbolosList: { id: DrawTool; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
     { id: 'door', label: 'Puerta', icon: DoorOpen },
     { id: 'puerta-rf', label: 'Puerta RF', icon: ShieldAlert },
     { id: 'puerta-corredera', label: 'Puerta corredera RF', icon: ShieldAlert },
     { id: 'detector', label: 'Detector', icon: Radio },
-    { id: 'extintor', label: 'Extintor', icon: Flame },
+    { id: 'extintor', label: 'Extintor', icon: ExtintorIcon },
     { id: 'bie', label: 'BIE', icon: Droplets },
     { id: 'hidrante', label: 'Hidrante', icon: Droplets },
     { id: 'centralita', label: 'Centralita', icon: Monitor },
@@ -2610,6 +3044,8 @@ function SeccionPlanoCanvas({
     setTool(nextTool);
     setToolMode(nextMode);
     setOpenMenu(null);
+    setPolygonPts([]);
+    polygonHoverRef.current = null;
     if (nextTool !== 'select') setSelectedId(null);
     if (nextTool === 'extintor') setSymbolLabel('ABC 6');
     else if (nextTool === 'bie') setSymbolLabel('BIE 25');
@@ -2676,20 +3112,59 @@ function SeccionPlanoCanvas({
             <span className="hidden sm:inline">Mover / Editar</span>
           </button>
 
-          {/* Mano alzada */}
-          <button
-            type="button"
-            onClick={() => selectTool('pen')}
-            className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
-              tool === 'pen'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-            }`}
-            title="Mano alzada"
-          >
-            <Pencil className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Mano alzada</span>
-          </button>
+          {/* Mano alzada con selector de grosor (Fino / Medio / Grueso) */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => {
+                if (tool !== 'pen') {
+                  selectTool('pen');
+                }
+                setOpenMenu(openMenu === 'pen' ? null : 'pen');
+              }}
+              className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                tool === 'pen'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+              }`}
+              title="Mano alzada (elegir grosor)"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">
+                Mano alzada ({lineWidth === 2 ? 'Fino' : lineWidth === 4 ? 'Medio' : 'Grueso'})
+              </span>
+              <ChevronDown className="w-3 h-3" />
+            </button>
+            {openMenu === 'pen' && (
+              <div className="absolute left-0 top-full mt-1 w-40 bg-white border border-slate-200 rounded-xl shadow-xl p-1 z-30">
+                {(
+                  [
+                    { val: 2, label: 'Fino', hClass: 'h-[2px]' },
+                    { val: 4, label: 'Medio', hClass: 'h-[4px]' },
+                    { val: 6, label: 'Grueso', hClass: 'h-[6px]' }
+                  ] as const
+                ).map((g) => (
+                  <button
+                    key={g.val}
+                    type="button"
+                    onClick={() => {
+                      setLineWidth(g.val);
+                      selectTool('pen');
+                      setOpenMenu(null);
+                    }}
+                    className={`w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer ${
+                      tool === 'pen' && lineWidth === g.val
+                        ? 'bg-blue-50 text-blue-700'
+                        : 'text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span>{g.label}</span>
+                    <span className={`w-8 rounded-full bg-current ${g.hClass}`} />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
           {/* Desplegable FORMAS */}
           <div className="relative">
@@ -2865,31 +3340,31 @@ function SeccionPlanoCanvas({
         </div>
 
         <div className="flex items-center gap-1.5">
-          <div className="flex items-center gap-1 bg-white px-1.5 py-1 rounded-lg border border-slate-200">
-            {DRAW_COLORS.map((c) => (
-              <button
-                key={c.value}
-                type="button"
-                onClick={() => setColor(c.value)}
-                className={`w-4 h-4 rounded-full transition-transform cursor-pointer ${
-                  color === c.value ? 'ring-2 ring-offset-1 ring-blue-500 scale-110' : ''
-                }`}
-                style={{ backgroundColor: c.value }}
-                title={c.label}
-              />
-            ))}
-          </div>
-
-          <select
-            value={lineWidth}
-            onChange={(e) => setLineWidth(Number(e.target.value))}
-            className="px-1.5 py-1 bg-white border border-slate-200 rounded-lg text-[11px] font-bold text-slate-700"
-            title="Grosor del trazo"
+          <div
+            className="flex items-center gap-1 bg-white px-1.5 py-1 rounded-lg border border-slate-200"
+            title={selectedElemento ? 'Cambiar color del elemento seleccionado y trazos' : 'Color de dibujo, texto y formas'}
           >
-            <option value={2}>Fino</option>
-            <option value={4}>Medio</option>
-            <option value={6}>Grueso</option>
-          </select>
+            {DRAW_COLORS.map((c) => {
+              const isColorActive = selectedElemento ? selectedElemento.color === c.value : color === c.value;
+              return (
+                <button
+                  key={c.value}
+                  type="button"
+                  onClick={() => {
+                    setColor(c.value);
+                    if (selectedElemento) {
+                      handleRecolorSelected(c.value);
+                    }
+                  }}
+                  className={`w-4 h-4 rounded-full transition-transform cursor-pointer ${
+                    isColorActive ? 'ring-2 ring-offset-1 ring-blue-500 scale-110' : ''
+                  }`}
+                  style={{ backgroundColor: c.value }}
+                  title={c.label}
+                />
+              );
+            })}
+          </div>
 
           {/* Selector de Tamaño de Equipos (Pequeño / Mediano / Grande) */}
           <div className="inline-flex items-center bg-white border border-slate-200 rounded-lg p-0.5" title="Tamaño de todos los equipos contra incendios del plano">
@@ -2940,6 +3415,46 @@ function SeccionPlanoCanvas({
 
           <button
             type="button"
+            onClick={handleRedo}
+            disabled={redoStack.length === 0}
+            className="p-1.5 rounded-lg bg-white hover:bg-slate-100 disabled:opacity-40 text-slate-600 border border-slate-200 cursor-pointer disabled:cursor-not-allowed"
+            title="Rehacer / Hacer cambio deshecho"
+          >
+            <Redo2 className="w-3.5 h-3.5" />
+          </button>
+
+          {/* Zoom - / 100% / + */}
+          <div className="inline-flex items-center bg-white border border-slate-200 rounded-lg p-0.5" title="Zoom del plano">
+            <button
+              type="button"
+              onClick={() => setZoom((z) => Math.max(0.5, Math.round((z - 0.25) * 100) / 100))}
+              disabled={zoom <= 0.5}
+              className="p-1 rounded text-slate-600 hover:bg-slate-100 disabled:opacity-40 cursor-pointer"
+              title="Alejar zoom (-)"
+            >
+              <ZoomOut className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setZoom(1)}
+              className="px-1.5 py-0.5 text-[10px] font-black text-slate-700 hover:bg-slate-100 rounded cursor-pointer min-w-[38px]"
+              title="Restablecer zoom al 100%"
+            >
+              {Math.round(zoom * 100)}%
+            </button>
+            <button
+              type="button"
+              onClick={() => setZoom((z) => Math.min(2, Math.round((z + 0.25) * 100) / 100))}
+              disabled={zoom >= 2}
+              className="p-1 rounded text-slate-600 hover:bg-slate-100 disabled:opacity-40 cursor-pointer"
+              title="Acercar zoom (+)"
+            >
+              <ZoomIn className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          <button
+            type="button"
             onClick={handleDownloadImage}
             className="p-1.5 rounded-lg bg-white hover:bg-emerald-50 text-emerald-700 border border-slate-200 cursor-pointer"
             title="Descargar imagen del plano (PNG)"
@@ -2976,6 +3491,8 @@ function SeccionPlanoCanvas({
                 onClick={() => {
                   setToolMode('create');
                   setSelectedId(null);
+                  setPolygonPts([]);
+                  polygonHoverRef.current = null;
                 }}
                 className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
                   toolMode === 'create'
@@ -2991,6 +3508,8 @@ function SeccionPlanoCanvas({
                 onClick={() => {
                   setToolMode('move');
                   setSelectedId(null);
+                  setPolygonPts([]);
+                  polygonHoverRef.current = null;
                 }}
                 className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
                   toolMode === 'move'
@@ -3011,14 +3530,81 @@ function SeccionPlanoCanvas({
         </div>
       )}
 
+      {/* Barra de ayuda y cierre para Área / Polígono */}
+      {tool === 'polygon' && toolMode === 'create' && (
+        <div className="flex flex-wrap items-center justify-between gap-2 bg-blue-50 border border-blue-200 rounded-lg px-2.5 py-1.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setPolygonOrtho((v) => !v)}
+              className={`px-2 py-1 rounded-md text-[11px] font-bold border transition-colors cursor-pointer ${
+                polygonOrtho
+                  ? 'bg-blue-600 text-white border-blue-600'
+                  : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+              }`}
+              title="Activar/desactivar ajuste automático a ángulos rectos (90°)"
+            >
+              Ángulos 90°: {polygonOrtho ? 'ON' : 'OFF'}
+            </button>
+            <span className="text-[11px] text-blue-900 font-medium">
+              Haz clic en cada esquina ({polygonPts.length} {polygonPts.length === 1 ? 'vértice' : 'vértices'}).
+              {polygonPts.length >= 3 ? ' Pulsa el primer punto verde o "Cerrar área".' : ''}
+            </span>
+          </div>
+          {polygonPts.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setPolygonPts((prev) => prev.slice(0, -1))}
+                className="px-2 py-1 rounded-md bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 text-[11px] font-bold cursor-pointer"
+              >
+                Deshacer esquina
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setPolygonPts([]);
+                  polygonHoverRef.current = null;
+                }}
+                className="px-2 py-1 rounded-md bg-white border border-red-200 text-red-700 hover:bg-red-50 text-[11px] font-bold cursor-pointer"
+              >
+                Cancelar
+              </button>
+              {polygonPts.length >= 2 && (
+                <button
+                  type="button"
+                  onClick={() => commitPolygon(polygonPts, false)}
+                  className="px-2 py-1 rounded-md bg-slate-700 text-white hover:bg-slate-800 text-[11px] font-bold cursor-pointer"
+                >
+                  Terminar línea
+                </button>
+              )}
+              {polygonPts.length >= 3 && (
+                <button
+                  type="button"
+                  onClick={() => commitPolygon(polygonPts, true)}
+                  className="px-2.5 py-1 rounded-md bg-emerald-600 text-white hover:bg-emerald-700 text-[11px] font-bold cursor-pointer"
+                >
+                  Cerrar área
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Barra rápida de etiqueta para símbolos antes de insertar */}
-      {simboloActivo && toolMode === 'create' && (
+      {simboloActivo && toolMode === 'create' && isEquipoNumerado(tool as NotaPlanoElemento['tipo']) && (
         <div className="flex flex-wrap items-center gap-1.5 bg-red-50 border border-red-200 rounded-lg px-2.5 py-1.5">
           <span className="text-[11px] font-black text-red-900 shrink-0">
             Próximo: {EQUIPO_LABELS[tool as NotaPlanoElemento['tipo']] || simboloActivo.label}{' '}
             {String(
-              prevSectionsElementos.filter((x) => x.tipo === tool).length +
-                elementos.filter((x) => x.tipo === tool).length +
+              prevSectionsElementos.filter(
+                (x) => getEquipoGrupoKey(x.tipo) === getEquipoGrupoKey(tool as NotaPlanoElemento['tipo'])
+              ).length +
+                elementos.filter(
+                  (x) => getEquipoGrupoKey(x.tipo) === getEquipoGrupoKey(tool as NotaPlanoElemento['tipo'])
+                ).length +
                 1
             ).padStart(2, '0')}
           </span>
@@ -3063,7 +3649,9 @@ function SeccionPlanoCanvas({
           selectedElemento.tipo !== 'eraser' &&
           selectedElemento.tipo !== 'line' &&
           selectedElemento.tipo !== 'rect' &&
-          selectedElemento.tipo !== 'circle';
+          selectedElemento.tipo !== 'circle' &&
+          selectedElemento.tipo !== 'polygon' &&
+          selectedElemento.tipo !== 'door';
         const isExtOrBie = selectedElemento.tipo === 'extintor' || selectedElemento.tipo === 'bie';
         const isPuertaRf =
           selectedElemento.tipo === 'puerta-rf' || selectedElemento.tipo === 'puerta-corredera';
@@ -3082,7 +3670,9 @@ function SeccionPlanoCanvas({
                 <span className="px-2.5 py-0.5 rounded-lg bg-blue-600 text-white text-sm font-black tracking-wide shadow-2xs uppercase">
                   {isNumerado
                     ? formatCodigoEquipo(selectedElemento, elementos, prevSectionsElementos)
-                    : activeToolLabel || 'Elemento'}
+                    : selectedElemento.tipo === 'door'
+                      ? 'Puerta'
+                      : activeToolLabel || 'Elemento'}
                 </span>
                 {supportsCreateMove && (
                   <div className="inline-flex rounded-lg bg-white p-0.5 border border-blue-200">
@@ -3121,27 +3711,6 @@ function SeccionPlanoCanvas({
               </div>
 
               <div className="flex flex-wrap items-end gap-2">
-                {/* Colores */}
-                <div className="flex flex-col items-start gap-0.5">
-                  <span className="text-[9px] font-extrabold uppercase tracking-wide text-blue-900/75 leading-none pl-0.5">
-                    Color del icono
-                  </span>
-                  <div className="flex items-center gap-1 bg-white px-1.5 py-1 rounded-lg border border-blue-200" title="Color del elemento">
-                    {DRAW_COLORS.map((c) => (
-                      <button
-                        key={c.value}
-                        type="button"
-                        onClick={() => handleRecolorSelected(c.value)}
-                        className={`w-3.5 h-3.5 rounded-full cursor-pointer ${
-                          selectedElemento.color === c.value ? 'ring-2 ring-offset-1 ring-blue-500' : ''
-                        }`}
-                        style={{ backgroundColor: c.value }}
-                        title={`Cambiar a ${c.label}`}
-                      />
-                    ))}
-                  </div>
-                </div>
-
                 {/* Girar y Voltear */}
                 {supportsTransform && (
                   <div className="flex flex-col items-start gap-0.5">
@@ -3221,10 +3790,14 @@ function SeccionPlanoCanvas({
                   <button
                     type="button"
                     onClick={handleUpdateSelectedText}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[11px] font-bold cursor-pointer shrink-0 shadow-2xs"
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 text-white rounded-lg text-[11px] font-bold cursor-pointer shrink-0 shadow-2xs transition-colors ${
+                      appliedFeedback
+                        ? 'bg-emerald-600 hover:bg-emerald-700'
+                        : 'bg-blue-600 hover:bg-blue-700'
+                    }`}
                   >
                     <Check className="w-3 h-3" />
-                    Aplicar
+                    {appliedFeedback ? 'Guardado' : 'Aplicar'}
                   </button>
                 )}
 
@@ -3450,13 +4023,17 @@ function SeccionPlanoCanvas({
         </div>
       )}
 
-      {/* Lienzo */}
-      <div className={isFullscreen ? 'flex-1 min-h-0 flex items-center justify-center' : ''}>
+      {/* Lienzo con borde delimitador y soporte de Zoom */}
+      <div
+        className={`overflow-auto rounded-xl border-2 border-slate-400 bg-slate-100 ${
+          isFullscreen ? 'flex-1 min-h-0 flex' : ''
+        }`}
+      >
         <div
-          className={`relative rounded-xl overflow-hidden border border-slate-300 bg-white ${
-            isFullscreen ? 'w-full max-w-6xl max-h-full' : 'w-full'
-          }`}
-          style={{ aspectRatio: `${CANVAS_W} / ${CANVAS_H}` }}
+          className={`relative bg-white ${
+            isFullscreen ? 'max-w-6xl max-h-full m-auto' : ''
+          } ${zoom < 1 && !isFullscreen ? 'mx-auto' : ''}`}
+          style={{ width: `${zoom * 100}%`, aspectRatio: `${CANVAS_W} / ${CANVAS_H}` }}
         >
           <canvas
             ref={canvasRef}
@@ -3483,77 +4060,6 @@ function SeccionPlanoCanvas({
               }}
             />
           )}
-          {selectedElemento &&
-            selectedElemento.tipo !== 'pen' &&
-            selectedElemento.tipo !== 'eraser' &&
-            selectedElemento.tipo !== 'text' && (() => {
-              const cx = ((selectedElemento.x1 ?? 0) + (selectedElemento.x2 ?? 0)) / 2;
-              const minY = Math.min(selectedElemento.y1 ?? 0, selectedElemento.y2 ?? 0);
-              const maxY = Math.max(selectedElemento.y1 ?? 0, selectedElemento.y2 ?? 0);
-              const leftPct = Math.min(82, Math.max(18, (cx / CANVAS_W) * 100));
-              const placeAbove = minY > 56;
-              const topPct = ((placeAbove ? minY : maxY) / CANVAS_H) * 100;
-              return (
-                <div
-                  className="absolute z-20 flex items-center gap-1 bg-white/95 backdrop-blur-xs border border-blue-400 shadow-lg rounded-full px-2 py-1"
-                  style={{
-                    left: `${leftPct}%`,
-                    top: `${topPct}%`,
-                    transform: placeAbove
-                      ? 'translate(-50%, calc(-100% - 10px))'
-                      : 'translate(-50%, 10px)'
-                  }}
-                >
-                  <button
-                    type="button"
-                    onClick={() => handleRotateSelected(-45)}
-                    title="Girar equipo 45° izquierda"
-                    className="p-1 rounded-full text-blue-700 hover:bg-blue-100 transition-colors cursor-pointer"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleRotateSelected(45)}
-                    title="Girar equipo 45° derecha"
-                    className="p-1 rounded-full text-blue-700 hover:bg-blue-100 transition-colors cursor-pointer"
-                  >
-                    <RotateCw className="w-3.5 h-3.5" />
-                  </button>
-                  {isEquipoNumerado(selectedElemento.tipo) && (
-                    <>
-                      <span className="w-px h-4 bg-slate-200 mx-0.5" />
-                      {(
-                        [
-                          { id: 'top', icon: ArrowUp, title: 'Número arriba' },
-                          { id: 'bottom', icon: ArrowDown, title: 'Número abajo' },
-                          { id: 'left', icon: ArrowLeft, title: 'Número izquierda' },
-                          { id: 'right', icon: ArrowRight, title: 'Número derecha' }
-                        ] as const
-                      ).map((dir) => {
-                        const DirIcon = dir.icon;
-                        const activePos = selectedElemento.labelPos || 'bottom';
-                        return (
-                          <button
-                            key={dir.id}
-                            type="button"
-                            onClick={() => handleSetSelectedLabelPos(dir.id)}
-                            title={dir.title}
-                            className={`p-1 rounded-full transition-colors cursor-pointer ${
-                              activePos === dir.id
-                                ? 'bg-blue-600 text-white'
-                                : 'text-slate-600 hover:bg-slate-100'
-                            }`}
-                          >
-                            <DirIcon className="w-3 h-3" />
-                          </button>
-                        );
-                      })}
-                    </>
-                  )}
-                </div>
-              );
-            })()}
         </div>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
@@ -3787,12 +4293,16 @@ export default function NotaSeccionesEditor({
                         type="button"
                         onClick={async () => {
                           if (!sec.dibujoDataUrl) return;
-                          const conCajetin = await exportarDataUrlConCajetin(sec.dibujoDataUrl, {
-                            ...cajetinMeta,
-                            seccionTitulo: sec.titulo?.trim()
-                              ? `Zona ${idx + 1} ${sec.titulo.trim()}`
-                              : `Zona ${idx + 1}`
-                          });
+                          const conCajetin = await exportarDataUrlConCajetin(
+                            sec.dibujoDataUrl,
+                            {
+                              ...cajetinMeta,
+                              seccionTitulo: sec.titulo?.trim()
+                                ? `Zona ${idx + 1} ${sec.titulo.trim()}`
+                                : `Zona ${idx + 1}`
+                            },
+                            sec.planoElementos
+                          );
                           const link = document.createElement('a');
                           const slug = (sec.titulo || `zona-${idx + 1}`)
                             .toLowerCase()
