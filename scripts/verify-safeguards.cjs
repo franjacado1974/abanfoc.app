@@ -2430,6 +2430,196 @@ if (fs.existsSync(pdfGenPath)) {
     }
   }
 
+  // REGLA 139: Notas con Alarmas (Hoy + Modal aviso) y Secciones por zonas con editor de planos CAD PCI (solo Presupuestos)
+  const fbPath139 = path.join(__dirname, '..', 'src', 'firebase.tsx');
+  if (fs.existsSync(fbPath139)) {
+    const fbContent139 = fs.readFileSync(fbPath139, 'utf8');
+    if (
+      !fbContent139.includes('NotaSeccionItem') ||
+      !fbContent139.includes('NotaPlanoElemento') ||
+      !fbContent139.includes('alarmaActiva') ||
+      !fbContent139.includes('alarmaFecha') ||
+      !fbContent139.includes('empresaMantenedora') ||
+      !fbContent139.includes("'sprinkler'") ||
+      !fbContent139.includes("'escalera'") ||
+      !fbContent139.includes('planoSymbolSize')
+    ) {
+      errors.push('CRÍTICO: firebase.tsx debe mantener NotaSeccionItem, NotaPlanoElemento, campos de alarma, cajetín y símbolos PCI (REGLA 139).');
+    }
+  }
+
+  const notasPath139 = path.join(__dirname, '..', 'src', 'Notas.tsx');
+  if (fs.existsSync(notasPath139)) {
+    const notasContent139 = fs.readFileSync(notasPath139, 'utf8');
+    if (
+      !notasContent139.includes('Activar alarma') ||
+      !notasContent139.includes('NotaSeccionesEditor') ||
+      !notasContent139.includes('modalVerNota.secciones') ||
+      !notasContent139.includes("formCategoria === 'Presupuestos'") ||
+      !notasContent139.includes('handleDescargarNotaPDF') ||
+      !notasContent139.includes('handleImprimirNota') ||
+      !notasContent139.includes('exportarDataUrlConCajetin')
+    ) {
+      errors.push('CRÍTICO: Notas.tsx debe mantener Activar alarma, NotaSeccionesEditor solo en Presupuestos, PDF, impresión y cajetín (REGLA 139).');
+    }
+  }
+
+  const editorPath139 = path.join(__dirname, '..', 'src', 'components', 'NotaSeccionesEditor.tsx');
+  if (!fs.existsSync(editorPath139)) {
+    errors.push('CRÍTICO: Falta src/components/NotaSeccionesEditor.tsx (REGLA 139).');
+  } else {
+    const edContent139 = fs.readFileSync(editorPath139, 'utf8');
+    if (
+      !edContent139.includes('Mover / Editar') ||
+      !edContent139.includes('Añadir zona / plano') ||
+      !edContent139.includes('Línea continua') ||
+      !edContent139.includes('Línea discontinua') ||
+      !edContent139.includes('Escalera') ||
+      !edContent139.includes('Puerta RF') ||
+      !edContent139.includes('Centralita') ||
+      !edContent139.includes('Pulsador') ||
+      !edContent139.includes('Sirena') ||
+      !edContent139.includes('Barrera lineal') ||
+      !edContent139.includes('Depósito') ||
+      !edContent139.includes('Grupo presión') ||
+      !edContent139.includes('Sprinkler') ||
+      !edContent139.includes('BIE 25') ||
+      !edContent139.includes('ABC 6') ||
+      !edContent139.includes('composarCanvasConCajetin') ||
+      !edContent139.includes('handleChangeSymbolSize') ||
+      !edContent139.includes('Pequeño') ||
+      !edContent139.includes('Volver a la nota') ||
+      !edContent139.includes('¿Borrar todo el plano?') ||
+      !edContent139.includes('#dc2626')
+    ) {
+      errors.push('CRÍTICO: NotaSeccionesEditor.tsx debe mantener herramientas, símbolos PCI rojos, cajetín, pantalla completa y confirmación de borrado (REGLA 139).');
+    }
+  }
+
+  const appPath139 = path.join(__dirname, '..', 'src', 'App.tsx');
+  if (fs.existsSync(appPath139)) {
+    const appContent139 = fs.readFileSync(appPath139, 'utf8');
+    if (!appContent139.includes('AlarmaNotasModal') || !appContent139.includes('subscribeNotasBloc')) {
+      errors.push('CRÍTICO: App.tsx debe mantener AlarmaNotasModal y las notas con alarma en Hoy (REGLA 139).');
+    }
+  }
+
+  // REGLA 140: Blindaje de auto-numeración correlativa entre secciones, Etiqueta (FF/UT/PH/Señal), Barrera B+E, rotación, y Reporte de Sistemas y Equipos con und. y #
+  if (fs.existsSync(editorPath139)) {
+    const edContent140 = fs.readFileSync(editorPath139, 'utf8');
+    if (
+      !edContent140.includes('buildReporteEquiposPorSecciones') ||
+      !edContent140.includes('formatCodigoEquipo') ||
+      !edContent140.includes('isEquipoNumerado') ||
+      !edContent140.includes('prevSectionsElementos') ||
+      !edContent140.includes("'barrera-espejo'") ||
+      !edContent140.includes('handleRotateSelected') ||
+      !edContent140.includes('drawMultiLineSymbolFooter') ||
+      !edContent140.includes('formatMonthYear') ||
+      !edContent140.includes('ESTADOS_SENAL') ||
+      !edContent140.includes('estadoSenal') ||
+      !edContent140.includes('Reporte de Sistemas y Equipos') ||
+      !edContent140.includes('und.') ||
+      !edContent140.includes('#${numStr}')
+    ) {
+      errors.push('CRÍTICO: NotaSeccionesEditor.tsx debe mantener numeración correlativa entre secciones, barrera B+E redimensionable, rotación, panel Etiqueta (FF/UT/PH/Señal) y Reporte de Sistemas y Equipos con und. y # (REGLA 140).');
+    }
+  }
+
+  if (fs.existsSync(notasPath139)) {
+    const notasContent140 = fs.readFileSync(notasPath139, 'utf8');
+    if (
+      !notasContent140.includes('buildReporteEquiposPorSecciones') ||
+      !notasContent140.includes('handleDescargarReporteEquiposPDF') ||
+      !notasContent140.includes('Reporte de Sistemas y Equipos') ||
+      !notasContent140.includes('RECUENTO TOTAL GLOBAL') ||
+      !notasContent140.includes('und.') ||
+      !notasContent140.includes('Recordatorio con Alarma') ||
+      !notasContent140.includes('ejecutarGuardadoNota')
+    ) {
+      errors.push('CRÍTICO: Notas.tsx debe mantener el Recordatorio con Alarma destacado arriba, guardado inline y el Reporte de Sistemas y Equipos en modal y PDF con und. (REGLA 140).');
+    }
+  }
+
+  const fbPath140 = path.join(__dirname, '..', 'src', 'firebase.tsx');
+  if (fs.existsSync(fbPath140)) {
+    const fbContent140 = fs.readFileSync(fbPath140, 'utf8');
+    if (
+      !fbContent140.includes("'barrera-espejo'") ||
+      !fbContent140.includes('estadoSenal?: string') ||
+      !fbContent140.includes('numero?: number') ||
+      !fbContent140.includes('labelPos?:') ||
+      !fbContent140.includes('rotation?: number')
+    ) {
+      errors.push('CRÍTICO: firebase.tsx debe mantener los campos de plano (barrera-espejo, numero, estadoSenal, labelPos, rotation) (REGLA 140).');
+    }
+  }
+
+  // REGLA 141: Blindaje de nomenclatura Zonas (Zona 1, Zona 2...), casilla ZONA en cajetín, y botones Descargar PDF / Descargar imagen en el editor
+  if (fs.existsSync(editorPath139)) {
+    const edContent141 = fs.readFileSync(editorPath139, 'utf8');
+    if (
+      !edContent141.includes("'ZONA'") ||
+      !edContent141.includes("'CENTRO'") ||
+      !edContent141.includes('Zonas y planos') ||
+      !edContent141.includes('Añadir zona / plano') ||
+      !edContent141.includes('Zona {idx + 1}') ||
+      !edContent141.includes('Descargar imagen') ||
+      !edContent141.includes('onDescargarNotaPdf')
+    ) {
+      errors.push('CRÍTICO: NotaSeccionesEditor.tsx debe mantener la casilla ZONA en el cajetín, nomenclatura Zona X, y botones Descargar PDF / Descargar imagen (REGLA 141).');
+    }
+  }
+
+  if (fs.existsSync(notasPath139)) {
+    const notasContent141 = fs.readFileSync(notasPath139, 'utf8');
+    if (
+      !notasContent141.includes('REPORTE DE ELEMENTOS POR ZONAS') ||
+      !notasContent141.includes('Reporte de Elementos por Zonas') ||
+      !notasContent141.includes('Zonas y planos') ||
+      !notasContent141.includes('onDescargarNotaPdf')
+    ) {
+      errors.push('CRÍTICO: Notas.tsx debe mantener la nomenclatura Zonas y el botón Descargar PDF en el editor (REGLA 141).');
+    }
+  }
+
+  // REGLA 142: Blindaje de contadores en filtro de Partes.tsx, Puerta corredera RF, presets RF 60/90/120, MonthYearSelect (MM/AAAA) y panel compacto unificado en NotaSeccionesEditor.tsx
+  const partesPath142 = path.join(__dirname, '..', 'src', 'Partes.tsx');
+  if (fs.existsSync(partesPath142)) {
+    const partesContent142 = fs.readFileSync(partesPath142, 'utf8');
+    if (
+      !partesContent142.includes('countsPorEstado') ||
+      !partesContent142.includes('( {selectedOption.count} )') ||
+      !partesContent142.includes('( {op.count} )')
+    ) {
+      errors.push('CRÍTICO: Partes.tsx debe mantener los contadores por estado en el filtro con el mismo formato que PartesTrabajoOperaciones (REGLA 142).');
+    }
+  }
+
+  if (fs.existsSync(editorPath139)) {
+    const edContent142 = fs.readFileSync(editorPath139, 'utf8');
+    if (
+      !edContent142.includes("'puerta-corredera'") ||
+      !edContent142.includes('drawPuertaCorrederaSymbol') ||
+      !edContent142.includes('PUERTA_RF_PRESETS') ||
+      !edContent142.includes("'RF 60'") ||
+      !edContent142.includes('MonthYearSelect') ||
+      !edContent142.includes('Movimiento icono') ||
+      !edContent142.includes('Posición etiqueta') ||
+      !edContent142.includes('Color del icono')
+    ) {
+      errors.push('CRÍTICO: NotaSeccionesEditor.tsx debe mantener Puerta corredera RF, presets RF 60/90/120, MonthYearSelect y encabezados Color del icono / Movimiento icono / Posición etiqueta (REGLA 142).');
+    }
+  }
+
+  const fbPath142 = path.join(__dirname, '..', 'src', 'firebase.tsx');
+  if (fs.existsSync(fbPath142)) {
+    const fbContent142 = fs.readFileSync(fbPath142, 'utf8');
+    if (!fbContent142.includes("'puerta-corredera'")) {
+      errors.push('CRÍTICO: firebase.tsx debe mantener puerta-corredera en NotaPlanoElemento (REGLA 142).');
+    }
+  }
+
 // Resultado de la verificación
 if (errors.length > 0) {
   console.error('\n❌ ERROR CRÍTICO DE BLINDAJE INTEGRAL (AGENTS.md):');

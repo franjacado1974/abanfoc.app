@@ -1,15 +1,23 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
   StickyNote, Plus, Search, Eye, Pencil, Trash2,
-  User, X, Check, Clock, MapPin, CheckCircle2
+  User, X, Check, Clock, MapPin, CheckCircle2, Bell, Calendar, Layers, Download, Printer, ClipboardList
 } from 'lucide-react';
+import { jsPDF } from 'jspdf';
 import {
   subscribeNotasBloc,
   addNotaBloc,
   updateNotaBloc,
   deleteNotaBloc,
-  type NotaBlocItem
+  type NotaBlocItem,
+  type NotaSeccionItem
 } from './firebase';
+import { optimizarImagenParaPDF } from './pdfGenerator';
+import NotaSeccionesEditor, {
+  exportarDataUrlConCajetin,
+  buildReporteEquiposPorSecciones,
+  type CajetinPlanoMeta
+} from './components/NotaSeccionesEditor';
 
 interface NotasProps {
   user?: { nombre: string; apellidos: string; rol: string; usuario?: string } | null;
@@ -108,6 +116,518 @@ export default function Notas({ user }: NotasProps) {
   const [formContenido, setFormContenido] = useState('');
   const [formCategoria, setFormCategoria] = useState<CategoriaNota>('Compras');
   const [formPrioridad, setFormPrioridad] = useState<PrioridadNota>('Media');
+  const [formAlarmaActiva, setFormAlarmaActiva] = useState(false);
+  const [formAlarmaDate, setFormAlarmaDate] = useState('');
+  const [formAlarmaTime, setFormAlarmaTime] = useState('09:00');
+  const [formSecciones, setFormSecciones] = useState<NotaSeccionItem[]>([]);
+  const [formEmpresaMantenedora, setFormEmpresaMantenedora] = useState('');
+  const [formClienteNombre, setFormClienteNombre] = useState('');
+  const [formCentroNombre, setFormCentroNombre] = useState('');
+  const [planoAmpliado, setPlanoAmpliado] = useState<{ url: string; title: string; nota?: NotaBlocItem } | null>(null);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [savedInlineNotice, setSavedInlineNotice] = useState(false);
+  const [reporteModalData, setReporteModalData] = useState<{
+    titulo: string;
+    cliente?: string;
+    centro?: string;
+    autor?: string;
+    fecha?: string;
+    secciones: NotaSeccionItem[];
+  } | null>(null);
+
+  const empresasList = useMemo<{ nombre: string }[]>(() => {
+    try {
+      const raw = localStorage.getItem('firecheck_db_empresas');
+      return raw ? JSON.parse(raw) : [];
+    } catch { return []; }
+  }, []);
+
+  const clientesList = useMemo<{ nombre: string }[]>(() => {
+    try {
+      const raw = localStorage.getItem('firecheck_db_clientes');
+      return raw ? JSON.parse(raw) : [];
+    } catch { return []; }
+  }, []);
+
+  const centrosList = useMemo<{ nombre: string }[]>(() => {
+    try {
+      const raw = localStorage.getItem('firecheck_db_centros');
+      return raw ? JSON.parse(raw) : [];
+    } catch { return []; }
+  }, []);
+
+  const defaultEmpresaNombre = empresasList[0]?.nombre || 'ABANFOC';
+
+  const formatFechaCorta = (iso?: string) => {
+    const d = iso ? new Date(iso) : new Date();
+    if (isNaN(d.getTime())) return new Date().toLocaleDateString('es-ES');
+    return d.toLocaleDateString('es-ES');
+  };
+
+  const buildCajetinMeta = (nota: NotaBlocItem, seccionTitulo?: string): CajetinPlanoMeta => ({
+    empresaMantenedora: nota.empresaMantenedora || defaultEmpresaNombre,
+    clienteNombre: nota.clienteNombre || nota.lugar || '—',
+    centroNombre: nota.centroNombre || nota.lugar || '—',
+    autor: nota.usuarioNombre || currentUserName,
+    fecha: formatFechaCorta(nota.fechaCreacion),
+    seccionTitulo
+  });
+
+  const htmlToPlainText = (html: string): string => {
+    if (!html) return '';
+    return html
+      .replace(/<li[^>]*>/gi, '\n• ')
+      .replace(/<\/(p|div|li|h[1-6])>/gi, '\n')
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<[^>]+>/g, '')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&amp;/gi, '&')
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  };
+
+  const handleDescargarImagenPlano = async (
+    dataUrl: string,
+    nombre?: string,
+    cajetin?: CajetinPlanoMeta
+  ) => {
+    const slug = (nombre || 'plano')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/gi, '-')
+      .replace(/^-|-$/g, '');
+    const finalUrl = await exportarDataUrlConCajetin(
+      dataUrl,
+      cajetin || {
+        empresaMantenedora: defaultEmpresaNombre,
+        clienteNombre: nombre || '—',
+        centroNombre: nombre || '—',
+        autor: currentUserName,
+        fecha: formatFechaCorta()
+      }
+    );
+    const link = document.createElement('a');
+    link.href = finalUrl;
+    link.download = `plano-${slug || 'nota'}.png`;
+    link.click();
+  };
+
+  const handleDescargarNotaPDF = async (nota: NotaBlocItem) => {
+    setIsExportingPdf(true);
+    try {
+      const doc = new jsPDF('p', 'mm', 'a4');
+      const pageW = 210;
+      const margin = 15;
+      const maxW = pageW - margin * 2;
+      let y = 18;
+
+      const ensureSpace = (needed: number) => {
+        if (y + needed > 282) {
+          doc.addPage();
+          y = 18;
+        }
+      };
+
+      // Cabecera
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(16);
+      doc.setTextColor(15, 35, 66);
+      const titleLines = doc.splitTextToSize((nota.lugar || 'NOTA').toUpperCase(), maxW);
+      doc.text(titleLines, margin, y);
+      y += titleLines.length * 7 + 2;
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(100, 116, 139);
+      const meta = `Categoría: ${nota.categoria}  |  Prioridad: ${nota.prioridad}  |  Autor: ${nota.usuarioNombre || 'Usuario'}`;
+      doc.text(meta, margin, y);
+      y += 5;
+
+      if (nota.alarmaActiva && nota.alarmaFecha) {
+        const fAlarma = `${nota.alarmaFecha.slice(8, 10)}/${nota.alarmaFecha.slice(5, 7)}/${nota.alarmaFecha.slice(0, 4)} ${nota.alarmaFecha.slice(11, 16)}`;
+        doc.setTextColor(180, 83, 9);
+        doc.text(`Alarma programada: ${fAlarma}`, margin, y);
+        y += 5;
+      }
+
+      doc.setDrawColor(203, 213, 225);
+      doc.line(margin, y, pageW - margin, y);
+      y += 6;
+
+      // Motivo
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(15, 23, 42);
+      doc.text('MOTIVO / QUÉ HAY QUE HACER:', margin, y);
+      y += 5;
+      doc.setFont('helvetica', 'normal');
+      const motivoLines = doc.splitTextToSize(nota.motivo || '', maxW);
+      doc.text(motivoLines, margin, y);
+      y += motivoLines.length * 5 + 4;
+
+      // Detalles adicionales
+      if (nota.contenido && nota.contenido.trim()) {
+        ensureSpace(14);
+        doc.setFont('helvetica', 'bold');
+        doc.text('DETALLES Y NOTAS ADICIONALES:', margin, y);
+        y += 5;
+        doc.setFont('helvetica', 'normal');
+        const detLines = doc.splitTextToSize(nota.contenido.trim(), maxW);
+        detLines.forEach((line: string) => {
+          ensureSpace(5);
+          doc.text(line, margin, y);
+          y += 5;
+        });
+        y += 4;
+      }
+
+      // Secciones por zonas y planos
+      if (nota.secciones && nota.secciones.length > 0) {
+        for (let i = 0; i < nota.secciones.length; i++) {
+          const sec = nota.secciones[i];
+          ensureSpace(16);
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(11);
+          doc.setTextColor(15, 35, 66);
+          const tituloZonaPdf = sec.titulo?.trim()
+            ? `ZONA ${i + 1} ${sec.titulo.trim().toUpperCase()}`
+            : `ZONA ${i + 1}`;
+          doc.text(tituloZonaPdf, margin, y);
+          y += 6;
+
+          const plain = htmlToPlainText(sec.contenidoHtml || '');
+          if (plain) {
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(10);
+            doc.setTextColor(51, 65, 85);
+            const secLines = doc.splitTextToSize(plain, maxW);
+            secLines.forEach((line: string) => {
+              ensureSpace(5);
+              doc.text(line, margin, y);
+              y += 5;
+            });
+            y += 3;
+          }
+
+          if (sec.dibujoDataUrl) {
+            try {
+              const conCajetin = await exportarDataUrlConCajetin(
+                sec.dibujoDataUrl,
+                buildCajetinMeta(
+                  nota,
+                  sec.titulo?.trim() ? `Zona ${i + 1} ${sec.titulo.trim()}` : `Zona ${i + 1}`
+                )
+              );
+              const optimized = await optimizarImagenParaPDF(conCajetin, 800, 0.75);
+              const imgW = maxW;
+              const imgH = imgW * ((380 + 74) / 720);
+              ensureSpace(imgH + 6);
+              doc.addImage(optimized.base64, optimized.format, margin, y, imgW, imgH);
+              y += imgH + 6;
+            } catch (err) {
+              console.error('Error optimizando plano para PDF:', err);
+            }
+          }
+          y += 2;
+        }
+      }
+
+      const slug = (nota.lugar || 'nota')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/gi, '-')
+        .replace(/^-|-$/g, '');
+      doc.save(`nota-${slug || 'detalle'}.pdf`);
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
+
+  const handleDescargarReporteEquiposPDF = (datos: {
+    titulo: string;
+    cliente?: string;
+    centro?: string;
+    autor?: string;
+    fecha?: string;
+    secciones: NotaSeccionItem[];
+  }) => {
+    const reporte = buildReporteEquiposPorSecciones(datos.secciones);
+    const doc = new jsPDF('p', 'mm', 'a4');
+    const pageW = doc.internal.pageSize.getWidth();
+    const pageH = doc.internal.pageSize.getHeight();
+    const margin = 14;
+    const maxW = pageW - margin * 2;
+    let y = 16;
+
+    const ensureSpace = (needed: number) => {
+      if (y + needed > pageH - 14) {
+        doc.addPage();
+        y = 16;
+      }
+    };
+
+    // Cabecera
+    doc.setFillColor(15, 23, 42);
+    doc.rect(0, 0, pageW, 24, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(13);
+    doc.text('REPORTE DE ELEMENTOS POR ZONAS', margin, 11);
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.text(
+      `${(datos.titulo || 'SIN TÍTULO').toUpperCase()}  ·  Total equipos: ${reporte.totalGeneral}`,
+      margin,
+      18
+    );
+
+    y = 31;
+    doc.setTextColor(51, 65, 85);
+    doc.setFontSize(9);
+    const metaParts: string[] = [];
+    if (datos.cliente) metaParts.push(`Cliente: ${datos.cliente}`);
+    if (datos.centro) metaParts.push(`Centro: ${datos.centro}`);
+    if (datos.autor) metaParts.push(`Autor: ${datos.autor}`);
+    if (datos.fecha) metaParts.push(`Fecha: ${datos.fecha}`);
+    if (metaParts.length > 0) {
+      const metaLines = doc.splitTextToSize(metaParts.join('  |  '), maxW);
+      doc.text(metaLines, margin, y);
+      y += metaLines.length * 4.5 + 3;
+    }
+
+    // Resumen global por tipo y sección
+    ensureSpace(18);
+    doc.setFillColor(254, 243, 199);
+    doc.setDrawColor(245, 158, 11);
+    const lineH = 6.2;
+    const innerW = maxW - 8;
+    type ResumenPdfRow = { prefix: string; boldPart: string; firstSuffix: string; extraLines: string[] };
+    const resumenRows: ResumenPdfRow[] =
+      reporte.resumenPorTipo.length > 0
+        ? reporte.resumenPorTipo.map((r) => {
+            const prefix = `- ${r.tipoLabel}: `;
+            const boldPart = `${r.total} und.`;
+            const suffix = ` (${r.porSeccion
+              .map((s) => `${s.count} und. en ${s.seccionTitulo}`)
+              .join(' / ')})`;
+            doc.setFontSize(8.8);
+            doc.setFont('helvetica', 'normal');
+            const prefixW = doc.getTextWidth(prefix);
+            doc.setFont('helvetica', 'bold');
+            const boldW = doc.getTextWidth(boldPart);
+            doc.setFont('helvetica', 'normal');
+            const availFirst = Math.max(25, innerW - prefixW - boldW);
+            const firstWrapped = doc.splitTextToSize(suffix, availFirst) as string[];
+            const firstSuffix = firstWrapped[0] || '';
+            const restText = suffix.slice(firstSuffix.length).trimStart();
+            const extraLines = restText ? (doc.splitTextToSize(restText, innerW) as string[]) : [];
+            return { prefix, boldPart, firstSuffix, extraLines };
+          })
+        : [{ prefix: 'Sin equipos registrados en los planos.', boldPart: '', firstSuffix: '', extraLines: [] }];
+
+    const totalPdfLines = resumenRows.reduce((sum, row) => sum + 1 + row.extraLines.length, 0);
+    const boxH = 12 + totalPdfLines * lineH;
+    doc.roundedRect(margin, y, maxW, boxH, 2, 2, 'FD');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9.5);
+    doc.setTextColor(120, 53, 15);
+    doc.text(`RECUENTO TOTAL GLOBAL (${reporte.totalGeneral} und.)`, margin + 4, y + 6.5);
+    doc.setFontSize(8.8);
+    let curY = y + 12.5;
+    resumenRows.forEach((row) => {
+      let curX = margin + 4;
+      doc.setFont('helvetica', 'normal');
+      doc.text(row.prefix, curX, curY);
+      curX += doc.getTextWidth(row.prefix);
+      if (row.boldPart) {
+        doc.setFont('helvetica', 'bold');
+        doc.text(row.boldPart, curX, curY);
+        curX += doc.getTextWidth(row.boldPart);
+      }
+      if (row.firstSuffix) {
+        doc.setFont('helvetica', 'normal');
+        doc.text(row.firstSuffix, curX, curY);
+      }
+      curY += lineH;
+      row.extraLines.forEach((ex) => {
+        doc.setFont('helvetica', 'normal');
+        doc.text(ex, margin + 4, curY);
+        curY += lineH;
+      });
+    });
+    y += boxH + 7;
+
+    // Desglose por sección
+    reporte.secciones.forEach((sec, idx) => {
+      ensureSpace(18);
+      doc.setFillColor(241, 245, 249);
+      doc.rect(margin, y, maxW, 8, 'F');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(15, 23, 42);
+      const secLabel =
+        sec.titulo.toLowerCase() === `zona ${idx + 1}`
+          ? sec.titulo.toUpperCase()
+          : `ZONA ${idx + 1} ${sec.titulo.toUpperCase()}`;
+      doc.text(`${secLabel}  (${sec.total} und.)`, margin + 3, y + 5.5);
+      y += 10;
+
+      const secCounts = Object.entries(sec.conteoPorTipo)
+        .map(([k, v]) => `${k}: ${v} und.`)
+        .join(' / ');
+      if (secCounts) {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8.5);
+        doc.setTextColor(185, 28, 28);
+        const cLines = doc.splitTextToSize(secCounts, maxW);
+        doc.text(cLines, margin, y);
+        y += cLines.length * 4.2 + 2;
+      }
+
+      if (sec.equipos.length === 0) {
+        doc.setFont('helvetica', 'italic');
+        doc.setFontSize(8.5);
+        doc.setTextColor(100, 116, 139);
+        doc.text('Sin equipos en esta zona.', margin + 2, y);
+        y += 6;
+      } else {
+        sec.equipos.forEach((eq) => {
+          const detalles: string[] = [];
+          if (eq.modelo) detalles.push(`Tipo: ${eq.modelo}`);
+          if (eq.ff) detalles.push(`FF: ${eq.ff}`);
+          if (eq.ut) detalles.push(`UT: ${eq.ut}`);
+          if (eq.ph) detalles.push(`PH: ${eq.ph}`);
+          if (eq.estadoSenal) detalles.push(`Señal: ${eq.estadoSenal}`);
+          const lineStr = `• ${eq.codigo}${detalles.length > 0 ? '  —  ' + detalles.join('  |  ') : ''}`;
+          const wrapped = doc.splitTextToSize(lineStr, maxW - 4);
+          ensureSpace(wrapped.length * 4.5 + 2);
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(8.8);
+          doc.setTextColor(30, 41, 59);
+          doc.text(wrapped, margin + 2, y);
+          y += wrapped.length * 4.5 + 1.5;
+        });
+        y += 3;
+      }
+    });
+
+    const slug = (datos.titulo || 'reporte')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/gi, '-')
+      .replace(/^-|-$/g, '');
+    doc.save(`reporte-equipos-${slug || 'zonas'}.pdf`);
+  };
+
+  const handleImprimirNota = (nota: NotaBlocItem) => {
+    const win = window.open('', '_blank', 'width=900,height=700');
+    if (!win) {
+      alert('Por favor, permite las ventanas emergentes para imprimir la nota.');
+      return;
+    }
+
+    const esc = (str: string) =>
+      String(str || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+
+    const seccionesHtml = (nota.secciones || [])
+      .map(
+        (sec, i) => `
+      <div class="section-box">
+        <h3>Zona ${i + 1}${sec.titulo?.trim() ? ` ${esc(sec.titulo.trim())}` : ''}</h3>
+        ${sec.contenidoHtml ? `<div class="section-text">${sec.contenidoHtml}</div>` : ''}
+        ${
+          sec.dibujoDataUrl
+            ? `<div class="section-img">
+                <img src="${sec.dibujoDataUrl}" alt="Plano ${esc(sec.titulo || '')}" />
+                <table class="cajetin">
+                  <tr>
+                    <td rowspan="2" style="width:30%">
+                      <div class="c-lbl">EMPRESA MANTENEDORA</div>
+                      <div class="c-val-lg">${esc(nota.empresaMantenedora || defaultEmpresaNombre)}</div>
+                      <div class="c-sub">PLANO DE INSTALACIÓN / REVISIÓN</div>
+                    </td>
+                    <td style="width:44%">
+                      <div class="c-lbl">CLIENTE</div>
+                      <div class="c-val">${esc(nota.clienteNombre || nota.lugar || '—')}</div>
+                    </td>
+                    <td style="width:26%">
+                      <div class="c-lbl">REALIZADO POR</div>
+                      <div class="c-val">${esc(nota.usuarioNombre || currentUserName)}</div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <div class="c-lbl">CENTRO / ZONA</div>
+                      <div class="c-val">${esc(nota.centroNombre || nota.lugar || '—')}${sec.titulo ? ` · ${esc(sec.titulo)}` : ''}</div>
+                    </td>
+                    <td>
+                      <div class="c-lbl">FECHA</div>
+                      <div class="c-val">${esc(formatFechaCorta(nota.fechaCreacion))}</div>
+                    </td>
+                  </tr>
+                </table>
+              </div>`
+            : ''
+        }
+      </div>
+    `
+      )
+      .join('');
+
+    win.document.write(`
+      <!doctype html>
+      <html lang="es">
+      <head>
+        <meta charset="utf-8" />
+        <title>Nota - ${esc(nota.lugar)}</title>
+        <style>
+          body { font-family: Arial, Helvetica, sans-serif; color: #0f172a; margin: 24px; }
+          .header { border-bottom: 2px solid #0f2342; padding-bottom: 10px; margin-bottom: 16px; }
+          .header h1 { margin: 0 0 6px; font-size: 20px; text-transform: uppercase; color: #0f2342; }
+          .meta { font-size: 12px; color: #475569; }
+          .block { background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; margin-bottom: 14px; }
+          .label { font-size: 10px; font-weight: bold; text-transform: uppercase; color: #64748b; margin-bottom: 4px; }
+          .section-box { border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; margin-bottom: 14px; page-break-inside: avoid; }
+          .section-box h3 { margin: 0 0 8px; font-size: 14px; text-transform: uppercase; color: #0f2342; }
+          .section-text { font-size: 13px; line-height: 1.5; }
+          .section-img img { max-width: 100%; border: 1px solid #cbd5e1; border-bottom: none; border-radius: 6px 6px 0 0; margin-top: 8px; display: block; }
+          .cajetin { width: 100%; border-collapse: collapse; background: #f8fafc; margin-bottom: 4px; }
+          .cajetin td { border: 1.5px solid #0f172a; padding: 5px 8px; vertical-align: top; }
+          .c-lbl { font-size: 8px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.4px; }
+          .c-val { font-size: 11px; font-weight: 700; color: #0f172a; margin-top: 2px; }
+          .c-val-lg { font-size: 12px; font-weight: 800; color: #0f2342; margin-top: 3px; text-transform: uppercase; }
+          .c-sub { font-size: 8px; color: #475569; margin-top: 3px; }
+          @media print { body { margin: 10mm; } }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>${esc(nota.lugar)}</h1>
+          <div class="meta">
+            Categoría: <strong>${esc(nota.categoria)}</strong> · Prioridad: <strong>${esc(nota.prioridad)}</strong> · Registrado por: <strong>${esc(nota.usuarioNombre || 'Usuario')}</strong>
+          </div>
+        </div>
+        <div class="block">
+          <div class="label">Motivo / Qué hay que hacer</div>
+          <div style="font-size:13px;font-weight:bold;white-space:pre-wrap;">${esc(nota.motivo)}</div>
+        </div>
+        ${
+          nota.contenido
+            ? `<div class="block"><div class="label">Detalles y notas adicionales</div><div style="font-size:12px;white-space:pre-wrap;">${esc(nota.contenido)}</div></div>`
+            : ''
+        }
+        ${seccionesHtml}
+      </body>
+      </html>
+    `);
+    win.document.close();
+    win.focus();
+    setTimeout(() => {
+      win.print();
+    }, 350);
+  };
 
   // Obtener nombre del usuario actual
   const currentUserName = useMemo(() => {
@@ -260,6 +780,13 @@ export default function Notas({ user }: NotasProps) {
     setFormContenido('');
     setFormCategoria(categoriaActiva === 'Completadas' ? 'Varias' : categoriaActiva);
     setFormPrioridad('Media');
+    setFormAlarmaActiva(false);
+    setFormAlarmaDate(new Date().toISOString().slice(0, 10));
+    setFormAlarmaTime('09:00');
+    setFormSecciones([]);
+    setFormEmpresaMantenedora(defaultEmpresaNombre);
+    setFormClienteNombre('');
+    setFormCentroNombre('');
     setModalFormOpen(true);
   };
 
@@ -271,13 +798,25 @@ export default function Notas({ user }: NotasProps) {
     setFormContenido(nota.contenido || '');
     setFormCategoria((nota.categoria as CategoriaNota) || 'Varias');
     setFormPrioridad((nota.prioridad as PrioridadNota) || 'Media');
+    setFormAlarmaActiva(Boolean(nota.alarmaActiva && nota.alarmaFecha));
+    if (nota.alarmaFecha && nota.alarmaFecha.includes('T')) {
+      const [d, t] = nota.alarmaFecha.split('T');
+      setFormAlarmaDate(d || new Date().toISOString().slice(0, 10));
+      setFormAlarmaTime((t || '09:00').slice(0, 5));
+    } else {
+      setFormAlarmaDate(new Date().toISOString().slice(0, 10));
+      setFormAlarmaTime('09:00');
+    }
+    setFormSecciones(Array.isArray(nota.secciones) ? nota.secciones : []);
+    setFormEmpresaMantenedora(nota.empresaMantenedora || defaultEmpresaNombre);
+    setFormClienteNombre(nota.clienteNombre || '');
+    setFormCentroNombre(nota.centroNombre || '');
     if (modalVerNota) setModalVerNota(null);
     setModalFormOpen(true);
   };
 
-  // Guardar nota (Crear o Actualizar)
-  const handleSaveNota = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Guardar nota (Crear o Actualizar, opcionalmente permaneciendo en el editor sin salir)
+  const ejecutarGuardadoNota = async (permanecerEnEditor: boolean) => {
     if (!formLugar.trim()) {
       alert('Por favor, introduce el lugar de la nota.');
       return;
@@ -286,12 +825,25 @@ export default function Notas({ user }: NotasProps) {
       alert('Por favor, introduce el motivo o lo que hay que hacer.');
       return;
     }
+    if (formAlarmaActiva && (!formAlarmaDate || !formAlarmaTime)) {
+      alert('Por favor, selecciona fecha y hora para la alarma.');
+      return;
+    }
+
+    const alarmaFechaFinal = formAlarmaActiva ? `${formAlarmaDate}T${formAlarmaTime}` : '';
+    const seccionesLimpias =
+      formCategoria === 'Presupuestos' || formCategoria === 'Completadas'
+        ? formSecciones.filter(
+            (s) => s.titulo.trim() || s.contenidoHtml.replace(/<[^>]+>/g, '').trim() || s.dibujoDataUrl
+          )
+        : [];
 
     setIsSaving(true);
     try {
       if (notaEditando && (notaEditando._docId || notaEditando.id)) {
         const docId = notaEditando._docId || notaEditando.id!;
-        await updateNotaBloc(docId, {
+        const fechaCambiada = alarmaFechaFinal !== (notaEditando.alarmaFecha || '');
+        const payload = {
           lugar: formLugar.trim().toUpperCase(),
           motivo: formMotivo.trim(),
           contenido: formContenido.trim(),
@@ -301,10 +853,21 @@ export default function Notas({ user }: NotasProps) {
           completada: formCategoria === 'Completadas' ? true : (notaEditando.completada ?? false),
           completadaPor: formCategoria === 'Completadas' ? (notaEditando.completadaPor || currentUserName) : ((notaEditando.categoria as string) === 'Completadas' ? '' : notaEditando.completadaPor),
           fechaCompletada: formCategoria === 'Completadas' ? (notaEditando.fechaCompletada || new Date().toISOString()) : ((notaEditando.categoria as string) === 'Completadas' ? '' : notaEditando.fechaCompletada),
-          categoriaAnterior: notaEditando.categoriaAnterior || ((notaEditando.categoria as string) !== 'Completadas' ? notaEditando.categoria : 'Varias')
-        });
+          categoriaAnterior: notaEditando.categoriaAnterior || ((notaEditando.categoria as string) !== 'Completadas' ? notaEditando.categoria : 'Varias'),
+          alarmaActiva: formAlarmaActiva,
+          alarmaFecha: alarmaFechaFinal,
+          alarmaNotificada: !formAlarmaActiva || fechaCambiada ? false : Boolean(notaEditando.alarmaNotificada),
+          secciones: seccionesLimpias,
+          empresaMantenedora: formEmpresaMantenedora.trim() || defaultEmpresaNombre,
+          clienteNombre: formClienteNombre.trim(),
+          centroNombre: formCentroNombre.trim()
+        };
+        await updateNotaBloc(docId, payload);
+        if (permanecerEnEditor) {
+          setNotaEditando({ ...notaEditando, ...payload });
+        }
       } else {
-        await addNotaBloc({
+        const creada = await addNotaBloc({
           lugar: formLugar.trim().toUpperCase(),
           motivo: formMotivo.trim(),
           contenido: formContenido.trim(),
@@ -315,17 +878,37 @@ export default function Notas({ user }: NotasProps) {
           completada: formCategoria === 'Completadas',
           completadaPor: formCategoria === 'Completadas' ? currentUserName : undefined,
           fechaCompletada: formCategoria === 'Completadas' ? new Date().toISOString() : undefined,
+          alarmaActiva: formAlarmaActiva,
+          alarmaFecha: alarmaFechaFinal,
+          alarmaNotificada: false,
+          secciones: seccionesLimpias,
+          empresaMantenedora: formEmpresaMantenedora.trim() || defaultEmpresaNombre,
+          clienteNombre: formClienteNombre.trim(),
+          centroNombre: formCentroNombre.trim()
         });
+        if (permanecerEnEditor && creada) {
+          setNotaEditando(creada as NotaBlocItem);
+        }
       }
 
-      setModalFormOpen(false);
-      setNotaEditando(null);
+      if (permanecerEnEditor) {
+        setSavedInlineNotice(true);
+        setTimeout(() => setSavedInlineNotice(false), 2500);
+      } else {
+        setModalFormOpen(false);
+        setNotaEditando(null);
+      }
     } catch (err) {
       console.error('Error guardando nota:', err);
       alert('Hubo un error al guardar la nota. Por favor, inténtalo de nuevo.');
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleSaveNota = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await ejecutarGuardadoNota(false);
   };
 
   // Eliminar nota
@@ -608,6 +1191,28 @@ export default function Notas({ user }: NotasProps) {
                   >
                     {nota.motivo}
                   </p>
+
+                  {nota.alarmaActiva && nota.alarmaFecha && (
+                    <div className={`mt-2.5 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-bold ${
+                      nota.alarmaNotificada
+                        ? 'bg-slate-50 text-slate-500 border-slate-200'
+                        : 'bg-amber-50 text-amber-800 border-amber-200'
+                    }`}>
+                      <Bell className={`w-3.5 h-3.5 ${nota.alarmaNotificada ? 'text-slate-400' : 'text-amber-600'}`} />
+                      <span>
+                        Alarma: {nota.alarmaFecha.slice(8, 10)}/{nota.alarmaFecha.slice(5, 7)}/{nota.alarmaFecha.slice(0, 4)} · {nota.alarmaFecha.slice(11, 16)}
+                      </span>
+                    </div>
+                  )}
+
+                  {nota.secciones && nota.secciones.length > 0 && (
+                    <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border bg-blue-50 text-blue-800 border-blue-200 text-[11px] font-bold ml-1">
+                      <Layers className="w-3.5 h-3.5 text-blue-600" />
+                      <span>
+                        {nota.secciones.length} {nota.secciones.length === 1 ? 'zona' : 'zonas'}
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 <div>
@@ -657,7 +1262,7 @@ export default function Notas({ user }: NotasProps) {
       {/* MODAL 1: CREAR / EDITAR NOTA */}
       {modalFormOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl w-full max-w-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 my-8">
+          <div className="bg-white rounded-3xl w-full max-w-5xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 my-6 max-h-[92vh] flex flex-col">
             {/* Cabecera del Modal */}
             <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
               <div className="flex items-center gap-2.5">
@@ -676,7 +1281,86 @@ export default function Notas({ user }: NotasProps) {
             </div>
 
             {/* Formulario */}
-            <form onSubmit={handleSaveNota} className="p-6 space-y-4">
+            <form onSubmit={handleSaveNota} className="p-6 space-y-4 overflow-y-auto">
+              {/* ALARMA / RECORDATORIO (DESTACADO ARRIBA) */}
+              <div className={`rounded-2xl p-3.5 border-2 transition-all ${
+                formAlarmaActiva
+                  ? 'bg-gradient-to-r from-amber-100 via-orange-50 to-amber-100 border-amber-500 shadow-md shadow-amber-500/15'
+                  : 'bg-gradient-to-r from-amber-50/90 to-orange-50/60 border-amber-300 shadow-xs'
+              }`}>
+                <div className="flex flex-wrap items-center justify-between gap-2.5">
+                  <div className="flex items-center gap-2.5">
+                    <div className={`p-2 rounded-xl shrink-0 ${
+                      formAlarmaActiva
+                        ? 'bg-amber-600 text-white shadow-sm animate-pulse'
+                        : 'bg-amber-100 text-amber-700 border border-amber-300'
+                    }`}>
+                      <Bell className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="block text-xs font-black uppercase tracking-wide text-amber-950">
+                        Recordatorio con Alarma
+                      </span>
+                      <span className="block text-[11px] font-medium text-amber-800/80">
+                        {formAlarmaActiva
+                          ? 'Aviso programado: recibirás una notificación en la fecha y hora indicadas'
+                          : 'Programa una fecha y hora para que no se te pase esta nota'}
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = !formAlarmaActiva;
+                      setFormAlarmaActiva(next);
+                      if (next) {
+                        if (!formAlarmaDate) setFormAlarmaDate(new Date().toISOString().slice(0, 10));
+                        if (!formAlarmaTime) setFormAlarmaTime('09:00');
+                      }
+                    }}
+                    className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer shrink-0 ${
+                      formAlarmaActiva
+                        ? 'bg-amber-700 hover:bg-amber-800 text-white shadow-sm'
+                        : 'bg-amber-500 hover:bg-amber-600 text-white shadow-xs'
+                    }`}
+                  >
+                    <Bell className="w-3.5 h-3.5" />
+                    {formAlarmaActiva ? 'Alarma activada' : 'Activar alarma'}
+                  </button>
+                </div>
+
+                {formAlarmaActiva && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3 pt-3 border-t border-amber-300/80">
+                    <div>
+                      <label className="flex items-center gap-1.5 text-[11px] font-bold text-amber-950 mb-1">
+                        <Calendar className="w-3.5 h-3.5 text-amber-700" />
+                        Fecha de aviso
+                      </label>
+                      <input
+                        type="date"
+                        value={formAlarmaDate}
+                        onChange={(e) => setFormAlarmaDate(e.target.value)}
+                        required={formAlarmaActiva}
+                        className="w-full px-3 py-2 bg-white border border-amber-400 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-amber-600 focus:ring-2 focus:ring-amber-500/20"
+                      />
+                    </div>
+                    <div>
+                      <label className="flex items-center gap-1.5 text-[11px] font-bold text-amber-950 mb-1">
+                        <Clock className="w-3.5 h-3.5 text-amber-700" />
+                        Hora de aviso
+                      </label>
+                      <input
+                        type="time"
+                        value={formAlarmaTime}
+                        onChange={(e) => setFormAlarmaTime(e.target.value)}
+                        required={formAlarmaActiva}
+                        className="w-full px-3 py-2 bg-white border border-amber-400 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-amber-600 focus:ring-2 focus:ring-amber-500/20"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* Categoría y Prioridad */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
@@ -742,6 +1426,66 @@ export default function Notas({ user }: NotasProps) {
                 </span>
               </div>
 
+              {/* DATOS PARA CAJETÍN DE PLANOS (SOLO EN PRESUPUESTOS) */}
+              {formCategoria === 'Presupuestos' && (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 bg-slate-50 border border-slate-200/80 rounded-xl p-3">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                      Empresa Mantenedora
+                    </label>
+                    <input
+                      type="text"
+                      list="notas-empresas-list"
+                      value={formEmpresaMantenedora}
+                      onChange={(e) => setFormEmpresaMantenedora(e.target.value)}
+                      placeholder={defaultEmpresaNombre}
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 focus:outline-none focus:border-blue-500"
+                    />
+                    <datalist id="notas-empresas-list">
+                      {empresasList.map((emp, idx) => (
+                        <option key={idx} value={emp.nombre} />
+                      ))}
+                    </datalist>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                      Cliente (Cajetín)
+                    </label>
+                    <input
+                      type="text"
+                      list="notas-clientes-list"
+                      value={formClienteNombre}
+                      onChange={(e) => setFormClienteNombre(e.target.value)}
+                      placeholder={formLugar || 'Nombre cliente...'}
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 focus:outline-none focus:border-blue-500"
+                    />
+                    <datalist id="notas-clientes-list">
+                      {clientesList.map((cli, idx) => (
+                        <option key={idx} value={cli.nombre} />
+                      ))}
+                    </datalist>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                      Centro (Cajetín)
+                    </label>
+                    <input
+                      type="text"
+                      list="notas-centros-list"
+                      value={formCentroNombre}
+                      onChange={(e) => setFormCentroNombre(e.target.value)}
+                      placeholder={formLugar || 'Nombre centro...'}
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 focus:outline-none focus:border-blue-500"
+                    />
+                    <datalist id="notas-centros-list">
+                      {centrosList.map((cen, idx) => (
+                        <option key={idx} value={cen.nombre} />
+                      ))}
+                    </datalist>
+                  </div>
+                </div>
+              )}
+
               {/* 2. MOTIVO / QUÉ HAY QUE HACER */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
@@ -770,9 +1514,57 @@ export default function Notas({ user }: NotasProps) {
                   value={formContenido}
                   onChange={(e) => setFormContenido(e.target.value)}
                   placeholder="Escribe aquí todas las especificaciones, listados de material, contactos, observaciones o notas extensas..."
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 resize-y min-h-[120px]"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 resize-y min-h-[100px]"
                 />
               </div>
+
+              {/* SECCIONES POR ZONAS Y PLANOS (SOLO EN PRESUPUESTOS) */}
+              {formCategoria === 'Presupuestos' && (
+                <NotaSeccionesEditor
+                  secciones={formSecciones}
+                  onChange={setFormSecciones}
+                  onGuardarNota={() => void ejecutarGuardadoNota(true)}
+                  isSavingNota={isSaving}
+                  savedNotice={savedInlineNotice}
+                  onDescargarNotaPdf={() =>
+                    void handleDescargarNotaPDF({
+                      id: notaEditando?.id || 'borrador',
+                      lugar: formLugar.trim() || 'Nota',
+                      motivo: formMotivo.trim(),
+                      contenido: formContenido.trim(),
+                      categoria: formCategoria,
+                      prioridad: formPrioridad,
+                      completada: Boolean(notaEditando?.completada),
+                      usuarioNombre: notaEditando?.usuarioNombre || currentUserName,
+                      fechaCreacion: notaEditando?.fechaCreacion || new Date().toISOString(),
+                      alarmaActiva: formAlarmaActiva,
+                      alarmaFecha: formAlarmaActiva ? `${formAlarmaDate}T${formAlarmaTime}` : '',
+                      secciones: formSecciones,
+                      empresaMantenedora: formEmpresaMantenedora.trim() || defaultEmpresaNombre,
+                      clienteNombre: formClienteNombre.trim(),
+                      centroNombre: formCentroNombre.trim()
+                    })
+                  }
+                  isExportingPdf={isExportingPdf}
+                  onVerReporte={() =>
+                    setReporteModalData({
+                      titulo: formLugar.trim() || 'Nota sin título',
+                      cliente: formClienteNombre.trim() || undefined,
+                      centro: formCentroNombre.trim() || undefined,
+                      autor: notaEditando?.usuarioNombre || currentUserName,
+                      fecha: formatFechaCorta(notaEditando?.fechaCreacion),
+                      secciones: formSecciones
+                    })
+                  }
+                  cajetinMeta={{
+                    empresaMantenedora: formEmpresaMantenedora.trim() || defaultEmpresaNombre,
+                    clienteNombre: formClienteNombre.trim() || formLugar.trim() || '—',
+                    centroNombre: formCentroNombre.trim() || formLugar.trim() || '—',
+                    autor: notaEditando?.usuarioNombre || currentUserName,
+                    fecha: formatFechaCorta(notaEditando?.fechaCreacion)
+                  }}
+                />
+              )}
 
               {/* USUARIO AUTOR (INFORMATIVO) */}
               <div className="bg-slate-50 rounded-xl p-3 border border-slate-200/80 space-y-2 text-xs text-slate-600">
@@ -799,22 +1591,51 @@ export default function Notas({ user }: NotasProps) {
               </div>
 
               {/* BOTONES DE ACCIÓN */}
-              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+              <div className="flex flex-wrap items-center justify-between gap-2.5 pt-3 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => setModalFormOpen(false)}
-                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs transition-colors cursor-pointer"
+                  disabled={isExportingPdf}
+                  onClick={() =>
+                    void handleDescargarNotaPDF({
+                      id: notaEditando?.id || 'borrador',
+                      lugar: formLugar.trim() || 'Nota',
+                      motivo: formMotivo.trim(),
+                      contenido: formContenido.trim(),
+                      categoria: formCategoria,
+                      prioridad: formPrioridad,
+                      completada: Boolean(notaEditando?.completada),
+                      usuarioNombre: notaEditando?.usuarioNombre || currentUserName,
+                      fechaCreacion: notaEditando?.fechaCreacion || new Date().toISOString(),
+                      alarmaActiva: formAlarmaActiva,
+                      alarmaFecha: formAlarmaActiva ? `${formAlarmaDate}T${formAlarmaTime}` : '',
+                      secciones: formCategoria === 'Presupuestos' ? formSecciones : [],
+                      empresaMantenedora: formEmpresaMantenedora.trim() || defaultEmpresaNombre,
+                      clienteNombre: formClienteNombre.trim(),
+                      centroNombre: formCentroNombre.trim()
+                    })
+                  }
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl font-bold text-xs shadow-xs transition-all cursor-pointer"
                 >
-                  Cancelar
+                  <Download className="w-4 h-4" />
+                  {isExportingPdf ? 'Generando PDF...' : 'Descargar PDF'}
                 </button>
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl font-bold text-xs shadow-md shadow-blue-200 transition-all cursor-pointer"
-                >
-                  <Check className="w-4 h-4" />
-                  {isSaving ? 'Guardando...' : notaEditando ? 'Guardar Cambios' : 'Registrar Nota'}
-                </button>
+                <div className="flex items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setModalFormOpen(false)}
+                    className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs transition-colors cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSaving}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl font-bold text-xs shadow-md shadow-blue-200 transition-all cursor-pointer"
+                  >
+                    <Check className="w-4 h-4" />
+                    {isSaving ? 'Guardando...' : notaEditando ? 'Guardar Cambios' : 'Registrar Nota'}
+                  </button>
+                </div>
               </div>
             </form>
           </div>
@@ -824,7 +1645,7 @@ export default function Notas({ user }: NotasProps) {
       {/* MODAL 2: VER NOTA COMPLETA (OJO) */}
       {modalVerNota && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl w-full max-w-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 my-8">
+          <div className="bg-white rounded-3xl w-full max-w-4xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 my-6 max-h-[92vh] flex flex-col">
             {/* Cabecera del modal */}
             <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -845,7 +1666,7 @@ export default function Notas({ user }: NotasProps) {
             </div>
 
             {/* Contenido Completo */}
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-4 overflow-y-auto">
               {/* BANNER NOTA FINALIZADA / COMPLETADA */}
               {(modalVerNota.completada || modalVerNota.categoria === 'Completadas' || modalVerNota.completadaPor) && (
                 <div className="bg-emerald-50 border border-emerald-200/90 rounded-2xl p-4 flex items-center justify-between gap-3 shadow-xs">
@@ -885,6 +1706,15 @@ export default function Notas({ user }: NotasProps) {
               )}
 
               {/* LUGAR (MAYÚSCULA Y NEGRITA) */}
+              {modalVerNota.alarmaActiva && modalVerNota.alarmaFecha && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl px-3.5 py-2.5 flex items-center gap-2 text-xs font-bold text-amber-900">
+                  <Bell className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>
+                    Alarma programada: {modalVerNota.alarmaFecha.slice(8, 10)}/{modalVerNota.alarmaFecha.slice(5, 7)}/{modalVerNota.alarmaFecha.slice(0, 4)} a las {modalVerNota.alarmaFecha.slice(11, 16)}
+                  </span>
+                </div>
+              )}
+
               <div>
                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
                   Lugar
@@ -916,6 +1746,121 @@ export default function Notas({ user }: NotasProps) {
                 </div>
               )}
 
+              {/* SECCIONES Y PLANOS (SI EXISTEN) */}
+              {modalVerNota.secciones && modalVerNota.secciones.length > 0 && (
+                <div className="space-y-3">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                    Zonas y planos ({modalVerNota.secciones.length})
+                  </span>
+                  {modalVerNota.secciones.map((sec, idx) => (
+                    <div key={sec.id || idx} className="bg-slate-50/80 border border-slate-200 rounded-2xl p-4 space-y-2.5">
+                      <h4 className="text-sm font-black text-slate-900 uppercase tracking-tight">
+                        Zona {idx + 1}{sec.titulo?.trim() ? ` ${sec.titulo.trim()}` : ''}
+                      </h4>
+                      {sec.contenidoHtml && (
+                        <div
+                          className="text-xs text-slate-700 leading-relaxed [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
+                          dangerouslySetInnerHTML={{ __html: sec.contenidoHtml }}
+                        />
+                      )}
+                      {sec.dibujoDataUrl && (
+                        <div className="pt-1 space-y-1.5">
+                          <img
+                            src={sec.dibujoDataUrl}
+                            alt={`Plano ${sec.titulo || `Zona ${idx + 1}`}`}
+                            onClick={() =>
+                              setPlanoAmpliado({
+                                url: sec.dibujoDataUrl!,
+                                title: sec.titulo || `Zona ${idx + 1}`,
+                                nota: modalVerNota
+                              })
+                            }
+                            className="w-full max-h-64 object-contain rounded-xl border border-slate-200 bg-white cursor-zoom-in hover:border-blue-400 transition-colors"
+                            title="Clic para ampliar el plano"
+                          />
+                          <div className="flex justify-end">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleDescargarImagenPlano(
+                                  sec.dibujoDataUrl!,
+                                  `${modalVerNota.lugar}-${sec.titulo || `zona-${idx + 1}`}`,
+                                  buildCajetinMeta(
+                                    modalVerNota,
+                                    sec.titulo?.trim()
+                                      ? `Zona ${idx + 1} ${sec.titulo.trim()}`
+                                      : `Zona ${idx + 1}`
+                                  )
+                                )
+                              }
+                              className="inline-flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-emerald-50 text-emerald-700 border border-slate-200 rounded-lg text-[11px] font-bold transition-colors cursor-pointer"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                              Descargar imagen
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* DESTACADO: REPORTE DE SISTEMAS Y EQUIPOS */}
+              {modalVerNota.secciones && modalVerNota.secciones.length > 0 && (() => {
+                const resumen = buildReporteEquiposPorSecciones(modalVerNota.secciones);
+                return (
+                  <div className="bg-gradient-to-r from-amber-50 via-orange-50/80 to-amber-50 border-2 border-amber-400 rounded-2xl p-3.5 shadow-sm space-y-2.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2.5">
+                      <div className="flex items-center gap-2.5">
+                        <div className="p-2 rounded-xl bg-amber-500 text-white shadow-xs shrink-0">
+                          <ClipboardList className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <span className="block text-xs font-black uppercase tracking-wide text-amber-950">
+                            Reporte de Sistemas y Equipos
+                          </span>
+                          <span className="block text-[11px] font-medium text-amber-800/90">
+                            {resumen.totalGeneral > 0
+                              ? `${resumen.totalGeneral} equipos contabilizados en ${resumen.secciones.length} ${resumen.secciones.length === 1 ? 'zona' : 'zonas'}`
+                              : 'Sin equipos registrados en los planos'}
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setReporteModalData({
+                            titulo: modalVerNota.lugar || 'Nota',
+                            cliente: modalVerNota.clienteNombre || undefined,
+                            centro: modalVerNota.centroNombre || undefined,
+                            autor: modalVerNota.usuarioNombre,
+                            fecha: formatFechaCorta(modalVerNota.fechaCreacion),
+                            secciones: modalVerNota.secciones || []
+                          })
+                        }
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-black shadow-xs transition-all cursor-pointer shrink-0"
+                      >
+                        <ClipboardList className="w-3.5 h-3.5" />
+                        Ver / Descargar Reporte
+                      </button>
+                    </div>
+                    {resumen.resumenPorTipo.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 pt-2 border-t border-amber-300/70">
+                        {resumen.resumenPorTipo.map((r) => (
+                          <span
+                            key={r.tipoLabel}
+                            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-white border border-amber-300 text-[11px] font-black text-slate-800"
+                          >
+                            {r.tipoLabel}: <span className="text-red-600">{r.total} und.</span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
               {/* AUTOR Y FECHA */}
               <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between text-xs text-slate-500 gap-2">
                 <div className="flex flex-col gap-1">
@@ -946,23 +1891,64 @@ export default function Notas({ user }: NotasProps) {
                 </div>
               </div>
 
-              {/* BOTONES: EDITAR Y CERRAR */}
-              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setModalVerNota(null)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs transition-colors cursor-pointer"
-                >
-                  Cerrar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleOpenEditModal(modalVerNota)}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs transition-all cursor-pointer shadow-xs"
-                >
-                  <Pencil className="w-3.5 h-3.5" />
-                  Editar Nota
-                </button>
+              {/* BOTONES: DESCARGAR PDF, IMPRIMIR, EDITAR Y CERRAR */}
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-100">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={isExportingPdf}
+                    onClick={() => handleDescargarNotaPDF(modalVerNota)}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl font-bold text-xs transition-all cursor-pointer shadow-xs"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    {isExportingPdf ? 'Generando PDF...' : 'Descargar PDF'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleImprimirNota(modalVerNota)}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-bold text-xs transition-all cursor-pointer shadow-xs"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    Imprimir
+                  </button>
+                  {modalVerNota.secciones && modalVerNota.secciones.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setReporteModalData({
+                          titulo: modalVerNota.lugar || 'Nota',
+                          cliente: modalVerNota.clienteNombre || undefined,
+                          centro: modalVerNota.centroNombre || undefined,
+                          autor: modalVerNota.usuarioNombre,
+                          fecha: formatFechaCorta(modalVerNota.fechaCreacion),
+                          secciones: modalVerNota.secciones || []
+                        })
+                      }
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold text-xs transition-all cursor-pointer shadow-xs"
+                    >
+                      <ClipboardList className="w-3.5 h-3.5" />
+                      Reporte equipos
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setModalVerNota(null)}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs transition-colors cursor-pointer"
+                  >
+                    Cerrar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenEditModal(modalVerNota)}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs transition-all cursor-pointer shadow-xs"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                    Editar Nota
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -1001,6 +1987,232 @@ export default function Notas({ user }: NotasProps) {
           </div>
         </div>
       )}
+
+      {/* MODAL 4: PLANO AMPLIADO */}
+      {planoAmpliado && (
+        <div
+          onClick={() => setPlanoAmpliado(null)}
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[120] flex items-center justify-center p-4 cursor-zoom-out"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="relative max-w-4xl w-full bg-white rounded-2xl p-2 shadow-2xl cursor-default"
+          >
+            <div className="absolute top-3 right-3 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() =>
+                  handleDescargarImagenPlano(
+                    planoAmpliado.url,
+                    planoAmpliado.title,
+                    planoAmpliado.nota
+                      ? buildCajetinMeta(planoAmpliado.nota, planoAmpliado.title)
+                      : undefined
+                  )
+                }
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-600 text-white hover:bg-emerald-700 text-xs font-bold shadow-md cursor-pointer"
+                title="Descargar imagen"
+              >
+                <Download className="w-4 h-4" />
+                Descargar imagen
+              </button>
+              <button
+                type="button"
+                onClick={() => setPlanoAmpliado(null)}
+                className="p-1.5 rounded-full bg-slate-900/80 text-white hover:bg-slate-900 cursor-pointer"
+                title="Cerrar"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <img
+              src={planoAmpliado.url}
+              alt={`Plano ${planoAmpliado.title}`}
+              className="w-full max-h-[85vh] object-contain rounded-xl bg-white"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 5: REPORTE DE ELEMENTOS POR SECCIONES */}
+      {reporteModalData && (() => {
+        const reporte = buildReporteEquiposPorSecciones(reporteModalData.secciones);
+        return (
+          <div className="fixed inset-0 bg-black/65 backdrop-blur-sm z-[130] flex items-center justify-center p-4 overflow-y-auto">
+            <div className="bg-white rounded-3xl w-full max-w-4xl shadow-2xl overflow-hidden my-6 max-h-[92vh] flex flex-col animate-in fade-in zoom-in-95 duration-200">
+              <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <ClipboardList className="w-5 h-5 text-amber-400 shrink-0" />
+                  <div className="min-w-0">
+                    <h3 className="font-bold text-sm truncate">
+                      Reporte de Elementos por Zonas
+                    </h3>
+                    <p className="text-[11px] text-slate-300 truncate">
+                      {reporteModalData.titulo} · Total: {reporte.totalGeneral} equipos
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setReporteModalData(null)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-5 overflow-y-auto space-y-4">
+                {/* Resumen Global */}
+                <div className="bg-amber-50 border border-amber-300 rounded-2xl p-4 space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-xs font-black text-amber-950 uppercase">
+                      Recuento Total Global
+                    </span>
+                    <span className="px-2.5 py-0.5 rounded-full bg-amber-600 text-white text-xs font-black">
+                      {reporte.totalGeneral} equipos
+                    </span>
+                  </div>
+                  {reporte.resumenPorTipo.length === 0 ? (
+                    <p className="text-xs text-amber-900">
+                      No hay equipos registrados en las zonas de esta nota.
+                    </p>
+                  ) : (
+                    <div className="space-y-2.5">
+                      {reporte.resumenPorTipo.map((r) => (
+                        <div
+                          key={r.tipoLabel}
+                          className="flex flex-wrap items-center justify-between gap-2 bg-white border border-amber-200 rounded-xl px-3.5 py-2 text-xs"
+                        >
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="font-semibold text-slate-800">- {r.tipoLabel}:</span>
+                            <strong className="font-black text-slate-950">{r.total} und.</strong>
+                            <span className="text-slate-600 font-medium">
+                              ({r.porSeccion.map((s) => `${s.count} und. en ${s.seccionTitulo}`).join(' / ')})
+                            </span>
+                          </div>
+                          <span className="px-2 py-0.5 rounded-full bg-red-600 text-white text-[11px] font-black shrink-0">
+                            Total: {r.total} und.
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {Object.keys(reporte.incidenciasSenal).length > 0 && (
+                    <div className="pt-2 border-t border-amber-200/80 flex flex-wrap items-center gap-1.5">
+                      <span className="text-[11px] font-bold text-red-800">Incidencias señal:</span>
+                      {Object.entries(reporte.incidenciasSenal).map(([est, count]) => (
+                        <span
+                          key={est}
+                          className="px-2 py-0.5 rounded-full bg-red-100 text-red-800 text-[11px] font-bold"
+                        >
+                          {est}: {count}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Desglose por cada sección */}
+                {reporte.secciones.map((sec, idx) => (
+                  <div key={sec.seccionId} className="border border-slate-200 rounded-2xl overflow-hidden">
+                    <div className="px-4 py-2.5 bg-slate-100 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-xs font-black text-slate-900 uppercase">
+                        {sec.titulo.toLowerCase() === `zona ${idx + 1}`
+                          ? sec.titulo
+                          : `Zona ${idx + 1} ${sec.titulo}`}
+                      </span>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {Object.entries(sec.conteoPorTipo).map(([tipo, count]) => (
+                          <span
+                            key={tipo}
+                            className="px-2 py-0.5 rounded-full bg-white border border-slate-300 text-[10px] font-bold text-slate-700"
+                          >
+                            {tipo}: {count} und.
+                          </span>
+                        ))}
+                        <span className="px-2 py-0.5 rounded-full bg-slate-800 text-white text-[10px] font-black">
+                          Total: {sec.total} und.
+                        </span>
+                      </div>
+                    </div>
+
+                    {sec.equipos.length === 0 ? (
+                      <p className="px-4 py-3 text-xs text-slate-500 italic">
+                        Sin equipos en esta zona.
+                      </p>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse text-xs">
+                          <thead>
+                            <tr className="bg-slate-50 text-[10px] uppercase text-slate-500 border-b border-slate-200">
+                              <th className="px-3 py-2 font-black">Equipo</th>
+                              <th className="px-3 py-2 font-black">Tipo / Modelo</th>
+                              <th className="px-3 py-2 font-black">FF</th>
+                              <th className="px-3 py-2 font-black">UT / PH</th>
+                              <th className="px-3 py-2 font-black">Estado señal</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {sec.equipos.map((eq, i) => (
+                              <tr key={`${sec.seccionId}-${eq.codigo}-${i}`} className="hover:bg-slate-50/70">
+                                <td className="px-3 py-2 font-black text-red-700 whitespace-nowrap">
+                                  {eq.codigo}
+                                </td>
+                                <td className="px-3 py-2 font-semibold text-slate-800">
+                                  {eq.modelo || '—'}
+                                </td>
+                                <td className="px-3 py-2 text-slate-700 whitespace-nowrap">
+                                  {eq.ff || '—'}
+                                </td>
+                                <td className="px-3 py-2 text-slate-700 whitespace-nowrap">
+                                  {eq.ut ? `UT: ${eq.ut}` : eq.ph ? `PH: ${eq.ph}` : '—'}
+                                </td>
+                                <td className="px-3 py-2 whitespace-nowrap">
+                                  {eq.estadoSenal ? (
+                                    <span
+                                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                        eq.estadoSenal === 'Correcta'
+                                          ? 'bg-emerald-100 text-emerald-800'
+                                          : 'bg-red-100 text-red-800'
+                                      }`}
+                                    >
+                                      {eq.estadoSenal}
+                                    </span>
+                                  ) : (
+                                    <span className="text-slate-400">—</span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleDescargarReporteEquiposPDF(reporteModalData)}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs shadow-xs cursor-pointer"
+                >
+                  <Download className="w-4 h-4" />
+                  Descargar Reporte PDF
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReporteModalData(null)}
+                  className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-xl font-bold text-xs cursor-pointer"
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

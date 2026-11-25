@@ -2219,17 +2219,27 @@ export default function RevisionChecklist() {
                 ? new Date(revFechaDate.getFullYear(), revFechaDate.getMonth(), revFechaDate.getDate(), now.getHours(), now.getMinutes(), now.getSeconds()).toISOString()
                 : now.toISOString();
 
-            // Identificar empresa mantenedora colaboradora vs Avanfoc
-            const empresasList: any[] = (() => {
+            // Identificar empresa mantenedora colaboradora vs Abanfoc
+            let empresasList: any[] = (() => {
                 try {
                     return JSON.parse(localStorage.getItem('firecheck_db_empresas') || localStorage.getItem('firecheck_db_empresa') || '[]');
                 } catch { return []; }
             })();
+            if (!Array.isArray(empresasList) || empresasList.length === 0) {
+                try {
+                    const { db } = await import('./firebase');
+                    const { collection, getDocs } = await import('firebase/firestore');
+                    const snap = await getDocs(collection(db, 'empresa'));
+                    empresasList = snap.docs.map(d => ({ _docId: d.id, id: d.id, ...d.data() }));
+                } catch (empErr) {
+                    console.warn('No se pudo cargar empresas desde Firestore:', empErr);
+                }
+            }
             const abanfocEmp = obtenerEmpresaAvanfoc(empresasList);
             const abanfocId = abanfocEmp ? ((abanfocEmp as any)._docId || abanfocEmp.id) : (empresasList[0]?.id || '');
             const empresaMantenedoraId = targetCentro?.empresaId || parte?.empresaId || abanfocId;
 
-            // 1. Albarán de Revisión / Trabajo (para el cliente, sin valorar, con logo de la mantenedora colaboradora)
+            // 1. Albarán de Revisión (para el menú Albarán de Revisión, sin valorar, con logo de la mantenedora escogida)
             const albaranItemsSinValorar = albaranItems.map(it => ({
                 ...it,
                 precioUnidad: 0,
@@ -2237,21 +2247,21 @@ export default function RevisionChecklist() {
                 subtotal: 0
             }));
 
-            const albaranTrabajo: Albaran = {
+            const albaranRevision: Albaran = {
                 id: nextId,
                 titulo: parte?.periodicidad ? `Albarán de Revisión: ${parte.periodicidad}` : 'Albarán de Revisión',
                 periodicidad: per,
-                tipoAlbaran: 'trabajo',
+                tipoAlbaran: 'revision',
                 sinValorar: true,
                 centroId: targetCentro?._docId || targetCentro?.id || parte?.centroId || '',
                 clienteId: targetCentro?.clienteId || parte?.clienteId || '',
-                empresaId: empresaMantenedoraId, // Logo de la empresa colaboradora (o Avanfoc si es cliente directo)
+                empresaId: empresaMantenedoraId, // Logo de la empresa mantenedora elegida en centro/parte
                 parteId: parteId,
                 tecnicoId: parte?.tecnicoId || '',
                 numeroMantenimiento: numMantenimiento,
                 numeroPedido: (parte as any)?.numeroPedido || '',
                 fechaCreacion: fechaRevisionFinalISO,
-                facturado: true, // No aparece en facturas pendientes (es de trabajo sin valorar)
+                facturado: true, // No aparece en facturas pendientes (es de revisión sin valorar)
                 items: albaranItemsSinValorar,
                 firmaCliente,
                 firmaTecnico,
@@ -2322,8 +2332,8 @@ export default function RevisionChecklist() {
 
             setSendProgress(80);
 
-            // Guardar Albarán de Revisión (sin valorar) y Albarán para Facturar (valorado)
-            await addAlbaran(albaranTrabajo);
+            // Guardar Albarán de Revisión (sin valorar, se envía al correo) y Albarán para Facturar (valorado con logo ABANFOC, solo en lista)
+            await addAlbaran(albaranRevision);
             await addAlbaran(albaranFacturacion);
             
             // Cambiar estado a Finalizado y guardar firmas en el parte

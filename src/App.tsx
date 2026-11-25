@@ -69,6 +69,8 @@ import {
   subscribeFacturas,
   subscribeAvisosStock,
   subscribeVehiculos,
+  subscribeNotasBloc,
+  updateNotaBloc,
   type UrgenciaItem,
   type ReparacionItem,
   type InstalacionItem,
@@ -77,7 +79,8 @@ import {
   type Factura,
   type Articulo,
   type AvisoStock,
-  type VehiculoItem
+  type VehiculoItem,
+  type NotaBlocItem
 } from './firebase';
 import { APP_VERSION } from './constants';
 import { useRegisterSW } from 'virtual:pwa-register/react';
@@ -598,6 +601,11 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
       return JSON.parse(localStorage.getItem('firecheck_db_vehiculos') || '[]');
     } catch { return []; }
   });
+  const [notasBlocList, setNotasBlocList] = useState<NotaBlocItem[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('firecheck_db_notas_bloc') || '[]');
+    } catch { return []; }
+  });
 
   const [clientesList, setClientesList] = useState<any[]>(() => {
     try {
@@ -827,6 +835,12 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
       }));
     } catch (e) { console.error('subscribeVehiculos failed', e); }
 
+    try {
+      unsubs.push(subscribeNotasBloc((items) => {
+        setNotasBlocList(items || []);
+      }));
+    } catch (e) { console.error('subscribeNotasBloc failed', e); }
+
     return () => {
       unsubs.forEach(unsub => {
         if (typeof unsub === 'function') unsub();
@@ -933,7 +947,7 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
       id: string;
       hora: string;
       cliente: string;
-      tipo: 'Revisión' | 'Reparación' | 'Instalación' | 'Aviso' | 'Visita programada';
+      tipo: 'Revisión' | 'Reparación' | 'Instalación' | 'Aviso' | 'Visita programada' | 'Nota';
       detalle: string;
       tecnico?: string;
       completado: boolean;
@@ -1035,8 +1049,28 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
       });
     });
 
+    // E) Notas con alarma programada para Hoy
+    notasBlocList.forEach(n => {
+      if (!n.alarmaActiva || !n.alarmaFecha) return;
+      if (n.completada || n.categoria === 'Completadas') return;
+      const fechaPart = n.alarmaFecha.slice(0, 10);
+      if (fechaPart !== todayIso) return;
+      const horaPart = n.alarmaFecha.includes('T') ? n.alarmaFecha.slice(11, 16) : '09:00';
+      lista.push({
+        id: `nota-${n._docId || n.id}`,
+        hora: horaPart,
+        cliente: n.lugar || 'Nota con alarma',
+        tipo: 'Nota',
+        detalle: n.motivo || 'Recordatorio de nota',
+        tecnico: n.usuarioNombre || undefined,
+        completado: Boolean(n.alarmaNotificada),
+        badgeColor: 'bg-amber-100 text-amber-800 border-amber-300',
+        ruta: '/notas'
+      });
+    });
+
     return lista.sort((a, b) => Number(a.completado) - Number(b.completado));
-  }, [partesList, reparaciones, instalaciones, urgencias, centrosList, clientesList, tecnicosList, clientesMap, centrosMap, albaranesList]);
+  }, [partesList, reparaciones, instalaciones, urgencias, notasBlocList, centrosList, clientesList, tecnicosList, clientesMap, centrosMap, albaranesList]);
 
   // ─── 3. TARJETA STOCK (VERDE): MATERIALES CON EXISTENCIAS BAJAS ───────────
   const materialesStockBajo = useMemo(() => {
@@ -1328,7 +1362,7 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
                         {tareasDeHoy.slice(0, 5).map((tarea) => (
                           <div
                             key={tarea.id}
-                            onClick={() => navigate('/calendario')}
+                            onClick={() => navigate(tarea.ruta || '/calendario')}
                             className={`group bg-white hover:bg-sky-50/90 border border-sky-200/80 hover:border-blue-400 rounded-xl px-3 py-2 flex items-center justify-between gap-2 transition-all cursor-pointer shadow-2xs ${
                               tarea.completado ? 'opacity-65' : ''
                             }`}
@@ -1657,6 +1691,130 @@ function PageLayout({ user, onLogout, appLogo, children }: { user: Usuario | nul
     </div>
   );
 }
+function AlarmaNotasModal({ user }: { user: Usuario | null }) {
+  const navigate = useNavigate();
+  const [notas, setNotas] = useState<NotaBlocItem[]>([]);
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  const [procesandoId, setProcesandoId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    const unsub = subscribeNotasBloc((items) => {
+      setNotas(items || []);
+    });
+    const timer = setInterval(() => setNowTick(Date.now()), 15000);
+    return () => {
+      unsub();
+      clearInterval(timer);
+    };
+  }, [user]);
+
+  const notasVencidas = useMemo(() => {
+    if (!user) return [];
+    return notas.filter((n) => {
+      if (!n.alarmaActiva || !n.alarmaFecha || n.alarmaNotificada) return false;
+      if (n.completada || n.categoria === 'Completadas') return false;
+      const ms = new Date(n.alarmaFecha).getTime();
+      return !isNaN(ms) && ms <= nowTick;
+    });
+  }, [notas, nowTick, user]);
+
+  if (!user || notasVencidas.length === 0) return null;
+
+  const notaActual = notasVencidas[0];
+  const docId = notaActual._docId || notaActual.id;
+
+  const marcarNotificada = async (irANotas: boolean) => {
+    if (docId) {
+      setProcesandoId(docId);
+      try {
+        await updateNotaBloc(docId, { alarmaNotificada: true });
+      } catch (e) {
+        console.error('Error marcando alarma como notificada:', e);
+      } finally {
+        setProcesandoId(null);
+      }
+    }
+    if (irANotas) {
+      navigate('/notas');
+    }
+  };
+
+  const fechaTexto = notaActual.alarmaFecha
+    ? `${notaActual.alarmaFecha.slice(8, 10)}/${notaActual.alarmaFecha.slice(5, 7)}/${notaActual.alarmaFecha.slice(0, 4)} · ${notaActual.alarmaFecha.slice(11, 16)}`
+    : '';
+
+  return (
+    <div className="fixed inset-0 z-[9998] bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl border border-amber-300 w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        <div className="bg-gradient-to-r from-amber-500 to-orange-600 px-5 py-4 text-white flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+              <Bell className="w-5 h-5 text-white animate-bounce" />
+            </div>
+            <div>
+              <h3 className="text-sm font-black uppercase tracking-wide">
+                Alarma de Nota
+              </h3>
+              <p className="text-[11px] text-amber-100 font-semibold">
+                {fechaTexto}
+              </p>
+            </div>
+          </div>
+          {notasVencidas.length > 1 && (
+            <span className="text-[11px] font-black bg-white/20 px-2.5 py-1 rounded-full">
+              1 de {notasVencidas.length}
+            </span>
+          )}
+        </div>
+
+        <div className="p-5 space-y-3">
+          <div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              Lugar / Asunto
+            </span>
+            <h4 className="text-base font-black text-slate-900 uppercase mt-0.5">
+              {notaActual.lugar}
+            </h4>
+          </div>
+
+          <div className="bg-amber-50/70 border border-amber-200 rounded-xl p-3">
+            <p className="text-xs font-bold text-slate-800 leading-relaxed">
+              {notaActual.motivo}
+            </p>
+            {notaActual.contenido && (
+              <p className="text-xs text-slate-600 mt-1.5 whitespace-pre-wrap line-clamp-4">
+                {notaActual.contenido}
+              </p>
+            )}
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <button
+              type="button"
+              disabled={procesandoId === docId}
+              onClick={() => marcarNotificada(true)}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-amber-800 bg-amber-100 hover:bg-amber-200 transition-colors cursor-pointer disabled:opacity-50"
+            >
+              <span>Ir a Notas</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              disabled={procesandoId === docId}
+              onClick={() => marcarNotificada(false)}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 transition-colors cursor-pointer disabled:opacity-50"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Aceptar aviso</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const {
     needRefresh: [needRefresh, setNeedRefresh],
@@ -2142,6 +2300,7 @@ export default function App() {
       {renderUpdatePrompt()}
       {renderInstallPrompt()}
       <AvisoStockModal user={loggedUser} />
+      <AlarmaNotasModal user={loggedUser} />
     </BrowserRouter>
   );
 }

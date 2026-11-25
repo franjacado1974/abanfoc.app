@@ -55,6 +55,7 @@ import {
   obtenerSiguienteNumeroAlbaran,
   extraerSufijoSecuencia,
   obtenerEmpresaPorDefecto,
+  obtenerEmpresaAvanfoc,
   type ReparacionItem,
   type InstalacionItem,
   type UrgenciaItem,
@@ -760,14 +761,16 @@ export default function PartesTrabajoOperaciones({
 
   // ─── ABRIR TAREA Y CARGAR / PREPARAR SU ALBARÁN ───
   const handleAbrirTarea = async (tarea: TareaOperacionUnificada) => {
-    // Buscar si ya existe un albarán vinculado a esta tarea
-    const albExistente = albaranes.find(a =>
+    // Buscar si ya existen albaranes vinculados a esta tarea (trabajo y facturación)
+    const albaranesTarea = albaranes.filter(a =>
       (tarea.albaranId && a.id === tarea.albaranId) ||
       (tarea.origen === 'reparacion' && a.reparacionId && (a.reparacionId === tarea._docId || a.reparacionId === tarea.id)) ||
       (tarea.origen === 'instalacion' && a.instalacionId && (a.instalacionId === tarea._docId || a.instalacionId === tarea.id)) ||
       (tarea.origen === 'urgencia' && a.urgenciaId && (a.urgenciaId === tarea._docId || a.urgenciaId === tarea.id)) ||
       (tarea.numeroPedido && a.numeroPedido && a.numeroPedido === tarea.numeroPedido)
     );
+    const albExistente = albaranesTarea.find(a => a.tipoAlbaran !== 'facturacion') || albaranesTarea[0];
+    const albFactExistente = albaranesTarea.find(a => a.tipoAlbaran === 'facturacion');
 
     setSelectedTarea(tarea);
     setNotaTecnico(tarea.nota || '');
@@ -798,7 +801,9 @@ export default function PartesTrabajoOperaciones({
         centroId: albExistente.centroId || tarea.centroId || '',
         clienteNombreLibre: albExistente.clienteNombreLibre || tarea.clienteNombreLibre || '',
         centroNombreLibre: albExistente.centroNombreLibre || tarea.centroNombreLibre || '',
-        items: albExistente.items && albExistente.items.length > 0 ? albExistente.items : tarea.items,
+        items: (albFactExistente?.items && albFactExistente.items.length > 0)
+          ? albFactExistente.items
+          : (albExistente.items && albExistente.items.length > 0 ? albExistente.items : tarea.items),
         reparacionId: tarea.origen === 'reparacion' ? (tarea._docId || tarea.id) : (albExistente.reparacionId || ''),
         instalacionId: tarea.origen === 'instalacion' ? (tarea._docId || tarea.id) : (albExistente.instalacionId || ''),
         urgenciaId: tarea.origen === 'urgencia' ? (tarea._docId || tarea.id) : (albExistente.urgenciaId || ''),
@@ -1264,40 +1269,101 @@ export default function PartesTrabajoOperaciones({
     const estadoFinalTarea: 'Pendiente' | 'En curso' | 'Parado' | 'Finalizado' =
       tieneFirma ? 'Finalizado' : estadoTareaActual;
 
-    const albaranToSave: Albaran = {
+    const fechaCreacionFinal = form.fechaCreacion || new Date().toISOString();
+    const itemsSinValorar = (form.items || []).map(it => ({
+      ...it,
+      precioUnidad: 0,
+      descuento: 0,
+      subtotal: 0
+    }));
+
+    // 1. Albarán de Trabajo (Operaciones / Albarán de Trabajo: siempre sin valorar y con logo de la mantenedora elegida)
+    const albaranTrabajo: Albaran = {
       ...form,
+      tipoAlbaran: 'trabajo',
+      sinValorar: true,
+      facturado: true, // El albarán de trabajo sin valorar no queda pendiente de facturar
+      items: itemsSinValorar,
       firmaCliente,
       firmaTecnico,
-      fechaCreacion: form.fechaCreacion || new Date().toISOString()
+      fechaCreacion: fechaCreacionFinal
     };
-
-
 
     setIsSending(true);
     setSendProgress(20);
     setSendCompleted(false);
 
     try {
-      setSendProgress(50);
-      let finalAlbaranId = albaranToSave.id;
+      setSendProgress(45);
+      let finalAlbaranId = albaranTrabajo.id;
 
-      if (existingAlbaranId || albaranes.some(a => a.id === albaranToSave.id)) {
-        await updateAlbaran(albaranToSave);
+      if (existingAlbaranId || albaranes.some(a => a.id === albaranTrabajo.id)) {
+        await updateAlbaran(albaranTrabajo);
       } else {
-        const saved = await addAlbaran(albaranToSave);
-        finalAlbaranId = saved.id || albaranToSave.id;
+        const saved = await addAlbaran(albaranTrabajo);
+        finalAlbaranId = saved.id || albaranTrabajo.id;
+      }
+
+      // 2. Albarán para Facturar (Documentos / Albaranes para Facturar: SIEMPRE logo ABANFOC y con valoración si existe, no se envía al correo)
+      let empresasDisponibles = empresas;
+      if (!empresasDisponibles || empresasDisponibles.length === 0) {
+        try {
+          const { getDocs: fetchDocs } = await import('firebase/firestore');
+          const snapEmp = await fetchDocs(collection(db, 'empresa'));
+          empresasDisponibles = snapEmp.docs.map((d: any) => ({ _docId: d.id, id: d.id, ...(d.data() as any) }));
+        } catch {}
+      }
+      const abanfocEmp = obtenerEmpresaAvanfoc(empresasDisponibles);
+      const abanfocId = abanfocEmp ? ((abanfocEmp as any)._docId || abanfocEmp.id) : form.empresaId;
+
+      const docId = selectedTarea._docId || selectedTarea.id;
+      const existingFact = albaranes.find(a =>
+        a.tipoAlbaran === 'facturacion' && (
+          a.albaranRelacionadoId === finalAlbaranId ||
+          (selectedTarea.origen === 'reparacion' && a.reparacionId === docId) ||
+          (selectedTarea.origen === 'instalacion' && a.instalacionId === docId) ||
+          (selectedTarea.origen === 'urgencia' && a.urgenciaId === docId)
+        )
+      );
+
+      let factId = existingFact?.id || '';
+      if (!factId) {
+        factId = await obtenerSiguienteNumeroAlbaran();
+        if (factId === finalAlbaranId) {
+          factId = `${finalAlbaranId}-F`;
+        }
+      }
+
+      const albaranFacturacion: Albaran = {
+        ...form,
+        id: factId,
+        titulo: form.titulo ? `Albarán para Facturar: ${form.titulo.replace(/^Albarán de (?:Trabajo|Revisión):\s*/i, '')}` : 'Albarán para Facturar',
+        tipoAlbaran: 'facturacion',
+        sinValorar: false,
+        facturado: existingFact?.facturado ?? false,
+        empresaId: abanfocId,
+        albaranRelacionadoId: finalAlbaranId,
+        items: form.items || [],
+        firmaCliente,
+        firmaTecnico,
+        fechaCreacion: existingFact?.fechaCreacion || fechaCreacionFinal
+      };
+
+      if (existingFact) {
+        await updateAlbaran(albaranFacturacion);
+      } else {
+        await addAlbaran(albaranFacturacion);
       }
 
       setSendProgress(80);
-      const docId = selectedTarea._docId || selectedTarea.id;
-      const totalCalc = (albaranToSave.items || []).reduce((acc, it) => acc + (Number(it.subtotal) || 0), 0);
+      const totalCalc = (albaranFacturacion.items || []).reduce((acc, it) => acc + (Number(it.subtotal) || 0), 0);
       const trimmedNota = notaTecnico.trim();
 
       if (selectedTarea.origen === 'reparacion') {
         const payload = {
           albaranId: finalAlbaranId,
           estado: estadoFinalTarea,
-          items: albaranToSave.items,
+          items: albaranFacturacion.items,
           total: totalCalc,
           nota: trimmedNota,
           observaciones: trimmedNota
@@ -1315,7 +1381,7 @@ export default function PartesTrabajoOperaciones({
         const payload = {
           albaranId: finalAlbaranId,
           estado: estadoFinalTarea,
-          items: albaranToSave.items,
+          items: albaranFacturacion.items,
           total: totalCalc,
           nota: trimmedNota,
           observaciones: trimmedNota
@@ -1333,7 +1399,7 @@ export default function PartesTrabajoOperaciones({
         const payload = {
           albaranId: finalAlbaranId,
           estado: estadoFinalTarea,
-          items: albaranToSave.items,
+          items: albaranFacturacion.items,
           total: totalCalc,
           nota: trimmedNota,
           observaciones: trimmedNota
@@ -1351,7 +1417,7 @@ export default function PartesTrabajoOperaciones({
         const payload = {
           albaranId: finalAlbaranId,
           estado: estadoFinalTarea,
-          items: albaranToSave.items,
+          items: albaranFacturacion.items,
           observaciones: trimmedNota
         };
 

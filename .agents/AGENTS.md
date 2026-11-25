@@ -1956,6 +1956,21 @@ Este archivo contiene reglas y directrices críticas de comportamiento y de arqu
 - **Persistencia Dual Inmediata**:
   - Toda la configuración del contrato (`tipoModalidadContrato`, `preciosSistemasAnualContrato`, `preciosSistemasTrimestralContrato`, importes y periodicidades) se sincroniza en Firestore (`updateCentro`, `saveContrato`) y `localStorage` (`firecheck_db_centros`).
 
+---
+
+## REGLA 139 — Blindaje de Notas: Alarmas, Secciones por Zonas y Editor de Planos CAD PCI
+- **Alarmas en Notas (`src/firebase.tsx`, `src/Notas.tsx`, `src/App.tsx`)**:
+  - `NotaBlocItem` mantiene `alarmaActiva`, `alarmaFecha` y `alarmaNotificada` sincronizados en `subscribeNotasBloc`.
+  - `Notas.tsx` incluye el botón **"Activar alarma"** con selector de fecha y hora.
+  - `App.tsx` incluye las notas con alarma para el día actual en **"2. Tareas de Hoy"** (`tareasDeHoy`) y muestra la ventana modal global `AlarmaNotasModal` cuando vence una alarma.
+- **Secciones por Zonas y Editor de Planos (`src/components/NotaSeccionesEditor.tsx`, `src/Notas.tsx`)**:
+  - Las secciones por zonas (`+ Añadir sección / plano`) y los datos del cajetín (`empresaMantenedora`, `clienteNombre`, `centroNombre`) se muestran únicamente en la categoría **`Presupuestos`** (conservándose si pasa a `Completadas`).
+  - Herramientas agrupadas en 2 desplegables con botones **`Añadir`** y **`Mover`** por cada elemento (y capa superior automática en modo `Mover`):
+    - **Formas**: `Línea continua`, `Línea discontinua`, `Cuadrado`, `Círculo`, `Escalera`, `Medida / Cota`.
+    - **Símbolos** (en rojo `#dc2626`, volteables al arrastrar `x2 < x1` o pulsar `Voltear`, y reescalables en bloque con los 3 tamaños **`Pequeño` | `Mediano` | `Grande`**): `Puerta`, `Puerta RF`, `Detector` (sin letra), `Extintor` (silueta con círculo superior relleno si es `NC`/`CO2`), `BIE` (armario horizontal), `Hidrante`, `Centralita`, `Pulsador`, `Sirena`, `Barrera lineal` (`B`), `Depósito`, `Grupo presión` y `Sprinkler` (rosca superior, bastidor, ampolla central y deflector con muescas), con etiquetas rápidas (`ABC 6`, `ABC 9`, `NC2`, `NC5`, `BIE 25`, `BIE 45`).
+  - Incluye modo **Pantalla completa** con botón `X` (*Volver a la nota*), botón **Borrar plano** en la esquina inferior derecha con modal de advertencia (`¿Borrar todo el plano?`), exportación a **PNG con cajetín profesional**, **Descargar PDF** e **Imprimir**.
+
+
 
 
 

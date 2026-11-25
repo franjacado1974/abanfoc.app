@@ -200,9 +200,9 @@ export default function Albaranes({ isTecnicoMode = false, tipoAlbaranFiltro }: 
         return esDeRevision(alb) && alb.tipoAlbaran !== 'facturacion' && !alb.facturado;
       }
       if (modoActivo === 'trabajo') {
-        return esDeOperaciones(alb) && alb.tipoAlbaran !== 'facturacion' && !alb.facturado;
+        return esDeOperaciones(alb) && alb.tipoAlbaran !== 'facturacion' && alb.tipoAlbaran !== 'revision' && !alb.facturado;
       }
-      return alb.tipoAlbaran !== 'trabajo' && !alb.sinValorar && !alb.facturado;
+      return alb.tipoAlbaran !== 'trabajo' && alb.tipoAlbaran !== 'revision' && !alb.sinValorar && !alb.facturado;
     }).length,
   [albaranes, modoActivo]);
 
@@ -425,7 +425,7 @@ export default function Albaranes({ isTecnicoMode = false, tipoAlbaranFiltro }: 
     const centro = centros.find(c => c._docId === alb.centroId || c.id === alb.centroId);
     const clienteParaPDF = cliente || (alb.clienteNombreLibre ? { nombre: alb.clienteNombreLibre } : null);
     const centroParaPDF = centro || (alb.centroNombreLibre ? { nombre: alb.centroNombreLibre } : null);
-    const esSinVal = modoActivo !== 'facturacion' && (alb.tipoAlbaran === 'trabajo' || alb.sinValorar || modoActivo === 'revision' || modoActivo === 'trabajo');
+    const esSinVal = modoActivo !== 'facturacion' && (alb.tipoAlbaran === 'trabajo' || alb.tipoAlbaran === 'revision' || alb.sinValorar || modoActivo === 'revision' || modoActivo === 'trabajo');
     await generarAlbaranPDF(clienteParaPDF as any, centroParaPDF as any, eqsDelCentro as any[], alb.numeroMantenimiento || alb.id, tecnicoNombre, alb.firmaCliente, alb.firmaTecnico, alb.nombreFirmante, alb.items, empresa as any, false, alb.titulo, alb.periodicidad, undefined, alb.numeroPedido, alb.fechaCreacion, esSinVal);
   };
 
@@ -450,7 +450,7 @@ export default function Albaranes({ isTecnicoMode = false, tipoAlbaranFiltro }: 
 
   const revalorarAlbaranSiProcede = (alb: Albaran, listaCentros: Centro[] = centros): { albaran: Albaran; modificado: boolean } => {
     if (!alb || !alb.items) return { albaran: alb, modificado: false };
-    if (alb.tipoAlbaran === 'trabajo' || alb.sinValorar) return { albaran: alb, modificado: false };
+    if (alb.tipoAlbaran === 'trabajo' || alb.tipoAlbaran === 'revision' || alb.sinValorar) return { albaran: alb, modificado: false };
 
     let cen = listaCentros.find(c => c._docId === alb.centroId || c.id === alb.centroId);
     if (!cen && alb.clienteId) {
@@ -633,10 +633,10 @@ export default function Albaranes({ isTecnicoMode = false, tipoAlbaranFiltro }: 
         if (alb.tipoAlbaran === 'facturacion') return false;
       } else if (modoActivo === 'trabajo') {
         if (!esDeOperaciones(alb)) return false;
-        if (alb.tipoAlbaran === 'facturacion') return false;
+        if (alb.tipoAlbaran === 'facturacion' || alb.tipoAlbaran === 'revision') return false;
       } else {
         // modoActivo === 'facturacion': Agrupa TODOS los albaranes para facturación (valorados)
-        if (alb.tipoAlbaran === 'trabajo' || alb.sinValorar) return false;
+        if (alb.tipoAlbaran === 'trabajo' || alb.tipoAlbaran === 'revision' || alb.sinValorar) return false;
       }
 
       if (isTecnicoMode && alb.facturado) return false;
@@ -1056,8 +1056,20 @@ export default function Albaranes({ isTecnicoMode = false, tipoAlbaranFiltro }: 
               {albaranesAMostrar.map((alb) => {
                 const cliente = clientes.find(c => c.id === alb.clienteId);
                 const centro = centros.find(c => c._docId === alb.centroId || c.id === alb.centroId);
+                const openAcciones = () => {
+                  const { albaran: albVal, modificado } = revalorarAlbaranSiProcede(alb, centros);
+                  if (modificado) {
+                    const docId = (albVal as any)._docId || albVal.id;
+                    updateAlbaran(docId, albVal).catch(() => {});
+                  }
+                  setAccionesModalItem(albVal);
+                };
                 return (
-                  <div key={alb.id} className="p-4 hover:bg-zinc-50/80 transition-colors">
+                  <div
+                    key={alb.id}
+                    onClick={openAcciones}
+                    className="p-4 hover:bg-amber-50/70 transition-colors cursor-pointer"
+                  >
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
                         <span className="text-[10px] font-mono font-bold text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded">{alb.id}</span>
@@ -1072,7 +1084,10 @@ export default function Albaranes({ isTecnicoMode = false, tipoAlbaranFiltro }: 
                           </span>
                         ) : (
                           <button 
-                            onClick={() => !isVisualizador && toggleFacturado(alb.id)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (!isVisualizador) toggleFacturado(alb.id);
+                            }}
                             disabled={isVisualizador}
                             className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md border flex items-center gap-0.5 ${
                               alb.facturado ? 'bg-blue-600 border-blue-700 text-white' : 'bg-zinc-100 border-zinc-200 text-zinc-500'
@@ -1082,23 +1097,6 @@ export default function Albaranes({ isTecnicoMode = false, tipoAlbaranFiltro }: 
                             {alb.facturado ? 'Facturado' : 'Pendiente'}
                           </button>
                         )}
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const { albaran: albVal, modificado } = revalorarAlbaranSiProcede(alb, centros);
-                            if (modificado) {
-                              const docId = (albVal as any)._docId || albVal.id;
-                              updateAlbaran(docId, albVal).catch(() => {});
-                            }
-                            setAccionesModalItem(albVal);
-                          }}
-                          className="inline-flex items-center justify-center p-2 rounded-xl text-amber-600 hover:text-amber-700 bg-amber-50/70 hover:bg-amber-100/80 border border-amber-200/80 transition-all cursor-pointer shadow-2xs group"
-                          title="Abrir acciones del albarán"
-                        >
-                          <Wand2 className="w-4 h-4 group-hover:rotate-12 transition-transform text-amber-600" />
-                        </button>
                       </div>
                     </div>
                     <div className="space-y-1">
@@ -1211,9 +1209,6 @@ export default function Albaranes({ isTecnicoMode = false, tipoAlbaranFiltro }: 
                         )}
                       </div>
                     </th>
-                    <th className="w-px whitespace-nowrap px-4 py-3 text-center select-none">
-                      Acciones
-                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-100">
@@ -1223,20 +1218,29 @@ export default function Albaranes({ isTecnicoMode = false, tipoAlbaranFiltro }: 
                     return (
                       <tr 
                         key={alb.id} 
-                        className={`transition-all duration-150 group ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100/80'} hover:bg-amber-100/90 hover:shadow-xs`}
+                        onClick={() => {
+                          const { albaran: albVal, modificado } = revalorarAlbaranSiProcede(alb, centros);
+                          if (modificado) {
+                            const docId = (albVal as any)._docId || albVal.id;
+                            updateAlbaran(docId, albVal).catch(() => {});
+                          }
+                          setAccionesModalItem(albVal);
+                        }}
+                        className={`transition-all duration-150 group cursor-pointer ${index % 2 === 0 ? 'bg-white' : 'bg-slate-100/80'} hover:bg-amber-100/90 hover:shadow-xs`}
+                        title="Clic en cualquier parte de la línea para abrir acciones"
                       >
-                        <td className="w-px whitespace-nowrap px-4 py-2.5">
+                        <td className="w-px whitespace-nowrap px-4 py-4">
                           <span className="text-xs font-mono font-medium text-zinc-700 bg-zinc-100 px-2 py-0.5 rounded border border-zinc-200/80">
                             {alb.id}
                           </span>
                         </td>
-                        <td className="w-px whitespace-nowrap px-4 py-2.5 text-xs text-slate-600 font-medium">
+                        <td className="w-px whitespace-nowrap px-4 py-4 text-xs text-slate-600 font-medium">
                           <span className="inline-flex items-center gap-1.5">
                             <Calendar className="w-3.5 h-3.5 text-red-500" />
                             {new Date(alb.fechaCreacion).toLocaleDateString()}
                           </span>
                         </td>
-                        <td className="w-px whitespace-nowrap px-4 py-2.5 text-xs text-slate-600 font-mono">
+                        <td className="w-px whitespace-nowrap px-4 py-4 text-xs text-slate-600 font-mono">
                           {alb.numeroPedido ? (
                             <span className="text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200/80 font-medium">
                               {alb.numeroPedido}
@@ -1245,7 +1249,7 @@ export default function Albaranes({ isTecnicoMode = false, tipoAlbaranFiltro }: 
                             <span className="text-slate-300">—</span>
                           )}
                         </td>
-                        <td className="px-4 py-2.5 text-xs text-slate-600">
+                        <td className="px-4 py-4 text-xs text-slate-600">
                           <div className="flex items-center gap-1.5">
                             <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                             <span className="font-medium text-slate-700 truncate max-w-[200px]" title={centro?.nombre || alb.centroNombreLibre || cliente?.nombre || alb.clienteNombreLibre || 'Desconocido'}>
@@ -1253,12 +1257,12 @@ export default function Albaranes({ isTecnicoMode = false, tipoAlbaranFiltro }: 
                             </span>
                           </div>
                         </td>
-                        <td className="px-4 py-2.5 text-xs text-slate-800">
+                        <td className="px-4 py-4 text-xs text-slate-800">
                           <span className="font-medium truncate block max-w-xs lg:max-w-md" title={alb.titulo || '—'}>
                             {alb.titulo || '—'}
                           </span>
                         </td>
-                        <td className="w-px whitespace-nowrap px-4 py-2.5 text-center">
+                        <td className="w-px whitespace-nowrap px-4 py-4 text-center">
                           {modoActivo !== 'facturacion' ? (
                             <span 
                               className={`text-[10px] font-semibold px-2.5 py-0.5 rounded-full border inline-flex items-center gap-1 ${
@@ -1272,7 +1276,10 @@ export default function Albaranes({ isTecnicoMode = false, tipoAlbaranFiltro }: 
                             </span>
                           ) : (
                             <button 
-                              onClick={() => !isVisualizador && toggleFacturado(alb.id)} 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (!isVisualizador) toggleFacturado(alb.id);
+                              }} 
                               disabled={isVisualizador}
                               className={`text-[10px] font-semibold px-2.5 py-0.5 rounded-full border inline-flex items-center gap-1 cursor-pointer ${
                                 alb.facturado ? 'bg-blue-600 border-blue-700 text-white' : 'bg-zinc-100 border-zinc-200 text-zinc-500'
@@ -1283,23 +1290,6 @@ export default function Albaranes({ isTecnicoMode = false, tipoAlbaranFiltro }: 
                               {alb.facturado ? 'Facturado' : 'Pendiente'}
                             </button>
                           )}
-                        </td>
-                        <td className="w-px whitespace-nowrap px-4 py-2.5 text-center">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const { albaran: albVal, modificado } = revalorarAlbaranSiProcede(alb, centros);
-                              if (modificado) {
-                                const docId = (albVal as any)._docId || albVal.id;
-                                updateAlbaran(docId, albVal).catch(() => {});
-                              }
-                              setAccionesModalItem(albVal);
-                            }}
-                            className="inline-flex items-center justify-center p-2 rounded-xl text-amber-600 hover:text-amber-700 bg-amber-50/70 hover:bg-amber-100/80 border border-amber-200/80 transition-all cursor-pointer shadow-2xs group"
-                            title="Abrir acciones del albarán"
-                          >
-                            <Wand2 className="w-4 h-4 group-hover:rotate-12 transition-transform text-amber-600" />
-                          </button>
                         </td>
                       </tr>
                     );

@@ -1127,6 +1127,44 @@ export default function Partes() {
     }
   };
 
+  const partesBaseConteo = partes.filter(p => {
+    if (search) {
+      const centro = getCentro(p.centroId);
+      const cliente = getCliente(p.clienteId);
+      const text = `${centro?.nombre || ''} ${cliente?.nombre || ''} ${centro?.poblacion || ''} ${getTipoRevision(p.periodicidad)}`.toLowerCase();
+      if (!text.includes(search.toLowerCase())) return false;
+    }
+    if (!startDate && !endDate) return true;
+    if (!p.fechaProgramada || typeof p.fechaProgramada !== 'string' || p.fechaProgramada.trim() === '') return false;
+    const [d, m, y] = p.fechaProgramada.split('-').map(Number);
+    const dateNum = y * 10000 + m * 100 + d;
+    if (startDate) {
+      const [sy, sm, sd] = startDate.split('-').map(Number);
+      if (dateNum < sy * 10000 + sm * 100 + sd) return false;
+    }
+    if (endDate) {
+      const [ey, em, ed] = endDate.split('-').map(Number);
+      if (dateNum > ey * 10000 + em * 100 + ed) return false;
+    }
+    return true;
+  });
+
+  const countsPorEstado = {
+    TODOS: partesBaseConteo.length,
+    Abierto: partesBaseConteo.filter(p => {
+      const st = (p.estado || '').trim();
+      return st === 'Abierto' || st === 'Planificado' || st === '';
+    }).length,
+    'En revisión': partesBaseConteo.filter(p => {
+      const st = (p.estado || '').trim();
+      return st === 'En revisión' || st === 'En curso';
+    }).length,
+    Finalizado: partesBaseConteo.filter(p => (p.estado || '').trim() === 'Finalizado').length,
+    Retimbrando: partesBaseConteo.filter(p => Boolean(tieneRetimbrePendiente(p) || (p.estado || '').trim() === 'Retimbrando')).length,
+    'Pre-Cerrado': partesBaseConteo.filter(p => (p.estado || '').trim() === 'Pre-Cerrado').length,
+    Cerrado: partesBaseConteo.filter(p => (p.estado || '').trim() === 'Cerrado').length,
+  };
+
   const partesFiltrados = partes.filter(p => {
     // 1. Filtro por tipo de estado
     if (estadoFilter !== 'TODOS') {
@@ -1278,13 +1316,13 @@ export default function Partes() {
                 {/* Filtro por Estado con Indicador de Color (A la derecha) */}
                 {(() => {
                   const opcionesEstado = [
-                    { value: 'TODOS', label: 'Todos los estados', colorClass: '' },
-                    { value: 'Abierto', label: 'Planificado', colorClass: 'bg-zinc-400 shadow-[0_0_8px_rgba(161,161,170,0.8)]' },
-                    { value: 'En revisión', label: 'En curso', colorClass: 'bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.8)]' },
-                    { value: 'Finalizado', label: 'Finalizado (Firmado)', colorClass: 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.8)]' },
-                    { value: 'Retimbrando', label: 'Retimbrando', colorClass: 'bg-red-600 shadow-[0_0_12px_rgba(220,38,38,0.9)] animate-pulse' },
-                    { value: 'Pre-Cerrado', label: 'Pre-cerrado', colorClass: 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.8)]' },
-                    { value: 'Cerrado', label: 'Cerrado', colorClass: 'bg-black shadow-[0_0_8px_rgba(0,0,0,0.6)]' },
+                    { value: 'TODOS', label: 'Todos los estados', count: countsPorEstado.TODOS, colorClass: '' },
+                    { value: 'Abierto', label: 'Planificado', count: countsPorEstado.Abierto, colorClass: 'bg-zinc-400 shadow-[0_0_8px_rgba(161,161,170,0.8)]' },
+                    { value: 'En revisión', label: 'En curso', count: countsPorEstado['En revisión'], colorClass: 'bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.8)]' },
+                    { value: 'Finalizado', label: 'Finalizado (Firmado)', count: countsPorEstado.Finalizado, colorClass: 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.8)]' },
+                    { value: 'Retimbrando', label: 'Retimbrando', count: countsPorEstado.Retimbrando, colorClass: 'bg-red-600 shadow-[0_0_12px_rgba(220,38,38,0.9)] animate-pulse' },
+                    { value: 'Pre-Cerrado', label: 'Pre-cerrado', count: countsPorEstado['Pre-Cerrado'], colorClass: 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.8)]' },
+                    { value: 'Cerrado', label: 'Cerrado', count: countsPorEstado.Cerrado, colorClass: 'bg-black shadow-[0_0_8px_rgba(0,0,0,0.6)]' },
                   ];
                   const selectedOption = opcionesEstado.find(o => o.value === estadoFilter) || opcionesEstado[0];
 
@@ -1293,21 +1331,24 @@ export default function Partes() {
                       <button
                         type="button"
                         onClick={() => setIsFilterOpen(!isFilterOpen)}
-                        className="w-full xl:w-auto h-full px-2.5 sm:px-3.5 bg-white border border-zinc-200/80 rounded-xl text-xs flex items-center justify-between gap-2 text-zinc-900 shadow-sm font-medium hover:border-zinc-300 transition-all min-w-0 xl:min-w-[220px]"
+                        className="w-full xl:w-auto h-full px-2.5 sm:px-3.5 bg-white border border-zinc-200/80 rounded-xl text-xs flex items-center justify-between gap-2 text-zinc-900 shadow-sm font-medium hover:border-zinc-300 transition-all min-w-0 xl:min-w-[235px]"
                         title="Filtrar partes por estado"
                       >
-                        <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0">
+                        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
                           <Filter className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-zinc-400 shrink-0" />
                           {selectedOption.colorClass && (
                             <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${selectedOption.colorClass}`} />
                           )}
-                          <span className="truncate">{selectedOption.label}</span>
+                          <span className="truncate font-semibold text-zinc-900">{selectedOption.label}</span>
+                          <span className="hidden sm:inline-flex px-2 py-0.5 rounded-md text-xs font-black bg-zinc-100 text-zinc-800 border border-zinc-200/90 shrink-0 shadow-2xs">
+                            ( {selectedOption.count} )
+                          </span>
                         </div>
                         <ChevronDown className={`w-4 h-4 text-zinc-400 shrink-0 transition-transform duration-200 ${isFilterOpen ? 'rotate-180' : ''}`} />
                       </button>
 
                       {isFilterOpen && (
-                        <div className="absolute right-0 top-full mt-1 bg-white border border-zinc-200 rounded-xl shadow-xl z-50 py-1.5 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150 min-w-[215px] sm:min-w-[230px]">
+                        <div className="absolute right-0 top-full mt-1 bg-white border border-zinc-200 rounded-xl shadow-xl z-50 py-1.5 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150 min-w-[235px] sm:min-w-[250px]">
                           {opcionesEstado.map((op) => (
                             <button
                               key={op.value}
@@ -1316,7 +1357,7 @@ export default function Partes() {
                                 setEstadoFilter(op.value);
                                 setIsFilterOpen(false);
                               }}
-                              className={`w-full px-3.5 py-2.5 text-left text-xs font-semibold flex items-center gap-3 transition-colors ${
+                              className={`w-full px-3.5 py-2.5 text-left text-xs font-semibold flex items-center gap-2.5 transition-colors ${
                                 estadoFilter === op.value
                                   ? 'bg-red-50 text-red-700 font-bold'
                                   : 'text-zinc-700 hover:bg-zinc-50'
@@ -1328,6 +1369,13 @@ export default function Partes() {
                                 <span className="w-2.5 h-2.5 rounded-full border border-zinc-300 shrink-0" />
                               )}
                               <span className="flex-1">{op.label}</span>
+                              <span className={`text-[11px] px-1.5 py-0.5 rounded-md font-extrabold shrink-0 ${
+                                estadoFilter === op.value
+                                  ? 'bg-red-100 text-red-800'
+                                  : 'bg-zinc-100 text-zinc-700'
+                              }`}>
+                                ( {op.count} )
+                              </span>
                               {estadoFilter === op.value && <Check className="w-3.5 h-3.5 text-red-600 shrink-0" />}
                             </button>
                           ))}

@@ -100,7 +100,7 @@ export interface Albaran {
   periodicidad?: string;
   clienteNombreLibre?: string;
   centroNombreLibre?: string;
-  tipoAlbaran?: 'trabajo' | 'facturacion';
+  tipoAlbaran?: 'revision' | 'trabajo' | 'facturacion';
   albaranRelacionadoId?: string;
   sinValorar?: boolean;
   _docId?: string;
@@ -1355,7 +1355,7 @@ async function enviarCorreoAlbaran(albaran: Albaran) {
         empresaId: empId
       } : { nombre: 'Centro sin nombre' });
 
-      const esAlbaranSinValorar = Boolean(albaran.sinValorar || albaran.tipoAlbaran === 'trabajo');
+      const esAlbaranSinValorar = Boolean(albaran.sinValorar || albaran.tipoAlbaran === 'trabajo' || albaran.tipoAlbaran === 'revision');
       const pdfDoc = await generarAlbaranPDF(
         clienteParaPDF as any,
         centroParaPDF as any,
@@ -1805,8 +1805,8 @@ export async function addAlbaran(albaran: Albaran) {
       localStorage.setItem('firecheck_db_albaranes', JSON.stringify(filtered));
     } catch {}
 
-    // Por defecto al firmar un parte, enviar por correo solo el albarán sin valorar de la empresa mantenedora
-    const esFacturacionDeParte = finalAlbaran.tipoAlbaran === 'facturacion' && (finalAlbaran.parteId || finalAlbaran.albaranRelacionadoId);
+    // Al firmar un parte o crear albarán de facturación, NO enviar al correo el albarán de facturación (solo el de revisión sin valorar)
+    const esFacturacionDeParte = finalAlbaran.tipoAlbaran === 'facturacion';
     if (!esFacturacionDeParte) {
       try {
         await enviarCorreoAlbaran(finalAlbaran);
@@ -1853,9 +1853,9 @@ export async function updateAlbaran(idOrAlbaran: string | Albaran, data?: Partia
     await setDoc(docRef, albaranToUpdate, { merge: true });
     console.info('updateAlbaran: updated', albaranId);
 
-    // Solo enviar correo si antes NO estaba firmado, ahora SÍ está firmado y no es el albarán de facturación vinculado a parte
-    const esFacturacionDeParteUpdate = (albaranToUpdate as any).tipoAlbaran === 'facturacion' && ((albaranToUpdate as any).parteId || (albaranToUpdate as any).albaranRelacionadoId);
-    if (!alreadySigned && !esFacturacionDeParteUpdate && isFirmaValida((albaranToUpdate as any).firmaCliente)) {
+    // Solo enviar correo si antes NO estaba firmado, ahora SÍ está firmado y no es albarán de facturación
+    const esAlbaranFacturacionUpdate = (albaranToUpdate as any).tipoAlbaran === 'facturacion';
+    if (!alreadySigned && !esAlbaranFacturacionUpdate && isFirmaValida((albaranToUpdate as any).firmaCliente)) {
       try {
         await enviarCorreoAlbaran(albaranToUpdate as Albaran);
       } catch (emailErr) {
@@ -3917,6 +3917,62 @@ export async function vaciarPapeleraCompleta() {
 // BLOC DE NOTAS (NOTAS COMPARTIDAS) - Firestore CRUD
 // ─────────────────────────────────────────────────────────────────────────────
 
+export interface NotaPlanoElemento {
+  id: string;
+  tipo:
+    | 'pen'
+    | 'eraser'
+    | 'line'
+    | 'dashed-line'
+    | 'arrow'
+    | 'rect'
+    | 'circle'
+    | 'escalera'
+    | 'door'
+    | 'puerta-rf'
+    | 'puerta-corredera'
+    | 'detector'
+    | 'extintor'
+    | 'bie'
+    | 'hidrante'
+    | 'centralita'
+    | 'pulsador'
+    | 'sirena'
+    | 'barrera'
+    | 'barrera-espejo'
+    | 'deposito'
+    | 'grupo-presion'
+    | 'sprinkler'
+    | 'measure'
+    | 'text';
+  color: string;
+  lineWidth: number;
+  x1?: number;
+  y1?: number;
+  x2?: number;
+  y2?: number;
+  x?: number;
+  y?: number;
+  text?: string;
+  ff?: string;
+  ut?: string;
+  ph?: string;
+  numero?: number;
+  estadoSenal?: string;
+  labelPos?: 'bottom' | 'top' | 'left' | 'right';
+  rotation?: number;
+  points?: { x: number; y: number }[];
+}
+
+export interface NotaSeccionItem {
+  id: string;
+  titulo: string;
+  contenidoHtml: string;
+  dibujoDataUrl?: string;
+  planoElementos?: NotaPlanoElemento[];
+  planoSymbolSize?: 'pequeno' | 'mediano' | 'grande';
+}
+
 export interface NotaBlocItem {
   id?: string;
   _docId?: string;
@@ -3933,6 +3989,13 @@ export interface NotaBlocItem {
   completadaPor?: string;
   fechaCompletada?: string;
   categoriaAnterior?: string;
+  alarmaActiva?: boolean;
+  alarmaFecha?: string;
+  alarmaNotificada?: boolean;
+  secciones?: NotaSeccionItem[];
+  empresaMantenedora?: string;
+  clienteNombre?: string;
+  centroNombre?: string;
 }
 
 export function subscribeNotasBloc(callback: (items: NotaBlocItem[]) => void) {
@@ -3953,6 +4016,13 @@ export function subscribeNotasBloc(callback: (items: NotaBlocItem[]) => void) {
           prioridad: data?.prioridad || 'Media',
           fechaCreacion: data?.fechaCreacion || new Date().toISOString(),
           fechaActualizacion: data?.fechaActualizacion || '',
+          alarmaActiva: Boolean(data?.alarmaActiva),
+          alarmaFecha: data?.alarmaFecha || '',
+          alarmaNotificada: Boolean(data?.alarmaNotificada),
+          secciones: Array.isArray(data?.secciones) ? data.secciones : [],
+          empresaMantenedora: data?.empresaMantenedora || '',
+          clienteNombre: data?.clienteNombre || '',
+          centroNombre: data?.centroNombre || '',
         } as NotaBlocItem;
       });
       try {
