@@ -57,6 +57,76 @@ function formatFechaEs(iso: string): string {
   return `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
 }
 
+function SpanishDateSelect({
+  value,
+  onChange,
+  minIso
+}: {
+  value: string;
+  onChange: (nextIso: string) => void;
+  minIso?: string;
+}) {
+  const nowYear = new Date().getFullYear();
+  const [yStr, mStr, dStr] = (value || new Date().toISOString().slice(0, 10)).split('-');
+  const y = Number(yStr) || nowYear;
+  const m = Number(mStr) || 1;
+  const d = Number(dStr) || 1;
+
+  const daysInMonth = new Date(y, m, 0).getDate();
+  const years = [nowYear - 1, nowYear, nowYear + 1, nowYear + 2];
+
+  const emit = (ny: number, nm: number, nd: number) => {
+    const maxD = new Date(ny, nm, 0).getDate();
+    const clampedD = Math.min(nd, maxD);
+    let next = `${ny}-${String(nm).padStart(2, '0')}-${String(clampedD).padStart(2, '0')}`;
+    if (minIso && next < minIso) next = minIso;
+    onChange(next);
+  };
+
+  return (
+    <div className="flex items-center gap-1">
+      <select
+        value={Math.min(d, daysInMonth)}
+        onChange={(e) => emit(y, m, Number(e.target.value))}
+        aria-label="Día"
+        className="w-12 px-1 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold bg-white text-center"
+      >
+        {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((dayNum) => (
+          <option key={dayNum} value={dayNum}>
+            {String(dayNum).padStart(2, '0')}
+          </option>
+        ))}
+      </select>
+      <span className="text-slate-400 text-xs font-bold">/</span>
+      <select
+        value={m}
+        onChange={(e) => emit(y, Number(e.target.value), d)}
+        aria-label="Mes"
+        className="w-12 px-1 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold bg-white text-center"
+      >
+        {Array.from({ length: 12 }, (_, i) => i + 1).map((monthNum) => (
+          <option key={monthNum} value={monthNum}>
+            {String(monthNum).padStart(2, '0')}
+          </option>
+        ))}
+      </select>
+      <span className="text-slate-400 text-xs font-bold">/</span>
+      <select
+        value={y}
+        onChange={(e) => emit(Number(e.target.value), m, d)}
+        aria-label="Año"
+        className="flex-1 min-w-[60px] px-1 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold bg-white text-center"
+      >
+        {years.map((yr) => (
+          <option key={yr} value={yr}>
+            {yr}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 export default function CalendarioVacaciones({
   user,
   solicitudes,
@@ -256,29 +326,27 @@ export default function CalendarioVacaciones({
               </select>
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-2">
               <div>
-                <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">Desde</label>
-                <input
-                  type="date"
+                <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
+                  Desde (DD/MM/AAAA)
+                </label>
+                <SpanishDateSelect
                   value={fechaInicio}
-                  onChange={(e) => {
-                    setFechaInicio(e.target.value);
-                    if (fechaFin < e.target.value) setFechaFin(e.target.value);
+                  onChange={(nextIso) => {
+                    setFechaInicio(nextIso);
+                    if (fechaFin < nextIso) setFechaFin(nextIso);
                   }}
-                  required
-                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold"
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">Hasta</label>
-                <input
-                  type="date"
+                <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
+                  Hasta (DD/MM/AAAA)
+                </label>
+                <SpanishDateSelect
                   value={fechaFin}
-                  min={fechaInicio}
-                  onChange={(e) => setFechaFin(e.target.value)}
-                  required
-                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold"
+                  minIso={fechaInicio}
+                  onChange={(nextIso) => setFechaFin(nextIso)}
                 />
               </div>
             </div>
