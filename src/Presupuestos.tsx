@@ -4,13 +4,13 @@ import { Search, X, Download, Edit, Send, Trash2, Save, Package, PackagePlus, Wr
 import PresupuestoAdjuntosOneDriveModal from './components/PresupuestoAdjuntosOneDriveModal';
 import { 
   subscribePresupuestos, addPresupuesto, updatePresupuesto, deletePresupuesto, 
-  subscribeClientes, subscribeArticulos, subscribeCentros, subscribeImpuestos, subscribeEmpresas,
+  subscribeClientes, subscribeClientesPotenciales, promoverClientePotencialACliente, subscribeArticulos, subscribeCentros, subscribeImpuestos, subscribeEmpresas,
   addPedido, addReparacion, addInstalacion, db,
   extraerSufijoSecuencia,
   saveArticulo, subscribeSistemasCategorias, uploadFile
 } from './firebase';
 import { collection, addDoc } from 'firebase/firestore';
-import type { Presupuesto, PresupuestoLinea, Cliente, Articulo, Centro, ReparacionItem, InstalacionItem, SistemaCategoria } from './firebase';
+import type { Presupuesto, PresupuestoLinea, Cliente, ClientePotencial, Articulo, Centro, ReparacionItem, InstalacionItem, SistemaCategoria } from './firebase';
 import { generarPresupuestoPDF, removeWhiteBackground } from './pdfGenerator';
 import { APP_VERSION, FAMILIAS_SISTEMAS_EXISTENTES } from './constants';
 import { encontrarArticuloMasCercano } from './services/presupuestoBorradorFromAnomalias';
@@ -89,6 +89,7 @@ export function getCapituloSubtotal(lineas: PresupuestoLinea[], capIndex: number
 export default function Presupuestos() {
   const [presupuestos, setPresupuestos] = useState<Presupuesto[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [clientesPotenciales, setClientesPotenciales] = useState<ClientePotencial[]>([]);
   const [articulos, setArticulos] = useState<Articulo[]>([]);
   const [servicios, setServicios] = useState<Articulo[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -235,13 +236,23 @@ export default function Presupuestos() {
     }
   }, []);
 
+  const allClientesParaPresupuesto = useMemo(() => {
+    const reales = clientes.map(c => ({ ...c, esPotencial: false as const }));
+    const potenciales = clientesPotenciales.map(p => ({ ...p, esPotencial: true as const }));
+    return [...reales, ...potenciales];
+  }, [clientes, clientesPotenciales]);
+
   const filteredClientes = useMemo(() => {
     const term = formClienteSearch.trim().toLowerCase();
-    if (!term) return clientes;
-    return clientes.filter(c => c.nombre?.toLowerCase().includes(term) || String(c.id).toLowerCase().includes(term));
-  }, [clientes, formClienteSearch]);
+    if (!term) return allClientesParaPresupuesto;
+    return allClientesParaPresupuesto.filter(
+      c => c.nombre?.toLowerCase().includes(term) || String(c.id).toLowerCase().includes(term)
+    );
+  }, [allClientesParaPresupuesto, formClienteSearch]);
 
-  const selectedCliente = clientes.find(c => c.id === formClienteId);
+  const selectedCliente = allClientesParaPresupuesto.find(
+    c => c.id === formClienteId || (c as any)._docId === formClienteId
+  );
 
   const centrosFiltrados = useMemo(() => {
     if (!formClienteId) return [];
@@ -279,6 +290,9 @@ export default function Presupuestos() {
     const unsub7 = subscribeSistemasCategorias(items => {
       try { setFamilias(Array.isArray(items) ? items : []); } catch {}
     });
+    const unsub8 = subscribeClientesPotenciales(items => {
+      try { setClientesPotenciales(Array.isArray(items) ? items : []); } catch {}
+    });
 
     // Cargar desde localStorage como fallback
     try {
@@ -289,7 +303,7 @@ export default function Presupuestos() {
       }
     } catch {}
 
-    return () => { try { unsub1(); } catch {} try { unsub2(); } catch {} try { unsub3(); } catch {} try { unsub4(); } catch {} try { unsub5(); } catch {} try { unsub6(); } catch {} try { unsub7(); } catch {} };
+    return () => { try { unsub1(); } catch {} try { unsub2(); } catch {} try { unsub3(); } catch {} try { unsub4(); } catch {} try { unsub5(); } catch {} try { unsub6(); } catch {} try { unsub7(); } catch {} try { unsub8(); } catch {} };
   }, []);
 
   // Detección de redirección desde parte de trabajo o edición directa
@@ -849,7 +863,9 @@ export default function Presupuestos() {
     if (!formClienteId) return alert('Selecciona un cliente.');
     if (formLineas.length === 0) return alert('Añade al menos una línea al presupuesto.');
 
-    const cliente = clientes.find(c => c.id === formClienteId);
+    const cliente = allClientesParaPresupuesto.find(
+      c => c.id === formClienteId || (c as any)._docId === formClienteId
+    );
     const subtotal = formSubtotal;
     const total = formTotal;
 
@@ -897,6 +913,7 @@ export default function Presupuestos() {
       titulo: formTitulo.trim(),
       clienteId: formClienteId,
       nombreCliente: cliente?.nombre || 'Cliente',
+      esClientePotencial: Boolean(cliente?.esPotencial),
       fechaCreacion: formFechaValidez
         ? (formFechaValidez.includes('T') ? formFechaValidez : `${formFechaValidez}T10:00:00.000Z`)
         : (editingPresupuesto?.fechaCreacion || new Date().toISOString()),
@@ -982,7 +999,9 @@ export default function Presupuestos() {
 
   // Abrir modal de envío de presupuesto por enlace
   const handleAbrirModalEnvio = (p: Presupuesto) => {
-    const cli = clientes.find(c => (c as any)._docId === p.clienteId || c.id === p.clienteId || c.nombre === p.nombreCliente);
+    const cli =
+      allClientesParaPresupuesto.find(c => (c as any)._docId === p.clienteId || c.id === p.clienteId) ||
+      allClientesParaPresupuesto.find(c => c.nombre === p.nombreCliente);
     const emailSug = cli?.correoGeneral || cli?.correoAdministracion || cli?.correo || cli?.correoFacturacion || '';
     setEmailDestino(emailSug);
 
@@ -1129,25 +1148,42 @@ export default function Presupuestos() {
     const codigoPedido = formatCodigoPedido(p.numeroPresupuesto, p.id);
 
     try {
+      // 0. Si el presupuesto pertenece a un Cliente Potencial, promoverlo a Cliente real y eliminarlo de potenciales
+      let clienteIdEfectivo = p.clienteId || '';
+      let nombreClienteEfectivo = p.nombreCliente || '';
+      const potencialMatched = clientesPotenciales.find(
+        pot => (pot._docId && pot._docId === p.clienteId) || pot.id === p.clienteId
+      );
+      if (potencialMatched) {
+        const clientePromovido = await promoverClientePotencialACliente(potencialMatched);
+        clienteIdEfectivo = clientePromovido.id;
+        nombreClienteEfectivo = clientePromovido.nombre;
+        setClientes(prev => [...prev, clientePromovido]);
+        setClientesPotenciales(prev => prev.filter(pot => (pot._docId || pot.id) !== (potencialMatched._docId || potencialMatched.id)));
+      }
+
       // 1. Actualizar estado del presupuesto a 'Aprobado' y vincular el pedido
       await updatePresupuesto(docId, { 
         estado: 'Aprobado',
         pedidoId: codigoPedido,
-        tipoTrabajo: tipoTrabajoSeleccionado
+        tipoTrabajo: tipoTrabajoSeleccionado,
+        clienteId: clienteIdEfectivo,
+        nombreCliente: nombreClienteEfectivo || p.nombreCliente,
+        esClientePotencial: false
       } as any);
 
       // Actualizar estado local y localStorage inmediatamente
       setPresupuestos(prev => {
-        const updated = prev.map(item => ((item as any)._docId === docId || item.id === p.id || item.id === docId) ? { ...item, estado: 'Aprobado' as const, pedidoId: codigoPedido, tipoTrabajo: tipoTrabajoSeleccionado } : item);
+        const updated = prev.map(item => ((item as any)._docId === docId || item.id === p.id || item.id === docId) ? { ...item, estado: 'Aprobado' as const, pedidoId: codigoPedido, tipoTrabajo: tipoTrabajoSeleccionado, clienteId: clienteIdEfectivo, nombreCliente: nombreClienteEfectivo || item.nombreCliente } : item);
         try { localStorage.setItem('firecheck_db_presupuestos', JSON.stringify(updated)); } catch {}
         return updated;
       });
 
       // Datos de ubicación seguros
       const centroObj = centros.find(c => (c as any)._docId === p.centroId || c.id === p.centroId);
-      const clienteObj = clientes.find(c => (c as any)._docId === p.clienteId || c.id === p.clienteId);
+      const clienteObj = clientes.find(c => (c as any)._docId === clienteIdEfectivo || c.id === clienteIdEfectivo);
       const nombreCentro = centroObj?.nombre || '';
-      const nombreCliente = clienteObj?.nombre || p.nombreCliente || '';
+      const nombreCliente = clienteObj?.nombre || nombreClienteEfectivo || p.nombreCliente || '';
       let lugar = '';
       if (nombreCentro && nombreCliente) {
         lugar = `${nombreCentro} (${nombreCliente})`;
@@ -1174,7 +1210,7 @@ export default function Presupuestos() {
         id: `PED-${Date.now()}`,
         numeroPedido: codigoPedido,
         presupuestoId: p.id || docId,
-        clienteId: p.clienteId || '',
+        clienteId: clienteIdEfectivo,
         nombreCliente,
         centroId: p.centroId || '',
         nombreCentro,
@@ -1210,7 +1246,7 @@ export default function Presupuestos() {
         const newRep: ReparacionItem = {
           id: newRepId,
           reparacion: tituloSeguro,
-          clienteId: p.clienteId || clienteObj?.id || '',
+          clienteId: clienteIdEfectivo || clienteObj?.id || '',
           clienteNombre: nombreCliente,
           centroId: p.centroId || centroObj?.id || '',
           lugar: lugar.trim(),
@@ -1237,7 +1273,7 @@ export default function Presupuestos() {
         const newIns: InstalacionItem = {
           id: newInsId,
           instalacion: tituloSeguro,
-          clienteId: p.clienteId || clienteObj?.id || '',
+          clienteId: clienteIdEfectivo || clienteObj?.id || '',
           clienteNombre: nombreCliente,
           centroId: p.centroId || centroObj?.id || '',
           lugar: lugar.trim(),
@@ -1312,7 +1348,9 @@ export default function Presupuestos() {
       if (empId) {
         empresaSeleccionada = empresas.find(e => (e as any)._docId === empId || (e as any).id === empId || ((e as any).nombre && typeof (e as any).nombre === 'string' && (e as any).nombre.trim().toLowerCase() === empId.trim().toLowerCase()));
       }
-      const clienteObj = clientes.find(c => (c as any)._docId === p.clienteId || c.id === p.clienteId || (c.nombre && c.nombre === p.nombreCliente));
+      const clienteObj =
+        allClientesParaPresupuesto.find(c => (c as any)._docId === p.clienteId || c.id === p.clienteId) ||
+        allClientesParaPresupuesto.find(c => c.nombre && c.nombre === p.nombreCliente);
       await generarPresupuestoPDF({
         titulo: p.titulo,
         numeroPresupuesto: p.numeroPresupuesto,
@@ -2045,7 +2083,7 @@ export default function Presupuestos() {
                         ) : (
                           filteredClientes.map(c => (
                             <button
-                              key={c.id}
+                              key={`${c.esPotencial ? 'pot' : 'cli'}-${c.id}`}
                               type="button"
                               onMouseDown={(e) => e.preventDefault()}
                               onClick={() => {
@@ -2053,9 +2091,14 @@ export default function Presupuestos() {
                                 setFormClienteSearch(c.nombre || '');
                                 setClienteDropdownOpen(false);
                               }}
-                              className="w-full text-left px-4 py-2 text-sm text-zinc-800 hover:bg-orange-50 transition-colors"
+                              className="w-full text-left px-4 py-2 text-sm text-zinc-800 hover:bg-orange-50 transition-colors flex items-center justify-between gap-2"
                             >
-                              {c.nombre}
+                              <span className="truncate">{c.nombre}</span>
+                              {c.esPotencial && (
+                                <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 text-[10px] font-bold uppercase shrink-0">
+                                  Potencial · {c.id}
+                                </span>
+                              )}
                             </button>
                           ))
                         )}

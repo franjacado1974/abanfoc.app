@@ -4954,6 +4954,115 @@ export async function deleteVacacionSolicitud(docId: string) {
   }
 }
 
+export interface ClientePotencial extends Cliente {
+  _docId?: string;
+  formaPago?: string;
+  vencimiento?: string;
+  iban?: string;
+  notas?: string;
+  fechaCreacion?: string;
+}
+
+export function subscribeClientesPotenciales(callback: (items: ClientePotencial[]) => void) {
+  try {
+    const col = collection(db, 'clientes_potenciales');
+    return onSnapshot(col, (snap) => {
+      const items = snap.docs.map((d) => ({
+        _docId: d.id,
+        id: d.id,
+        ...d.data()
+      })) as ClientePotencial[];
+      try {
+        localStorage.setItem('firecheck_db_clientes_potenciales', JSON.stringify(items));
+      } catch {}
+      callback(items);
+    }, (err) => {
+      console.error('subscribeClientesPotenciales error:', err);
+      try {
+        const cached = localStorage.getItem('firecheck_db_clientes_potenciales');
+        if (cached) callback(JSON.parse(cached));
+      } catch {
+        callback([]);
+      }
+    });
+  } catch (e) {
+    console.error('subscribeClientesPotenciales error:', e);
+    return () => {};
+  }
+}
+
+export async function addClientePotencial(data: Omit<ClientePotencial, '_docId'>) {
+  try {
+    const col = collection(db, 'clientes_potenciales');
+    const docId = (data.id || `POT-${Date.now()}`).trim();
+    const payload = cleanUndefinedForFirestore({
+      ...data,
+      id: docId,
+      nombre: (data.nombre || '').toUpperCase(),
+      fechaCreacion: data.fechaCreacion || new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+    await setDoc(doc(col, docId), payload);
+    return { ...payload, _docId: docId, id: docId } as ClientePotencial;
+  } catch (e) {
+    console.error('addClientePotencial error:', e);
+    throw e;
+  }
+}
+
+export async function updateClientePotencial(docId: string, data: Partial<ClientePotencial>) {
+  try {
+    const ref = doc(db, 'clientes_potenciales', docId);
+    const payload = cleanUndefinedForFirestore({
+      ...data,
+      ...(data.nombre ? { nombre: data.nombre.toUpperCase() } : {}),
+      updatedAt: new Date().toISOString()
+    });
+    await setDoc(ref, payload, { merge: true });
+  } catch (e) {
+    console.error('updateClientePotencial error:', e);
+    throw e;
+  }
+}
+
+export async function deleteClientePotencial(docId: string) {
+  try {
+    await deleteDoc(doc(db, 'clientes_potenciales', docId));
+  } catch (e) {
+    console.error('deleteClientePotencial error:', e);
+    throw e;
+  }
+}
+
+export async function promoverClientePotencialACliente(potencial: ClientePotencial): Promise<Cliente> {
+  try {
+    const clientesSnap = await getDocs(collection(db, 'clientes'));
+    let maxNum = 0;
+    clientesSnap.docs.forEach((d) => {
+      const n = Number(d.id);
+      if (Number.isInteger(n) && n > maxNum) maxNum = n;
+    });
+    const newClienteId = String(maxNum + 1);
+    const { _docId, fechaCreacion, ...rest } = potencial;
+    const nuevoCliente: any = cleanUndefinedForFirestore({
+      ...rest,
+      id: newClienteId,
+      nombre: (potencial.nombre || '').toUpperCase(),
+      updatedAt: new Date().toISOString()
+    });
+    await setDoc(doc(db, 'clientes', newClienteId), nuevoCliente);
+
+    const potDocId = _docId || potencial.id;
+    if (potDocId) {
+      await deleteDoc(doc(db, 'clientes_potenciales', potDocId));
+    }
+    return nuevoCliente as Cliente;
+  } catch (e) {
+    console.error('promoverClientePotencialACliente error:', e);
+    throw e;
+  }
+}
+
 export {app, storage, db, analytics};
 
 

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
-  Users, CalendarDays, Calendar, FileText, SearchCheck, Wrench,
+  Users, UserPlus, CalendarDays, Calendar, FileText, SearchCheck, Wrench,
   Calculator, Package, FileCheck, FileDigit, Receipt,
   Settings, Power, ChevronLeft, ChevronRight, LayoutDashboard,
   Menu, X, Mail, Clock, Trash2,
@@ -68,6 +68,7 @@ const CATEGORIAS_MENU: NavCategory[] = [
     allowedRoles: ['super-administrador', 'administrador', 'editor', 'tecnico'],
     subItems: [
       { id: 'clientes', path: '/clientes', title: 'Clientes', Icon: Users, allowedRoles: ['super-administrador', 'administrador', 'editor'] },
+      { id: 'clientes-potenciales', path: '/clientes-potenciales', title: 'Clientes potenciales', Icon: UserPlus, allowedRoles: ['super-administrador', 'administrador', 'editor'] },
       { id: 'centros', path: '/centros', title: 'Centros', Icon: Building2, allowedRoles: ['super-administrador', 'administrador'] },
       { id: 'proveedores', path: '/proveedores', title: 'Proveedores', Icon: Building2, allowedRoles: ['super-administrador', 'administrador', 'editor'] },
       { id: 'catalogo', path: '/catalogo', title: 'Catálogo', Icon: Package, allowedRoles: ['super-administrador', 'administrador', 'editor', 'tecnico'] },

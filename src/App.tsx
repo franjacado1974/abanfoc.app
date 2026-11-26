@@ -9,6 +9,7 @@ import { useState, useEffect, useMemo } from 'react';
 import Loader from './components/Loader';
 import DashboardTecnico from './DashboardTecnico';
 import Clientes from './Clientes';
+import ClientesPotenciales from './ClientesPotenciales';
 import Centros from './Centros';
 import ClientesCentros from './ClientesCentros';
 import Presupuestos from './Presupuestos';
@@ -2134,6 +2135,11 @@ export default function App() {
         <Route path="/clientes" element={
           <ProtectedRoute allowedRoles={['super-administrador', 'administrador', 'editor']} user={loggedUser}>
             <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><Clientes /></PageLayout>
+          </ProtectedRoute>
+        } />
+        <Route path="/clientes-potenciales" element={
+          <ProtectedRoute allowedRoles={['super-administrador', 'administrador', 'editor']} user={loggedUser}>
+            <PageLayout user={loggedUser} onLogout={handleLogout} appLogo={appLogo}><ClientesPotenciales /></PageLayout>
           </ProtectedRoute>
         } />
         <Route path="/centros" element={

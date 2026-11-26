@@ -7242,9 +7242,9 @@ export const generarPresupuestoPDF = async (
           data.cell.styles.textColor = [59, 98, 173];
         }
         if (data.column.index === 2) {
-          // Usar 7.2pt normal en didParseCell para que autoTable calcule la altura y saltos sin ensanchar de más
-          data.cell.styles.fontSize = 7.2;
-          data.cell.styles.fontStyle = 'normal';
+          // Usar 8pt negrita en didParseCell para que autoTable reserve la altura real de todas las líneas del capítulo
+          data.cell.styles.fontSize = 8;
+          data.cell.styles.fontStyle = 'bold';
           data.cell.styles.textColor = [59, 98, 173];
         }
         if (!esSinValorar && data.column.index === 5) {
@@ -7304,8 +7304,8 @@ export const generarPresupuestoPDF = async (
       if (data.section === 'body' && data.column.index === 2 && data.cell._savedCapText) {
         const cell = data.cell;
         const lineaCap = (presupuesto.lineas || [])[data.row.index];
-        const leftPad = typeof cell.padding === 'function' ? cell.padding('left') : 1.5;
-        const rightPad = typeof cell.padding === 'function' ? cell.padding('right') : 1;
+        const leftPad = typeof cell.padding === 'function' ? cell.padding('left') : 2;
+        const rightPad = typeof cell.padding === 'function' ? cell.padding('right') : 2;
         const usableW = Math.max(40, cell.width - leftPad - rightPad);
 
         const capTitle = (lineaCap?.concepto || 'CAPÍTULO').toUpperCase();
@@ -7346,8 +7346,8 @@ export const generarPresupuestoPDF = async (
       if (data.section === 'body' && data.column.index === 2 && data.cell._savedText) {
         const cell = data.cell;
         const lineaArt = (presupuesto.lineas || [])[data.row.index];
-        const leftPad = typeof cell.padding === 'function' ? cell.padding('left') : 1.5;
-        const rightPad = typeof cell.padding === 'function' ? cell.padding('right') : 1;
+        const leftPad = typeof cell.padding === 'function' ? cell.padding('left') : 2;
+        const rightPad = typeof cell.padding === 'function' ? cell.padding('right') : 2;
         const usableW = Math.max(40, cell.width - leftPad - rightPad);
 
         const fam = (lineaArt?.familia || '').trim();
@@ -7388,31 +7388,62 @@ export const generarPresupuestoPDF = async (
 
   const finalY = (doc as any).lastAutoTable?.finalY || y + 10;
   const totalX = pageWidth - margen;
-  let currentTotY = finalY + 4;
-  let currentBottomY = currentTotY;
+
+  const ivaExento = !esSinValorar && presupuesto.iva === 0;
+  const tieneDescuento = !esSinValorar && !!(presupuesto.descuentoPorcentaje && Number(presupuesto.descuentoPorcentaje) > 0);
+  const descPorc = Number(presupuesto.descuentoPorcentaje) || 0;
+  const descImp = Number(presupuesto.descuentoImporte) || (presupuesto.subtotal * descPorc / 100);
+  const baseTrasDescuento = Math.max(0, presupuesto.subtotal - descImp);
+
+  const firmaBoxW = 74;
+  const firmaBoxH = 34;
+  const rowH = Math.max(firmaBoxH, !esSinValorar && tieneDescuento ? 36 : 34);
+
+  const textoExencion = 'Factura exenta de IVA por inversión del sujeto pasivo de acuerdo con el artículo 84 letra f-Uno. 2º - Ley 37/1992 - art. 5 Ley 7/2012';
+  const exencionSplit = ivaExento ? doc.splitTextToSize(textoExencion, pageWidth - margen * 2 - 8) : [];
+  const exencionH = ivaExento ? 8 + exencionSplit.length * 4 : 0;
+
+  const notasFullW = pageWidth - margen * 2;
+  const notasSplit = presupuesto.notas ? doc.splitTextToSize(presupuesto.notas, notasFullW - 8) : [];
+  const notasH = presupuesto.notas ? Math.min(30, 11 + notasSplit.length * 3.8) : 0;
+
+  const totalNeededH = rowH + (exencionH > 0 ? exencionH + 4 : 0) + (notasH > 0 ? notasH + 4 : 0);
+
+  // Salto de página preventivo solo si el bloque conjunto no cabe antes del pie RGPD
+  let blockStartY = finalY + 6;
+  if (blockStartY + totalNeededH > pageHeight - 20) {
+    doc.addPage();
+    blockStartY = 20;
+  }
+
+  // ── MISMA FILA HORIZONTAL: CONFORME Y ACEPTACIÓN (IZQUIERDA) + IMPORTES (DERECHA) ──
+  const firmaBoxX = margen;
+  const firmaBoxY = blockStartY;
+
+  doc.setDrawColor(228, 231, 238);
+  doc.setLineWidth(0.2);
+  doc.setFillColor(255, 255, 255);
+  doc.roundedRect(firmaBoxX, firmaBoxY, firmaBoxW, firmaBoxH, 2.5, 2.5, 'FD');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.2);
+  doc.setTextColor(60, 65, 75);
+  doc.text('CONFORME Y ACEPTACIÓN DEL CLIENTE', firmaBoxX + 4, firmaBoxY + 5);
+
+  doc.setDrawColor(235, 238, 245);
+  doc.setLineWidth(0.2);
+  doc.line(firmaBoxX + 4, firmaBoxY + 6.5, firmaBoxX + firmaBoxW - 4, firmaBoxY + 6.5);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6.8);
+  doc.setTextColor(100, 105, 115);
+  doc.text('Fecha: ..... / ..... / .........', firmaBoxX + 4, firmaBoxY + 11.5);
+  doc.text('Firma y Sello:', firmaBoxX + 4, firmaBoxY + 17);
 
   if (!esSinValorar) {
-    const ivaExento = presupuesto.iva === 0;
-    const tieneDescuento = !!(presupuesto.descuentoPorcentaje && Number(presupuesto.descuentoPorcentaje) > 0);
-    const descPorc = Number(presupuesto.descuentoPorcentaje) || 0;
-    const descImp = Number(presupuesto.descuentoImporte) || (presupuesto.subtotal * descPorc / 100);
-    const baseTrasDescuento = Math.max(0, presupuesto.subtotal - descImp);
+    let currentTotY = blockStartY + 5;
 
-    // ── SALTO DE PÁGINA PREVENTIVO ──────────────────────────────────────────────
-    // Calcular altura total del bloque de totales para saber si cabe antes del pie
-    const alturaBloqueTotal = (tieneDescuento ? 14 : 0) + 38;
-    const firmaBoxHEstimado = 35;
-    const footerSafeZone = 30 + firmaBoxHEstimado + 6; // margen seguro sobre el pie de página
-    const limiteDisponible = pageHeight - footerSafeZone;
-
-    if (currentTotY + alturaBloqueTotal > limiteDisponible) {
-      doc.addPage();
-      currentTotY = 20; // Margen superior en página nueva
-    }
-    // ────────────────────────────────────────────────────────────────────────────
-
-    // 1. TOTAL PRESUPUESTO (suma de los importes de los artículos, antes de descuento e impuestos)
-    currentTotY += 3;
+    // 1. TOTAL PRESUPUESTO
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
     doc.setTextColor(80, 80, 80);
@@ -7431,14 +7462,13 @@ export const generarPresupuestoPDF = async (
       doc.text(labelDesc, totalX - 50, currentTotY, { align: 'right' });
       doc.text(`-${formatM(descImp)}`, totalX, currentTotY, { align: 'right' });
 
-      // LÍNEA HORIZONTAL (inferior del descuento)
       currentTotY += 3.2;
       doc.setDrawColor(200, 205, 215);
       doc.setLineWidth(0.35);
       doc.line(totalX - 75, currentTotY, totalX, currentTotY);
     }
 
-    // 3. SUBTOTAL SIN IMPUESTOS (base imponible tras descuento)
+    // 3. SUBTOTAL SIN IMPUESTOS
     currentTotY += 5.5;
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
@@ -7471,88 +7501,39 @@ export const generarPresupuestoPDF = async (
     doc.setTextColor(24, 24, 27);
     doc.text('TOTAL con impuestos:', totalX - 50, currentTotY, { align: 'right' });
     doc.text(formatM(presupuesto.total), totalX, currentTotY, { align: 'right' });
-
-    // Texto de exención de IVA si aplica
-    currentBottomY = currentTotY + 7;
-    if (ivaExento) {
-      doc.setDrawColor(230, 220, 200);
-      doc.setFillColor(255, 250, 243);
-      const textoExencion = 'Factura exenta de IVA por inversión del sujeto pasivo de acuerdo con el artículo 84 letra f-Uno. 2º - Ley 37/1992 - art. 5 Ley 7/2012';
-      const exencionSplit = doc.splitTextToSize(textoExencion, pageWidth - margen * 2 - 8);
-      const exencionH = 8 + exencionSplit.length * 4;
-      doc.roundedRect(margen, currentBottomY, pageWidth - margen * 2, exencionH, 2.5, 2.5, 'FD');
-      doc.setFont('helvetica', 'italic');
-      doc.setFontSize(7);
-      doc.setTextColor(170, 110, 30);
-      let exy = currentBottomY + 5;
-      exencionSplit.forEach((line: string) => { doc.text(line, margen + 4, exy); exy += 4; });
-      currentBottomY += exencionH + 6;
-    }
-  } else {
-    currentBottomY = finalY + 4;
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // ─────────────────────────────────────────────────────────────────────────
-  // RECUADRO DE ACEPTACIÓN CON FECHA Y FIRMA (a la izquierda) Y NOTAS (a la derecha)
-  // Anclado abajo del todo, con altura generosa para albergar sello y firma
-  // ─────────────────────────────────────────────────────────────────────────
-  const firmaBoxW = 74;
-  const firmaBoxH = 35; // Ampliado a 35 mm para que quepa perfectamente un sello oficial
-  const firmaBoxX = margen;
-  const firmaBoxY = pageHeight - 30 - firmaBoxH; // Subido 10 puntos para no estar tan pegado al pie de página
+  let currentBottomY = blockStartY + rowH + 4;
 
-  // Si el contenido anterior invade la zona del recuadro, pasar a nueva página
-  if (currentBottomY > firmaBoxY - 4) {
-    doc.addPage();
+  if (ivaExento) {
+    doc.setDrawColor(230, 220, 200);
+    doc.setFillColor(255, 250, 243);
+    doc.roundedRect(margen, currentBottomY, pageWidth - margen * 2, exencionH, 2.5, 2.5, 'FD');
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(7);
+    doc.setTextColor(170, 110, 30);
+    let exy = currentBottomY + 5;
+    exencionSplit.forEach((line: string) => { doc.text(line, margen + 4, exy); exy += 4; });
+    currentBottomY += exencionH + 4;
   }
-
-  // RECUADRO DE ACEPTACIÓN, FECHA Y FIRMA (Abajo a la izquierda)
-  doc.setDrawColor(228, 231, 238); // Borde más suave y sutil
-  doc.setLineWidth(0.2); // Trazo fino y suave
-  doc.setFillColor(255, 255, 255); // Sin fondo gris (fondo blanco limpio)
-  doc.roundedRect(firmaBoxX, firmaBoxY, firmaBoxW, firmaBoxH, 2.5, 2.5, 'FD');
-
-  // Cabecera del recuadro
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.2);
-  doc.setTextColor(60, 65, 75);
-  doc.text('CONFORME Y ACEPTACIÓN DEL CLIENTE', firmaBoxX + 4, firmaBoxY + 5);
-
-  // Línea sutil bajo el título del recuadro
-  doc.setDrawColor(235, 238, 245);
-  doc.setLineWidth(0.2);
-  doc.line(firmaBoxX + 4, firmaBoxY + 6.5, firmaBoxX + firmaBoxW - 4, firmaBoxY + 6.5);
-
-  // Fecha y Firma
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(6.8);
-  doc.setTextColor(100, 105, 115);
-  doc.text('Fecha: ..... / ..... / .........', firmaBoxX + 4, firmaBoxY + 11.5);
-  doc.text('Firma y Sello:', firmaBoxX + 4, firmaBoxY + 17);
-
-  // NOTAS Y CONDICIONES (a la derecha del recuadro de aceptación)
-  const notasX = margen + firmaBoxW + 6;
-  const notasW = pageWidth - margen - notasX;
 
   if (presupuesto.notas) {
-    doc.setDrawColor(228, 231, 238); // Borde suave a juego con firma
+    doc.setDrawColor(228, 231, 238);
     doc.setLineWidth(0.2);
-    doc.setFillColor(255, 255, 255); // Fondo blanco limpio sin tono grisáceo
-    const notasSplit = doc.splitTextToSize(presupuesto.notas, notasW - 8);
-    doc.roundedRect(notasX, firmaBoxY, notasW, firmaBoxH, 2.5, 2.5, 'FD');
+    doc.setFillColor(255, 255, 255);
+    doc.roundedRect(margen, currentBottomY, notasFullW, notasH, 2.5, 2.5, 'FD');
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(7.2);
     doc.setTextColor(60, 65, 75);
-    doc.text('NOTAS Y CONDICIONES', notasX + 4, firmaBoxY + 5);
+    doc.text('NOTAS Y CONDICIONES', margen + 4, currentBottomY + 5);
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(6.8);
     doc.setTextColor(85, 90, 100);
-    let nty = firmaBoxY + 9.5;
-    notasSplit.forEach((line: string) => { 
-      if (nty < firmaBoxY + firmaBoxH - 2) {
-        doc.text(line, notasX + 4, nty); 
-        nty += 3.8; 
+    let nty = currentBottomY + 9.5;
+    notasSplit.forEach((line: string) => {
+      if (nty < currentBottomY + notasH - 2) {
+        doc.text(line, margen + 4, nty);
+        nty += 3.8;
       }
     });
   }

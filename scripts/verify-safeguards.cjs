@@ -2673,6 +2673,45 @@ if (fs.existsSync(pdfGenPath)) {
     }
   }
 
+  // REGLA 144: Blindaje de Clientes Potenciales, conversión automática en Presupuestos y maquetación compacta/completa de PDF de Presupuestos
+  const cliPotPath144 = path.join(__dirname, '..', 'src', 'ClientesPotenciales.tsx');
+  if (!fs.existsSync(cliPotPath144)) {
+    errors.push('CRÍTICO: Falta src/ClientesPotenciales.tsx (REGLA 144).');
+  } else {
+    const cliPotContent = fs.readFileSync(cliPotPath144, 'utf8');
+    if (
+      !cliPotContent.includes('Directorio de Clientes Potenciales') ||
+      !cliPotContent.includes('subscribeClientesPotenciales') ||
+      !cliPotContent.includes('addClientePotencial')
+    ) {
+      errors.push('CRÍTICO: ClientesPotenciales.tsx debe mantener la tabla y formulario idénticos a Clientes con persistencia en clientes_potenciales (REGLA 144).');
+    }
+  }
+  if (fs.existsSync(sidebarPath)) {
+    const sideContent144 = fs.readFileSync(sidebarPath, 'utf8');
+    if (!sideContent144.includes('/clientes-potenciales') || !sideContent144.includes('Clientes potenciales')) {
+      errors.push('CRÍTICO: Sidebar.tsx debe mantener el submenú Clientes potenciales debajo de Clientes (REGLA 144).');
+    }
+  }
+  if (fs.existsSync(fbPath142)) {
+    const fbContent144 = fs.readFileSync(fbPath142, 'utf8');
+    if (!fbContent144.includes('clientes_potenciales') || !fbContent144.includes('promoverClientePotencialACliente')) {
+      errors.push('CRÍTICO: firebase.tsx debe mantener clientes_potenciales y promoverClientePotencialACliente (REGLA 144).');
+    }
+  }
+  if (fs.existsSync(presupuestosPath)) {
+    const presContent144 = fs.readFileSync(presupuestosPath, 'utf8');
+    if (!presContent144.includes('allClientesParaPresupuesto') || !presContent144.includes('promoverClientePotencialACliente')) {
+      errors.push('CRÍTICO: Presupuestos.tsx debe incluir clientes potenciales en allClientesParaPresupuesto y promoverlos automáticamente al aceptar pedido (REGLA 144).');
+    }
+  }
+  if (fs.existsSync(pdfGenPath)) {
+    const pdfContent144 = fs.readFileSync(pdfGenPath, 'utf8');
+    if (!pdfContent144.includes('CONFORME Y ACEPTACIÓN DEL CLIENTE') || !pdfContent144.includes('blockStartY') || !pdfContent144.includes('data.cell.styles.fontSize = 8;')) {
+      errors.push('CRÍTICO: pdfGenerator.ts debe mantener importes + Conforme en la misma línea (blockStartY) y altura de capítulos 8pt bold (REGLA 144).');
+    }
+  }
+
 // Resultado de la verificación
 if (errors.length > 0) {
   console.error('\n❌ ERROR CRÍTICO DE BLINDAJE INTEGRAL (AGENTS.md):');
