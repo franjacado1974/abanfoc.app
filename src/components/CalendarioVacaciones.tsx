@@ -10,7 +10,9 @@ import {
   ChevronLeft,
   ChevronRight,
   ShieldCheck,
-  ExternalLink
+  ExternalLink,
+  Edit,
+  Save
 } from 'lucide-react';
 import {
   addVacacionSolicitud,
@@ -143,6 +145,17 @@ export default function CalendarioVacaciones({
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [feedback, setFeedback] = useState<string>('');
 
+  // Gestión exclusiva del Super Administrador (lista general, edición y eliminación)
+  const [adminFilterEstado, setAdminFilterEstado] = useState<'todas' | 'pendiente' | 'aprobada' | 'rechazada'>('todas');
+  const [editingSol, setEditingSol] = useState<VacacionSolicitud | null>(null);
+  const [editTipo, setEditTipo] = useState<'vacaciones' | 'festivo' | 'puente'>('vacaciones');
+  const [editInicio, setEditInicio] = useState<string>('');
+  const [editFin, setEditFin] = useState<string>('');
+  const [editMotivo, setEditMotivo] = useState<string>('');
+  const [editEstado, setEditEstado] = useState<'pendiente' | 'aprobada' | 'rechazada'>('aprobada');
+  const [isSavingEdit, setIsSavingEdit] = useState<boolean>(false);
+  const [confirmDeleteSol, setConfirmDeleteSol] = useState<VacacionSolicitud | null>(null);
+
   const fullUserName = [user?.nombre, user?.apellidos].filter(Boolean).join(' ').trim() || user?.usuario || 'Usuario';
 
   const pendientes = useMemo(
@@ -205,6 +218,49 @@ export default function CalendarioVacaciones({
     if (!id) return;
     await deleteVacacionSolicitud(id);
   };
+
+  const handleOpenEdit = (sol: VacacionSolicitud) => {
+    if (!isSuperAdmin) return;
+    setEditingSol(sol);
+    setEditTipo(sol.tipo || 'vacaciones');
+    setEditInicio(sol.fechaInicio || new Date().toISOString().slice(0, 10));
+    setEditFin(sol.fechaFin || sol.fechaInicio || new Date().toISOString().slice(0, 10));
+    setEditMotivo(sol.motivo || '');
+    setEditEstado(sol.estado || 'pendiente');
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isSuperAdmin || !editingSol) return;
+    const id = editingSol._docId || editingSol.id;
+    if (!id) return;
+    setIsSavingEdit(true);
+    try {
+      const end = editFin && editFin >= editInicio ? editFin : editInicio;
+      await updateVacacionSolicitud(id, {
+        tipo: editTipo,
+        fechaInicio: editInicio,
+        fechaFin: end,
+        motivo: editMotivo.trim(),
+        estado: editEstado,
+        aprobadoPor: fullUserName,
+        fechaResolucion: new Date().toISOString()
+      });
+      setEditingSol(null);
+    } catch (err) {
+      console.error('Error editando solicitud:', err);
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
+  const allSolicitudesAdmin = useMemo(() => {
+    const sorted = [...solicitudes].sort((a, b) =>
+      (b.fechaInicio || b.fechaCreacion || '').localeCompare(a.fechaInicio || a.fechaCreacion || '')
+    );
+    if (adminFilterEstado === 'todas') return sorted;
+    return sorted.filter((s) => s.estado === adminFilterEstado);
+  }, [solicitudes, adminFilterEstado]);
 
   // Días del mes actual para el calendario visual de vacaciones publicadas
   const calendarDays = useMemo(() => {
@@ -508,8 +564,15 @@ export default function CalendarioVacaciones({
                       {cell.items.map((item, i) => (
                         <div
                           key={`${item._docId || item.id}-${i}`}
-                          title={`${item.usuarioNombre}: ${item.tipo}${item.motivo ? ` - ${item.motivo}` : ''}`}
-                          className={`px-1.5 py-0.5 rounded text-[10px] font-bold truncate border ${tipoBadge(item.tipo)}`}
+                          onClick={() => isSuperAdmin && handleOpenEdit(item)}
+                          title={
+                            isSuperAdmin
+                              ? `${item.usuarioNombre}: ${item.tipo}${item.motivo ? ` - ${item.motivo}` : ''} (Clic para editar o quitar)`
+                              : `${item.usuarioNombre}: ${item.tipo}${item.motivo ? ` - ${item.motivo}` : ''}`
+                          }
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-bold truncate border ${tipoBadge(item.tipo)} ${
+                            isSuperAdmin ? 'cursor-pointer hover:opacity-80' : ''
+                          }`}
                         >
                           {item.usuarioNombre}
                         </div>
@@ -522,6 +585,265 @@ export default function CalendarioVacaciones({
           </div>
         </div>
       </div>
+
+      {/* Lista general de solicitudes y vacaciones (solo Super Administrador) */}
+      {isSuperAdmin && (
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="w-5 h-5 text-slate-900" />
+              <div>
+                <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide">
+                  Gestión de Solicitudes y Vacaciones ({allSolicitudesAdmin.length})
+                </h3>
+                <p className="text-[11px] text-slate-500">
+                  Control exclusivo del Super Administrador para editar o eliminar vacaciones/festivos de cualquier usuario.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {(
+                [
+                  { id: 'todas', label: 'Todas' },
+                  { id: 'pendiente', label: 'Pendientes' },
+                  { id: 'aprobada', label: 'Aprobadas' },
+                  { id: 'rechazada', label: 'Rechazadas' }
+                ] as const
+              ).map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => setAdminFilterEstado(f.id)}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors cursor-pointer ${
+                    adminFilterEstado === f.id
+                      ? 'bg-slate-900 text-white border-slate-900'
+                      : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {allSolicitudesAdmin.length === 0 ? (
+            <p className="text-xs text-slate-500 italic py-2">No hay solicitudes en esta categoría.</p>
+          ) : (
+            <div className="overflow-x-auto border border-slate-200 rounded-xl">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-black text-slate-500 uppercase tracking-wider">
+                    <th className="py-2.5 px-3">Usuario</th>
+                    <th className="py-2.5 px-3">Tipo</th>
+                    <th className="py-2.5 px-3">Fechas</th>
+                    <th className="py-2.5 px-3">Motivo</th>
+                    <th className="py-2.5 px-3">Estado</th>
+                    <th className="py-2.5 px-3 text-right">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {allSolicitudesAdmin.map((sol) => (
+                    <tr key={sol._docId || sol.id} className="hover:bg-slate-50/80">
+                      <td className="py-2.5 px-3 font-bold text-slate-900">{sol.usuarioNombre}</td>
+                      <td className="py-2.5 px-3">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold border uppercase ${tipoBadge(sol.tipo)}`}>
+                          {sol.tipo}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3 font-semibold text-slate-700 whitespace-nowrap">
+                        {formatFechaEs(sol.fechaInicio)}
+                        {sol.fechaFin && sol.fechaFin !== sol.fechaInicio ? ` → ${formatFechaEs(sol.fechaFin)}` : ''}
+                      </td>
+                      <td className="py-2.5 px-3 text-slate-600 max-w-xs truncate" title={sol.motivo || ''}>
+                        {sol.motivo || '—'}
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border uppercase ${estadoBadge(sol.estado)}`}>
+                          {sol.estado}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                        <div className="inline-flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEdit(sol)}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-[11px] font-bold cursor-pointer"
+                            title="Editar solicitud / fechas"
+                          >
+                            <Edit className="w-3 h-3" />
+                            Editar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDeleteSol(sol)}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-[11px] font-bold cursor-pointer"
+                            title="Eliminar solicitud / vacación"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            Eliminar
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Modal de Edición (solo Super Administrador) */}
+      {isSuperAdmin && editingSol && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md border border-slate-200 overflow-hidden">
+            <div className="bg-slate-900 text-white px-5 py-3.5 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-black uppercase tracking-wide">Editar Vacación / Solicitud</h3>
+                <p className="text-[11px] text-slate-300">{editingSol.usuarioNombre}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingSol(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <form onSubmit={handleSaveEdit} className="p-5 space-y-3.5">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">Tipo</label>
+                  <select
+                    value={editTipo}
+                    onChange={(e) => setEditTipo(e.target.value as 'vacaciones' | 'festivo' | 'puente')}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 text-xs font-semibold bg-white"
+                  >
+                    <option value="vacaciones">Vacaciones</option>
+                    <option value="festivo">Día festivo</option>
+                    <option value="puente">Puente</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">Estado</label>
+                  <select
+                    value={editEstado}
+                    onChange={(e) => setEditEstado(e.target.value as 'pendiente' | 'aprobada' | 'rechazada')}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 text-xs font-semibold bg-white"
+                  >
+                    <option value="pendiente">Pendiente</option>
+                    <option value="aprobada">Aprobada</option>
+                    <option value="rechazada">Rechazada</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
+                  Desde (DD/MM/AAAA)
+                </label>
+                <SpanishDateSelect
+                  value={editInicio}
+                  onChange={(nextIso) => {
+                    setEditInicio(nextIso);
+                    if (editFin < nextIso) setEditFin(nextIso);
+                  }}
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
+                  Hasta (DD/MM/AAAA)
+                </label>
+                <SpanishDateSelect
+                  value={editFin}
+                  minIso={editInicio}
+                  onChange={(nextIso) => setEditFin(nextIso)}
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">Motivo</label>
+                <input
+                  type="text"
+                  value={editMotivo}
+                  onChange={(e) => setEditMotivo(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 text-xs"
+                  placeholder="Motivo o comentario..."
+                />
+              </div>
+
+              <div className="flex items-center justify-between gap-2 pt-3 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const sol = editingSol;
+                    setEditingSol(null);
+                    setConfirmDeleteSol(sol);
+                  }}
+                  className="inline-flex items-center gap-1 px-3 py-2 rounded-lg bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-xs font-bold cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Eliminar
+                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingSol(null)}
+                    className="px-3 py-2 rounded-lg border border-slate-300 text-slate-700 text-xs font-bold hover:bg-slate-100 cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSavingEdit}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold cursor-pointer"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    {isSavingEdit ? 'Guardando...' : 'Guardar'}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Confirmación de Eliminación (solo Super Administrador) */}
+      {isSuperAdmin && confirmDeleteSol && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm border border-slate-200 p-5 space-y-4">
+            <h3 className="text-sm font-black text-slate-900 uppercase">Eliminar vacación / solicitud</h3>
+            <p className="text-xs text-slate-600">
+              ¿Seguro que deseas eliminar las fechas de <strong>{confirmDeleteSol.usuarioNombre}</strong> (
+              {formatFechaEs(confirmDeleteSol.fechaInicio)}
+              {confirmDeleteSol.fechaFin && confirmDeleteSol.fechaFin !== confirmDeleteSol.fechaInicio
+                ? ` → ${formatFechaEs(confirmDeleteSol.fechaFin)}`
+                : ''}
+              )? Se quitarán del Calendario de Vacaciones y del Calendario Laboral.
+            </p>
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteSol(null)}
+                className="px-3.5 py-2 rounded-lg border border-slate-300 text-slate-700 text-xs font-bold hover:bg-slate-100 cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  await handleEliminar(confirmDeleteSol);
+                  setConfirmDeleteSol(null);
+                }}
+                className="px-3.5 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-bold cursor-pointer"
+              >
+                Sí, eliminar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -2711,6 +2711,13 @@ if (fs.existsSync(pdfGenPath)) {
       errors.push('CRÍTICO: pdfGenerator.ts debe mantener importes + Conforme en la misma línea (blockStartY) y altura de capítulos 8pt bold (REGLA 144).');
     }
   }
+  const calVacPath144 = path.join(__dirname, '..', 'src', 'components', 'CalendarioVacaciones.tsx');
+  if (fs.existsSync(calVacPath144)) {
+    const calVacContent144 = fs.readFileSync(calVacPath144, 'utf8');
+    if (!calVacContent144.includes('allSolicitudesAdmin') || !calVacContent144.includes('handleOpenEdit') || !calVacContent144.includes('confirmDeleteSol')) {
+      errors.push('CRÍTICO: CalendarioVacaciones.tsx debe mantener la lista general de solicitudes y edición/eliminación exclusiva para Super Administrador (REGLA 144).');
+    }
+  }
 
 // Resultado de la verificación
 if (errors.length > 0) {
