@@ -7125,14 +7125,14 @@ export const generarPresupuestoPDF = async (
       if (esSinValorar) {
         return [
           '', // Columna para imagen
-          'CAPÍTULO:', // Código
+          '', // Código vacío en filas de capítulo
           capTexto, // Título y descripción opcional del capítulo
           ''  // Unidades
         ];
       }
       return [
         '', // Columna para imagen
-        'CAPÍTULO:', // Código
+        '', // Código vacío en filas de capítulo
         capTexto, // Título y descripción opcional del capítulo
         '', // Precio
         '', // Unidades
@@ -7409,12 +7409,13 @@ export const generarPresupuestoPDF = async (
 
   const totalNeededH = rowH + (exencionH > 0 ? exencionH + 4 : 0) + (notasH > 0 ? notasH + 4 : 0);
 
-  // Salto de página preventivo solo si el bloque conjunto no cabe antes del pie RGPD
-  let blockStartY = finalY + 6;
-  if (blockStartY + totalNeededH > pageHeight - 20) {
+  // Anclar el bloque conjunto (Conforme + Importes + Exención/Notas) en la parte inferior de la página,
+  // manteniendo 6 mm de separación sobre la cláusula RGPD (pageHeight - 16).
+  const anchoredBlockY = (pageHeight - 22) - totalNeededH;
+  if (finalY + 6 > anchoredBlockY) {
     doc.addPage();
-    blockStartY = 20;
   }
+  const blockStartY = anchoredBlockY;
 
   // ── MISMA FILA HORIZONTAL: CONFORME Y ACEPTACIÓN (IZQUIERDA) + IMPORTES (DERECHA) ──
   const firmaBoxX = margen;

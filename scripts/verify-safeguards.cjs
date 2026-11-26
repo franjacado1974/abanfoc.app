@@ -2046,8 +2046,8 @@ if (fs.existsSync(pdfGenPath)) {
   }
   if (fs.existsSync(pdfGenPath131)) {
     const pdfContent131 = fs.readFileSync(pdfGenPath131, 'utf8');
-    if (!pdfContent131.includes('isCapitulo') || !pdfContent131.includes("'CAPÍTULO:'") || !pdfContent131.includes('_savedCapText')) {
-      errors.push('CRÍTICO: pdfGenerator.ts carece de resaltado de capítulos en azul, código CAPÍTULO: o descripción debajo del título (REGLA 131).');
+    if (!pdfContent131.includes('isCapitulo') || !pdfContent131.includes('_savedCapText')) {
+      errors.push('CRÍTICO: pdfGenerator.ts carece de resaltado de capítulos en azul o descripción debajo del título (REGLA 131).');
     }
     if (!pdfContent131.includes("'Total presupuesto:'") || !pdfContent131.includes("'Subtotal sin impuestos:'") || !pdfContent131.includes("'TOTAL con impuestos:'")) {
       errors.push('CRÍTICO: pdfGenerator.ts no mantiene el desglose de totales (Total presupuesto / Subtotal sin impuestos / TOTAL con impuestos) (REGLA 131).');
@@ -2707,8 +2707,14 @@ if (fs.existsSync(pdfGenPath)) {
   }
   if (fs.existsSync(pdfGenPath)) {
     const pdfContent144 = fs.readFileSync(pdfGenPath, 'utf8');
-    if (!pdfContent144.includes('CONFORME Y ACEPTACIÓN DEL CLIENTE') || !pdfContent144.includes('blockStartY') || !pdfContent144.includes('data.cell.styles.fontSize = 8;')) {
-      errors.push('CRÍTICO: pdfGenerator.ts debe mantener importes + Conforme en la misma línea (blockStartY) y altura de capítulos 8pt bold (REGLA 144).');
+    if (
+      !pdfContent144.includes('CONFORME Y ACEPTACIÓN DEL CLIENTE') ||
+      !pdfContent144.includes('blockStartY') ||
+      !pdfContent144.includes('anchoredBlockY') ||
+      !pdfContent144.includes('data.cell.styles.fontSize = 8;') ||
+      pdfContent144.includes("'CAPÍTULO:'")
+    ) {
+      errors.push('CRÍTICO: pdfGenerator.ts debe mantener importes + Conforme anclados abajo (anchoredBlockY), altura de capítulos 8pt bold y sin la palabra CAPÍTULO: a la izquierda (REGLA 144).');
     }
   }
   const calVacPath144 = path.join(__dirname, '..', 'src', 'components', 'CalendarioVacaciones.tsx');
