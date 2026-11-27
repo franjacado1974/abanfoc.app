@@ -3,7 +3,7 @@ import {
   Building2,
   ShieldCheck, ArrowLeft,
   Clock, ArrowRightCircle, ArrowLeftCircle, CheckCircle2, AlertTriangle, KeyRound,
-  CalendarDays, Package, Receipt, ArrowRight, Bell, Truck
+  CalendarDays, ArrowRight, Bell, Truck
 } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import Loader from './components/Loader';
@@ -602,6 +602,11 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
       return JSON.parse(localStorage.getItem('firecheck_db_vehiculos') || '[]');
     } catch { return []; }
   });
+  const [presupuestosList, setPresupuestosList] = useState<any[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('firecheck_db_presupuestos') || '[]');
+    } catch { return []; }
+  });
   const [notasBlocList, setNotasBlocList] = useState<NotaBlocItem[]>(() => {
     try {
       return JSON.parse(localStorage.getItem('firecheck_db_notas_bloc') || '[]');
@@ -798,6 +803,7 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
     try {
       unsubs.push(subscribePresupuestos((items) => {
         safeLocalSet('firecheck_db_presupuestos', JSON.stringify(items));
+        setPresupuestosList(items || []);
       }));
     } catch (e) { console.error('subscribePresupuestos failed', e); }
 
@@ -1111,24 +1117,46 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
     return Array.from(map.values()).sort((a, b) => a.cantidad - b.cantidad);
   }, [articulosList, avisosStockList]);
 
-  // ─── 4. TARJETA NOTIFICACIONES (PÚRPURA): ALERTAS DE VEHÍCULOS, SEGURO, ITV ─
+  // ─── 4. TARJETA NOTIFICACIONES (PÚRPURA): PRESUPUESTOS FIRMADOS + ALERTAS DE VEHÍCULOS, SEGURO, ITV ─
   const notificacionesAlertas = useMemo(() => {
     const hoy = new Date();
     hoy.setHours(0, 0, 0, 0);
 
     const lista: {
       id: string;
+      origen: 'presupuesto' | 'vehiculo';
       vehiculoId: string;
       matricula: string;
       marcaModelo: string;
       titulo: string;
       fecha: string;
       diasRestantes: number;
-      tipo: 'seguro' | 'itv' | 'mantenimiento' | 'otro';
+      tipo: 'seguro' | 'itv' | 'mantenimiento' | 'otro' | 'presupuesto';
       descripcion?: string;
       estado: 'vencido' | 'hoy' | 'urgente' | 'aviso';
     }[] = [];
 
+    presupuestosList.forEach((p: any) => {
+      if (Boolean(p?.seguimiento?.firmado) && !p?.pedidoId && p?.estado !== 'Rechazado') {
+        const fechaFirma = p?.seguimiento?.firmadoEn || p?.fechaCreacion || '';
+        const fechaFmt = fechaFirma ? formatFechaCorta(fechaFirma) : 'Reciente';
+        const subDesc = [p?.nombreCliente, p?.nombreCentro].filter(Boolean).join(' · ') || 'Cliente';
+        lista.push({
+          id: `presupuesto-${p.id}`,
+          origen: 'presupuesto',
+          vehiculoId: '',
+          matricula: p.codigo || 'PRES',
+          marcaModelo: subDesc,
+          titulo: 'Presupuesto aceptado y firmado',
+          fecha: fechaFmt,
+          diasRestantes: -1,
+          tipo: 'presupuesto',
+          estado: 'hoy'
+        });
+      }
+    });
+
+    const alertasVehiculos: typeof lista = [];
     vehiculosList.forEach(veh => {
       if (!veh.alertas || !Array.isArray(veh.alertas)) return;
       veh.alertas.forEach(alerta => {
@@ -1148,8 +1176,9 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
           else if (diasRestantes === 0) estado = 'hoy';
           else if (diasRestantes <= 5) estado = 'urgente';
 
-          lista.push({
+          alertasVehiculos.push({
             id: `${veh.id}-${alerta.id}`,
+            origen: 'vehiculo',
             vehiculoId: veh.id,
             matricula: veh.matricula || 'S/M',
             marcaModelo: veh.marcaModelo || 'Vehículo',
@@ -1164,8 +1193,9 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
       });
     });
 
-    return lista.sort((a, b) => a.diasRestantes - b.diasRestantes);
-  }, [vehiculosList]);
+    alertasVehiculos.sort((a, b) => a.diasRestantes - b.diasRestantes);
+    return [...lista, ...alertasVehiculos];
+  }, [vehiculosList, presupuestosList]);
 
   return (
     <div className="flex h-screen bg-[#F4F7FB]">
@@ -1195,23 +1225,25 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
               {/* ═══════════════════════════════════════════════════════════════
                   1. TARJETA FACTURACIÓN (COLOR NARANJA)
               ═══════════════════════════════════════════════════════════════ */}
-              <div className="rounded-2xl bg-gradient-to-br from-orange-50 via-amber-50/60 to-white border border-orange-200/90 shadow-sm hover:shadow-md transition-all flex flex-col justify-between overflow-hidden h-full">
+              <div className="order-3 rounded-2xl bg-gradient-to-br from-indigo-50 via-violet-50/60 to-white border border-indigo-200/90 shadow-sm hover:shadow-md transition-all flex flex-col justify-between overflow-hidden h-full">
                 <div className="p-4 sm:p-5 flex-1 flex flex-col min-h-0">
                   {/* Cabecera con Icono Ilustrativo y Contador Destacado */}
-                  <div className="flex items-center gap-3.5 pb-3.5 border-b border-orange-200/70 shrink-0">
-                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#0F2342] to-[#1D3557] border border-orange-400/40 flex items-center justify-center shrink-0 shadow-sm relative">
-                      <Receipt className="w-6 h-6 text-white stroke-[1.8]" />
-                      <span className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-orange-500 text-white font-black text-[10px] flex items-center justify-center border border-white shadow-xs">
+                  <div className="flex items-center gap-3.5 pb-3.5 border-b border-indigo-200/70 shrink-0">
+                    <div className="w-14 h-14 shrink-0 relative">
+                      <div className="w-full h-full rounded-full overflow-hidden shadow-sm">
+                        <img src="/albaranes-icon.jpg" alt="Facturación" className="w-full h-full object-cover" />
+                      </div>
+                      <span className="absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full bg-indigo-600 text-white font-black text-[10px] flex items-center justify-center border border-white shadow-xs">
                         €
                       </span>
                     </div>
 
                     <div className="min-w-0 flex-1">
-                      <span className="inline-block text-[10px] font-black uppercase tracking-wider text-orange-800 bg-orange-200/70 px-2 py-0.5 rounded-full mb-0.5">
-                        1. Facturación
+                      <span className="inline-block text-[10px] font-black uppercase tracking-wider text-indigo-800 bg-indigo-200/70 px-2 py-0.5 rounded-full mb-0.5">
+                        3. Facturación
                       </span>
                       <div className="flex items-baseline gap-2">
-                        <span className="text-3xl sm:text-4xl font-black text-orange-600 tracking-tight leading-none">
+                        <span className="text-3xl sm:text-4xl font-black text-indigo-600 tracking-tight leading-none">
                           {albaranesPendientesFacturar.length}
                         </span>
                         <span className="text-xs font-extrabold uppercase tracking-wider text-[#0F2342]">
@@ -1292,7 +1324,7 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
                   <button
                     type="button"
                     onClick={() => navigate('/facturas')}
-                    className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-bold text-xs sm:text-sm shadow-sm hover:shadow transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
+                    className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-700 hover:from-indigo-700 hover:to-violet-800 text-white font-bold text-xs sm:text-sm shadow-sm hover:shadow transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
                   >
                     <ArrowRight className="w-3.5 h-3.5 stroke-[2.5]" />
                     <span>Ver pendientes</span>
@@ -1303,13 +1335,13 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
               {/* ═══════════════════════════════════════════════════════════════
                   2. TARJETA TAREAS DE HOY (COLOR AZUL)
               ═══════════════════════════════════════════════════════════════ */}
-              <div className="rounded-2xl bg-gradient-to-br from-sky-50 via-blue-50/60 to-white border border-sky-200/90 shadow-sm hover:shadow-md transition-all flex flex-col justify-between overflow-hidden h-full">
+              <div className="order-2 rounded-2xl bg-gradient-to-br from-sky-50 via-blue-50/60 to-white border border-sky-200/90 shadow-sm hover:shadow-md transition-all flex flex-col justify-between overflow-hidden h-full">
                 <div className="p-4 sm:p-5 flex-1 flex flex-col min-h-0">
                   {/* Cabecera con Icono Ilustrativo y Contador Destacado */}
                   <div className="flex items-center gap-3.5 pb-3.5 border-b border-sky-200/70 shrink-0">
-                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#0F2342] to-[#1D3557] border border-sky-400/40 flex items-center justify-center shrink-0 shadow-sm relative">
-                      <CalendarDays className="w-6 h-6 text-white stroke-[1.8]" />
-                      <span className="absolute -bottom-1 -right-1 px-1 py-0.2 rounded-full bg-blue-600 text-white font-black text-[9px] flex items-center justify-center border border-white shadow-xs">
+                    <div className="w-14 h-14 shrink-0 relative">
+                      <img src="/calendario-icon.png" alt="Tareas de Hoy" className="w-full h-full object-contain drop-shadow-xs" />
+                      <span className="absolute -bottom-0.5 -right-0.5 px-1 py-0.2 rounded-full bg-blue-600 text-white font-black text-[9px] flex items-center justify-center border border-white shadow-xs">
                         HOY
                       </span>
                     </div>
@@ -1412,13 +1444,15 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
               {/* ═══════════════════════════════════════════════════════════════
                   3. TARJETA STOCK (COLOR VERDE)
               ═══════════════════════════════════════════════════════════════ */}
-              <div className="rounded-2xl bg-gradient-to-br from-emerald-50 via-green-50/60 to-white border border-emerald-200/90 shadow-sm hover:shadow-md transition-all flex flex-col justify-between overflow-hidden h-full">
+              <div className="order-4 rounded-2xl bg-gradient-to-br from-emerald-50 via-green-50/60 to-white border border-emerald-200/90 shadow-sm hover:shadow-md transition-all flex flex-col justify-between overflow-hidden h-full">
                 <div className="p-4 sm:p-5 flex-1 flex flex-col min-h-0">
                   {/* Cabecera con Icono Ilustrativo y Contador Destacado */}
                   <div className="flex items-center gap-3.5 pb-3.5 border-b border-emerald-200/70 shrink-0">
-                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#0F2342] to-[#1D3557] border border-emerald-400/40 flex items-center justify-center shrink-0 shadow-sm relative">
-                      <Package className="w-6 h-6 text-white stroke-[1.8]" />
-                      <span className={`absolute -bottom-1 -right-1 w-5 h-5 rounded-full text-white font-black text-[10px] flex items-center justify-center border border-white shadow-xs ${
+                    <div className="w-14 h-14 shrink-0 relative">
+                      <div className="w-full h-full rounded-full overflow-hidden shadow-sm">
+                        <img src="/catalogo-icon.jpg" alt="Stock" className="w-full h-full object-cover" />
+                      </div>
+                      <span className={`absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full text-white font-black text-[10px] flex items-center justify-center border border-white shadow-xs ${
                         materialesStockBajo.length > 0 ? 'bg-red-600' : 'bg-emerald-600'
                       }`}>
                         {materialesStockBajo.length > 0 ? '!' : '✓'}
@@ -1427,7 +1461,7 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
 
                     <div className="min-w-0 flex-1">
                       <span className="inline-block text-[10px] font-black uppercase tracking-wider text-emerald-900 bg-emerald-200/70 px-2 py-0.5 rounded-full mb-0.5">
-                        3. Stock
+                        4. Stock
                       </span>
                       <div className="flex items-baseline gap-2">
                         <span className="text-3xl sm:text-4xl font-black text-emerald-600 tracking-tight leading-none">
@@ -1531,25 +1565,27 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
               {/* ═══════════════════════════════════════════════════════════════
                   4. TARJETA NOTIFICACIONES (COLOR PÚRPURA / CARMESÍ)
               ═══════════════════════════════════════════════════════════════ */}
-              <div className="rounded-2xl bg-gradient-to-br from-purple-50 via-pink-50/50 to-white border border-purple-200/90 shadow-sm hover:shadow-md transition-all flex flex-col justify-between overflow-hidden h-full">
+              <div className="order-1 rounded-2xl bg-gradient-to-br from-red-50 via-rose-50/60 to-white border border-red-200/90 shadow-sm hover:shadow-md transition-all flex flex-col justify-between overflow-hidden h-full">
                 <div className="p-4 sm:p-5 flex-1 flex flex-col min-h-0">
                   {/* Cabecera con Icono Ilustrativo y Contador Destacado */}
-                  <div className="flex items-center gap-3.5 pb-3.5 border-b border-purple-200/70 shrink-0">
-                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#0F2342] to-[#1D3557] border border-purple-400/40 flex items-center justify-center shrink-0 shadow-sm relative">
-                      <Bell className="w-6 h-6 text-white stroke-[1.8]" />
-                      <span className={`absolute -bottom-1 -right-1 w-5 h-5 rounded-full text-white font-black text-[10px] flex items-center justify-center border border-white shadow-xs ${
-                        notificacionesAlertas.length > 0 ? 'bg-rose-600 animate-pulse' : 'bg-purple-600'
+                  <div className="flex items-center gap-3.5 pb-3.5 border-b border-red-200/70 shrink-0">
+                    <div className="w-14 h-14 shrink-0 relative">
+                      <div className="w-full h-full rounded-full overflow-hidden shadow-sm">
+                        <img src="/avisos-icon.jpg" alt="Notificaciones" className="w-full h-full object-cover scale-[1.36] translate-y-[4%]" />
+                      </div>
+                      <span className={`absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full text-white font-black text-[10px] flex items-center justify-center border border-white shadow-xs ${
+                        notificacionesAlertas.length > 0 ? 'bg-red-600 animate-pulse' : 'bg-rose-600'
                       }`}>
                         {notificacionesAlertas.length > 0 ? '!' : '✓'}
                       </span>
                     </div>
 
                     <div className="min-w-0 flex-1">
-                      <span className="inline-block text-[10px] font-black uppercase tracking-wider text-purple-900 bg-purple-200/70 px-2 py-0.5 rounded-full mb-0.5">
-                        4. Notificaciones
+                      <span className="inline-block text-[10px] font-black uppercase tracking-wider text-red-900 bg-red-200/70 px-2 py-0.5 rounded-full mb-0.5">
+                        1. Notificaciones
                       </span>
                       <div className="flex items-baseline gap-2">
-                        <span className="text-3xl sm:text-4xl font-black text-purple-600 tracking-tight leading-none">
+                        <span className="text-3xl sm:text-4xl font-black text-red-600 tracking-tight leading-none">
                           {notificacionesAlertas.length}
                         </span>
                         <span className="text-xs font-extrabold uppercase tracking-wider text-[#0F2342]">
@@ -1557,7 +1593,7 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
                         </span>
                       </div>
                       <p className="text-[11px] font-semibold text-slate-600 mt-0.5">
-                        Alertas de vehículos, seguros e ITV
+                        Presupuestos firmados, vehículos, seguros e ITV
                       </p>
                     </div>
                   </div>
@@ -1565,68 +1601,98 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
                   {/* Listado de Notificaciones */}
                   <div className="mt-3.5 flex-1 flex flex-col min-h-0">
                     <div className="flex items-center justify-between mb-2 shrink-0">
-                      <span className="text-[10px] font-extrabold uppercase tracking-wider text-purple-900/80">
-                        Vencimientos de flota
+                      <span className="text-[10px] font-extrabold uppercase tracking-wider text-red-900/80">
+                        Alertas pendientes de gestión
                       </span>
                       {notificacionesAlertas.length > 0 && (
-                        <span className="text-[10px] font-bold text-purple-700">
+                        <span className="text-[10px] font-bold text-red-700">
                           {notificacionesAlertas.length} {notificacionesAlertas.length === 1 ? 'alerta' : 'alertas'}
                         </span>
                       )}
                     </div>
 
                     {notificacionesAlertas.length === 0 ? (
-                      <div className="flex-1 min-h-[140px] rounded-xl bg-white/80 border border-purple-200/60 flex flex-col items-center justify-center p-4 text-center">
+                      <div className="flex-1 min-h-[140px] rounded-xl bg-white/80 border border-red-200/60 flex flex-col items-center justify-center p-4 text-center">
                         <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center mb-1.5">
                           <CheckCircle2 className="w-5 h-5 stroke-[2.2]" />
                         </div>
                         <p className="text-sm font-black text-[#0F2342]">Todo al día</p>
                         <p className="text-[11px] font-medium text-slate-500 mt-0.5">
-                          No hay vencimientos de vehículos ni seguros en los próximos 15 días.
+                          No hay presupuestos pendientes ni vencimientos en los próximos 15 días.
                         </p>
                       </div>
                     ) : (
                       <div className="space-y-1.5 flex-1 overflow-y-auto pr-1">
-                        {notificacionesAlertas.map((notif) => (
-                          <div
-                            key={notif.id}
-                            onClick={() => navigate('/vehiculos')}
-                            className="group bg-white hover:bg-purple-50/90 border border-purple-200/80 hover:border-purple-400 rounded-xl px-3 py-2 flex items-center justify-between gap-2 transition-all cursor-pointer shadow-2xs"
-                            title={`Ir a Vehículos: ${notif.matricula} - ${notif.titulo}`}
-                          >
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-[10px] font-mono font-black text-purple-900 bg-purple-100 px-1.5 py-0.5 rounded border border-purple-200 shrink-0">
-                                  {notif.matricula}
-                                </span>
-                                <p className="text-xs font-bold text-[#0F2342] truncate group-hover:text-purple-700 transition-colors">
-                                  {notif.titulo}
-                                </p>
+                        {notificacionesAlertas.map((notif, idx) => {
+                          const isPresupuesto = notif.origen === 'presupuesto';
+                          const delayMs = `${(idx % 6) * 320}ms`;
+                          return (
+                            <div
+                              key={notif.id}
+                              onClick={() => navigate(isPresupuesto ? '/presupuestos' : '/vehiculos')}
+                              style={{ animationDelay: delayMs }}
+                              className={`group animate-pulse rounded-xl px-3 py-2 flex items-center justify-between gap-2 transition-all cursor-pointer shadow-2xs border ${
+                                isPresupuesto
+                                  ? 'bg-emerald-50/90 hover:bg-emerald-100/90 border-emerald-300 hover:border-emerald-500'
+                                  : 'bg-white hover:bg-red-50/90 border-red-200/80 hover:border-red-400'
+                              }`}
+                              title={
+                                isPresupuesto
+                                  ? `Ir a Presupuestos: ${notif.matricula} - ${notif.marcaModelo}`
+                                  : `Ir a Vehículos: ${notif.matricula} - ${notif.titulo}`
+                              }
+                            >
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5">
+                                  <span
+                                    className={`text-[10px] font-mono font-black px-1.5 py-0.5 rounded border shrink-0 ${
+                                      isPresupuesto
+                                        ? 'text-emerald-900 bg-emerald-100 border-emerald-300'
+                                        : 'text-red-900 bg-red-100 border-red-200'
+                                    }`}
+                                  >
+                                    {notif.matricula}
+                                  </span>
+                                  <p
+                                    className={`text-xs font-bold text-[#0F2342] truncate transition-colors ${
+                                      isPresupuesto ? 'group-hover:text-emerald-800' : 'group-hover:text-red-700'
+                                    }`}
+                                  >
+                                    {notif.titulo}
+                                  </p>
+                                </div>
+                                <div className="flex items-center gap-2 mt-0.5 pl-1">
+                                  <p className="text-[10px] font-semibold text-slate-600 truncate">
+                                    {notif.marcaModelo} · {notif.fecha}
+                                  </p>
+                                </div>
                               </div>
-                              <div className="flex items-center gap-2 mt-0.5 pl-1">
-                                <p className="text-[10px] font-semibold text-slate-600 truncate">
-                                  {notif.marcaModelo} · {notif.fecha}
-                                </p>
-                              </div>
-                            </div>
 
-                            <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border shrink-0 ${
-                              notif.diasRestantes < 0
-                                ? 'bg-red-100 text-red-700 border-red-300 animate-pulse'
-                                : notif.diasRestantes === 0
-                                ? 'bg-rose-100 text-rose-800 border-rose-300 animate-pulse font-black'
-                                : notif.diasRestantes <= 5
-                                ? 'bg-amber-100 text-amber-800 border-amber-300'
-                                : 'bg-purple-100 text-purple-800 border-purple-300'
-                            }`}>
-                              {notif.diasRestantes < 0
-                                ? `Venció hace ${Math.abs(notif.diasRestantes)}d`
-                                : notif.diasRestantes === 0
-                                ? '¡Hoy!'
-                                : `En ${notif.diasRestantes}d`}
-                            </span>
-                          </div>
-                        ))}
+                              <span
+                                style={{ animationDelay: delayMs }}
+                                className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border shrink-0 animate-pulse ${
+                                  isPresupuesto
+                                    ? 'bg-emerald-600 text-white border-emerald-700'
+                                    : notif.diasRestantes < 0
+                                    ? 'bg-red-100 text-red-700 border-red-300'
+                                    : notif.diasRestantes === 0
+                                    ? 'bg-rose-100 text-rose-800 border-rose-300 font-black'
+                                    : notif.diasRestantes <= 5
+                                    ? 'bg-amber-100 text-amber-800 border-amber-300'
+                                    : 'bg-purple-100 text-purple-800 border-purple-300'
+                                }`}
+                              >
+                                {isPresupuesto
+                                  ? 'Pendiente pedido'
+                                  : notif.diasRestantes < 0
+                                  ? `Venció hace ${Math.abs(notif.diasRestantes)}d`
+                                  : notif.diasRestantes === 0
+                                  ? '¡Hoy!'
+                                  : `En ${notif.diasRestantes}d`}
+                              </span>
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -1637,7 +1703,7 @@ function Dashboard({ loggedUser, onLogout }: { loggedUser: Usuario, onLogout: ()
                   <button
                     type="button"
                     onClick={() => navigate('/vehiculos')}
-                    className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-700 hover:from-purple-700 hover:to-indigo-800 text-white font-bold text-xs sm:text-sm shadow-sm hover:shadow transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
+                    className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-700 hover:to-rose-800 text-white font-bold text-xs sm:text-sm shadow-sm hover:shadow transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
                   >
                     <Truck className="w-3.5 h-3.5 stroke-[2.5]" />
                     <span>Ver vehículos</span>

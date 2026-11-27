@@ -1914,7 +1914,7 @@ if (fs.existsSync(pdfGenPath)) {
   }
   if (fs.existsSync(appPath114)) {
     const appContent127 = fs.readFileSync(appPath114, 'utf8');
-    if (!appContent127.includes('xl:grid-cols-4') || !appContent127.includes('4. Notificaciones') || !appContent127.includes('notificacionesAlertas')) {
+    if (!appContent127.includes('xl:grid-cols-4') || !appContent127.includes('1. Notificaciones') || !appContent127.includes('notificacionesAlertas')) {
       errors.push('CRÍTICO: App.tsx carece de la cuadrícula de 4 tarjetas en HOY o del sistema de alertas de vehículos a 15 días (AGENTS.md REGLA 127).');
     }
   }
@@ -2818,6 +2818,24 @@ if (fs.existsSync(pdfGenPath)) {
       reqIcons146.some((ic) => !dtContent146.includes(ic))
     ) {
       errors.push('CRÍTICO: DashboardTecnico.tsx debe mantener la tarjeta Calendarios, pestañas de 3 calendarios, botón volver azul y los iconos personalizados (REGLA 146).');
+    }
+  }
+
+  // REGLA 147: Blindaje del menú HOY (Notificaciones en 1ª col roja con presupuestos firmados + parpadeo escalonado, Tareas 2ª, Facturación 3ª índigo, Stock 4ª, iconos Flat Long Shadow)
+  if (fs.existsSync(appPath114)) {
+    const appContent147 = fs.readFileSync(appPath114, 'utf8');
+    const reqHoyIcons147 = ['/avisos-icon.jpg', '/calendario-icon.png', '/albaranes-icon.jpg', '/catalogo-icon.jpg'];
+    if (
+      !appContent147.includes('presupuestosList') ||
+      !appContent147.includes('Presupuesto aceptado y firmado') ||
+      !appContent147.includes('animationDelay: delayMs') ||
+      !appContent147.includes('order-1 rounded-2xl bg-gradient-to-br from-red-50') ||
+      !appContent147.includes('order-2 rounded-2xl bg-gradient-to-br from-sky-50') ||
+      !appContent147.includes('order-3 rounded-2xl bg-gradient-to-br from-indigo-50') ||
+      !appContent147.includes('order-4 rounded-2xl bg-gradient-to-br from-emerald-50') ||
+      reqHoyIcons147.some((ic) => !appContent147.includes(ic))
+    ) {
+      errors.push('CRÍTICO: App.tsx debe mantener Notificaciones (1ª col roja con presupuestos firmados y parpadeo escalonado), Tareas (2ª), Facturación (3ª índigo), Stock (4ª) y sus iconos Flat Long Shadow (REGLA 147).');
     }
   }
 
