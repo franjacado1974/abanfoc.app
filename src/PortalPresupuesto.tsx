@@ -209,6 +209,7 @@ export default function PortalPresupuesto({ token }: PortalPresupuestoProps) {
         iva: presupuesto.iva,
         total: presupuesto.total,
         notas: presupuesto.notas,
+        firmaCliente: presupuesto.seguimiento?.firmado,
       });
 
       // Registrar descarga en Firestore
@@ -255,7 +256,12 @@ export default function PortalPresupuesto({ token }: PortalPresupuestoProps) {
         nombre: nombreFirmante.trim(),
         dni: dniFirmante.trim().toUpperCase(),
         firmaBase64
-      }, presupuesto.seguimiento);
+      }, presupuesto.seguimiento, {
+        numeroPresupuesto: presupuesto.numeroPresupuesto,
+        titulo: presupuesto.titulo,
+        nombreCliente: presupuesto.nombreCliente,
+        total: presupuesto.total
+      });
 
       setFirmaCompletada(true);
       setPresupuesto(prev => prev ? {
@@ -329,11 +335,11 @@ export default function PortalPresupuesto({ token }: PortalPresupuestoProps) {
             <button
               onClick={handleDescargarPDF}
               disabled={descargandoPDF}
-              className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors shadow-xs cursor-pointer disabled:opacity-50"
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-extrabold text-white bg-red-600 hover:bg-red-700 transition-colors shadow-md shadow-red-600/20 cursor-pointer disabled:opacity-50"
               title="Descargar documento en PDF"
             >
-              <Download className="w-4 h-4 text-slate-600" />
-              <span className="hidden sm:inline">{descargandoPDF ? 'Generando...' : 'Descargar PDF'}</span>
+              <Download className="w-4 h-4 text-white" />
+              <span>{descargandoPDF ? 'Generando...' : 'Descargar PDF'}</span>
             </button>
           </div>
         </div>
@@ -545,6 +551,18 @@ export default function PortalPresupuesto({ token }: PortalPresupuestoProps) {
                     </div>
                   </div>
                 )}
+
+                <div className="mt-6">
+                  <button
+                    type="button"
+                    onClick={handleDescargarPDF}
+                    disabled={descargandoPDF}
+                    className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-extrabold text-white bg-red-600 hover:bg-red-700 transition-colors shadow-md shadow-red-600/20 cursor-pointer disabled:opacity-50"
+                  >
+                    <Download className="w-4 h-4 text-white" />
+                    <span>{descargandoPDF ? 'Generando PDF...' : 'Descargar presupuesto firmado'}</span>
+                  </button>
+                </div>
               </div>
             ) : (
               <form onSubmit={handleConfirmarFirma} className="space-y-6">

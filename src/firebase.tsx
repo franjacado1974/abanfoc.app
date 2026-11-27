@@ -2585,7 +2585,8 @@ export async function registrarDescargaPresupuesto(docId: string, seguimientoAct
 export async function firmarPresupuestoPublico(
   docId: string, 
   datosFirma: { nombre: string; dni: string; firmaBase64: string },
-  seguimientoActual?: PresupuestoSeguimiento
+  seguimientoActual?: PresupuestoSeguimiento,
+  infoPresupuesto?: { numeroPresupuesto?: string; titulo?: string; nombreCliente?: string; total?: number }
 ) {
   try {
     const ahora = new Date().toISOString();
@@ -2614,6 +2615,47 @@ export async function firmarPresupuestoPublico(
       seguimiento: updatedSeguimiento, 
       updatedAt: ahora 
     }, { merge: true });
+
+    // Notificación automática por correo a abanfoc@abanfoc.es
+    try {
+      const codigo = infoPresupuesto?.numeroPresupuesto || docId;
+      const clienteNom = infoPresupuesto?.nombreCliente || 'Cliente';
+      const tituloPres = infoPresupuesto?.titulo || 'Presupuesto';
+      const totalStr = typeof infoPresupuesto?.total === 'number'
+        ? `${infoPresupuesto.total.toFixed(2).replace('.', ',')} €`
+        : '—';
+      const fechaEs = new Date(ahora).toLocaleString('es-ES');
+
+      await addDoc(collection(db, 'mail'), {
+        to: 'abanfoc@abanfoc.es',
+        message: {
+          subject: `Presupuesto Aceptado y Firmado: ${codigo} - ${clienteNom}`,
+          html: `
+            <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #1e293b; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
+              <h2 style="color: #881322; border-bottom: 2px solid #881322; padding-bottom: 10px; margin-top: 0;">
+                Presupuesto Aceptado y Firmado
+              </h2>
+              <p style="font-size: 14px; margin: 12px 0;">
+                El cliente <strong>${clienteNom}</strong> ha aceptado y firmado digitalmente el presupuesto <strong>${codigo}</strong> desde el portal.
+              </p>
+              <div style="background-color: #f8fafc; padding: 14px; border-radius: 8px; border: 1px solid #e2e8f0; font-size: 13px; line-height: 1.6;">
+                <div><strong>Presupuesto:</strong> ${codigo} — ${tituloPres}</div>
+                <div><strong>Cliente:</strong> ${clienteNom}</div>
+                <div><strong>Importe Total:</strong> ${totalStr}</div>
+                <div><strong>Firmado por:</strong> ${datosFirma.nombre} (DNI/NIF: ${datosFirma.dni})</div>
+                <div><strong>Fecha y hora:</strong> ${fechaEs}</div>
+              </div>
+              <p style="margin-top: 16px; padding: 10px 14px; background-color: #fffbeb; border: 1px solid #fcd34d; border-radius: 8px; color: #92400e; font-size: 13px; font-weight: bold;">
+                Pendiente de revisar y pasar a pedido desde el menú Presupuestos.
+              </p>
+            </div>
+          `
+        },
+        createdAt: ahora
+      });
+    } catch (mailErr) {
+      console.error('Error enviando aviso de presupuesto aceptado a abanfoc@abanfoc.es:', mailErr);
+    }
 
     return true;
   } catch (e) {

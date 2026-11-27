@@ -547,11 +547,11 @@ export default function CalendarioVacaciones({
             ))}
           </div>
 
-          <div className="grid grid-cols-7 gap-1.5">
+          <div className="grid grid-cols-7 gap-1">
             {calendarDays.map((cell, idx) => (
               <div
                 key={idx}
-                className={`min-h-[125px] sm:min-h-[145px] p-1.5 rounded-lg border text-left flex flex-col ${
+                className={`min-h-[68px] sm:min-h-[76px] p-1 rounded-lg border text-left flex flex-col ${
                   cell.day === null
                     ? 'bg-slate-50/50 border-slate-100'
                     : 'bg-white border-slate-200'
@@ -559,8 +559,8 @@ export default function CalendarioVacaciones({
               >
                 {cell.day !== null && (
                   <>
-                    <div className="text-xs font-bold text-slate-700 mb-1.5">{cell.day}</div>
-                    <div className="space-y-1 flex-1">
+                    <div className="text-[11px] font-bold text-slate-700 mb-1">{cell.day}</div>
+                    <div className="space-y-0.5 flex-1">
                       {cell.items.map((item, i) => (
                         <div
                           key={`${item._docId || item.id}-${i}`}

@@ -2668,8 +2668,8 @@ if (fs.existsSync(pdfGenPath)) {
     if (!labContent143.includes('BARCELONA_FESTIVOS_OFICIALES') || !labContent143.includes('https://ajuntament.barcelona.cat/calendarifestius/es/') || !labContent143.includes('lg:grid-cols-4')) {
       errors.push('CRÍTICO: CalendarioLaboral.tsx debe incluir BARCELONA_FESTIVOS_OFICIALES, la URL oficial de Barcelona y el diseño 3x4 (lg:grid-cols-4) (REGLA 143).');
     }
-    if (!vacContent143.includes('addVacacionSolicitud') || !vacContent143.includes('https://ajuntament.barcelona.cat/calendarifestius/es/') || !vacContent143.includes('min-h-[125px]')) {
-      errors.push('CRÍTICO: CalendarioVacaciones.tsx debe incluir addVacacionSolicitud, la URL oficial de Barcelona y casillas altas (min-h-[125px]) (REGLA 143).');
+    if (!vacContent143.includes('addVacacionSolicitud') || !vacContent143.includes('https://ajuntament.barcelona.cat/calendarifestius/es/') || !vacContent143.includes('min-h-[68px]')) {
+      errors.push('CRÍTICO: CalendarioVacaciones.tsx debe incluir addVacacionSolicitud, la URL oficial de Barcelona y casillas compactas (min-h-[68px]) (REGLA 143).');
     }
   }
 
@@ -2722,6 +2722,48 @@ if (fs.existsSync(pdfGenPath)) {
     const calVacContent144 = fs.readFileSync(calVacPath144, 'utf8');
     if (!calVacContent144.includes('allSolicitudesAdmin') || !calVacContent144.includes('handleOpenEdit') || !calVacContent144.includes('confirmDeleteSol')) {
       errors.push('CRÍTICO: CalendarioVacaciones.tsx debe mantener la lista general de solicitudes y edición/eliminación exclusiva para Super Administrador (REGLA 144).');
+    }
+  }
+
+  // REGLA 145: Blindaje de ajustes visuales Calendario Laboral, Portal Presupuesto (PDF rojo + firma en PDF + aviso correo abanfoc@abanfoc.es) y avisos de presupuestos firmados pendientes de pedido
+  const portalPath145 = path.join(__dirname, '..', 'src', 'PortalPresupuesto.tsx');
+  if (fs.existsSync(portalPath145)) {
+    const portalContent145 = fs.readFileSync(portalPath145, 'utf8');
+    if (
+      !portalContent145.includes('Descargar presupuesto firmado') ||
+      !portalContent145.includes('bg-red-600') ||
+      !portalContent145.includes('firmaCliente: presupuesto.seguimiento?.firmado')
+    ) {
+      errors.push('CRÍTICO: PortalPresupuesto.tsx debe mantener el botón Descargar PDF en rojo, el botón Descargar presupuesto firmado y el envío de firmaCliente al PDF (REGLA 145).');
+    }
+  }
+  if (fs.existsSync(pdfGenPath)) {
+    const pdfContent145 = fs.readFileSync(pdfGenPath, 'utf8');
+    if (!pdfContent145.includes('presupuesto.firmaCliente') || !pdfContent145.includes('optimizarImagenParaPDF(firmaCli.firmaBase64, 600, 0.7, true)')) {
+      errors.push('CRÍTICO: pdfGenerator.ts debe insertar firmaCliente optimizada en el recuadro CONFORME Y ACEPTACIÓN DEL CLIENTE (REGLA 145).');
+    }
+  }
+  if (fs.existsSync(presupuestosPath)) {
+    const presContent145 = fs.readFileSync(presupuestosPath, 'utf8');
+    if (
+      !presContent145.includes('firmadosSinPedido') ||
+      !presContent145.includes('showFirmadosPendientesModal') ||
+      !presContent145.includes('max-w-3xl') ||
+      !presContent145.includes('firmaCliente: p.seguimiento?.firmado')
+    ) {
+      errors.push('CRÍTICO: Presupuestos.tsx debe mantener el aviso superior y modal ancha (max-w-3xl) para presupuestos firmados pendientes de pedido (REGLA 145).');
+    }
+  }
+  if (fs.existsSync(fbPath142)) {
+    const fbContent145 = fs.readFileSync(fbPath142, 'utf8');
+    if (!fbContent145.includes("to: 'abanfoc@abanfoc.es'") || !fbContent145.includes('Presupuesto Aceptado y Firmado:')) {
+      errors.push('CRÍTICO: firebase.tsx debe enviar notificación por correo a abanfoc@abanfoc.es al firmar un presupuesto en PortalPresupuesto (REGLA 145).');
+    }
+  }
+  if (fs.existsSync(calLabPath143)) {
+    const labContent145 = fs.readFileSync(calLabPath143, 'utf8');
+    if (labContent145.includes('Trabajo extraordinario') || !labContent145.includes('max-w-[95%]') || !labContent145.includes('justify-center gap-x-10')) {
+      errors.push('CRÍTICO: CalendarioLaboral.tsx debe mantener tamaño ~95% (max-w-[95%]), leyenda centrada (gap-x-10) y sin Trabajo extraordinario (REGLA 145).');
     }
   }
 

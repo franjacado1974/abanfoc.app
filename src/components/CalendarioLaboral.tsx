@@ -7,7 +7,7 @@ interface CalendarioLaboralProps {
   vacacionesAprobadas: VacacionSolicitud[];
 }
 
-type DayCategory = 'festivo' | 'puente' | 'vacaciones' | 'fin_semana' | 'jornada_reducida' | 'extra';
+type DayCategory = 'festivo' | 'puente' | 'vacaciones' | 'fin_semana' | 'jornada_reducida';
 
 interface MarkedDay {
   day: number;
@@ -152,8 +152,7 @@ const CATEGORY_CELL_CLASS: Record<DayCategory, string> = {
   puente: 'bg-[#b91c1c] text-white font-extrabold',
   vacaciones: 'bg-[#65a30d] text-white font-extrabold',
   fin_semana: 'bg-[#a3a3a3] text-slate-900',
-  jornada_reducida: 'bg-[#6495b5] text-slate-950 font-semibold',
-  extra: 'bg-[#9d416a] text-white font-extrabold'
+  jornada_reducida: 'bg-[#6495b5] text-slate-950 font-semibold'
 };
 
 const CATEGORY_BADGE_CLASS: Record<DayCategory, string> = {
@@ -161,8 +160,7 @@ const CATEGORY_BADGE_CLASS: Record<DayCategory, string> = {
   puente: 'bg-[#b91c1c] text-white',
   vacaciones: 'bg-[#65a30d] text-white',
   fin_semana: 'bg-[#a3a3a3] text-slate-900',
-  jornada_reducida: 'bg-[#6495b5] text-white',
-  extra: 'bg-[#9d416a] text-white'
+  jornada_reducida: 'bg-[#6495b5] text-white'
 };
 
 export default function CalendarioLaboral({ workerName, vacacionesAprobadas }: CalendarioLaboralProps) {
@@ -228,9 +226,6 @@ export default function CalendarioLaboral({ workerName, vacacionesAprobadas }: C
         if (customEvent) {
           category = customEvent.category;
           markedList.push({ day: d, category: customEvent.category, label: customEvent.label });
-          if (jsDay !== 0 && jsDay !== 6 && category === 'extra') {
-            workingDays += 1;
-          }
         } else if (jsDay === 0 || jsDay === 6) {
           category = 'fin_semana';
         } else if (jsDay === 5) {
@@ -261,15 +256,15 @@ export default function CalendarioLaboral({ workerName, vacacionesAprobadas }: C
   }, [year, dayEventsByIso]);
 
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 sm:p-6 space-y-4">
+    <div className="max-w-[95%] mx-auto bg-white border border-slate-200 rounded-2xl shadow-sm p-4 sm:p-5 space-y-3.5">
       {/* Cabecera corporativa estilo hoja anual */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-[#881322] text-white flex items-center justify-center font-black text-lg shadow-xs">
+          <div className="w-9 h-9 rounded-xl bg-[#881322] text-white flex items-center justify-center font-black text-lg shadow-xs">
             A
           </div>
           <div>
-            <div className="text-2xl font-black tracking-tight text-slate-900 leading-none">
+            <div className="text-[22px] font-black tracking-tight text-slate-900 leading-none">
               ABANFOC
             </div>
             <div className="text-[10px] font-bold tracking-widest text-slate-600 uppercase mt-0.5">
@@ -313,17 +308,16 @@ export default function CalendarioLaboral({ workerName, vacacionesAprobadas }: C
       </div>
 
       {/* Leyenda de colores */}
-      <div className="flex flex-wrap items-center justify-between gap-3 px-1">
+      <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-1.5 px-1">
         {[
           { label: 'Festivo', cls: 'bg-[#eab308]' },
           { label: 'Puente', cls: 'bg-[#b91c1c]' },
           { label: 'Vacaciones', cls: 'bg-[#65a30d]' },
           { label: 'Fin de semana', cls: 'bg-[#a3a3a3]' },
-          { label: 'Jornada reducida', cls: 'bg-[#6495b5]' },
-          { label: 'Trabajo extraordinario', cls: 'bg-[#9d416a]' }
+          { label: 'Jornada reducida', cls: 'bg-[#6495b5]' }
         ].map((item) => (
-          <div key={item.label} className="inline-flex items-center gap-2 text-xs font-semibold text-slate-700">
-            <span className={`w-4 h-4 border border-slate-400/70 inline-block ${item.cls}`} />
+          <div key={item.label} className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+            <span className={`w-3.5 h-3.5 border border-slate-400/70 inline-block ${item.cls}`} />
             <span>{item.label}</span>
           </div>
         ))}
@@ -346,10 +340,10 @@ export default function CalendarioLaboral({ workerName, vacacionesAprobadas }: C
       </div>
 
       {/* Cuadrícula de 12 meses (3 filas de 4 meses en escritorio) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {monthsData.map((m) => (
           <div key={m.monthName} className="flex flex-col">
-            <div className="flex items-baseline justify-center gap-2 mb-1.5">
+            <div className="flex items-baseline justify-center gap-2 mb-1">
               <span className="text-sm font-black tracking-wide text-slate-900">{m.monthName}</span>
               <span className="text-xs font-bold text-slate-500" title="Días laborables">
                 {m.workingDays}
@@ -359,7 +353,7 @@ export default function CalendarioLaboral({ workerName, vacacionesAprobadas }: C
             <div className="border border-slate-700 overflow-hidden rounded-sm">
               <div className="grid grid-cols-7 bg-slate-950 text-white text-[11px] font-black text-center">
                 {WEEKDAYS_SHORT.map((wd, idx) => (
-                  <div key={idx} className="py-1.5 border-r last:border-r-0 border-slate-700">
+                  <div key={idx} className="py-1 border-r last:border-r-0 border-slate-700">
                     {wd}
                   </div>
                 ))}
@@ -369,7 +363,7 @@ export default function CalendarioLaboral({ workerName, vacacionesAprobadas }: C
                   <div
                     key={idx}
                     title={cell.title}
-                    className={`h-8 flex items-center justify-center border-t border-r [&:nth-child(7n)]:border-r-0 border-slate-300 ${
+                    className={`h-[30px] flex items-center justify-center border-t border-r [&:nth-child(7n)]:border-r-0 border-slate-300 ${
                       cell.day === null
                         ? 'bg-slate-50 text-transparent'
                         : cell.category
@@ -385,11 +379,11 @@ export default function CalendarioLaboral({ workerName, vacacionesAprobadas }: C
 
             {/* Lista de festivos / vacaciones del mes */}
             {m.markedList.length > 0 && (
-              <div className="mt-2 space-y-1">
+              <div className="mt-1.5 space-y-1">
                 {m.markedList.map((ev, i) => (
                   <div key={`${ev.day}-${i}`} className="flex items-start gap-1.5 text-[11px] leading-tight">
                     <span
-                      className={`inline-flex items-center justify-center min-w-[20px] h-[18px] px-1 rounded-[2px] font-bold border border-slate-400/60 shrink-0 ${CATEGORY_BADGE_CLASS[ev.category]}`}
+                      className={`inline-flex items-center justify-center min-w-[19px] h-[17px] px-1 rounded-[2px] font-bold border border-slate-400/60 shrink-0 ${CATEGORY_BADGE_CLASS[ev.category]}`}
                     >
                       {ev.day}
                     </span>

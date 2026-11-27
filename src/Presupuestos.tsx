@@ -145,6 +145,24 @@ export default function Presupuestos() {
   const [presupuestoParaSeguimiento, setPresupuestoParaSeguimiento] = useState<Presupuesto | null>(null);
   const [copiadoSeguimiento, setCopiadoSeguimiento] = useState(false);
 
+  // Aviso de presupuestos aceptados y firmados pendientes de pasar a pedido
+  const [showFirmadosPendientesModal, setShowFirmadosPendientesModal] = useState(false);
+  const hasAutoShownFirmadosModalRef = useRef(false);
+  const firmadosSinPedido = useMemo(
+    () =>
+      presupuestos.filter(
+        (p) => Boolean(p.seguimiento?.firmado) && !p.pedidoId && p.estado !== 'Rechazado'
+      ),
+    [presupuestos]
+  );
+
+  useEffect(() => {
+    if (firmadosSinPedido.length > 0 && !hasAutoShownFirmadosModalRef.current) {
+      hasAutoShownFirmadosModalRef.current = true;
+      setShowFirmadosPendientesModal(true);
+    }
+  }, [firmadosSinPedido.length]);
+
   // Estados para modal de creación rápida de artículos desde presupuesto
   const [familias, setFamilias] = useState<SistemaCategoria[]>([]);
   const [showCrearArticuloModal, setShowCrearArticuloModal] = useState(false);
@@ -1378,6 +1396,7 @@ export default function Presupuestos() {
         iva: p.iva,
         total: p.total,
         notas: p.notas,
+        firmaCliente: p.seguimiento?.firmado,
       }, empresaSeleccionada, (percent, stage) => {
         setPdfDownloadProgress({
           active: true,
@@ -1408,6 +1427,53 @@ export default function Presupuestos() {
           <h1 className="text-2xl font-black text-zinc-950 tracking-tight">Presupuestos Comerciales</h1>
           <p className="text-xs font-semibold text-zinc-500 mt-1">Creación, envío y control de ofertas y presupuestos comerciales.</p>
         </div>
+
+        {/* Aviso superior de presupuestos aceptados y firmados pendientes de pasar a pedido */}
+        {firmadosSinPedido.length > 0 && (
+          <div className="mb-4 bg-amber-50 border-2 border-amber-400 rounded-2xl p-3.5 sm:p-4 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+            <div className="flex items-start sm:items-center gap-3 min-w-0">
+              <div className="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs animate-pulse">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs sm:text-sm font-black text-amber-950">
+                  {firmadosSinPedido.length === 1
+                    ? 'Hay 1 presupuesto aceptado y firmado pendiente de pasar a pedido'
+                    : `Hay ${firmadosSinPedido.length} presupuestos aceptados y firmados pendientes de pasar a pedido`}
+                </p>
+                <p className="text-[11px] text-amber-800 font-medium">
+                  Este aviso permanecerá visible hasta que los conviertas en pedido.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+              {firmadosSinPedido.slice(0, 4).map((p) => (
+                <button
+                  key={p._docId || p.id}
+                  type="button"
+                  onClick={() => {
+                    setPresupuestoParaAceptar(p);
+                    setTipoTrabajoSeleccionado('Reparación');
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-bold shadow-xs transition-colors cursor-pointer"
+                  title={`Pasar ${formatCodigoPresupuesto(p.numeroPresupuesto, p.id)} a pedido`}
+                >
+                  <span>{formatCodigoPresupuesto(p.numeroPresupuesto, p.id)}</span>
+                  <span className="max-w-[130px] truncate opacity-90">· {p.nombreCliente}</span>
+                </button>
+              ))}
+              {firmadosSinPedido.length > 4 && (
+                <button
+                  type="button"
+                  onClick={() => setShowFirmadosPendientesModal(true)}
+                  className="px-3 py-1.5 rounded-xl bg-white border border-amber-300 text-amber-900 hover:bg-amber-100 text-[11px] font-bold cursor-pointer"
+                >
+                  Ver los {firmadosSinPedido.length}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Pestañas + buscador y botón */}
         <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4 mb-6">
@@ -4070,6 +4136,83 @@ export default function Presupuestos() {
             );
           }}
         />
+      )}
+
+      {/* MODAL DE AVISO: PRESUPUESTOS FIRMADOS PENDIENTES DE PASAR A PEDIDO */}
+      {showFirmadosPendientesModal && firmadosSinPedido.length > 0 && (
+        <div className="fixed inset-0 z-[140] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden border border-amber-300 animate-in zoom-in-95 duration-200">
+            <div className="bg-amber-600 px-6 py-4 flex items-center justify-between text-white">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+                  <AlertTriangle className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black tracking-wide uppercase">
+                    Presupuestos Firmados Pendientes
+                  </h3>
+                  <p className="text-[11px] text-amber-100 font-medium">
+                    {firmadosSinPedido.length === 1
+                      ? '1 presupuesto aceptado por el cliente pendiente de pasar a pedido'
+                      : `${firmadosSinPedido.length} presupuestos aceptados por el cliente pendientes de pasar a pedido`}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowFirmadosPendientesModal(false)}
+                className="p-1.5 rounded-lg text-white/80 hover:text-white hover:bg-white/10 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-2.5 max-h-[70vh] overflow-y-auto">
+              {firmadosSinPedido.map((p) => (
+                <div
+                  key={p._docId || p.id}
+                  className="flex items-center justify-between gap-3 p-3 rounded-2xl bg-amber-50/70 border border-amber-200"
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-black text-amber-900">
+                        {formatCodigoPresupuesto(p.numeroPresupuesto, p.id)}
+                      </span>
+                      <span className="text-xs font-bold text-slate-800 truncate">
+                        {p.nombreCliente}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-slate-600 truncate mt-0.5">
+                      {p.titulo || 'Presupuesto'}
+                      {p.seguimiento?.firmado?.nombre ? ` · Firmado por ${p.seguimiento.firmado.nombre}` : ''}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowFirmadosPendientesModal(false);
+                      setPresupuestoParaAceptar(p);
+                      setTipoTrabajoSeleccionado('Reparación');
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shrink-0 cursor-pointer shadow-xs"
+                  >
+                    Pasar a pedido
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowFirmadosPendientesModal(false)}
+                className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold cursor-pointer"
+              >
+                Entendido
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* TOAST DE ÉXITO */}

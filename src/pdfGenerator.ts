@@ -6812,6 +6812,7 @@ export const generarPresupuestoPDF = async (
     sinValorar?: boolean;
     autoPrint?: boolean;
     returnBlob?: boolean;
+    firmaCliente?: { nombre?: string; dni?: string; fecha?: string; firmaBase64?: string };
   },
   _empresa?: Record<string, any>,
   onProgress?: (percent: number, stage?: string) => void
@@ -7435,11 +7436,51 @@ export const generarPresupuestoPDF = async (
   doc.setLineWidth(0.2);
   doc.line(firmaBoxX + 4, firmaBoxY + 6.5, firmaBoxX + firmaBoxW - 4, firmaBoxY + 6.5);
 
+  // Fecha y Firma (si el cliente ya firmó digitalmente, insertar fecha, datos y firma optimizada)
+  const firmaCli = presupuesto.firmaCliente;
+  let fechaFirmaTexto = 'Fecha: ..... / ..... / .........';
+  if (firmaCli?.fecha) {
+    try {
+      const dtF = new Date(firmaCli.fecha);
+      if (!Number.isNaN(dtF.getTime())) {
+        fechaFirmaTexto = `Fecha: ${dtF.toLocaleDateString('es-ES')}`;
+      }
+    } catch {}
+  }
+
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(6.8);
   doc.setTextColor(100, 105, 115);
-  doc.text('Fecha: ..... / ..... / .........', firmaBoxX + 4, firmaBoxY + 11.5);
-  doc.text('Firma y Sello:', firmaBoxX + 4, firmaBoxY + 17);
+  doc.text(fechaFirmaTexto, firmaBoxX + 4, firmaBoxY + 11.5);
+  doc.text('Firma y Sello:', firmaBoxX + 4, firmaBoxY + 16);
+
+  if (firmaCli?.firmaBase64) {
+    try {
+      const { base64: firmaOpt, format } = await optimizarImagenParaPDF(firmaCli.firmaBase64, 600, 0.7, true);
+      if (firmaOpt) {
+        const props = doc.getImageProperties(firmaOpt);
+        const maxW = 36;
+        const maxH = 12;
+        const ratio = props.width && props.height ? props.width / props.height : 2;
+        let w = maxW;
+        let h = w / ratio;
+        if (h > maxH) {
+          h = maxH;
+          w = h * ratio;
+        }
+        doc.addImage(firmaOpt, format, firmaBoxX + 24, firmaBoxY + 13, w, h);
+      }
+    } catch (e) {
+      console.error('Error insertando firma de cliente en presupuesto PDF:', e);
+    }
+  }
+  if (firmaCli?.nombre || firmaCli?.dni) {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(6.2);
+    doc.setTextColor(60, 65, 75);
+    const firmanteLabel = [firmaCli.nombre, firmaCli.dni ? `DNI: ${firmaCli.dni}` : ''].filter(Boolean).join(' · ');
+    doc.text(firmanteLabel, firmaBoxX + 4, firmaBoxY + firmaBoxH - 3.5, { maxWidth: firmaBoxW - 8 });
+  }
 
   if (!esSinValorar) {
     let currentTotY = blockStartY + 5;
