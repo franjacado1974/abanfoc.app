@@ -1072,7 +1072,8 @@ export default function Partes() {
           numeroMantenimiento,
           parte.fechaCreacion || new Date().toISOString().slice(0, 10),
           tecnicoNombre,
-          empresaSeleccionada
+          empresaSeleccionada,
+          checklistItemsPorSistema
         );
       }
 

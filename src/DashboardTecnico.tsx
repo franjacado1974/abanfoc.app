@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { FileText, Package, Power, LogOut, FileCheck, Mail, Calendar, HardHat, Building2, StickyNote } from 'lucide-react';
+import { FileText, Package, Power, LogOut, FileCheck, Mail, Calendar, HardHat, Building2, StickyNote, ArrowLeft } from 'lucide-react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { 
@@ -383,11 +383,20 @@ function DashboardHome({ loggedUser, onLogout, onNavigate }: DashboardTecnicoPro
     onNavigate(cardId);
   };
 
+  const ahoraCal = new Date();
+  const mesRawCal = ahoraCal.toLocaleDateString('es-ES', { month: 'long' });
+  const mesActualCal = mesRawCal.charAt(0).toUpperCase() + mesRawCal.slice(1);
+  const utcCal = new Date(Date.UTC(ahoraCal.getFullYear(), ahoraCal.getMonth(), ahoraCal.getDate()));
+  const dayNumCal = utcCal.getUTCDay() || 7;
+  utcCal.setUTCDate(utcCal.getUTCDate() + 4 - dayNumCal);
+  const yearStartCal = new Date(Date.UTC(utcCal.getUTCFullYear(), 0, 1));
+  const semanaActualCal = Math.ceil((((utcCal.getTime() - yearStartCal.getTime()) / 86400000) + 1) / 7);
+
   const cards = [
     {
       id: 'calendario' as TecnicoView,
-      title: 'Calendario',
-      description: 'Planificación de trabajos y revisiones',
+      title: 'Calendarios',
+      description: 'Calendario de tareas, laboral y vacaciones',
       icon: Calendar,
       bgColor: 'bg-rose-500/10 text-rose-600',
       iconColor: 'text-rose-600',
@@ -399,7 +408,7 @@ function DashboardHome({ loggedUser, onLogout, onNavigate }: DashboardTecnicoPro
       badgeLabel: 'Agenda',
       clickable: true,
       stats: [
-        { label: 'Mes actual', value: stats.partesPendientes },
+        { label: `Semana ${semanaActualCal}`, value: mesActualCal },
       ],
     },
     {
@@ -592,20 +601,47 @@ function DashboardHome({ loggedUser, onLogout, onNavigate }: DashboardTecnicoPro
                 onKeyDown={card.clickable ? (e) => { if (e.key === 'Enter') handleCardClick(card.id); } : undefined}
                 className={`group relative bg-white rounded-2xl border ${isBuzonUnread ? 'border-red-400 shadow-red-100 ring-2 ring-red-400/20' : `${card.borderColor} ${card.hoverBorder}`} shadow-xs hover:shadow-md transition-all duration-200 p-3 sm:p-4 flex flex-col justify-between min-h-[130px] sm:min-h-[152px] ${card.clickable ? 'cursor-pointer active:scale-[0.98] select-none' : ''}`}
               >
-                <div className="flex items-start justify-between gap-1">
-                  <div className={`relative w-10 h-10 sm:w-12 sm:h-12 rounded-xl ${card.bgColor} flex items-center justify-center transition-transform group-hover:scale-105 shadow-xs`}>
-                    <Icon className={`w-5 h-5 sm:w-6 sm:h-6 ${card.iconColor}`} />
-                    {isBuzonUnread && (
-                      <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-600 rounded-full animate-pulse shadow-[0_0_10px_rgba(220,38,38,0.9)] border-2 border-white" />
-                    )}
-                  </div>
-                  <span className={`text-[9px] sm:text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-md ${
+                <div className="flex items-start justify-between gap-2">
+                  <span className={`text-[9px] sm:text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-md shrink-0 ${
                     isBuzonUnread
                       ? 'bg-red-600 text-white animate-pulse shadow-[0_0_8px_rgba(220,38,38,0.7)]'
                       : `${card.badgeBg} ${card.badgeText}`
                   }`}>
                     {isBuzonUnread ? '¡Aviso!' : card.badgeLabel}
                   </span>
+                  {(() => {
+                    const customIcons: Record<string, { src: string; imgClass: string; wrapClass: string }> = {
+                      calendario: { src: '/calendario-icon.png', imgClass: 'w-full h-full object-contain', wrapClass: '' },
+                      catalogo: { src: '/catalogo-icon.jpg', imgClass: 'w-full h-full object-cover', wrapClass: 'rounded-full overflow-hidden' },
+                      partes: { src: '/partes-icon.webp', imgClass: 'w-full h-full object-cover scale-[1.4] translate-y-[4%]', wrapClass: 'rounded-full overflow-hidden' },
+                      'partes-trabajo': { src: '/partes-trabajo-icon.jpg', imgClass: 'w-full h-full object-cover scale-[1.34]', wrapClass: 'rounded-full overflow-hidden' },
+                      albaranes: { src: '/albaranes-icon.jpg', imgClass: 'w-full h-full object-cover', wrapClass: 'rounded-full overflow-hidden' },
+                      notas: { src: '/notas-icon.jpg', imgClass: 'w-full h-full object-cover', wrapClass: 'rounded-full overflow-hidden' },
+                      centros: { src: '/centros-icon.jpg', imgClass: 'w-full h-full object-cover scale-[1.4] translate-y-[4%]', wrapClass: 'rounded-full overflow-hidden' },
+                      buzon: { src: '/buzon-icon.jpg', imgClass: 'w-full h-full object-cover scale-[1.18]', wrapClass: 'rounded-full overflow-hidden' },
+                    };
+                    const custom = customIcons[card.id];
+                    if (custom) {
+                      return (
+                        <div className="relative w-16 h-16 sm:w-20 sm:h-20 shrink-0 transition-transform group-hover:scale-105">
+                          <div className={`w-full h-full flex items-center justify-center ${custom.wrapClass}`}>
+                            <img src={custom.src} alt={card.title} className={custom.imgClass} />
+                          </div>
+                          {isBuzonUnread && (
+                            <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-600 rounded-full animate-pulse shadow-[0_0_10px_rgba(220,38,38,0.9)] border-2 border-white" />
+                          )}
+                        </div>
+                      );
+                    }
+                    return (
+                      <div className={`relative w-16 h-16 sm:w-20 sm:h-20 rounded-2xl ${card.bgColor} flex items-center justify-center transition-transform group-hover:scale-105 shadow-xs shrink-0`}>
+                        <Icon className={`w-9 h-9 sm:w-11 sm:h-11 ${card.iconColor}`} />
+                        {isBuzonUnread && (
+                          <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-600 rounded-full animate-pulse shadow-[0_0_10px_rgba(220,38,38,0.9)] border-2 border-white" />
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 <div className="mt-2 sm:mt-3">
@@ -686,6 +722,7 @@ function DashboardHome({ loggedUser, onLogout, onNavigate }: DashboardTecnicoPro
 // ─── WRAPPER PRINCIPAL CON ESTADO DE NAVEGACIÓN ───────────────────────────────
 function TecnicoApp({ loggedUser, onLogout }: DashboardTecnicoProps) {
   const [currentView, setCurrentView] = useState<TecnicoView>('dashboard');
+  const [calendarioTab, setCalendarioTab] = useState<'tareas' | 'laboral' | 'vacaciones'>('tareas');
 
   if (currentView === 'partes-trabajo') {
     return (
@@ -809,20 +846,45 @@ function TecnicoApp({ loggedUser, onLogout }: DashboardTecnicoProps) {
   }
 
   if (currentView === 'calendario') {
+    const calTabs: { id: 'tareas' | 'laboral' | 'vacaciones'; label: string }[] = [
+      { id: 'tareas', label: 'Calendario Tareas' },
+      { id: 'laboral', label: 'Calendario Laboral' },
+      { id: 'vacaciones', label: 'Calendario Vacaciones' },
+    ];
     return (
       <div className="min-h-screen bg-slate-100 relative">
-        <div className="sticky top-0 z-50 bg-white border-b border-zinc-200 px-4 py-3 flex items-center justify-between shadow-xs">
+        <div className="sticky top-0 z-50 bg-white border-b border-zinc-200 px-3 sm:px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 shadow-xs">
           <button
             onClick={() => setCurrentView('dashboard')}
-            className="flex items-center gap-2 text-zinc-600 font-semibold cursor-pointer hover:text-zinc-900 transition-colors"
+            className="flex items-center gap-1.5 sm:gap-2 text-zinc-600 font-semibold cursor-pointer hover:text-zinc-900 transition-colors text-xs sm:text-sm shrink-0"
           >
-            <span className="w-8 h-8 rounded-full bg-zinc-100 flex items-center justify-center">←</span>
-            Volver al panel
+            <span className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-xs">
+              <ArrowLeft className="w-4 h-4 stroke-[2.75]" />
+            </span>
+            <span>Volver al panel</span>
           </button>
-          <h1 className="text-sm font-bold text-zinc-900">Calendario de Trabajo</h1>
+          <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto scrollbar-none">
+            {calTabs.map((t) => {
+              const active = calendarioTab === t.id;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setCalendarioTab(t.id)}
+                  className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer whitespace-nowrap border ${
+                    active
+                      ? 'bg-red-600 text-white border-red-600 shadow-xs'
+                      : 'bg-zinc-100 text-zinc-700 border-zinc-200 hover:bg-zinc-200/70'
+                  }`}
+                >
+                  {t.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
-        <div className="h-[calc(100vh-57px)]">
-          <Calendario />
+        <div className={calendarioTab === 'tareas' ? 'h-[calc(100vh-53px)]' : 'min-h-[calc(100vh-53px)] overflow-y-auto'}>
+          <Calendario user={loggedUser} initialTab={calendarioTab} />
         </div>
       </div>
     );

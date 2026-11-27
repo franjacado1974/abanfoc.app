@@ -11,6 +11,7 @@ import { collection, getDocs } from 'firebase/firestore';
 import { getPlantillas } from './plantillas';
 import { saveParteOfflineBundle, getParteOfflineBundle, getOfflineDiagnostics, type OfflineParteBundle } from './offlineDB';
 import { generarActaExtintoresPDF, generarCertificadoPDF } from './pdfGenerator';
+import { generarReporteAnomaliasPDF } from './pdfReporteAnomaliasGenerator';
 import { useNavigate } from 'react-router-dom';
 import type { Parte, Centro, Cliente, CentroSistema } from './Centros';
 import type { Tecnico } from './firebase';
@@ -101,7 +102,7 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
   const [loadingAlertas, setLoadingAlertas] = useState(false);
   const [showPdfModal, setShowPdfModal] = useState(false);
   const [parteSeleccionadoPdf, setParteSeleccionadoPdf] = useState<{ target: Parte; esAnterior: boolean } | null>(null);
-  const [pdfOptions, setPdfOptions] = useState({ acta: true, certificado: true });
+  const [pdfOptions, setPdfOptions] = useState({ acta: true, certificado: true, reporteAnomalias: false });
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   // Comprobar si una revisión ha sido realizada
@@ -149,7 +150,7 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
       return;
     }
     setParteSeleccionadoPdf(info);
-    setPdfOptions({ acta: true, certificado: true });
+    setPdfOptions({ acta: true, certificado: true, reporteAnomalias: false });
     setShowPdfModal(true);
   };
 
@@ -382,6 +383,21 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
         await generarCertificadoPDF(
           cliente, centro, parte, tecnicoNombre, (parte as any).estadoCertificado || undefined, sistemasDelCentro, equiposTodos,
           firmaCliente, firmaTecnico, nombreFirmante, false, empresaSeleccionada
+        );
+      }
+
+      // 3. Generar Reporte de Anomalías si está seleccionado
+      if (pdfOptions.reporteAnomalias) {
+        await generarReporteAnomaliasPDF(
+          cliente,
+          centro,
+          sistemasDelCentro,
+          equiposTodos,
+          numeroMantenimiento,
+          parte.fechaCreacion || new Date().toISOString().slice(0, 10),
+          tecnicoNombre,
+          empresaSeleccionada,
+          checklistItemsPorSistema
         );
       }
 
@@ -1405,6 +1421,22 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
                     <span className="text-[10px] sm:text-[11px] text-zinc-400">Certificado oficial de mantenimiento reglamentario</span>
                   </div>
                 </label>
+
+                <label className="flex items-center p-3 rounded-xl border border-zinc-200 hover:bg-zinc-50 cursor-pointer transition-colors">
+                  <div className={`w-5 h-5 rounded flex items-center justify-center mr-3 transition-colors ${pdfOptions.reporteAnomalias ? 'bg-red-600 border-red-600' : 'border-2 border-zinc-300'}`}>
+                    {pdfOptions.reporteAnomalias && <Check className="w-3.5 h-3.5 text-white" />}
+                  </div>
+                  <input 
+                    type="checkbox" 
+                    className="hidden"
+                    checked={pdfOptions.reporteAnomalias}
+                    onChange={(e) => setPdfOptions(prev => ({ ...prev, reporteAnomalias: e.target.checked }))}
+                  />
+                  <div>
+                    <span className="font-semibold text-xs sm:text-sm text-zinc-800 block">Reporte de Anomalías</span>
+                    <span className="text-[10px] sm:text-[11px] text-zinc-400">Listado de incidencias, ubicación, tipo y observaciones de la revisión</span>
+                  </div>
+                </label>
               </div>
 
               <div className="mt-6 pt-4 border-t border-zinc-100 flex gap-2.5">
@@ -1419,7 +1451,7 @@ export default function PartesTecnico({ loggedUser, onBack }: PartesTecnicoProps
                 <button
                   type="button"
                   onClick={confirmarDescargaPdf}
-                  disabled={isGeneratingPdf || (!pdfOptions.acta && !pdfOptions.certificado)}
+                  disabled={isGeneratingPdf || (!pdfOptions.acta && !pdfOptions.certificado && !pdfOptions.reporteAnomalias)}
                   className="flex-1 py-2.5 px-3 rounded-xl font-bold text-xs bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 shadow-sm shadow-red-200 active:scale-95"
                 >
                   {isGeneratingPdf ? (

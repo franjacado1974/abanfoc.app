@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { FileText, Package, Users, Power, LogOut, FileCheck, Mail, Calendar } from 'lucide-react';
+import { FileText, Package, Users, Power, LogOut, FileCheck, Mail, Calendar, ArrowLeft } from 'lucide-react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { db } from '../../recursos-compartidos/firebase/firebase';
@@ -223,6 +223,15 @@ function DashboardHome({ loggedUser, onLogout, onNavigate }: DashboardTecnicoPro
     return { partes, partesPendientes, catalogo, clientes, centros, albaranes };
   }, []);
 
+  const ahoraCal = new Date();
+  const mesRawCal = ahoraCal.toLocaleDateString('es-ES', { month: 'long' });
+  const mesActualCal = mesRawCal.charAt(0).toUpperCase() + mesRawCal.slice(1);
+  const utcCal = new Date(Date.UTC(ahoraCal.getFullYear(), ahoraCal.getMonth(), ahoraCal.getDate()));
+  const dayNumCal = utcCal.getUTCDay() || 7;
+  utcCal.setUTCDate(utcCal.getUTCDate() + 4 - dayNumCal);
+  const yearStartCal = new Date(Date.UTC(utcCal.getUTCFullYear(), 0, 1));
+  const semanaActualCal = Math.ceil((((utcCal.getTime() - yearStartCal.getTime()) / 86400000) + 1) / 7);
+
   const cards = [
     {
       id: 'partes' as TecnicoView,
@@ -245,8 +254,8 @@ function DashboardHome({ loggedUser, onLogout, onNavigate }: DashboardTecnicoPro
     },
     {
       id: 'calendario' as TecnicoView,
-      title: 'Calendario',
-      description: 'Planificación de trabajos, revisiones y averías',
+      title: 'Calendarios',
+      description: 'Calendario de tareas, laboral y vacaciones',
       icon: Calendar,
       bgColor: 'bg-rose-50',
       iconColor: 'text-rose-600',
@@ -258,7 +267,7 @@ function DashboardHome({ loggedUser, onLogout, onNavigate }: DashboardTecnicoPro
       badgeLabel: 'Planificación',
       clickable: true,
       stats: [
-        { label: 'Eventos del mes', value: stats.partesPendientes },
+        { label: `Semana ${semanaActualCal}`, value: mesActualCal },
       ],
     },
     {
@@ -423,9 +432,35 @@ function DashboardHome({ loggedUser, onLogout, onNavigate }: DashboardTecnicoPro
                 onKeyDown={card.clickable ? (e) => { if (e.key === 'Enter') handleCardClick(card.id); } : undefined}
                 className={`bg-white rounded-2xl border ${isBuzonUnread ? 'border-red-400 shadow-red-100 ring-2 ring-red-400/20' : `${card.borderColor} ${card.hoverBorder}`} shadow-sm hover:shadow-md transition-all duration-200 p-6 flex flex-col gap-4 ${card.clickable ? 'cursor-pointer active:scale-[0.97] select-none' : ''}`}
               >
-                <div className="flex items-start justify-between">
-                  <div className={`relative w-12 h-12 rounded-2xl ${card.bgColor} flex items-center justify-center`}>
-                    <Icon className={`w-6 h-6 ${card.iconColor}`} />
+                <div className="flex flex-row-reverse items-start justify-between gap-2">
+                  <div className={`relative w-20 h-20 rounded-2xl ${card.id === 'calendario' || card.id === 'catalogo' || card.id === 'partes' || card.id === 'albaranes' || card.id === 'buzon' ? 'rounded-full overflow-hidden' : card.bgColor} flex items-center justify-center shrink-0`}>
+                    {card.id === 'calendario' || card.id === 'catalogo' || card.id === 'partes' || card.id === 'albaranes' || card.id === 'buzon' ? (
+                      <img
+                        src={
+                          card.id === 'calendario'
+                            ? '/calendario-icon.png'
+                            : card.id === 'catalogo'
+                            ? '/catalogo-icon.jpg'
+                            : card.id === 'partes'
+                            ? '/partes-icon.webp'
+                            : card.id === 'albaranes'
+                            ? '/albaranes-icon.jpg'
+                            : '/buzon-icon.jpg'
+                        }
+                        alt={card.title}
+                        className={
+                          card.id === 'catalogo' || card.id === 'albaranes'
+                            ? 'w-20 h-20 object-cover rounded-full'
+                            : card.id === 'partes'
+                            ? 'w-full h-full object-cover scale-[1.4] translate-y-[4%]'
+                            : card.id === 'buzon'
+                            ? 'w-full h-full object-cover scale-[1.18]'
+                            : 'w-20 h-20 object-contain'
+                        }
+                      />
+                    ) : (
+                      <Icon className={`w-10 h-10 ${card.iconColor}`} />
+                    )}
                     {isBuzonUnread && (
                       <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-600 rounded-full animate-pulse shadow-[0_0_10px_rgba(220,38,38,0.9)] border-2 border-white" />
                     )}
@@ -516,6 +551,7 @@ function DashboardHome({ loggedUser, onLogout, onNavigate }: DashboardTecnicoPro
 // ─── WRAPPER PRINCIPAL CON ESTADO DE NAVEGACIÓN ───────────────────────────────
 function TecnicoApp({ loggedUser, onLogout }: DashboardTecnicoProps) {
   const [currentView, setCurrentView] = useState<TecnicoView>('dashboard');
+  const [calendarioTab, setCalendarioTab] = useState<'tareas' | 'laboral' | 'vacaciones'>('tareas');
 
   if (currentView === 'partes') {
     return (
@@ -557,7 +593,9 @@ function TecnicoApp({ loggedUser, onLogout }: DashboardTecnicoProps) {
             onClick={() => setCurrentView('dashboard')}
             className="flex items-center gap-2 text-zinc-600 font-semibold"
           >
-            <span className="w-8 h-8 rounded-full bg-zinc-100 flex items-center justify-center">←</span>
+            <span className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-xs">
+              <ArrowLeft className="w-4 h-4 stroke-[2.75]" />
+            </span>
             Volver
           </button>
         </div>
@@ -576,7 +614,9 @@ function TecnicoApp({ loggedUser, onLogout }: DashboardTecnicoProps) {
             onClick={() => setCurrentView('dashboard')}
             className="flex items-center gap-2 text-zinc-600 font-semibold"
           >
-            <span className="w-8 h-8 rounded-full bg-zinc-100 flex items-center justify-center">←</span>
+            <span className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-xs">
+              <ArrowLeft className="w-4 h-4 stroke-[2.75]" />
+            </span>
             Volver
           </button>
           <h1 className="text-lg font-bold text-zinc-900">Directorio de Clientes</h1>
@@ -596,7 +636,9 @@ function TecnicoApp({ loggedUser, onLogout }: DashboardTecnicoProps) {
             onClick={() => setCurrentView('dashboard')}
             className="flex items-center gap-2 text-zinc-600 font-semibold"
           >
-            <span className="w-8 h-8 rounded-full bg-zinc-100 flex items-center justify-center">←</span>
+            <span className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-xs">
+              <ArrowLeft className="w-4 h-4 stroke-[2.75]" />
+            </span>
             Volver
           </button>
           <h1 className="text-lg font-bold text-zinc-900">Directorio de Centros</h1>
@@ -616,13 +658,39 @@ function TecnicoApp({ loggedUser, onLogout }: DashboardTecnicoProps) {
             onClick={() => setCurrentView('dashboard')}
             className="flex items-center gap-2 text-zinc-600 font-semibold cursor-pointer hover:text-zinc-900 transition-colors"
           >
-            <span className="w-8 h-8 rounded-full bg-zinc-100 flex items-center justify-center">←</span>
+            <span className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-xs">
+              <ArrowLeft className="w-4 h-4 stroke-[2.75]" />
+            </span>
             Volver al panel
           </button>
-          <h1 className="text-sm font-bold text-zinc-900">Calendario de Trabajo</h1>
+          <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto scrollbar-none">
+            {(
+              [
+                { id: 'tareas', label: 'Calendario Tareas' },
+                { id: 'laboral', label: 'Calendario Laboral' },
+                { id: 'vacaciones', label: 'Calendario Vacaciones' },
+              ] as const
+            ).map((t) => {
+              const active = calendarioTab === t.id;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setCalendarioTab(t.id)}
+                  className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer whitespace-nowrap border ${
+                    active
+                      ? 'bg-red-600 text-white border-red-600 shadow-xs'
+                      : 'bg-zinc-100 text-zinc-700 border-zinc-200 hover:bg-zinc-200/70'
+                  }`}
+                >
+                  {t.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
         <div className="h-[calc(100vh-57px)]">
-          <Calendario />
+          <Calendario user={loggedUser} initialTab={calendarioTab} />
         </div>
       </div>
     );

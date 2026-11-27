@@ -1195,7 +1195,7 @@ export default function Calendario({ user, initialTab = 'tareas' }: CalendarioPr
         <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between gap-2.5 sm:gap-4">
           <div className="w-full xl:w-auto text-left">
             <div>
-              <div className="flex items-center justify-between sm:justify-start gap-2">
+              <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 min-w-0">
                 <div className="flex items-center gap-2 min-w-0">
                   <h1 className="text-lg sm:text-2xl font-black text-slate-900 tracking-tight capitalize truncate">
                     {MESES[month]} {year}
@@ -1206,91 +1206,16 @@ export default function Calendario({ user, initialTab = 'tareas' }: CalendarioPr
                     </span>
                   )}
                 </div>
+                <p className="text-[11px] sm:text-xs text-slate-500 font-medium truncate">
+                  Calendario unificado de todas las tareas.
+                </p>
               </div>
-              <p className="text-[11px] sm:text-xs text-slate-500 font-medium mt-0.5">
-                Calendario unificado de todas las tareas.
-              </p>
             </div>
           </div>
 
           {/* Botones de filtrado y acciones */}
-          <div className="flex flex-col md:flex-row md:flex-wrap items-stretch md:items-center justify-between xl:justify-end gap-2 w-full xl:w-auto min-w-0">
-            {/* Desplegable de Tipos de Tareas en Móvil (< md) */}
-            {(() => {
-              const tiposOpciones = [
-                { key: 'revisiones' as const, short: 'Rev.', label: 'Revisiones', count: statsMes.mantCount, dotClass: 'bg-amber-500', badgeClass: 'bg-amber-50 text-amber-900 border-amber-300' },
-                { key: 'reparaciones' as const, short: 'Rep.', label: 'Reparaciones', count: statsMes.repCount, dotClass: 'bg-sky-500', badgeClass: 'bg-sky-50 text-sky-900 border-sky-300' },
-                { key: 'instalaciones' as const, short: 'Inst.', label: 'Instalaciones', count: statsMes.instCount, dotClass: 'bg-red-500', badgeClass: 'bg-red-50 text-red-900 border-red-300' },
-                { key: 'urgencias' as const, short: 'Urg.', label: 'Urgencias', count: statsMes.urgCount, dotClass: 'bg-black', badgeClass: 'bg-zinc-900 text-white border-zinc-950' },
-              ];
-              const activosCount = tiposOpciones.filter((t) => filtrosVisibles[t.key]).length;
-              const resumenTexto =
-                activosCount === 4
-                  ? 'Tipos de tareas (Todas)'
-                  : activosCount === 0
-                  ? 'Tipos de tareas (Ninguna)'
-                  : `Tipos: ${tiposOpciones.filter((t) => filtrosVisibles[t.key]).map((t) => t.short).join(' ')} (${activosCount}/4)`;
-
-              return (
-                <div className="relative md:hidden w-full" ref={tiposDropdownRef}>
-                  <button
-                    type="button"
-                    onClick={() => setShowTiposDropdown((prev) => !prev)}
-                    className="w-full h-9 px-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 text-xs font-bold flex items-center justify-between gap-2 shadow-2xs cursor-pointer"
-                  >
-                    <span className="flex items-center gap-2 min-w-0">
-                      <Filter className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                      <span className="truncate">{resumenTexto}</span>
-                    </span>
-                    <ChevronDown className={`w-4 h-4 text-slate-400 shrink-0 transition-transform duration-150 ${showTiposDropdown ? 'rotate-180' : ''}`} />
-                  </button>
-
-                  {showTiposDropdown && (
-                    <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1.5 overflow-hidden">
-                      {tiposOpciones.map((op) => {
-                        const active = filtrosVisibles[op.key];
-                        return (
-                          <button
-                            key={op.key}
-                            type="button"
-                            onClick={() => toggleFiltro(op.key)}
-                            className={`w-full px-3.5 py-2.5 text-left text-xs font-bold flex items-center justify-between gap-2 transition-colors cursor-pointer ${
-                              active ? 'bg-slate-50/80 text-slate-900' : 'text-slate-400 hover:bg-slate-50'
-                            }`}
-                          >
-                            <span className="flex items-center gap-2.5 min-w-0">
-                              <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${active ? op.dotClass : 'bg-slate-300'}`} />
-                              <span className={active ? '' : 'line-through'}>{op.label} ({op.count})</span>
-                            </span>
-                            <span className={`w-4 h-4 rounded-md border flex items-center justify-center shrink-0 ${
-                              active ? 'bg-slate-900 border-slate-900 text-white' : 'border-slate-300 bg-white'
-                            }`}>
-                              {active && <Check className="w-3 h-3" />}
-                            </span>
-                          </button>
-                        );
-                      })}
-                      {activosCount < 4 && (
-                        <div className="border-t border-slate-100 mt-1 pt-1 px-2">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setFiltrosVisibles({ revisiones: true, reparaciones: true, instalaciones: true, urgencias: true });
-                              setShowTiposDropdown(false);
-                            }}
-                            className="w-full py-1.5 text-[11px] font-bold text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                          >
-                            Mostrar todas
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-
-            {/* Leyenda y Conteo de Etiquetas con Filtros Interactivos en Tablet/Escritorio (>= md) */}
+          <div className="flex flex-row flex-wrap md:flex-nowrap items-center justify-between xl:justify-end gap-1.5 sm:gap-2 w-full xl:w-auto min-w-0">
+            {/* Leyenda y Conteo de Etiquetas con Filtros Interactivos en Escritorio (>= md) */}
             <div className="hidden md:flex items-center gap-2 overflow-x-auto scrollbar-none">
               <button
                 type="button"
@@ -1351,13 +1276,87 @@ export default function Calendario({ user, initialTab = 'tareas' }: CalendarioPr
 
             <div className="hidden md:block h-5 w-px bg-slate-200 shrink-0 mx-0.5" />
 
-            {/* Botones de Hoy, Finde y selector de mes compacto */}
-            <div className="flex items-center justify-between md:justify-end gap-1.5 sm:gap-2 w-full md:w-auto shrink-0 min-w-0">
-              <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+            {/* Fila única en Móvil/Tablet (< md): Desplegable compacto de Tipos + Hoy + Finde + Selector de mes */}
+            <div className="flex items-center justify-between md:justify-end gap-1.5 sm:gap-2 w-full md:w-auto min-w-0">
+              {(() => {
+                const tiposOpciones = [
+                  { key: 'revisiones' as const, short: 'Rev.', label: 'Revisiones', count: statsMes.mantCount, dotClass: 'bg-amber-500', badgeClass: 'bg-amber-50 text-amber-900 border-amber-300' },
+                  { key: 'reparaciones' as const, short: 'Rep.', label: 'Reparaciones', count: statsMes.repCount, dotClass: 'bg-sky-500', badgeClass: 'bg-sky-50 text-sky-900 border-sky-300' },
+                  { key: 'instalaciones' as const, short: 'Inst.', label: 'Instalaciones', count: statsMes.instCount, dotClass: 'bg-red-500', badgeClass: 'bg-red-50 text-red-900 border-red-300' },
+                  { key: 'urgencias' as const, short: 'Urg.', label: 'Urgencias', count: statsMes.urgCount, dotClass: 'bg-black', badgeClass: 'bg-zinc-900 text-white border-zinc-950' },
+                ];
+                const activosCount = tiposOpciones.filter((t) => filtrosVisibles[t.key]).length;
+                const resumenTexto =
+                  activosCount === 4
+                    ? 'Tipos: Todas'
+                    : activosCount === 0
+                    ? 'Tipos: Ninguna'
+                    : `${tiposOpciones.filter((t) => filtrosVisibles[t.key]).map((t) => t.short).join(' ')}`;
+
+                return (
+                  <div className="relative md:hidden flex-1 min-w-0 max-w-[165px]" ref={tiposDropdownRef}>
+                    <button
+                      type="button"
+                      onClick={() => setShowTiposDropdown((prev) => !prev)}
+                      className="w-full h-8 sm:h-9 px-2 sm:px-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 text-[11px] sm:text-xs font-bold flex items-center justify-between gap-1 shadow-2xs cursor-pointer"
+                    >
+                      <span className="flex items-center gap-1.5 min-w-0">
+                        <Filter className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-slate-400 shrink-0" />
+                        <span className="truncate">{resumenTexto}</span>
+                      </span>
+                      <ChevronDown className={`w-3.5 h-3.5 text-slate-400 shrink-0 transition-transform duration-150 ${showTiposDropdown ? 'rotate-180' : ''}`} />
+                    </button>
+
+                    {showTiposDropdown && (
+                      <div className="absolute left-0 top-full mt-1 min-w-[220px] bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1.5 overflow-hidden">
+                        {tiposOpciones.map((op) => {
+                          const active = filtrosVisibles[op.key];
+                          return (
+                            <button
+                              key={op.key}
+                              type="button"
+                              onClick={() => toggleFiltro(op.key)}
+                              className={`w-full px-3.5 py-2.5 text-left text-xs font-bold flex items-center justify-between gap-2 transition-colors cursor-pointer ${
+                                active ? 'bg-slate-50/80 text-slate-900' : 'text-slate-400 hover:bg-slate-50'
+                              }`}
+                            >
+                              <span className="flex items-center gap-2.5 min-w-0">
+                                <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${active ? op.dotClass : 'bg-slate-300'}`} />
+                                <span className={active ? '' : 'line-through'}>{op.label} ({op.count})</span>
+                              </span>
+                              <span className={`w-4 h-4 rounded-md border flex items-center justify-center shrink-0 ${
+                                active ? 'bg-slate-900 border-slate-900 text-white' : 'border-slate-300 bg-white'
+                              }`}>
+                                {active && <Check className="w-3 h-3" />}
+                              </span>
+                            </button>
+                          );
+                        })}
+                        {activosCount < 4 && (
+                          <div className="border-t border-slate-100 mt-1 pt-1 px-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setFiltrosVisibles({ revisiones: true, reparaciones: true, instalaciones: true, urgencias: true });
+                                setShowTiposDropdown(false);
+                              }}
+                              className="w-full py-1.5 text-[11px] font-bold text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                            >
+                              Mostrar todas
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              <div className="flex items-center gap-1 sm:gap-2 shrink-0">
                 <button
                   type="button"
                   onClick={handleToday}
-                  className="h-8 sm:h-9 inline-flex items-center justify-center gap-1 sm:gap-1.5 px-2.5 sm:px-3.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-[11px] sm:text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95 whitespace-nowrap"
+                  className="h-8 sm:h-9 inline-flex items-center justify-center gap-1 px-2 sm:px-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-[11px] sm:text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95 whitespace-nowrap"
                 >
                   <Clock className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-slate-500" />
                   <span>Hoy</span>
@@ -1366,7 +1365,7 @@ export default function Calendario({ user, initialTab = 'tareas' }: CalendarioPr
                 <button
                   type="button"
                   onClick={() => setMostrarFinSemana((prev) => !prev)}
-                  className={`h-8 sm:h-9 inline-flex items-center justify-center gap-1 sm:gap-1.5 px-2.5 sm:px-3.5 rounded-xl border text-[11px] sm:text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95 whitespace-nowrap ${
+                  className={`h-8 sm:h-9 inline-flex items-center justify-center gap-1 px-2 sm:px-3 rounded-xl border text-[11px] sm:text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95 whitespace-nowrap ${
                     mostrarFinSemana
                       ? 'border-amber-400 bg-amber-50 text-amber-950 hover:bg-amber-100 shadow-xs'
                       : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
@@ -1374,31 +1373,30 @@ export default function Calendario({ user, initialTab = 'tareas' }: CalendarioPr
                   title={mostrarFinSemana ? 'Ocultar sábado y domingo' : 'Mostrar sábado y domingo'}
                 >
                   <CalendarDays className={`w-3 h-3 sm:w-3.5 sm:h-3.5 ${mostrarFinSemana ? 'text-amber-700' : 'text-slate-500'}`} />
-                  <span className="sm:hidden">{mostrarFinSemana ? 'Sin Finde' : 'Finde'}</span>
-                  <span className="hidden sm:inline">{mostrarFinSemana ? 'Ocultar Finde' : 'Mostrar Finde'}</span>
+                  <span>{mostrarFinSemana ? 'Ocultar Finde' : 'Mostrar Finde'}</span>
                 </button>
-              </div>
 
-              <div className="h-8 sm:h-9 inline-flex items-center bg-slate-100 px-0.5 sm:px-1 rounded-xl border border-slate-200/80 shadow-2xs shrink-0">
-                <button
-                  type="button"
-                  onClick={handlePrevMonth}
-                  className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded-lg hover:bg-white text-slate-600 hover:text-slate-900 transition-all cursor-pointer"
-                  title="Mes anterior"
-                >
-                  <ChevronLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                </button>
-                <span className="px-1.5 sm:px-2.5 text-[11px] sm:text-xs font-black text-slate-700 min-w-[40px] sm:min-w-[70px] text-center capitalize select-none">
-                  {MESES[month].slice(0, 3)}
-                </span>
-                <button
-                  type="button"
-                  onClick={handleNextMonth}
-                  className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded-lg hover:bg-white text-slate-600 hover:text-slate-900 transition-all cursor-pointer"
-                  title="Mes siguiente"
-                >
-                  <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                </button>
+                <div className="h-8 sm:h-9 inline-flex items-center bg-slate-100 px-0.5 sm:px-1 rounded-xl border border-slate-200/80 shadow-2xs shrink-0">
+                  <button
+                    type="button"
+                    onClick={handlePrevMonth}
+                    className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded-lg hover:bg-white text-slate-600 hover:text-slate-900 transition-all cursor-pointer"
+                    title="Mes anterior"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  </button>
+                  <span className="px-1 sm:px-2 text-[11px] sm:text-xs font-black text-slate-700 min-w-[34px] sm:min-w-[54px] text-center capitalize select-none">
+                    {MESES[month].slice(0, 3)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleNextMonth}
+                    className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded-lg hover:bg-white text-slate-600 hover:text-slate-900 transition-all cursor-pointer"
+                    title="Mes siguiente"
+                  >
+                    <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  </button>
+                </div>
               </div>
             </div>
           </div>

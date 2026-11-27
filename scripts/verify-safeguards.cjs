@@ -2765,6 +2765,60 @@ if (fs.existsSync(pdfGenPath)) {
     if (labContent145.includes('Trabajo extraordinario') || !labContent145.includes('max-w-[95%]') || !labContent145.includes('justify-center gap-x-10')) {
       errors.push('CRÍTICO: CalendarioLaboral.tsx debe mantener tamaño ~95% (max-w-[95%]), leyenda centrada (gap-x-10) y sin Trabajo extraordinario (REGLA 145).');
     }
+    if (!labContent145.includes('hidden lg:inline-flex') || !labContent145.includes('flex md:hidden flex-nowrap')) {
+      errors.push('CRÍTICO: CalendarioLaboral.tsx debe ocultar Imprimir en tablet/móvil (hidden lg:inline-flex) y mantener leyenda en una fila (REGLA 146).');
+    }
+  }
+
+  // REGLA 146: Blindaje de Reporte de Anomalías (6 columnas + ubicación/tipo/fecha + móvil) y Tarjetas/Calendarios en DashboardTecnico
+  const repAnomPath146 = path.join(__dirname, '..', 'src', 'pdfReporteAnomaliasGenerator.ts');
+  if (!fs.existsSync(repAnomPath146)) {
+    errors.push('CRÍTICO: Debe existir src/pdfReporteAnomaliasGenerator.ts (REGLA 146).');
+  } else {
+    const repContent146 = fs.readFileSync(repAnomPath146, 'utf8');
+    if (
+      !repContent146.includes('resolverChecklistItemsSistema') ||
+      !repContent146.includes('obtenerUbicacionEquipo') ||
+      !repContent146.includes('obtenerTipoEquipo') ||
+      !repContent146.includes('obtenerUltimaFechaRevision') ||
+      !repContent146.includes("['Nº', 'SISTEMA', 'EQUIPO', 'TIPO', 'UBICACIÓN', 'ANOMALÍA / DEFECTO DETECTADO']") ||
+      !repContent146.includes('Observación:') ||
+      !repContent146.includes('doc.setTextColor(0, 82, 204)')
+    ) {
+      errors.push('CRÍTICO: pdfReporteAnomaliasGenerator.ts debe mantener las 6 columnas, resolución completa de ubicación/tipo/fecha y observaciones en azul (REGLA 146).');
+    }
+  }
+  const partesTecPath146 = path.join(__dirname, '..', 'src', 'PartesTecnico.tsx');
+  if (fs.existsSync(partesTecPath146)) {
+    const ptContent146 = fs.readFileSync(partesTecPath146, 'utf8');
+    if (!ptContent146.includes('generarReporteAnomaliasPDF') || !ptContent146.includes('reporteAnomalias')) {
+      errors.push('CRÍTICO: PartesTecnico.tsx debe mantener la descarga de Reporte de Anomalías en móvil/tablet (REGLA 146).');
+    }
+  }
+  const dashTecPath146 = path.join(__dirname, '..', 'src', 'DashboardTecnico.tsx');
+  if (fs.existsSync(dashTecPath146)) {
+    const dtContent146 = fs.readFileSync(dashTecPath146, 'utf8');
+    const reqIcons146 = [
+      '/calendario-icon.png',
+      '/catalogo-icon.jpg',
+      '/partes-icon.webp',
+      '/partes-trabajo-icon.jpg',
+      '/albaranes-icon.jpg',
+      '/notas-icon.jpg',
+      '/centros-icon.jpg',
+      '/buzon-icon.jpg'
+    ];
+    if (
+      !dtContent146.includes("title: 'Calendarios'") ||
+      !dtContent146.includes('Calendario de tareas, laboral y vacaciones') ||
+      !dtContent146.includes('Semana ${semanaActualCal}') ||
+      !dtContent146.includes('Calendario Laboral') ||
+      !dtContent146.includes('Calendario Vacaciones') ||
+      !dtContent146.includes('bg-blue-600 text-white') ||
+      reqIcons146.some((ic) => !dtContent146.includes(ic))
+    ) {
+      errors.push('CRÍTICO: DashboardTecnico.tsx debe mantener la tarjeta Calendarios, pestañas de 3 calendarios, botón volver azul y los iconos personalizados (REGLA 146).');
+    }
   }
 
 // Resultado de la verificación
